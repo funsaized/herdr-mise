@@ -1,0 +1,186 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - client/**
+      - server/**
+      - scripts/package-release.sh
+      - scripts/verify-release-artifact.sh
+      - scripts/release-contract.test.mjs
+      - .github/workflows/release.yml
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: npm ci --prefix client
+      - run: npm run build
+      - run: cargo build --release --locked --bin herdr-mise --target ${{ matrix.target }}
+      - name: Assert tag matches authoritative Cargo version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml)
+          test "${GITHUB_REF_NAME}" = "v${version}"
+      - name: Import Developer ID certificate
+        if: startsWith(github.ref, 'refs/tags/') && runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          test -n "$APPLE_CERTIFICATE_P12_BASE64"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          test -n "$APPLE_SIGNING_IDENTITY"
+          KEYCHAIN_PATH="$RUNNER_TEMP/release-signing.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/release-certificate.p12"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | openssl base64 -d -A > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "target/${{ matrix.target }}/release/herdr-mise"
+          codesign --verify --deep --strict --verbose=2 "target/${{ matrix.target }}/release/herdr-mise"
+      - name: Notarize signed CLI binary
+        if: startsWith(github.ref, 'refs/tags/') && runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_API_PRIVATE_KEY_BASE64 }}
+        run: |
+          test -n "$APPLE_API_KEY_ID"
+          test -n "$APPLE_API_ISSUER_ID"
+          test -n "$APPLE_API_PRIVATE_KEY_BASE64"
+          key="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          upload="$RUNNER_TEMP/herdr-mise-${{ matrix.target }}.zip"
+          printf '%s' "$APPLE_API_PRIVATE_KEY_BASE64" | openssl base64 -d -A > "$key"
+          ditto -c -k --keepParent "target/${{ matrix.target }}/release/herdr-mise" "$upload"
+          xcrun notarytool submit "$upload" --key "$key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --wait
+          codesign --verify --deep --strict --verbose=2 "target/${{ matrix.target }}/release/herdr-mise"
+          spctl --assess --type exec --verbose=4 "target/${{ matrix.target }}/release/herdr-mise"
+          # A standalone executable has no stapling target; notarization is verified by notarytool's accepted result.
+      - name: Package and verify artifact
+        run: |
+          sh scripts/package-release.sh "${{ matrix.target }}" "target/${{ matrix.target }}/release/herdr-mise"
+          sh scripts/verify-release-artifact.sh dist/*.tar.gz
+      - name: Clean signing material
+        if: always() && startsWith(github.ref, 'refs/tags/') && runner.os == 'macOS'
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/release-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/release-certificate.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/herdr-mise-v*-${{ matrix.target }}.tar.gz*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Create or validate matching prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml)
+          test "$GITHUB_REF_NAME" = "v$version"
+          mapfile -t files < <(find dist -maxdepth 1 -type f -print | sort)
+          test "${#files[@]}" -eq 6
+          for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu; do
+            test -s "dist/herdr-mise-${GITHUB_REF_NAME}-${target}.tar.gz"
+            test -s "dist/herdr-mise-${GITHUB_REF_NAME}-${target}.tar.gz.sha256"
+          done
+          printf '%s\n' "${files[@]##*/}" | sort >expected-assets.txt
+          if gh release view "$GITHUB_REF_NAME" --json isPrerelease,tagName,title >release.json 2>/dev/null; then
+            jq -e --arg tag "$GITHUB_REF_NAME" '.isPrerelease and .tagName == $tag and .title == $tag' release.json
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets[].name' | sort >existing-assets.txt
+            comm -23 existing-assets.txt expected-assets.txt >unexpected-assets.txt
+            test ! -s unexpected-assets.txt
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets[].name' | sort >published-assets.txt
+          diff -u expected-assets.txt published-assets.txt
+
+  verify-public-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: publish
+    strategy:
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assert public release and verify public downloads
+        shell: bash
+        run: |
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME"
+          curl --fail --silent --show-error "$api" -o release.json
+          test "$(jq '.prerelease' release.json)" = true
+          test "$(jq '.assets | length' release.json)" -eq 6
+          base="herdr-mise-${GITHUB_REF_NAME}-${{ matrix.target }}.tar.gz"
+          for name in "$base" "$base.sha256"; do
+            url=$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .browser_download_url' release.json)
+            case "$url" in https://github.com/*/releases/download/*) ;; *) exit 1 ;; esac
+            curl --fail --location --silent --show-error "$url" -o "$name"
+            test -s "$name"
+          done
+          if test "${{ runner.os }}" = macOS; then export VERIFY_GATEKEEPER=1; fi
+          sh scripts/verify-release-artifact.sh "$base"

@@ -1,0 +1,12 @@
+const semantic = { flame: "#f0882a", flameHigh: "#ffd24d", flameDark: "#ff9a35", flameHighDark: "#ffe066", blocked: "#d8342c", blockedText: "#ff7a6e", done: "#4f9d5d", tungsten: "#f5c95e", tungstenDark: "#ffd76e" } as const;
+export const tokens = {
+  semantic,
+  accents: ["#5b8a8f", "#8a6a92", "#667a9e", "#8a8a4f", "#b07a7a", "#a98a5b", "#6f9a8d", "#997f5e", "#7a7f9e", "#8f9a6f", "#9a6f7f", "#6f8a9a"],
+  scene: { wall: ["#8d97a5", "#4a5260"], wainscot: ["#ece5d1", "#6e6a59"], grout: ["#d8d0b8", "#5d594b"], trim: ["#77818f", "#3f4651"], floor: ["#e6d9bd", "#6d6553"], floorSeam: ["#cbbc93", "#524b3a"], steel: [["#aeb8c2", "#6f7a87"], ["#cfd6dd", "#87919d"], ["#8a95a1", "#58636f"]], chalkboard: ["#243529", "#18251d"], chalk: ["#e9e4d0", "#d8d3bf"], wood: ["#7a5433", "#8a6a42"], brass: "#c99a42", copper: "#b06a33", coat: ["#f3efe2", "#d9d4c4"], skin: "#e6b28c", ink: "#2c2721", stationName: ["#2c2721", "#f3efe2"], stationState: { idle: ["#5f594d", "#f0e9d5"], working: ["#874500", "#ffe8b0"], blocked: ["#a01e18", "#ffdedb"], done: ["#2f6c3a", "#bff3c5"], ended: ["#5f594d", "#f0e9d5"] }, sky: ["#a8c8d8", "#141c2e"], cloud: "#f4f0e5", shadow: "#736b5b", muted: "#8a8272", ticket: "#f7f3e8", ticketDone: "#cfc9b8", transparent: "rgba(0, 0, 0, 0)", blockedChip: "rgba(26, 22, 18, 0.82)" },
+  chrome: { panel: "#fdfcf9", panelSoft: "rgba(250, 248, 242, 0.94)", border: "#e3ded2", borderSoft: "rgba(90, 83, 68, 0.25)", hairline: ["#eeeade", "#f2eee2"], text: "#2c2721", textWarm: "#5a5344", textMuted: "#6a6455", workingText: "#b05f14", doneText: "#3d7a4a", secondary: "#8a8272", tertiary: "#a39b89", tooltipSecondary: "#c9c3b2", chip: "#f1ede1", buttonText: "#faf8f2", white: "#ffffff", toggleOff: "#d6d0bc", amber: "#c9973f", tooltip: "rgba(28, 26, 22, 0.94)", scrim: "rgba(12, 14, 18, 0.28)", shadow: "0 16px 40px rgba(20, 18, 12, 0.22)", shadowStrong: "0 20px 48px rgba(10, 8, 4, 0.4)", shadowPlacard: "0 10px 26px rgba(10, 8, 4, 0.28)" },
+  spacing: { panel: 18, rowSmall: 12, row: 14 },
+  radius: { small: 6, tooltip: 7, control: 8, panel: 12 },
+  typography: { worldFamily: "Silkscreen, monospace", chromeFamily: "Instrument Sans, sans-serif", title: { size: 16, weight: 700 }, rowLabel: { size: 13.5, weight: 600 }, value: { size: 13, weight: 400 }, secondary: { size: 12, weight: 400 }, section: { size: 11.5, weight: 600 }, numericVariant: "tabular-nums" },
+} as const;
+
+export type DesignTokens = typeof tokens;

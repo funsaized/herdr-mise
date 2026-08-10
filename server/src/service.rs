@@ -1,0 +1,488 @@
+use crate::feed::Feed;
+use axum::{
+    body::Body,
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        State,
+    },
+    http::{header, HeaderMap, StatusCode, Uri},
+    response::{IntoResponse, Response},
+    routing::get,
+    Router,
+};
+use futures_util::{SinkExt, StreamExt};
+use rust_embed::RustEmbed;
+use std::{borrow::Cow, sync::Arc, time::Duration};
+
+use crate::protocol::{AgentStateEvent, PROTOCOL_VERSION};
+
+#[derive(RustEmbed)]
+#[folder = "$OUT_DIR/embedded-dist/"]
+struct Assets;
+
+struct ServiceState {
+    feed: Arc<Feed>,
+    extra_origins: Vec<String>,
+}
+
+pub fn router(feed: Feed) -> Router {
+    router_with_extra_origins(feed, Vec::new())
+}
+
+pub fn router_with_extra_origins(feed: Feed, extra_origins: Vec<String>) -> Router {
+    Router::new()
+        .route("/ws", get(ws))
+        .fallback(get(static_asset))
+        .with_state(Arc::new(ServiceState {
+            feed: Arc::new(feed),
+            extra_origins,
+        }))
+}
+
+/// Parses `HERDR_MISE_EXTRA_ORIGINS`: a comma-separated list of exact
+/// browser origins (scheme://host[:port], no path, no wildcard). Any
+/// invalid entry is a hard error so a widened origin policy is never
+/// silently misconfigured.
+pub fn parse_extra_origins(value: &str) -> Result<Vec<String>, String> {
+    let mut origins = Vec::new();
+    for entry in value.split(',') {
+        let origin = entry.trim();
+        if origin.is_empty() {
+            continue;
+        }
+        let host = origin
+            .strip_prefix("http://")
+            .or_else(|| origin.strip_prefix("https://"))
+            .ok_or_else(|| format!("origin {origin:?} must start with http:// or https://"))?;
+        if host.is_empty()
+            || host.contains('/')
+            || host.contains('*')
+            || host.chars().any(char::is_whitespace)
+        {
+            return Err(format!(
+                "origin {origin:?} must be an exact scheme://host[:port] with no path or wildcard"
+            ));
+        }
+        origins.push(origin.to_string());
+    }
+    Ok(origins)
+}
+
+async fn ws(
+    State(state): State<Arc<ServiceState>>,
+    headers: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    if !allowed_origin(&headers, &state.extra_origins) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let feed = state.feed.clone();
+    upgrade
+        .on_upgrade(move |socket| client(socket, feed))
+        .into_response()
+}
+fn allowed_origin(headers: &HeaderMap, extra_origins: &[String]) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN) else {
+        return true;
+    };
+    let Ok(origin) = origin.to_str() else {
+        return false;
+    };
+    matches!(origin, "http://localhost:8686" | "http://127.0.0.1:8686")
+        || extra_origins.iter().any(|extra| extra == origin)
+}
+async fn client(socket: WebSocket, feed: Arc<Feed>) {
+    let mut changes = feed.subscribe();
+    let mut health = feed.subscribe_health();
+    let (mut output, mut input) = socket.split();
+    if !*health.borrow() {
+        let _ = output.send(Message::Close(None)).await;
+        return;
+    }
+    let Ok(snapshot) = serde_json::to_string(&feed.snapshot().await) else {
+        return;
+    };
+    if output.send(Message::Text(snapshot.into())).await.is_err() {
+        return;
+    }
+    let mut heartbeat = tokio::time::interval(Duration::from_secs(1));
+    heartbeat.tick().await;
+    loop {
+        tokio::select! {
+            changed=health.changed()=>if changed.is_err() || !*health.borrow() { let _=output.send(Message::Close(None)).await; break },
+            message=input.next()=>match message { Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break, _=>{} },
+            event=changes.recv()=>match event { Ok(event)=> { let Ok(text)=serde_json::to_string(&event) else{continue}; if output.send(Message::Text(text.into())).await.is_err(){break} }, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=> { let Ok(text)=serde_json::to_string(&feed.snapshot().await) else{continue}; if output.send(Message::Text(text.into())).await.is_err(){break} }, Err(_)=>break },
+            _=heartbeat.tick()=> { let event=AgentStateEvent::Heartbeat{version:PROTOCOL_VERSION}; let Ok(text)=serde_json::to_string(&event) else{continue}; if output.send(Message::Text(text.into())).await.is_err(){break} }
+        }
+    }
+}
+async fn static_asset(uri: Uri) -> Response {
+    let requested = uri.path().trim_start_matches('/');
+    let key = if requested.is_empty() {
+        "index.html"
+    } else {
+        requested
+    };
+    let asset = Assets::get(key).or_else(|| {
+        if navigation_path(requested) {
+            Assets::get("index.html")
+        } else {
+            None
+        }
+    });
+    match asset {
+        Some(file) => {
+            let mime = content_type(key);
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, mime)
+                .body(Body::from(match file.data {
+                    Cow::Borrowed(data) => data.to_vec(),
+                    Cow::Owned(data) => data,
+                }))
+                .unwrap()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+fn navigation_path(path: &str) -> bool {
+    path.is_empty()
+        || (!path.starts_with("assets/")
+            && path
+                .rsplit('/')
+                .next()
+                .is_some_and(|segment| !segment.contains('.')))
+}
+fn content_type(path: &str) -> &'static str {
+    if path.ends_with(".js") {
+        "text/javascript; charset=utf-8"
+    } else if path.ends_with(".css") {
+        "text/css; charset=utf-8"
+    } else if path.ends_with(".svg") {
+        "image/svg+xml"
+    } else if path.ends_with(".ttf") {
+        "font/ttf"
+    } else if path.ends_with(".txt") {
+        "text/plain; charset=utf-8"
+    } else {
+        "text/html; charset=utf-8"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats};
+    use axum::body::to_bytes;
+    use std::future::IntoFuture;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tower::ServiceExt;
+    #[tokio::test]
+    async fn serves_root_and_spa_fallback() {
+        let app = router(Feed::fixed(AppMode::Demo, vec![]).await);
+        for path in ["/", "/nested/route"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(path)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            assert!(body.windows(10).any(|w| w == b"herdr-mise"));
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_assets_do_not_fall_back_to_html() {
+        let app = router(Feed::fixed(AppMode::Demo, vec![]).await);
+        for path in [
+            "/assets/missing.js",
+            "/assets/missing",
+            "/missing.css",
+            "/favicon.ico",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(path)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn serves_embedded_fonts_with_font_mime_types() {
+        let app = router(Feed::fixed(AppMode::Demo, vec![]).await);
+        for (path, expected) in [
+            ("/fonts/instrument-sans-400.ttf", "font/ttf"),
+            (
+                "/fonts/OFL-Instrument-Sans.txt",
+                "text/plain; charset=utf-8",
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(path)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{path}");
+            assert_eq!(
+                response.headers().get(header::CONTENT_TYPE).unwrap(),
+                expected,
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn websocket_origin_policy_is_loopback_same_origin_only() {
+        for allowed in [
+            None,
+            Some("http://localhost:8686"),
+            Some("http://127.0.0.1:8686"),
+        ] {
+            let mut headers = HeaderMap::new();
+            if let Some(origin) = allowed {
+                headers.insert(header::ORIGIN, origin.parse().unwrap());
+            }
+            assert!(allowed_origin(&headers, &[]), "{allowed:?}");
+        }
+        for rejected in [
+            "https://localhost:8686",
+            "http://localhost",
+            "http://evil.test",
+            "http://127.0.0.1:8687",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::ORIGIN, rejected.parse().unwrap());
+            assert!(!allowed_origin(&headers, &[]), "{rejected}");
+        }
+    }
+
+    #[test]
+    fn configured_extra_origin_is_accepted_alongside_loopback_defaults() {
+        let extra = vec!["https://herdr-mise.example.com".to_string()];
+        for allowed in [
+            "https://herdr-mise.example.com",
+            "http://localhost:8686",
+            "http://127.0.0.1:8686",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::ORIGIN, allowed.parse().unwrap());
+            assert!(allowed_origin(&headers, &extra), "{allowed}");
+        }
+        for rejected in [
+            "http://herdr-mise.example.com",
+            "https://herdr-mise.example.com:8443",
+            "https://evil.test",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::ORIGIN, rejected.parse().unwrap());
+            assert!(!allowed_origin(&headers, &extra), "{rejected}");
+        }
+    }
+
+    #[test]
+    fn extra_origins_parse_exact_values_and_reject_unsafe_shapes() {
+        assert_eq!(
+            parse_extra_origins(" https://herdr-mise.example.com , http://pi.tailnet:8686 ,")
+                .unwrap(),
+            vec![
+                "https://herdr-mise.example.com".to_string(),
+                "http://pi.tailnet:8686".to_string(),
+            ]
+        );
+        assert_eq!(parse_extra_origins("").unwrap(), Vec::<String>::new());
+        for invalid in [
+            "herdr-mise.example.com",
+            "https://herdr-mise.example.com/",
+            "https://*.example.com",
+            "ws://herdr-mise.example.com",
+            "https://",
+        ] {
+            assert!(parse_extra_origins(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[tokio::test]
+    async fn websocket_endpoint_accepts_configured_extra_origin() {
+        let feed = Feed::fixed(AppMode::Demo, vec![]).await;
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind test server: {error}"),
+        };
+        let address = listener.local_addr().unwrap();
+        let app = router_with_extra_origins(feed, vec!["https://mise.example.ts.net".to_string()]);
+        let server = tokio::spawn(axum::serve(listener, app).into_future());
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: https://mise.example.ts.net\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        let headers = read_http_headers(&mut socket).await;
+        assert!(headers.starts_with("HTTP/1.1 101"), "{headers}");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn websocket_endpoint_rejects_foreign_browser_origin() {
+        let feed = Feed::fixed(AppMode::Demo, vec![]).await;
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind test server: {error}"),
+        };
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(axum::serve(listener, router(feed)).into_future());
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: https://evil.test\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        let headers = read_http_headers(&mut socket).await;
+        assert!(headers.starts_with("HTTP/1.1 403"), "{headers}");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn quiet_websocket_receives_typed_heartbeat() {
+        let feed = Feed::fixed(AppMode::Demo, vec![]).await;
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind test server: {error}"),
+        };
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(axum::serve(listener, router(feed)).into_future());
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: http://localhost:8686\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        assert!(read_http_headers(&mut socket)
+            .await
+            .starts_with("HTTP/1.1 101"));
+        let first = read_server_text(&mut socket).await;
+        assert!(matches!(
+            serde_json::from_str::<AgentStateEvent>(&first).unwrap(),
+            AgentStateEvent::Snapshot { .. }
+        ));
+        let heartbeat =
+            tokio::time::timeout(Duration::from_millis(1_200), read_server_text(&mut socket))
+                .await
+                .expect("heartbeat deadline");
+        assert_eq!(
+            serde_json::from_str::<AgentStateEvent>(&heartbeat).unwrap(),
+            AgentStateEvent::Heartbeat {
+                version: PROTOCOL_VERSION
+            }
+        );
+        server.abort();
+    }
+
+    #[test]
+    fn embeds_production_client_assets() {
+        let files: Vec<_> = Assets::iter().map(|name| name.into_owned()).collect();
+        assert!(files.iter().any(|name| name == "index.html"));
+        assert!(
+            files
+                .iter()
+                .any(|name| name.starts_with("assets/") && name.ends_with(".js")),
+            "embedded files must include the Vite production JavaScript: {files:?}"
+        );
+        assert!(!files.iter().any(|name| name.contains("node_modules")));
+    }
+
+    #[tokio::test]
+    async fn websocket_sends_snapshot_before_delta() {
+        let feed = Feed::fixed(AppMode::Demo, vec![]).await;
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind test server: {error}"),
+        };
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(axum::serve(listener, router(feed.clone())).into_future());
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        let mut headers = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !headers.ends_with(b"\r\n\r\n") {
+            socket.read_exact(&mut byte).await.unwrap();
+            headers.push(byte[0]);
+        }
+        assert!(String::from_utf8(headers)
+            .unwrap()
+            .starts_with("HTTP/1.1 101"));
+        let first = read_server_text(&mut socket).await;
+        assert!(matches!(
+            serde_json::from_str::<AgentStateEvent>(&first).unwrap(),
+            AgentStateEvent::Snapshot { .. }
+        ));
+        feed.publish(AgentRecord {
+            id: "a".into(),
+            name: "A".into(),
+            state: AgentState::Working,
+            progress: Some(0.5),
+            state_entered_at: "2026-07-31T00:00:00Z".into(),
+            accent_index: 0,
+            model: "".into(),
+            workspace: "".into(),
+            session: SessionStats {
+                runtime_ms: 0,
+                tickets: 0,
+            },
+        })
+        .await;
+        let second = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            read_server_text(&mut socket),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            serde_json::from_str::<AgentStateEvent>(&second).unwrap(),
+            AgentStateEvent::Delta { .. }
+        ));
+        server.abort();
+    }
+
+    async fn read_server_text(stream: &mut tokio::net::TcpStream) -> String {
+        let mut head = [0_u8; 2];
+        stream.read_exact(&mut head).await.unwrap();
+        assert_eq!(head[0] & 0x0f, 1);
+        let length = match head[1] & 0x7f {
+            n @ 0..=125 => n as usize,
+            126 => {
+                let mut bytes = [0_u8; 2];
+                stream.read_exact(&mut bytes).await.unwrap();
+                u16::from_be_bytes(bytes) as usize
+            }
+            _ => {
+                let mut bytes = [0_u8; 8];
+                stream.read_exact(&mut bytes).await.unwrap();
+                u64::from_be_bytes(bytes) as usize
+            }
+        };
+        let mut payload = vec![0; length];
+        stream.read_exact(&mut payload).await.unwrap();
+        String::from_utf8(payload).unwrap()
+    }
+
+    async fn read_http_headers(stream: &mut tokio::net::TcpStream) -> String {
+        let mut headers = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !headers.ends_with(b"\r\n\r\n") {
+            stream.read_exact(&mut byte).await.unwrap();
+            headers.push(byte[0]);
+        }
+        String::from_utf8(headers).unwrap()
+    }
+}

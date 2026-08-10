@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "RFC 6455 sample WebSocket nonce used in service tests"
+condition = "AND"
+paths = ['''^server/src/service\.rs$''']
+regexes = ['''dGhlIHNhbXBsZSBub25jZQ==''']
