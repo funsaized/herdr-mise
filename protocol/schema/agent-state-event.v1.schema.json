@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://herdr-mise.local/protocol/agent-state-event.v1.schema.json",
+  "title": "AgentStateEvent v1",
+  "oneOf": [
+    { "$ref": "#/$defs/snapshot" },
+    { "$ref": "#/$defs/upsertDelta" },
+    { "$ref": "#/$defs/removeDelta" },
+    { "$ref": "#/$defs/heartbeat" }
+  ],
+  "$defs": {
+    "version": { "const": 1 },
+    "mode": { "enum": ["live", "demo"] },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "state", "progress", "stateEnteredAt", "accentIndex", "model", "workspace", "session"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["idle", "working", "blocked", "done", "ended"] },
+        "progress": { "oneOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }] },
+        "stateEnteredAt": { "type": "string", "format": "date-time" },
+        "accentIndex": { "type": "integer", "minimum": 0, "maximum": 11 },
+        "model": { "type": "string" },
+        "workspace": { "type": "string" },
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runtimeMs", "tickets"],
+          "properties": {
+            "runtimeMs": { "type": "integer", "minimum": 0 },
+            "tickets": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "type", "mode", "agents"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "type": { "const": "snapshot" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "agents": { "type": "array", "items": { "$ref": "#/$defs/agent" } }
+      }
+    },
+    "upsertDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "type", "mode", "operation", "agent"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "type": { "const": "delta" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "operation": { "const": "upsert" },
+        "agent": { "$ref": "#/$defs/agent" }
+      }
+    },
+    "removeDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "type", "mode", "operation", "agentId"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "type": { "const": "delta" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "operation": { "const": "remove" },
+        "agentId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "type"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "type": { "const": "heartbeat" }
+      }
+    }
+  }
+}

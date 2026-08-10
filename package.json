@@ -1,0 +1,28 @@
+{
+  "name": "herdr-mise",
+  "private": true,
+  "license": "MIT",
+  "author": "Funsaized",
+  "scripts": {
+    "build": "npm --prefix client run build",
+    "dev:visual": "npm --prefix client run dev:visual --",
+    "bundle": "npm run build && cargo build --release --bin herdr-mise",
+    "package": "sh scripts/package-release.sh",
+    "smoke": "sh scripts/smoke-release.sh",
+    "validate:release": "sh scripts/validate-release.sh",
+    "measure:server": "sh scripts/measure-server.sh target/release/herdr-mise",
+    "typecheck": "npm --prefix client run typecheck",
+    "lint": "npm --prefix client run lint",
+    "test": "node --test scripts/*.test.mjs && npm --prefix client run test",
+    "audit:tokens": "node scripts/audit-tokens.mjs",
+    "audit:architecture": "node scripts/audit-pixi-architecture.mjs",
+    "audit:accessibility": "node scripts/audit-accessibility.mjs",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "capture:readme": "node scripts/capture-readme-media.mjs",
+    "perf": "playwright test --config perf/playwright.config.ts",
+    "test:visual": "playwright test --config e2e/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

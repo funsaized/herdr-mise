@@ -1,0 +1,31 @@
+[package]
+name = "herdr-mise-server"
+version = "0.1.0-rc.1"
+edition = "2021"
+publish = false
+license = "MIT"
+authors = ["Funsaized"]
+
+[[bin]]
+name = "herdr-mise"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+futures-util = "0.3"
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+thiserror = "2"
+
+[dev-dependencies]
+jsonschema = "0.18"
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+
+[build-dependencies]
+walkdir = "2"

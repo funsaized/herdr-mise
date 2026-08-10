@@ -1,0 +1,12 @@
+/target/
+/node_modules/
+/client/node_modules/
+/client/dist/
+/dist/
+/perf/artifacts/
+*.tsbuildinfo
+/e2e/artifacts/
+/.hermes/
+/.claude/
+/target-linux-x64/
+.DS_Store

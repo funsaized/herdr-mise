@@ -1,0 +1,1 @@
+{"version":1,"type":"delta","mode":"live","operation":"upsert","agent":{"id":"agent-01","name":"refactor-agent","state":"blocked","progress":0.42,"stateEnteredAt":"2026-07-31T16:15:00Z","accentIndex":2,"model":"codex","workspace":"/work/refactor","session":{"runtimeMs":1201000,"tickets":4}}}
