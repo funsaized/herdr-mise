@@ -361,7 +361,7 @@ locally runnable today.
 |---------------------------|--------------------------------------|-------|
 | Rust format               | `cargo fmt --all --check`            | |
 | Rust check                | `cargo check --workspace`            | |
-| Rust tests                | `cargo test --workspace`             | typed heartbeat, snapshot-before-delta, protocol-17/19 adapter, ended eviction, coalescer, WS origin policy and extra-origin opt-in |
+| Rust tests                | `cargo test --workspace --locked`    | typed heartbeat, snapshot-before-delta, protocol-17/19 adapter, ended eviction, coalescer, WS origin policy and extra-origin opt-in |
 | Client typecheck          | `npm run typecheck`                  | |
 | Client lint               | `npm run lint`                       | |
 | Client tests              | `npm test`                           | store, WebSocket, visual harness, chrome, settings, protocol fixtures, layout and sound |

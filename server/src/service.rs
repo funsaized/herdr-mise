@@ -20,6 +20,9 @@ use crate::protocol::{AgentStateEvent, PROTOCOL_VERSION};
 #[folder = "$OUT_DIR/embedded-dist/"]
 struct Assets;
 
+#[cfg(test)]
+const EMBEDDED_ASSET_MODE: &str = env!("HERDR_MISE_ASSET_MODE");
+
 struct ServiceState {
     feed: Arc<Feed>,
     extra_origins: Vec<String>,
@@ -221,15 +224,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serves_embedded_fonts_with_font_mime_types() {
+    async fn embedded_assets_match_selected_mode_and_mime_types() {
         let app = router(Feed::fixed(AppMode::Demo, vec![]).await);
-        for (path, expected) in [
-            ("/fonts/instrument-sans-400.ttf", "font/ttf"),
-            (
-                "/fonts/OFL-Instrument-Sans.txt",
-                "text/plain; charset=utf-8",
-            ),
-        ] {
+        let expected = match EMBEDDED_ASSET_MODE {
+            "fallback" => vec![
+                ("/fonts/instrument-sans-400.ttf", None),
+                ("/fonts/OFL-Instrument-Sans.txt", None),
+            ],
+            "production" => vec![
+                ("/fonts/instrument-sans-400.ttf", Some("font/ttf")),
+                (
+                    "/fonts/OFL-Instrument-Sans.txt",
+                    Some("text/plain; charset=utf-8"),
+                ),
+            ],
+            mode => panic!("unexpected embedded asset mode: {mode}"),
+        };
+        for (path, expected) in expected {
             let response = app
                 .clone()
                 .oneshot(
@@ -240,12 +251,17 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::OK, "{path}");
-            assert_eq!(
-                response.headers().get(header::CONTENT_TYPE).unwrap(),
-                expected,
-                "{path}"
-            );
+            match expected {
+                Some(mime) => {
+                    assert_eq!(response.status(), StatusCode::OK, "{path}");
+                    assert_eq!(
+                        response.headers().get(header::CONTENT_TYPE).unwrap(),
+                        mime,
+                        "{path}"
+                    );
+                }
+                None => assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}"),
+            }
         }
     }
 
@@ -388,15 +404,23 @@ mod tests {
     }
 
     #[test]
-    fn embeds_production_client_assets() {
+    fn embeds_assets_for_selected_mode() {
         let files: Vec<_> = Assets::iter().map(|name| name.into_owned()).collect();
         assert!(files.iter().any(|name| name == "index.html"));
-        assert!(
-            files
-                .iter()
-                .any(|name| name.starts_with("assets/") && name.ends_with(".js")),
-            "embedded files must include the Vite production JavaScript: {files:?}"
-        );
+        let has_vite_javascript = files
+            .iter()
+            .any(|name| name.starts_with("assets/") && name.ends_with(".js"));
+        match EMBEDDED_ASSET_MODE {
+            "fallback" => assert!(
+                !has_vite_javascript,
+                "fallback assets must not masquerade as a production client: {files:?}"
+            ),
+            "production" => assert!(
+                has_vite_javascript,
+                "embedded files must include the Vite production JavaScript: {files:?}"
+            ),
+            mode => panic!("unexpected embedded asset mode: {mode}"),
+        }
         assert!(!files.iter().any(|name| name.contains("node_modules")));
     }
 

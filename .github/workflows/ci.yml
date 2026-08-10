@@ -10,6 +10,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - name: Test Rust workspace with fallback assets
+        run: |
+          test ! -e client/dist
+          cargo test --workspace --locked
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -22,8 +26,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: cargo fmt --all --check
-      - run: cargo check --workspace
-      - run: cargo test --workspace
+      - run: cargo check --workspace --locked
+      - name: Test Rust workspace with production assets
+        run: cargo test --workspace --locked
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
