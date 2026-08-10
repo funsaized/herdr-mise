@@ -382,7 +382,7 @@ public download. End-to-end local verification of a packaged archive:
 ```sh
 sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz
 # optional on a signed macOS binary after extract:
-# VERIFY_GATEKEEPER=1 sh scripts/verify-release-artifact.sh path/to/archive.tar.gz
+# VERIFY_CODESIGN=1 sh scripts/verify-release-artifact.sh path/to/archive.tar.gz
 ```
 
 ### Publishing a signed prerelease
@@ -491,15 +491,15 @@ Then:
   `x86_64-apple-darwin`, `ubuntu-24.04` → `x86_64-unknown-linux-gnu`.
 - macOS jobs import the P12 into an ephemeral keychain, sign with
   `--options runtime --timestamp`, submit a ZIP via API-key
-  `notarytool --wait`, then
-  `spctl --assess --type exec --verbose=4`. Missing secrets fail closed.
+  `notarytool --wait`, then re-verify the Developer ID signature. Missing
+  secrets fail closed.
   Credential files and the keychain are deleted in an `always()` cleanup.
 - Packaging writes `herdr-mise-v<VERSION>-<TARGET>.tar.gz` plus a SHA-256
   sidecar; `scripts/verify-release-artifact.sh` runs before upload.
 - `publish` creates or validates a **prerelease** for the tag, uploads all
   six files with `--clobber`, and asserts the final asset name set is exact.
 - `verify-public-release` downloads via the unauthenticated public API /
-  browser URLs and re-runs the full verifier (`VERIFY_GATEKEEPER=1` on macOS).
+  browser URLs and re-runs the full verifier (`VERIFY_CODESIGN=1` on macOS).
 
 #### Standalone CLI notarization (no stapling)
 
@@ -508,11 +508,13 @@ bundle. There is **no stapling target**. Applicable evidence is:
 
 1. `notarytool` reports the submission accepted,
 2. the Developer ID signature remains on the binary, and
-3. online Gatekeeper assessment
-   `spctl --assess --type exec --verbose=4` accepts the executable.
+3. the signature retains the hardened-runtime flag and secure timestamp.
 
-Do not claim or require `xcrun stapler` for this binary. Apple documents
-`exec` (older spelling `execute`) for command-line tools.
+Do not claim or require `xcrun stapler` for this binary. Also do not use
+Apple's app-assessment tool as the acceptance gate for the extracted bare
+executable: it can reject a valid, accepted CLI because the code is not an
+app bundle. The notarization service result and Developer ID signature are
+the relevant evidence.
 
 #### Runner horizon
 
@@ -556,19 +558,20 @@ unexpected names, then re-uploads all six with `--clobber` and diffs the final
 set. Re-run the failed `publish` (or the whole tag workflow). Do not hand-edit
 release assets into a different naming scheme.
 
-**Gatekeeper assessment failure on a public macOS download.** Confirm you
-extracted the public prerelease asset (not a local unsigned build). Assess
-explicitly:
+**Code-signature verification failure on a public macOS download.** Confirm
+you extracted the public prerelease asset (not a local unsigned build), then
+inspect and verify it explicitly:
 
 ```sh
 tar -xzf herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz
-spctl --assess --type exec --verbose=4 ./herdr-mise
 codesign --verify --deep --strict --verbose=2 ./herdr-mise
+codesign -dv --verbose=4 ./herdr-mise
 ```
 
-If CI's `verify-public-release` failed the same check, treat it as a signing /
-notarization defect and re-run after fixing secrets or Apple-side status.
-Offline networks can make online assessment fail even for a good binary.
+Require a Developer ID Application authority, a TeamIdentifier, the runtime
+flag, and a secure timestamp. If CI's `verify-public-release` failed the same
+check, treat it as a signing defect and re-run after fixing the certificate or
+packaging path.
 
 **Intel runner / platform risk.** If `macos-15-intel` jobs queue forever or
 the label is removed before Aug 2027, stop and update the workflow labels —

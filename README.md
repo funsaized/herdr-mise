@@ -258,10 +258,11 @@ tar -xzf "$BASE.tar.gz"
 
 Run checksum verification from the directory that holds both files. The
 sidecar records the archive basename only. On macOS, signed/notarized
-binaries can also be assessed with
-`spctl --assess --type exec --verbose=4 ./herdr-mise` after extract
-(online check; this is a standalone CLI, not an app bundle — see
-[Operations](docs/operations.md#publishing-a-signed-prerelease)).
+binaries can also be checked after extraction with
+`codesign --verify --deep --strict --verbose=2 ./herdr-mise`. This is a bare
+CLI rather than an app bundle, so Apple's app-assessment tool is not an
+applicable acceptance check; see
+[Operations](docs/operations.md#standalone-cli-notarization-no-stapling).
 
 ### Upgrade
 
