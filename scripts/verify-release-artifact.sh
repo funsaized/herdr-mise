@@ -33,10 +33,17 @@ grep -q '^## JavaScript dependencies$' "$work/THIRD_PARTY_NOTICES.txt"
 grep -q 'Instrument Sans Project Authors' "$work/THIRD_PARTY_NOTICES.txt"
 grep -q 'Silkscreen Project Authors' "$work/THIRD_PARTY_NOTICES.txt"
 echo "license_notices=ok"
-if [ "${VERIFY_GATEKEEPER:-0}" = 1 ]; then
-  [ "$(uname -s)" = Darwin ] || { echo "Gatekeeper assessment requires macOS" >&2; exit 1; }
-  spctl --assess --type exec --verbose=4 "$binary"
-  echo "gatekeeper_assessment=accepted"
+if [ "${VERIFY_CODESIGN:-0}" = 1 ]; then
+  [ "$(uname -s)" = Darwin ] || { echo "code-signature verification requires macOS" >&2; exit 1; }
+  codesign --verify --deep --strict --verbose=2 \
+    --test-requirement='=anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.13] exists' \
+    "$binary"
+  signature=$(codesign -dv --verbose=4 "$binary" 2>&1)
+  printf '%s\n' "$signature" | grep -q '^Authority=Developer ID Application:'
+  printf '%s\n' "$signature" | grep -Eq '^TeamIdentifier=[A-Z0-9]+$'
+  printf '%s\n' "$signature" | grep -Eq '^CodeDirectory .*flags=.*\(runtime\)'
+  printf '%s\n' "$signature" | grep -q '^Timestamp='
+  echo "developer_id_signature=ok"
 fi
 
 HOME="$work/home" XDG_CONFIG_HOME="$work/config" XDG_RUNTIME_DIR="$work/runtime" \

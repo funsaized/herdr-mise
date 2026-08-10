@@ -8,7 +8,10 @@ import test from 'node:test';
 const workflow = readFileSync('.github/workflows/release.yml', 'utf8');
 const cargo = readFileSync('server/Cargo.toml', 'utf8');
 const packager = readFileSync('scripts/package-release.sh', 'utf8');
+const artifactVerifier = readFileSync('scripts/verify-release-artifact.sh', 'utf8');
 const browserSmoke = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+const readme = readFileSync('README.md', 'utf8');
+const operations = readFileSync('docs/operations.md', 'utf8');
 
 test('release workflow keeps publication tag-only and covers every target', () => {
   assert.match(workflow, /push:\n    tags: \['v\*'\]/);
@@ -110,11 +113,24 @@ test('packaged browser smoke proves bundled fonts load', () => {
 });
 
 test('tagged macOS builds sign, notarize, and clean ephemeral credentials', () => {
-  for (const token of ['codesign --force --options runtime --timestamp', 'notarytool submit', 'spctl --assess --type exec', 'security delete-keychain']) {
+  for (const token of ['codesign --force --options runtime --timestamp', 'notarytool submit', 'codesign --verify --deep --strict', 'security delete-keychain']) {
     assert.ok(workflow.includes(token), token);
   }
+  assert.ok(!workflow.includes('spctl --assess'), 'standalone CLIs are not Gatekeeper app assessment targets');
   assert.match(workflow, /security delete-keychain "\$RUNNER_TEMP\/release-signing\.keychain-db"/);
-  assert.match(workflow, /VERIFY_GATEKEEPER=1/);
+  assert.match(workflow, /VERIFY_CODESIGN=1/);
+  assert.match(artifactVerifier, /codesign --verify --deep --strict/);
+  assert.match(artifactVerifier, /anchor apple generic/);
+  assert.match(artifactVerifier, /1\.2\.840\.113635\.100\.6\.1\.13/);
+  assert.match(artifactVerifier, /Authority=Developer ID Application:/);
+  assert.match(artifactVerifier, /flags=.*runtime/);
+  assert.match(artifactVerifier, /\^Timestamp=/);
+});
+
+test('standalone CLI verification uses notarization and code-signature evidence', () => {
+  assert.ok(!readme.includes('spctl --assess --type exec'));
+  assert.ok(!operations.includes('spctl --assess --type exec'));
+  assert.match(operations, /VERIFY_CODESIGN=1/);
 });
 
 test('existing expected asset subsets are rerunnable but unexpected assets fail closed', () => {

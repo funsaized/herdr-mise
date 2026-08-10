@@ -93,8 +93,8 @@ jobs:
           ditto -c -k --keepParent "target/${{ matrix.target }}/release/herdr-mise" "$upload"
           xcrun notarytool submit "$upload" --key "$key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --wait
           codesign --verify --deep --strict --verbose=2 "target/${{ matrix.target }}/release/herdr-mise"
-          spctl --assess --type exec --verbose=4 "target/${{ matrix.target }}/release/herdr-mise"
-          # A standalone executable has no stapling target; notarization is verified by notarytool's accepted result.
+          # A bare CLI is not an spctl app-assessment target and has no stapling target.
+          # notarytool's accepted result plus the surviving Developer ID signature are the applicable evidence.
       - name: Package and verify artifact
         run: |
           sh scripts/package-release.sh "${{ matrix.target }}" "target/${{ matrix.target }}/release/herdr-mise"
@@ -182,5 +182,5 @@ jobs:
             curl --fail --location --silent --show-error "$url" -o "$name"
             test -s "$name"
           done
-          if test "${{ runner.os }}" = macOS; then export VERIFY_GATEKEEPER=1; fi
+          if test "${{ runner.os }}" = macOS; then export VERIFY_CODESIGN=1; fi
           sh scripts/verify-release-artifact.sh "$base"
