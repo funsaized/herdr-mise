@@ -105,7 +105,7 @@ jobs:
         run: |
           security delete-keychain "$RUNNER_TEMP/release-signing.keychain-db" || true
           rm -f "$RUNNER_TEMP/release-certificate.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/*.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.target }}
           path: dist/herdr-mise-v*-${{ matrix.target }}.tar.gz*
