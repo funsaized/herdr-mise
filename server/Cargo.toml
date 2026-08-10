@@ -23,7 +23,7 @@ tokio-util = "0.7"
 thiserror = "2"
 
 [dev-dependencies]
-jsonschema = "0.18"
+jsonschema = "0.49"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 
