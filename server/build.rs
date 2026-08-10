@@ -31,10 +31,11 @@ fn main() {
     let client_dist = manifest.join("../client/dist");
     println!("cargo:rerun-if-changed={}", client_dist.display());
     let source = configured.as_deref().unwrap_or(&client_dist);
-    let source = if source.join("index.html").is_file() {
-        source
+    let fallback = manifest.join("static");
+    let (source, asset_mode): (&Path, &str) = if source.join("index.html").is_file() {
+        (source, "production")
     } else {
-        &manifest.join("static")
+        (&fallback, "fallback")
     };
     if !source.join("index.html").is_file() {
         panic!("embedded assets require index.html");
@@ -42,6 +43,8 @@ fn main() {
     if configured.is_some() {
         println!("cargo:rerun-if-changed={}", source.display());
     }
+    // Compile-time test contract only: production code must not branch on this mode.
+    println!("cargo:rustc-env=HERDR_MISE_ASSET_MODE={asset_mode}");
     let destination = PathBuf::from(env::var_os("OUT_DIR").expect("out dir")).join("embedded-dist");
     if destination.exists() {
         fs::remove_dir_all(&destination).expect("clear embedded assets");

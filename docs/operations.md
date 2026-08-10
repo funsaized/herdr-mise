@@ -399,7 +399,7 @@ tag is the only path that signs, notarizes, and publishes. Pull requests and
    `0.1.0-rc.1`). The tag **must** be that value with a `v` prefix
    (`v0.1.0-rc.1`). The workflow fails if `GITHUB_REF_NAME != v$version`.
 3. Local gates you care about have passed on that commit
-   (`npm test`, `npm run build`, `cargo test --workspace`,
+   (`npm test`, `npm run build`, `cargo test --workspace --locked`,
    `npm run validate:release`, etc.).
 4. The six Apple secrets below are already set on the GitHub repository
    (required only for the tagged macOS jobs).

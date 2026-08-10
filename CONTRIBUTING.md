@@ -33,7 +33,7 @@ npm run dev:visual    # isolated playground on http://localhost:8686
 Run the same gates CI runs:
 
 ```sh
-cargo fmt --all --check && cargo test --workspace
+cargo fmt --all --check && cargo test --workspace --locked
 npm run typecheck && npm run lint && npm test
 npm run test:visual   # Playwright browser matrix (Chromium required)
 npm run audit:tokens && npm run audit:accessibility && npm run check:bundle
