@@ -128,8 +128,8 @@ WebSocket mock before React mounts, and the real client
 the mock is installed in the browser, not hosted by a server. Use query
 parameters to compose the scene:
 
-- `preset=idle|working|blocked|done|ended|mixed` (default `working`)
-- `agents=1|2|6|12` (default `6`)
+- `preset=idle|working|blocked|done|ended|mixed` (default `mixed`)
+- `agents=1..12` (any integer from 1 through 12; default `6`)
 - `theme=light|dinner` (default `light`; `dinner` selects the
   existing dark lighting)
 

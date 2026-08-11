@@ -5,7 +5,7 @@
 // stale timeout. Runs against `npm run dev:visual` via the webServer config.
 import { test, expect, type Page } from "@playwright/test";
 
-const COUNTS = [1, 2, 6, 12] as const;
+const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const STATE_WORDS = {
   idle: "Idle — prepping",
   working: "Working — on the fire",
@@ -94,13 +94,26 @@ test("dinner theme URL selects the dark lighting setting", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Dinner" })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("invalid preset and count fall back to working x 6", async ({ page }) => {
+test("idle cooks expose all four stable decorative poses", async ({ page }) => {
+  await page.goto("/?preset=idle&agents=6&stats");
+  await expect(placard(page)).toBeVisible();
+  const readPoses = () => page.evaluate(() => {
+    const metrics = (window as typeof window & { __miseSceneMetrics?: () => { idlePoses: Record<string, string> } }).__miseSceneMetrics?.();
+    return metrics?.idlePoses ?? {};
+  });
+  await expect.poll(async () => Object.keys(await readPoses()).length).toBe(6);
+  const first = await readPoses();
+  expect(new Set(Object.values(first))).toEqual(new Set(["smoke", "recline", "sleep", "prep"]));
+  await page.waitForTimeout(500);
+  expect(await readPoses()).toEqual(first);
+});
+
+test("invalid preset and count fall back to mixed x 6", async ({ page }) => {
   const errors = watchErrors(page);
-  await page.goto("/?preset=bogus&agents=3");
+  await page.goto("/?preset=bogus&agents=13");
   await expect(placard(page)).toBeVisible();
   const names = await collectStationNames(page, 6);
-  expect([...names].sort()).toEqual([...expectedNames("working", 6)].sort());
-  await expect(page.getByRole("tooltip")).toContainText(STATE_WORDS.working);
+  expect([...names].sort()).toEqual([...expectedNames("mixed", 6)].sort());
   expect(errors).toEqual([]);
 });
 

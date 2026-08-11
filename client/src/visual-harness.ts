@@ -2,11 +2,11 @@ import type { AgentRecord, AgentState, AgentStateEvent } from "../../protocol/ge
 import type { ThemeChoice } from "./theme/theme";
 
 export type VisualPreset = AgentState | "mixed";
-export interface VisualConfig { preset: VisualPreset; agents: 1 | 2 | 6 | 12; theme: ThemeChoice }
+export type VisualAgentCount = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+export interface VisualConfig { preset: VisualPreset; agents: VisualAgentCount; theme: ThemeChoice }
 
 const presets = new Set<VisualPreset>(["idle", "working", "blocked", "done", "ended", "mixed"]);
-const agentCounts = new Set([1, 2, 6, 12]);
-export const defaultVisualConfig: VisualConfig = { preset: "working", agents: 6, theme: "light" };
+export const defaultVisualConfig: VisualConfig = { preset: "mixed", agents: 6, theme: "light" };
 
 export function isVisualMode(mode: string) { return mode === "visual"; }
 
@@ -14,7 +14,7 @@ export function parseVisualConfig(search: string): VisualConfig {
   const query = new URLSearchParams(search), preset = query.get("preset"), count = Number(query.get("agents"));
   return {
     preset: preset !== null && presets.has(preset as VisualPreset) ? preset as VisualPreset : defaultVisualConfig.preset,
-    agents: agentCounts.has(count) ? count as VisualConfig["agents"] : defaultVisualConfig.agents,
+    agents: Number.isInteger(count) && count >= 1 && count <= 12 ? count as VisualAgentCount : defaultVisualConfig.agents,
     theme: query.get("theme") === "dinner" ? "dark" : "light",
   };
 }
