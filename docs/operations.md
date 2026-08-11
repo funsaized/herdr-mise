@@ -63,17 +63,25 @@ TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gn
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
 
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256"
-
-# macOS:
-shasum -a 256 -c "$BASE.tar.gz.sha256"
-# Linux:
-# sha256sum -c "$BASE.tar.gz.sha256"
-
-tar -xzf "$BASE.tar.gz"
-./herdr-mise
+curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
+  && {
+    if command -v shasum >/dev/null 2>&1; then
+      shasum -a 256 -c "$BASE.tar.gz.sha256"
+    else
+      sha256sum -c "$BASE.tar.gz.sha256"
+    fi
+  } \
+  && tar -xzf "$BASE.tar.gz" \
+  && ./herdr-mise
 # open http://127.0.0.1:8686
 ```
+
+The default `TARGET` is macOS Apple Silicon. Replace it with either other
+target from the table on macOS Intel or Linux x86_64. The checksum selection
+uses `shasum` when available (macOS) and `sha256sum` otherwise (Linux). The
+explicit `&&` chain prevents checksum verification, extraction, or execution
+after any preceding failure; it does not rely on interactive-shell error
+handling or exit the user's shell.
 
 The archive contains three top-level files (no nested directory): the
 `herdr-mise` executable, the project `LICENSE`, and generated
@@ -650,6 +658,58 @@ npm run audit:accessibility   # Chrome and day/dinner station labels ≥ 4.5:1
 These run in CI (`scripts/audit-*.mjs`).
 
 ## Troubleshooting
+
+### Herdr socket unavailable
+
+The server cannot reach the Herdr Unix socket. The chrome shows the
+persistent `DEMO SERVICE` placard and the typed `sourceStatus` is
+`unavailableSocket` or `timeout` (`server/src/feed.rs`,
+`server/src/discovery.rs`). Causes and checks:
+
+- Herdr is installed but not running. Start the Herdr server and
+  confirm its documented socket path exists. The current Herdr
+  stable release and install options are at
+  <https://github.com/herdrdev/herdr/releases>.
+- `HERDR_SOCKET_PATH` overrides the default. Unset it to use the
+  Herdr-discovered path, or set it to the exact path Herdr reports.
+  Discovery precedence is documented in
+  [socket override](#socket-override).
+- The resolved socket path exceeds `sun_path` (104 chars), which can
+  happen with deeply nested `HERDR_SOCKET_PATH` values. Pick a path
+  under `/tmp` or `$HOME/.local` to stay well under the limit.
+- A sandboxed shell is blocking loopback binds. Run the binary
+  outside the sandbox.
+
+Once the socket is reachable, the server fetches and normalizes a
+fresh snapshot before it atomically swaps the demo roster for the
+live roster — no restart or browser reload is needed.
+
+### Herdr protocol not supported
+
+The server reached the socket, but the snapshot advertised a
+protocol outside the supported set. The chrome shows the persistent
+`DEMO SERVICE` placard and the typed `sourceStatus` is
+`unsupportedProtocol` (`server/src/adapter.rs` `AdapterError::Protocol`).
+
+The adapter only accepts protocols `17` and `19`
+(`HERDR_PROTOCOLS = &[17, 19]`). A snapshot with any other
+`protocol` value is rejected as `unsupportedProtocol`; this is the
+only path that produces that demo condition. Other product
+versions that ship protocol `17` or `19` are accepted by the
+adapter but are not part of the verified matrix above. The exact
+tested matrix is:
+
+| Herdr release | Snapshot protocol |
+|---------------|-------------------|
+| `0.7.5`       | `17`              |
+| `0.8.0`       | `19`              |
+
+If you are on a Herdr version that reports a different protocol,
+either upgrade Herdr to a tested release or stay on the demo
+placard; the binary will not synthesize a live feed outside the
+supported protocol set. Herdr releases on protocol `17` or `19`
+that are not in the verified table above are accepted by the
+adapter but are outside the tested release matrix.
 
 ### The overlay says *GAS LEAK — SERVICE SUSPENDED*
 
