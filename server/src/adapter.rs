@@ -79,7 +79,6 @@ struct RawSnapshot {
     protocol: u64,
     workspaces: Vec<Workspace>,
     agents: Vec<RawAgent>,
-    panes: Vec<RawAgent>,
     tabs: Vec<Value>,
     layouts: Vec<Value>,
 }
@@ -121,11 +120,7 @@ impl Normalizer {
             .into_iter()
             .map(|w| (w.workspace_id, w.label))
             .collect();
-        let source = if raw.agents.is_empty() {
-            raw.panes
-        } else {
-            raw.agents
-        };
+        let source = raw.agents;
         let mut current = HashSet::new();
         let mut agents = Vec::with_capacity(source.len());
         for agent in source {
@@ -381,6 +376,49 @@ mod tests {
 
         assert_eq!(snapshot.agents.len(), 1);
         assert_eq!(snapshot.agents[0].state, AgentState::Working);
+    }
+
+    #[test]
+    fn protocol_19_empty_agents_ignores_ordinary_panes() {
+        let mut n = Normalizer::default();
+        let snapshot = serde_json::from_str(include_str!(
+            "../tests/fixtures/snapshot-protocol-19-empty-agents.json"
+        ))
+        .unwrap();
+
+        let normalized = n
+            .normalize_snapshot_value(snapshot, "2026-08-11T00:00:00Z")
+            .unwrap();
+
+        assert!(normalized.agents.is_empty());
+        assert!(normalized.ended_ids.is_empty());
+    }
+
+    #[test]
+    fn protocol_19_unknown_status_agent_remains_visible() {
+        let mut n = Normalizer::default();
+        let snapshot = json!({
+            "version": "0.8.0",
+            "protocol": 19,
+            "workspaces": [],
+            "tabs": [],
+            "panes": [],
+            "layouts": [],
+            "agents": [{
+                "pane_id": "p-unknown",
+                "workspace_id": "",
+                "agent": "codex",
+                "agent_status": "unknown"
+            }]
+        });
+
+        let normalized = n
+            .normalize_snapshot_value(snapshot, "2026-08-11T00:00:00Z")
+            .unwrap();
+
+        assert_eq!(normalized.agents.len(), 1);
+        assert_eq!(normalized.agents[0].state, AgentState::Idle);
+        assert!(normalized.ended_ids.is_empty());
     }
 
     #[test]
