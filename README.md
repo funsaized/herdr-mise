@@ -426,6 +426,9 @@ These are release bounds, not optimization targets:
   socket override, demo fallback, source-loss and recovery
   semantics, package and checksum verification, diagnostics,
   troubleshooting.
+- [docs/backlog.md](docs/backlog.md) — proposed initial-RC backlog with
+  implementation scope, dependencies, acceptance criteria, and validation.
+  Accepted work is tracked in GitHub issues.
 - [SECURITY.md](SECURITY.md) — supported versions, threat model, and private
   vulnerability reporting.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — setup, verification gates, and review

@@ -8,6 +8,9 @@ opinions; the docs below will save you time.
 - `docs/architecture.md` — how the pieces fit (Rust server, TypeScript client,
   versioned protocol).
 - `docs/operations.md` — how to run, develop, and verify locally.
+- `docs/backlog.md` — proposed initial-RC work, sequencing, acceptance criteria,
+  and item-specific verification. GitHub issues become authoritative as items
+  are accepted.
 - `README.md` — product behavior, deliberate boundaries, installation, and
   current verification commands. Code plus passing tests wins when prose and
   behavior disagree.
