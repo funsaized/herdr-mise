@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRecord, AgentStateEvent } from "../../protocol/generated/agent-state-event";
-import { blockedPassGeometry, BUSSER_SWEEP_MS, BusserSweepTimeline, busserSweepSample, compactPixelText, donePlateGeometry, doorGeometry, passBellGeometry, passFrontSlot, shouldDisposeRetainedStation, shouldReconcileBusserClear, stationIdentityLabels, stationTicketGeometry, stationWorkspaceLabel, workspaceDisplayName } from "./scene/kitchen-scene";
+import { blockedPassGeometry, BUSSER_SWEEP_MS, BusserSweepTimeline, busserSweepSample, compactPixelText, donePlateGeometry, doorGeometry, passBellGeometry, passFrontSlot, sceneMotionPolicy, shouldDisposeRetainedStation, shouldReconcileBusserClear, stationIdentityLabels, stationTicketGeometry, stationWorkspaceLabel, workspaceDisplayName } from "./scene/kitchen-scene";
 import { computeLayout, stationVisualMetrics } from "./scene/layout";
 import { ParticlePool } from "./scene/particles";
 import { TransitionEngine } from "./scene/transition";
@@ -38,6 +38,10 @@ describe("agent store machines", () => {
 });
 
 describe("layout, transitions and resources", () => {
+  it("disables every decorative scene motion channel only while reduced motion is active",()=>{
+    expect(sceneMotionPolicy(true)).toEqual({idle:false,steam:false,cook:false,escalation:false,travel:false,busser:false,transitions:false});
+    expect(sceneMotionPolicy(false)).toEqual({idle:true,steam:true,cook:true,escalation:true,travel:true,busser:true,transitions:true});
+  });
   it.each([[2,2,1,false],[6,3,2,false],[12,6,2,true]] as const)("lays out %i agents", (count, columns, rows, banquet) => { const result=computeLayout(1200,740,Array.from({length:count},(_,i)=>String(i))); expect([result.columns,result.rows,result.banquet]).toEqual([columns,rows,banquet]); expect(result.stations).toHaveLength(count); for(const rect of result.stations){expect(rect.width).toBeGreaterThan(0);expect(rect.x+rect.width).toBeLessThanOrEqual(1200);} });
   it.each([1,2,6,12])("keeps %i-agent compositions dense, bounded, and on-screen",count=>{const layout=computeLayout(1200,740,Array.from({length:count},(_,i)=>String(i)));expect(layout.wall.height).toBeLessThanOrEqual(56*layout.unit);expect(layout.pass.width).toBeLessThanOrEqual(132*layout.unit);for(const station of layout.stations){expect(station.width/layout.unit).toBeGreaterThanOrEqual(layout.banquet?28:40);expect(station.y).toBeGreaterThan(layout.pass.y);expect(station.y+station.height).toBeLessThanOrEqual(740);}});
   it.each([1,2,6,12])("gives %i agents useful pixel weight and balanced occupancy at 1280x633",count=>{const layout=computeLayout(1280,633,Array.from({length:count},(_,i)=>String(i)));expect(layout.unit).toBe(4);const metrics=layout.stations.map(station=>stationVisualMetrics(layout,station));for(const metric of metrics){expect(metric.cookHeight).toBeGreaterThanOrEqual(67);expect(metric.counterHeight).toBeGreaterThanOrEqual(32);expect(metric.labelFontSize).toBeGreaterThanOrEqual(10);}expect(Math.max(...metrics.map(metric=>metric.stationBottom))).toBeGreaterThanOrEqual(count<=2?500:600);expect(Math.max(...metrics.map(metric=>metric.stationBottom))).toBeLessThanOrEqual(633);});

@@ -1,11 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentStore } from "./state/store";
 import { AgentWebSocketClient } from "./state/ws-client";
-import { createHintPersistence, createRuntimeStore } from "./runtime";
+import { createHintPersistence, createReducedMotionPreference, createRuntimeStore } from "./runtime";
 import { buildVisualFeed, initializeVisualMode, installVisualWebSocket, isVisualMode, parseVisualConfig } from "./visual-harness";
 import { stationIdentityLabels } from "./scene/kitchen-scene";
 
 afterEach(() => vi.useRealTimers());
+
+it("tracks reduced-motion changes in both directions and cleans up its media-query listener", () => {
+  let matches = true;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const query = {
+    get matches() { return matches; },
+    addEventListener: vi.fn((_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener)),
+    removeEventListener: vi.fn((_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener)),
+  } as unknown as MediaQueryList;
+  const preference = createReducedMotionPreference(query), changes: boolean[] = [];
+  expect(preference.current()).toBe(true);
+  const unsubscribe = preference.subscribe(value => changes.push(value));
+  matches = false;
+  for (const listener of listeners) listener({ matches } as MediaQueryListEvent);
+  matches = true;
+  for (const listener of listeners) listener({ matches } as MediaQueryListEvent);
+  expect(changes).toEqual([false, true]);
+  unsubscribe();
+  expect(query.removeEventListener).toHaveBeenCalledOnce();
+  expect(listeners.size).toBe(0);
+});
 
 describe("visual harness configuration", () => {
   it("parses every supported scene control", () => {

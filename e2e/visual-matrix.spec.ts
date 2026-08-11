@@ -26,10 +26,59 @@ function watchErrors(page: Page) {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(String(error)));
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("requestfailed", request => errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "request failed"}`));
   return errors;
 }
 
+type MotionMetrics={motion:{reduced:boolean;activeParticles:number;activeTransitions:number;activeBusserSweeps:number;continuous:boolean;preferenceChanges:number};blockedIndicators:number;stateIndicators:Record<string,number>;endedEntries:number};
+const sceneMetrics=(page:Page)=>page.evaluate(()=>(window as typeof window&{__miseSceneMetrics?:()=>MotionMetrics}).__miseSceneMetrics?.());
+
 const placard = (page: Page) => page.getByRole("status").filter({ hasText: "DEMO SERVICE" });
+
+test("reduced motion is static before blocked-scene startup in light and dinner themes",async({page})=>{
+  const errors=watchErrors(page);
+  await page.emulateMedia({reducedMotion:"reduce"});
+  for(const theme of ["light","dinner"]){
+    await page.goto(`/?preset=blocked&agents=1&theme=${theme}&stats`);
+    await expect(placard(page)).toBeVisible();
+    await expect(page.getByRole("button",{name:"mise-01, Blocked — at the pass, open details"})).toHaveCount(1);
+    await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,activeParticles:0,activeTransitions:0,activeBusserSweeps:0,continuous:false},blockedIndicators:1});
+  }
+  expect(errors).toEqual([]);
+});
+
+test("runtime preference changes preserve mixed lifecycle truth in both directions",async({page})=>{
+  const errors=watchErrors(page),hero=(state:string)=>page.getByRole("button",{name:`Codex, ${state}, open details`});
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.goto("/?preset=mixed&agents=6&stats");
+  await expect(hero("Working — on the fire")).toHaveCount(1);
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:false,continuous:true,preferenceChanges:1}});
+  await expect(hero("Blocked — at the pass")).toHaveCount(1,{timeout:8_000});
+  await expect(page.getByLabel("Agent state announcements")).toHaveText("Codex blocked, just now");
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,activeParticles:0,activeTransitions:0,activeBusserSweeps:0,continuous:false,preferenceChanges:2},blockedIndicators:3});
+  await expect(hero("Working — on the fire")).toHaveCount(1,{timeout:5_000});
+  await expect(hero("Done — plated")).toHaveCount(1,{timeout:5_000});
+  expect(errors).toEqual([]);
+});
+
+test("reduced startup preserves idle working blocked waiting and ended state indicators",async({page})=>{
+  const errors=watchErrors(page);
+  await page.emulateMedia({reducedMotion:"reduce"});
+  for(const [preset,label] of [["idle","Idle — prepping"],["working","Working — on the fire"],["blocked","Blocked — at the pass"]] as const){
+    await page.goto(`/?preset=${preset}&agents=1&stats`);
+    await expect(page.getByRole("button",{name:`mise-01, ${label}, open details`})).toHaveCount(1);
+    await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,continuous:false},stateIndicators:{[preset]:1},endedEntries:0});
+  }
+  await page.setViewportSize({width:1280,height:720});
+  await page.goto("/?preset=ended&agents=1&stats");
+  await expect(page.getByRole("status").filter({hasText:"Waiting for agents"})).toBeVisible();
+  await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,continuous:false},endedEntries:1});
+  await page.mouse.click((1280-368)/2+3*4+16,(4+12)*4+4);
+  await expect(page.getByRole("complementary",{name:"mise-01 session summary"})).toContainText("86'D — SESSION ENDED");
+  expect(errors).toEqual([]);
+});
 
 // Keyboard-cycle station focus and collect tooltip names until every
 // expected station has been seen. Hit regions appear only after scene init,
@@ -157,20 +206,25 @@ test("HMR socket delegates to native WebSocket and feed stays live past the stal
 });
 
 test("semantic station controls are AX-only Tab exclusions and restore focus after details close", async ({ page }) => {
+  await page.emulateMedia({reducedMotion:"reduce"});
   await page.goto("/?preset=working&agents=2");
   const station = page.getByRole("button", { name: "mise-01, Working — on the fire, open details" });
   await expect(station).toHaveAttribute("tabindex", "-1");
   await station.evaluate((element) => (element as HTMLButtonElement).click());
-  await expect(page.getByRole("complementary", { name: "mise-01 details" })).toBeVisible();
+  const panel=page.getByRole("complementary", { name: "mise-01 details" });
+  await expect(panel).toBeVisible();
+  await expect(panel).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("complementary", { name: "mise-01 details" })).toHaveCount(0);
   await expect(station).toBeFocused();
 });
 
 test("settings restores focus to its visible trigger", async ({ page }) => {
+  await page.emulateMedia({reducedMotion:"reduce"});
   await page.goto("/?preset=working&agents=1");
   const trigger = page.getByRole("button", { name: "Open settings" });
   await trigger.click();
-  await page.getByRole("button", { name: "Close settings" }).click();
+  await expect(page.getByRole("complementary",{name:"Settings"})).toBeFocused();
+  await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
 });

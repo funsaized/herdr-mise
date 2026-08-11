@@ -8,6 +8,13 @@ import { Chrome, DetailCard, ModeTreatment, SessionSummary, SettingsPanel } from
 afterEach(cleanup);
 const record:AgentRecord={id:"a",name:"refactor-auth",state:"working",progress:.5,stateEnteredAt:new Date().toISOString(),accentIndex:1,model:"codex",workspace:"/work/app",session:{runtimeMs:1_000,tickets:2}};
 describe("chrome interactions",()=>{
+  it("moves initial focus into settings and detail panels",()=>{
+    const {unmount}=render(<SettingsPanel settings={defaultSettings} onChange={()=>{}} onClose={()=>{}}/>);
+    expect(screen.getByLabelText("Settings")).toBe(document.activeElement);
+    unmount();
+    render(<DetailCard agent={{...record,targetState:"working",renderedState:"working",transitionStartedAt:0,clearAt:null,answerReceivedUntil:null,revision:1,history:[{state:"working",startedAt:Date.now()}]}} onClose={()=>{}}/>);
+    expect(screen.getByLabelText("refactor-auth details")).toBe(document.activeElement);
+  });
   it("renders exact mode truth treatments",()=>{const {rerender}=render(<ModeTreatment mode="empty" sourceStatus="connected" lastUpdateSeconds={0}/>);expect(screen.getByText("Waiting for agents — start one in herdr")).toBeTruthy();rerender(<ModeTreatment mode="demo" sourceStatus="unavailableSocket" lastUpdateSeconds={0}/>);expect(screen.getByText("DEMO SERVICE")).toBeTruthy();rerender(<ModeTreatment mode="disconnected" sourceStatus="connected" lastUpdateSeconds={14}/>);expect(screen.getByRole("alert").textContent).toContain("Lost connection to herdr");expect(screen.getByRole("alert").textContent).toContain("last update 14s ago");});
   it("distinguishes unsupported protocol from an unavailable socket",()=>{const {rerender}=render(<ModeTreatment mode="demo" sourceStatus="unavailableSocket" lastUpdateSeconds={0}/>);expect(screen.getByRole("status").textContent).toContain("socket unavailable");rerender(<ModeTreatment mode="demo" sourceStatus="unsupportedProtocol" lastUpdateSeconds={0}/>);expect(screen.getByRole("status").textContent).toContain("protocol is unsupported");expect(screen.getByRole("status").textContent).not.toContain("socket unavailable");});
   it("round-trips settings controls",()=>{const change=vi.fn(),close=vi.fn();render(<SettingsPanel settings={defaultSettings} onChange={change} onClose={close}/>);fireEvent.click(screen.getByRole("switch",{name:"Service bell"}));expect(change).toHaveBeenCalledWith({sound:true});fireEvent.click(screen.getByRole("button",{name:"Dinner"}));expect(change).toHaveBeenCalledWith({theme:"dark"});fireEvent.click(screen.getByRole("button",{name:"Close settings"}));expect(close).toHaveBeenCalledOnce();});

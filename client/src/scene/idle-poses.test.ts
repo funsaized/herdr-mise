@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Graphics } from "pixi.js";
-import { assignedIdlePose, drawIdlePose, idleAnimationFrame, idlePoseIsAnimated, IdlePoseAssignments, sampleIdlePose, SMOKE_LIFT_CYCLE_MS, smokeLiftUnits, type IdlePose } from "./idle-poses";
+import { assignedIdlePose, drawIdlePose, idleAnimationFrame, idlePoseIsAnimated, IdlePoseAssignments, reducedIdlePoseSample, sampleIdlePose, SMOKE_LIFT_CYCLE_MS, smokeLiftUnits, type IdlePose } from "./idle-poses";
 
 interface RecordedRect { x: number; y: number; width: number; height: number; fill?: unknown }
 
@@ -128,6 +128,12 @@ describe("idle pose rendering geometry", () => {
 });
 
 describe("idle pose animation", () => {
+  it("uses a decoration-free fixed sample for every reduced-motion idle pose",()=>{
+    for(const pose of ["smoke","recline","sleep","prep"] as const){
+      const sample=reducedIdlePoseSample(pose);
+      expect(sample).toMatchObject({frame:0,prepStep:0,bobUnits:0,handRaised:false,handLiftUnits:0,billows:[],zs:[]});
+    }
+  });
   it("uses a calm 4.2-second lift cycle with long stable holds and pixel-unit steps", () => {
     expect(SMOKE_LIFT_CYCLE_MS).toBe(4_200);
     expect(Array.from({ length: 10 }, (_, frame) => smokeLiftUnits(frame * 140))).toEqual(Array(10).fill(0));

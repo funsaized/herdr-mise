@@ -399,6 +399,27 @@ replaces the demo roster
   threshold, never continuously
   (`client/src/sound/bell.ts`).
 
+### Reduced motion and blocked-state salience
+
+herdr-mise follows the live OS `prefers-reduced-motion` preference. A change
+takes effect without a browser reload. With reduced motion enabled, the scene
+stops decorative idle marks and pose animation, steam particles, cook bob and
+flame flicker, travel/transitions, busser sweeps, and blocked pulse/vignette
+pulse. Lifecycle reconciliation, blocked elapsed text, keyboard focus and
+controls, state announcements, and state salience remain active.
+
+Blocked is still explicit and static: the cook is fixed at the pass, with a
+high-contrast outline, home/pass tickets, and an elapsed timer. The visible
+state text is `AT THE PASS`; its semantic station control keeps an accessible
+name such as `Codex, Blocked — at the pass, open details`. Bell arcs are solid,
+and the escalation vignette uses fixed opacity when its blocked stage is active.
+The signal uses text and shape as well as color or motion.
+
+For the executable human acceptance record, use the [reduced-motion and
+VoiceOver checklist](docs/operations.md#reduced-motion-and-voiceover-acceptance).
+The checklist starts as `NOT RUN`; it is not evidence of a completed VoiceOver
+session.
+
 ## Verification commands
 
 These are the exact commands the project uses as gates. Each is

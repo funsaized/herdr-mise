@@ -67,6 +67,10 @@ export function sampleIdlePose(pose: IdlePose, elapsedMs: number): IdlePoseSampl
   };
 }
 
+export function reducedIdlePoseSample(pose:IdlePose):IdlePoseSample {
+  return {...sampleIdlePose(pose,0),billows:[],zs:[]};
+}
+
 export function idlePoseIsAnimated(pose: IdlePose) { return pose !== "recline"; }
 
 export function idleAnimationFrame(pose: IdlePose, elapsedMs: number) {
