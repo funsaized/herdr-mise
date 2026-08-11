@@ -155,21 +155,25 @@ npm test
 
 ## BL-002 — Recover automatically from demo startup to a live Herdr feed
 
+- **Status:** Complete
 - **Priority:** P0
 - **Area:** feed, adapter, client chrome
 **Outcome:** Starting herdr-mise before Herdr no longer requires restarting
 herdr-mise, and the UI reports the real failure reason.
 
-### Evidence
+### Pre-implementation evidence
 
-`server/src/feed.rs::Feed::start` permanently selects `run_demo` after any
-startup discovery, connection, request, or normalization error.
-`server/src/feed.rs::run_demo` never probes the source again. The client then
-hardcodes `Mock feed — no herdr socket found` even when the actual failure is a
-timeout, unsupported protocol, remote error, or malformed response.
+Before BL-002 was implemented, `server/src/feed.rs::Feed::start` permanently
+selected `run_demo` after any startup discovery, connection, request, or
+normalization error, and `server/src/feed.rs::run_demo` never probed the source
+again. The client then hardcoded `Mock feed — no herdr socket found` even when
+the actual failure was a timeout, unsupported protocol, remote error, or
+malformed response.
 
-The RC audit reproduced this behavior: the process started in demo mode, a
-valid Herdr socket was made available, and the process remained in demo mode.
+The RC audit reproduced that pre-implementation behavior: the process started
+in demo mode, a valid Herdr socket was made available, and the process remained
+in demo mode. The current implementation and completion evidence below replace
+this behavior.
 
 ### Likely files
 
@@ -223,6 +227,18 @@ npm run validate:release
 
 Add an automated integration test that reproduces the exact
 missing-source-then-live-source lifecycle.
+
+### Completion evidence
+
+`FeedState` now atomically owns mode, typed source status, and roster. Startup
+uses a cancellation-aware exponential retry loop capped at 4 s; successful
+startup or source-loss recovery installs a freshly normalized authoritative
+snapshot before broadcasting or restoring health. The shared schema, Rust and
+TypeScript bindings, golden fixture, store, and chrome carry truthful
+non-sensitive source statuses. Feed tests cover missing-source-to-live recovery,
+paused-time backoff/shutdown, atomic replacement, source restoration, and wire
+coalescing; component tests distinguish an unavailable socket from an
+unsupported protocol.
 
 **Dependencies:** implement after or alongside BL-001 so the recovered initial
 snapshot is projected correctly.

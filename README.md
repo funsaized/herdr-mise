@@ -70,14 +70,17 @@ State machine and rendering limits are enforced in code:
 The product is a single binary with three observable app modes that the
 chrome surfaces honestly:
 
-- **Demo service.** Auto-discovered at the configured herdr socket path
-  was unavailable within 2 s. The server runs a deterministic mock
+- **Demo service.** Until a compatible Herdr snapshot is available, the
+  server runs a deterministic mock
   roster (`server/src/demo.rs`) and a persistent
   *DEMO SERVICE* placard is rendered in the chrome
   (`client/src/chrome/Chrome.tsx` `ModeTreatment`). The placard is not
-  dismissible.
+  dismissible and names the actual non-sensitive condition: unavailable
+  socket, timeout, unsupported protocol, or incompatible response. The server
+  retries with exponential backoff from 250 ms to a 4 s ceiling.
 - **Live service.** When `server/src/feed.rs` accepts a supported Herdr
-  snapshot, mode flips to `live` and the placard is removed.
+  snapshot, the same process atomically replaces the demo roster, flips to
+  `live`, and removes the placard; no restart or browser reload is needed.
 - **Disconnected.** A typed 1 Hz `heartbeat` keeps the liveness timer
   from firing on a quiet live feed
   (`server/src/service.rs`, `protocol/fixtures/heartbeat.v1.json`).
@@ -320,8 +323,10 @@ The server picks the herdr Unix socket path in this order
 3. `$HOME/.config/herdr/herdr.sock` if `HOME` is set.
 4. `./.config/herdr/herdr.sock` as a last resort.
 
-If the probe does not complete within 2 s, the server falls back to
-the demo feed and labels every snapshot with `"mode": "demo"`
+If a probe fails, the server uses the demo feed while it keeps retrying.
+Snapshots carry both `"mode": "demo"` and a typed `sourceStatus`; a newly
+available compatible source is normalized before an atomic live snapshot
+replaces the demo roster
 (`server/src/feed.rs`, `server/src/demo.rs`).
 
 ## Settings, keyboard, accessibility

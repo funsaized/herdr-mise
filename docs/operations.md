@@ -246,9 +246,18 @@ order:
 3. `$HOME/.config/herdr/herdr.sock` (if `HOME` set).
 4. `./.config/herdr/herdr.sock` as a final fallback.
 
-The probe is bounded to 2 s; on timeout or any adapter error
-(connect refused, protocol mismatch, malformed JSON) the server
-falls back to demo mode and the snapshot is labeled `"mode": "demo"`.
+Each probe is bounded to 2 s. On failure the server stays in labeled demo mode
+and retries with bounded exponential delays of 250 ms, 500 ms, 1 s, 2 s, then
+4 s. Shutdown cancels an in-flight probe or delay immediately. Demo snapshots
+include a typed `sourceStatus`: `unavailableSocket`, `timeout`,
+`unsupportedProtocol`, or `incompatibleResponse`; a live snapshot uses
+`connected`. These values contain no payload, agent, workspace, or socket-path
+diagnostics.
+
+When Herdr becomes available, the server fetches and normalizes a fresh
+snapshot before it atomically changes mode, status, and roster. The same
+process and open browser recover without restart. Demo cooks therefore cannot
+appear under a live label.
 
 Useful overrides:
 
@@ -317,6 +326,10 @@ WebSocket. The live loop flips it to `false` after three consecutive
 adapter errors and the WS loop closes the connection
 (`server/src/feed.rs`, `server/src/service.rs`).
 
+After source loss, health is restored only after a fresh snapshot has been
+fetched, normalized, and installed as the complete live roster. A reconnecting
+WebSocket still receives that snapshot before any delta.
+
 The client mirrors this with a 2.9 s liveness budget. Any of the
 following keeps the client in `live`:
 
@@ -343,7 +356,7 @@ the current snapshot. Re-`Esc` presses do not animate the catch-up.
 
 `axum::serve(...).with_graceful_shutdown(...)` is wired to
 `tokio::signal::ctrl_c()` in `server/src/main.rs`. On `SIGINT` the
-server cancels the live/demo/coalescer tasks, closes the loopback
+server cancels the live/retry tasks, closes the loopback
 listener, and exits within ~1 s with an open WebSocket. The release
 smoke (`scripts/smoke-release.sh`) sends `SIGINT` after the snapshot
 assertion and checks that the process exits cleanly.
