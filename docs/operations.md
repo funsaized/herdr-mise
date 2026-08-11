@@ -123,8 +123,8 @@ client side. Source: `client/src/main.tsx`,
 
 | Parameter | Accepted values          | Default   | Notes |
 |-----------|--------------------------|-----------|-------|
-| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed` | `working` | Any other value falls back to `working`. |
-| `agents`  | `1\|2\|6\|12`            | `6`       | Any other value (including `3`) falls back to `6`. |
+| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed` | `mixed` | Any other value falls back to `mixed`. |
+| `agents`  | Integer from `1` through `12` | `6`       | Absent, non-integer, non-finite, or out-of-range values fall back to `6`. |
 | `theme`   | `light\|dinner`          | `light`   | `dinner` selects the existing dark lighting. |
 
 Parsing and validation are concentrated in

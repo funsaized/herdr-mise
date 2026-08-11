@@ -11,12 +11,25 @@ describe("visual harness configuration", () => {
   it("parses every supported scene control", () => {
     expect(parseVisualConfig("?preset=done&agents=2&theme=dinner")).toEqual({ preset: "done", agents: 2, theme: "dark" });
     expect(parseVisualConfig("?preset=mixed&agents=12&theme=light")).toEqual({ preset: "mixed", agents: 12, theme: "light" });
+    for (let agents = 1; agents <= 12; agents += 1) {
+      expect(parseVisualConfig(`?agents=${agents}`).agents).toBe(agents);
+    }
   });
 
   it("uses deterministic defaults for absent and unsupported values", () => {
-    const fallback = { preset: "working", agents: 6, theme: "light" };
+    const fallback = { preset: "mixed", agents: 6, theme: "light" };
     expect(parseVisualConfig("")).toEqual(fallback);
-    expect(parseVisualConfig("?preset=nope&agents=3&theme=dark")).toEqual(fallback);
+    for (const agents of ["nope", "1.5", "Infinity", "0", "13"]) {
+      expect(parseVisualConfig(`?preset=nope&agents=${agents}`)).toEqual(fallback);
+    }
+  });
+
+  it("generates feeds matching intermediate agent counts", () => {
+    for (const agents of [3, 4, 5, 7, 11] as const) {
+      const [event] = buildVisualFeed({ preset: "mixed", agents, theme: "light" });
+      expect(event?.type).toBe("snapshot");
+      if (event?.type === "snapshot") expect(event.agents).toHaveLength(agents);
+    }
   });
 
   it("constructs stable protocol feeds for all supported counts and active presets", () => {
