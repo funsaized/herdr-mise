@@ -63,17 +63,25 @@ TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gn
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
 
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256"
-
-# macOS:
-shasum -a 256 -c "$BASE.tar.gz.sha256"
-# Linux:
-# sha256sum -c "$BASE.tar.gz.sha256"
-
-tar -xzf "$BASE.tar.gz"
-./herdr-mise
+curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
+  && {
+    if command -v shasum >/dev/null 2>&1; then
+      shasum -a 256 -c "$BASE.tar.gz.sha256"
+    else
+      sha256sum -c "$BASE.tar.gz.sha256"
+    fi
+  } \
+  && tar -xzf "$BASE.tar.gz" \
+  && ./herdr-mise
 # open http://127.0.0.1:8686
 ```
+
+The default `TARGET` is macOS Apple Silicon. Replace it with either other
+target from the table on macOS Intel or Linux x86_64. The checksum selection
+uses `shasum` when available (macOS) and `sha256sum` otherwise (Linux). The
+explicit `&&` chain prevents checksum verification, extraction, or execution
+after any preceding failure; it does not rely on interactive-shell error
+handling or exit the user's shell.
 
 The archive contains three top-level files (no nested directory): the
 `herdr-mise` executable, the project `LICENSE`, and generated
@@ -236,6 +244,144 @@ The original "Vite dev server proxies `/ws` to the Rust server"
 wording is **not accurate** for this repository and has been
 removed.
 
+## Reduced motion and VoiceOver acceptance
+
+### Behavior contract
+
+The scene reads the live OS media query
+`matchMedia("(prefers-reduced-motion: reduce)")` at startup and subscribes to
+its `change` event (`client/src/runtime.ts`,
+`client/src/scene/kitchen-scene.ts`). Changing the OS preference updates the
+open page in place without a browser reload.
+
+When reduced motion is active, the scene disables these decorative channels:
+
+- idle pose animation and idle marks (`billows` / `zs`);
+- steam particles;
+- cook bob and working-flame flicker;
+- travel and state transitions;
+- busser sweep travel; and
+- blocked bell-arc pulse and escalation-vignette pulse.
+
+Entering reduced motion also releases active particles, clears transitions,
+and removes active busser sweep graphics. The store still reconciles target and
+rendered lifecycle state, and the browser continues to update the elapsed
+blocked timer text, selection/focus treatment, keyboard controls, and the
+polite state-announcement region. Reduced motion changes presentation, not the
+truthful feed or the state itself. The CSS fallback also disables the
+canvas/filter and toggle-knob transitions and the disconnected-card blink
+(`client/src/theme/global.css`).
+
+A blocked cook remains fixed at the pass. The static signal combines a thick
+blocked outline, home and pass tickets, an elapsed timer chip, `AT THE PASS`
+state text, solid bell arcs, and fixed-opacity escalation vignette geometry when
+the corresponding escalation stage is active. The semantic station control
+uses an accessible name such as `Codex, Blocked — at the pass, open details`.
+The blocked state is therefore communicated with text and shape as well as
+color or motion.
+
+### Run setup
+
+Run the local visual candidate from the repository root:
+
+```sh
+npm run dev:visual
+# open http://localhost:8686/?preset=mixed&agents=6&theme=light
+```
+
+The visual harness is deterministic and supports the states needed by this
+checklist. Use these local URLs as convenient starting points:
+
+- `?preset=mixed&agents=6&theme=light` — working → blocked → working → done
+  announcement and lifecycle sequence;
+- `?preset=blocked&agents=1&theme=light` and
+  `?preset=blocked&agents=1&theme=dinner` — static blocked signal in both
+  themes;
+- `?preset=ended&agents=1&theme=light` — 86 board and ended-session summary.
+
+The same checks may be run against a local release binary at
+`http://127.0.0.1:8686`. Keep the browser on localhost; this is an acceptance
+record for the local, read-only visualizer, not a remote deployment test.
+
+### Acceptance record metadata
+
+Copy this block for each candidate. The placeholders are intentionally blank;
+do not replace them with private paths, channel IDs, email addresses, or local
+deployment identifiers.
+
+| Field | Record |
+|---|---|
+| Date | `<YYYY-MM-DD>` |
+| Commit / candidate identifier | `<commit-or-candidate>` |
+| macOS | `<macOS version>` |
+| Browser | `<browser and version>` |
+| VoiceOver settings | `<verbosity, speech rate, punctuation, hints, navigation/rotor settings>` |
+| Tester | `<tester name or initials>` |
+| Overall result | `NOT RUN` |
+| Artifact / evidence notes | `<observed speech transcript, screenshot, recording, or none>` |
+
+### VoiceOver and keyboard checklist
+
+Every row below intentionally starts at `NOT RUN`. Allowed row values are
+`PASS`, `FAIL`, and `NOT RUN`. After a human run, replace that value with
+exactly `PASS` or `FAIL` and record the observed VoiceOver speech or other
+evidence. Do not infer a manual pass from an automated test or from the
+implementation handoff.
+
+#### Roles, names, and status surfaces
+
+| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
+|---|---|---|---|
+| VO-01 | Open Settings with the `Open settings` button. VoiceOver exposes a complementary panel named `Settings`, its `Settings` heading, and a `Close settings` button. | `NOT RUN` | |
+| VO-02 | In Settings, verify a `Service bell` switch exposes its on/off state; `Light`, `Dinner`, and `System` are buttons exposing pressed state; and selects are named `Done timeout`, `Faster bell after`, and `Screen-edge glow after`. | `NOT RUN` | |
+| VO-03 | Navigate the `Agent stations` navigation. Each station control is a button with a name shaped like `<agent>, <state>, open details`; verify the state words are human-readable (`Idle — prepping`, `Working — on the fire`, `Blocked — at the pass`, `Done — plated`, or `Ended — 86'd`). | `NOT RUN` | |
+| VO-04 | Activate an agent station control. VoiceOver exposes a complementary panel named `<agent> details`, the agent heading, its state label, a `Close panel` button, and the `Model`, `Workspace`, `Time in state`, `Tickets this session`, and `Session history` text. | `NOT RUN` | |
+| VO-05 | Open an 86 board row. VoiceOver exposes a complementary panel named `<agent> session summary`, the `86'D — SESSION ENDED` label, a `Close panel` button, and `Runtime`, `Tickets served`, `Ended at`, and `Final state` text. | `NOT RUN` | |
+| VO-06 | When the corresponding condition is present, verify status/alert semantics: `DEMO SERVICE` and `Waiting for agents — start one in herdr` are `status` surfaces; `GAS LEAK — SERVICE SUSPENDED` is an `alert`. | `NOT RUN` | |
+| VO-07 | Verify the live region is named `Agent state announcements`, is polite, and is atomic. It should expose only the current announcement, not a stale concatenation of prior announcements. | `NOT RUN` | |
+
+#### Focus, Escape, and restoration
+
+| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
+|---|---|---|---|
+| FOCUS-01 | Activate `Open settings`. Initial focus lands on the `Settings` panel container, not an arbitrary background element. | `NOT RUN` | |
+| FOCUS-02 | Activate an `Agent stations` button for a live cook. Initial focus lands on the `<agent> details` panel container. | `NOT RUN` | |
+| FOCUS-03 | Open an ended-session summary. Initial focus lands on the `<agent> session summary` panel container. | `NOT RUN` | |
+| FOCUS-04 | With Settings focused, press `Escape`. Settings closes and the page returns to the settings trigger. Repeat with focus on an interactive Settings control to verify Escape remains global. | `NOT RUN` | |
+| FOCUS-05 | With an agent detail panel focused, press `Escape`; then repeat with an ended-session summary. The panel closes without changing the Herdr feed. | `NOT RUN` | |
+| FOCUS-06 | Open Settings from `Open settings`, close with its close button and with `Escape`, and verify focus returns to the originating `Open settings` trigger each time. | `NOT RUN` | |
+| FOCUS-07 | Open details by activating the originating semantic station control, close with the panel close button and with `Escape`, and verify focus returns to that same semantic station control. | `NOT RUN` | |
+
+#### Keyboard operation and announcements
+
+| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
+|---|---|---|---|
+| KEY-01 | From the document body, use `ArrowRight`/`ArrowDown` to cycle stations forward and `ArrowLeft`/`ArrowUp` to cycle backward. Use `Tab` from the body as the documented forward cycle. Verify the visible focus ring and station identity change together. | `NOT RUN` | |
+| KEY-02 | With a station focused, press `Enter` to open details. Verify the station mirror buttons remain `tabindex="-1"` (AX/semantic controls, not ordinary Tab stops) and can still be activated through VoiceOver or the documented keyboard path. | `NOT RUN` | |
+| KEY-03 | In Settings and detail/summary panels, use `Tab` and `Shift+Tab` to reach every button, switch, and select. Operate buttons/switches with native keyboard activation, change each select with keyboard input, and use `Escape` to close. | `NOT RUN` | |
+| ANN-01 | Cause a real transition into blocked (the initial `blocked` snapshot has no prior state announcement). Expect exactly one concise live-region update with `<agent> blocked, just now`; for other state transitions record the emitted `<agent> <state>` wording. | `NOT RUN` | |
+| ANN-02 | Leave the page open through heartbeats, progress-only updates, and repeated observation of the same state. Expect no duplicate announcement and no stale announcement after the next real state transition. Record any VoiceOver repetition rather than treating it as a pass. | `NOT RUN` | |
+
+#### Reduced-motion startup and runtime changes
+
+| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
+|---|---|---|---|
+| RM-01 | Set the macOS Reduce Motion preference before opening/reloading the light-theme page. Verify startup is static: no idle pose/mark animation, steam particles, cook bob, flame flicker, travel/transition, busser sweep, or blocked pulse/vignette pulse. | `NOT RUN` | |
+| RM-02 | Repeat RM-01 with the dinner theme. Verify the same motion policy and confirm the blocked signal remains recognizable. | `NOT RUN` | |
+| RM-03 | Without reloading the page, change Reduce Motion from reduce to normal. Verify `prefers-reduced-motion` changes in place and adjacent normal-motion channels resume; do not interpret resuming decoration as a state change. | `NOT RUN` | |
+| RM-04 | Without reloading, change the preference from normal to reduce. Verify active particles, transitions, busser graphics, and pulses stop/clear immediately and remain static. | `NOT RUN` | |
+| RM-05 | While reduced motion is active, let the feed change states. Verify lifecycle labels, the blocked elapsed timer text, keyboard focus/selection, and the live announcement region continue to update. | `NOT RUN` | |
+| RM-06 | In light theme, inspect a blocked cook at the pass. Verify fixed cook-at-pass geometry, high-contrast outline, home/pass tickets, timer chip, `AT THE PASS` text, solid bell arcs, and fixed-opacity vignette at its escalation stage. Confirm the state is conveyed by text and shape, not color or motion alone. | `NOT RUN` | |
+| RM-07 | Repeat RM-06 in dinner theme. If the vignette stage is not reached during the session, record that sub-check as `NOT RUN` and include the configured threshold/wait in the evidence notes. | `NOT RUN` | |
+
+### Manual result boundary
+
+Record the overall result only after all applicable rows have an explicit
+status and evidence note. This document intentionally records no human
+VoiceOver result: the initial overall value is `NOT RUN`, and automated checks
+such as `npm test`, `npm run audit:accessibility`, and `npm run test:visual` do
+not substitute for listening to VoiceOver speech.
+
 ## Socket override
 
 `server/src/discovery.rs` resolves the herdr Unix socket in this
@@ -246,9 +392,18 @@ order:
 3. `$HOME/.config/herdr/herdr.sock` (if `HOME` set).
 4. `./.config/herdr/herdr.sock` as a final fallback.
 
-The probe is bounded to 2 s; on timeout or any adapter error
-(connect refused, protocol mismatch, malformed JSON) the server
-falls back to demo mode and the snapshot is labeled `"mode": "demo"`.
+Each probe is bounded to 2 s. On failure the server stays in labeled demo mode
+and retries with bounded exponential delays of 250 ms, 500 ms, 1 s, 2 s, then
+4 s. Shutdown cancels an in-flight probe or delay immediately. Demo snapshots
+include a typed `sourceStatus`: `unavailableSocket`, `timeout`,
+`unsupportedProtocol`, or `incompatibleResponse`; a live snapshot uses
+`connected`. These values contain no payload, agent, workspace, or socket-path
+diagnostics.
+
+When Herdr becomes available, the server fetches and normalizes a fresh
+snapshot before it atomically changes mode, status, and roster. The same
+process and open browser recover without restart. Demo cooks therefore cannot
+appear under a live label.
 
 Useful overrides:
 
@@ -317,6 +472,10 @@ WebSocket. The live loop flips it to `false` after three consecutive
 adapter errors and the WS loop closes the connection
 (`server/src/feed.rs`, `server/src/service.rs`).
 
+After source loss, health is restored only after a fresh snapshot has been
+fetched, normalized, and installed as the complete live roster. A reconnecting
+WebSocket still receives that snapshot before any delta.
+
 The client mirrors this with a 2.9 s liveness budget. Any of the
 following keeps the client in `live`:
 
@@ -343,7 +502,7 @@ the current snapshot. Re-`Esc` presses do not animate the catch-up.
 
 `axum::serve(...).with_graceful_shutdown(...)` is wired to
 `tokio::signal::ctrl_c()` in `server/src/main.rs`. On `SIGINT` the
-server cancels the live/demo/coalescer tasks, closes the loopback
+server cancels the live/retry tasks, closes the loopback
 listener, and exits within ~1 s with an open WebSocket. The release
 smoke (`scripts/smoke-release.sh`) sends `SIGINT` after the snapshot
 assertion and checks that the process exits cleanly.
@@ -637,6 +796,58 @@ npm run audit:accessibility   # Chrome and day/dinner station labels ≥ 4.5:1
 These run in CI (`scripts/audit-*.mjs`).
 
 ## Troubleshooting
+
+### Herdr socket unavailable
+
+The server cannot reach the Herdr Unix socket. The chrome shows the
+persistent `DEMO SERVICE` placard and the typed `sourceStatus` is
+`unavailableSocket` or `timeout` (`server/src/feed.rs`,
+`server/src/discovery.rs`). Causes and checks:
+
+- Herdr is installed but not running. Start the Herdr server and
+  confirm its documented socket path exists. The current Herdr
+  stable release and install options are at
+  <https://github.com/herdrdev/herdr/releases>.
+- `HERDR_SOCKET_PATH` overrides the default. Unset it to use the
+  Herdr-discovered path, or set it to the exact path Herdr reports.
+  Discovery precedence is documented in
+  [socket override](#socket-override).
+- The resolved socket path exceeds `sun_path` (104 chars), which can
+  happen with deeply nested `HERDR_SOCKET_PATH` values. Pick a path
+  under `/tmp` or `$HOME/.local` to stay well under the limit.
+- A sandboxed shell is blocking loopback binds. Run the binary
+  outside the sandbox.
+
+Once the socket is reachable, the server fetches and normalizes a
+fresh snapshot before it atomically swaps the demo roster for the
+live roster — no restart or browser reload is needed.
+
+### Herdr protocol not supported
+
+The server reached the socket, but the snapshot advertised a
+protocol outside the supported set. The chrome shows the persistent
+`DEMO SERVICE` placard and the typed `sourceStatus` is
+`unsupportedProtocol` (`server/src/adapter.rs` `AdapterError::Protocol`).
+
+The adapter only accepts protocols `17` and `19`
+(`HERDR_PROTOCOLS = &[17, 19]`). A snapshot with any other
+`protocol` value is rejected as `unsupportedProtocol`; this is the
+only path that produces that demo condition. Other product
+versions that ship protocol `17` or `19` are accepted by the
+adapter but are not part of the verified matrix above. The exact
+tested matrix is:
+
+| Herdr release | Snapshot protocol |
+|---------------|-------------------|
+| `0.7.5`       | `17`              |
+| `0.8.0`       | `19`              |
+
+If you are on a Herdr version that reports a different protocol,
+either upgrade Herdr to a tested release or stay on the demo
+placard; the binary will not synthesize a live feed outside the
+supported protocol set. Herdr releases on protocol `17` or `19`
+that are not in the verified table above are accepted by the
+adapter but are outside the tested release matrix.
 
 ### The overlay says *GAS LEAK — SERVICE SUSPENDED*
 

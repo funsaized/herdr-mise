@@ -8,6 +8,88 @@ skin over a small, versioned JSON feed.
 herdr-mise does not control agents, does not render their output, and does
 not aggregate remote servers. It is a window, not an office.
 
+## Quick start
+
+Install Herdr, then download, verify, and run herdr-mise
+`v0.1.0-rc.1`. Reach a truthful live kitchen in under five minutes.
+Detailed platform commands live in
+[Operations — local run](docs/operations.md#local-run).
+
+### Install and start Herdr
+
+Pick any official install path from <https://herdr.dev> (see the
+[Herdr install docs](https://herdr.dev/docs/install)) and run
+`herdr` in its own terminal — leave it running. Source or release
+at <https://github.com/herdrdev/herdr>; latest stable is
+[Herdr `v0.8.0`](https://github.com/herdrdev/herdr/releases).
+
+```sh
+curl -fsSL https://herdr.dev/install.sh | sh   # or: brew install herdr / mise use -g herdr
+herdr   # keep this terminal running
+```
+
+### Download, verify, and run herdr-mise
+
+In a **second** terminal: download the archive and its `.sha256`
+sidecar, **verify the checksum first**, then extract and run. Full
+per-platform detail and codesign checks:
+[Operations — run the release archive](docs/operations.md#run-the-release-archive).
+
+```sh
+TAG=v0.1.0-rc.1
+TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
+BASE=herdr-mise-${TAG}-${TARGET}
+URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
+
+curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
+  && {
+    if command -v shasum >/dev/null 2>&1; then
+      shasum -a 256 -c "$BASE.tar.gz.sha256"
+    else
+      sha256sum -c "$BASE.tar.gz.sha256"
+    fi
+  } \
+  && tar -xzf "$BASE.tar.gz" \
+  && ./herdr-mise
+```
+
+Open <http://127.0.0.1:8686>.
+
+### Recognize live vs. demo
+
+- **Live.** The `DEMO SERVICE` placard is **absent** and the
+  WebSocket payload carries `mode: "live"`.
+- **Demo.** A persistent `DEMO SERVICE` placard is shown for
+  `unavailableSocket`, `timeout`, `unsupportedProtocol`, or
+  `incompatibleResponse`. Demo is **not** a successful live
+  connection — its cooks are a deterministic mock.
+
+Troubleshooting: [Herdr socket unavailable](docs/operations.md#herdr-socket-unavailable),
+[Herdr protocol not supported](docs/operations.md#herdr-protocol-not-supported).
+
+### Tested Herdr compatibility
+
+The adapter (`server/src/adapter.rs`) accepts protocols **17** and
+**19**; only snapshots outside that set trigger
+`unsupportedProtocol`. Other product versions on 17/19 are accepted
+but not part of the verified matrix below.
+
+| Herdr release | Snapshot protocol |
+|---------------|-------------------|
+| `0.7.5`       | `17`              |
+| `0.8.0`       | `19`              |
+
+Evidence: `server/tests/fixtures/snapshot-working.json`,
+`snapshot-unknown-fields.json`,
+`snapshot-protocol-19-empty-agents.json`, plus a live
+`herdr api snapshot` for `0.8.0`.
+
+### Relationship
+
+herdr-mise is an **independent community project**, not an official
+Herdr project, and is not affiliated with, endorsed by, or
+maintained by the Herdr team.
+
 ![Six AI agents sharing a calm kitchen service with idle, active, blocked, and plated stations](docs/assets/herdr-mise-demo.gif)
 
 The GIF and screens below are repeatable captures from the isolated visual
@@ -70,14 +152,17 @@ State machine and rendering limits are enforced in code:
 The product is a single binary with three observable app modes that the
 chrome surfaces honestly:
 
-- **Demo service.** Auto-discovered at the configured herdr socket path
-  was unavailable within 2 s. The server runs a deterministic mock
+- **Demo service.** Until a compatible Herdr snapshot is available, the
+  server runs a deterministic mock
   roster (`server/src/demo.rs`) and a persistent
   *DEMO SERVICE* placard is rendered in the chrome
   (`client/src/chrome/Chrome.tsx` `ModeTreatment`). The placard is not
-  dismissible.
+  dismissible and names the actual non-sensitive condition: unavailable
+  socket, timeout, unsupported protocol, or incompatible response. The server
+  retries with exponential backoff from 250 ms to a 4 s ceiling.
 - **Live service.** When `server/src/feed.rs` accepts a supported Herdr
-  snapshot, mode flips to `live` and the placard is removed.
+  snapshot, the same process atomically replaces the demo roster, flips to
+  `live`, and removes the placard; no restart or browser reload is needed.
 - **Disconnected.** A typed 1 Hz `heartbeat` keeps the liveness timer
   from firing on a quiet live feed
   (`server/src/service.rs`, `protocol/fixtures/heartbeat.v1.json`).
@@ -207,62 +292,15 @@ dependencies plus the bundled fonts.
 | macOS Intel | `x86_64-apple-darwin` | `herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz` |
 | Linux x86_64 | `x86_64-unknown-linux-gnu` | `herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz` |
 
-The commands below target the upstream `funsaized/herdr-mise` release. Always
-download the archive **and** its `.sha256` sidecar, verify the checksum, then
-extract and run.
+Always download the archive **and** its `.sha256` sidecar, verify the checksum
+before extraction, and allow any failed step to prevent execution. The sole
+detailed, copy-pasteable procedure—including portable checksum selection—is
+[Operations — run the release archive](docs/operations.md#run-the-release-archive).
 
-### macOS arm64
-
-```sh
-TAG=v0.1.0-rc.1
-TARGET=aarch64-apple-darwin
-BASE=herdr-mise-${TAG}-${TARGET}
-URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
-
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256"
-shasum -a 256 -c "$BASE.tar.gz.sha256"
-tar -xzf "$BASE.tar.gz"
-./herdr-mise
-# open http://127.0.0.1:8686
-```
-
-### macOS x86_64
-
-```sh
-TAG=v0.1.0-rc.1
-TARGET=x86_64-apple-darwin
-BASE=herdr-mise-${TAG}-${TARGET}
-URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
-
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256"
-shasum -a 256 -c "$BASE.tar.gz.sha256"
-tar -xzf "$BASE.tar.gz"
-./herdr-mise
-# open http://127.0.0.1:8686
-```
-
-### Linux x86_64
-
-```sh
-TAG=v0.1.0-rc.1
-TARGET=x86_64-unknown-linux-gnu
-BASE=herdr-mise-${TAG}-${TARGET}
-URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
-
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256"
-sha256sum -c "$BASE.tar.gz.sha256"
-tar -xzf "$BASE.tar.gz"
-./herdr-mise
-# open http://127.0.0.1:8686
-```
-
-Run checksum verification from the directory that holds both files. The
-sidecar records the archive basename only. On macOS, signed/notarized
-binaries can also be checked after extraction with
-`codesign --verify --deep --strict --verbose=2 ./herdr-mise`. This is a bare
-CLI rather than an app bundle, so Apple's app-assessment tool is not an
-applicable acceptance check; see
-[Operations](docs/operations.md#standalone-cli-notarization-no-stapling).
+On macOS, the release binary is signed and notarized. It is a bare CLI rather
+than an app bundle, so Apple's app-assessment tool is not an applicable
+acceptance check; verification details are in
+[Operations — standalone CLI notarization](docs/operations.md#standalone-cli-notarization-no-stapling).
 
 ### Upgrade
 
@@ -286,6 +324,12 @@ is installed on the host.
 
 Operator signing, tag publication, and failure recovery live in
 [Operations — publishing a signed prerelease](docs/operations.md#publishing-a-signed-prerelease).
+
+If the chrome still shows the `DEMO SERVICE` placard after following
+the steps above, see
+[troubleshooting — Herdr socket unavailable](docs/operations.md#herdr-socket-unavailable)
+and
+[troubleshooting — Herdr protocol not supported](docs/operations.md#herdr-protocol-not-supported).
 
 ## URL and security model
 
@@ -320,8 +364,10 @@ The server picks the herdr Unix socket path in this order
 3. `$HOME/.config/herdr/herdr.sock` if `HOME` is set.
 4. `./.config/herdr/herdr.sock` as a last resort.
 
-If the probe does not complete within 2 s, the server falls back to
-the demo feed and labels every snapshot with `"mode": "demo"`
+If a probe fails, the server uses the demo feed while it keeps retrying.
+Snapshots carry both `"mode": "demo"` and a typed `sourceStatus`; a newly
+available compatible source is normalized before an atomic live snapshot
+replaces the demo roster
 (`server/src/feed.rs`, `server/src/demo.rs`).
 
 ## Settings, keyboard, accessibility
@@ -352,6 +398,27 @@ the demo feed and labels every snapshot with `"mode": "demo"`
   bell dings once on entering blocked and again at each escalation
   threshold, never continuously
   (`client/src/sound/bell.ts`).
+
+### Reduced motion and blocked-state salience
+
+herdr-mise follows the live OS `prefers-reduced-motion` preference. A change
+takes effect without a browser reload. With reduced motion enabled, the scene
+stops decorative idle marks and pose animation, steam particles, cook bob and
+flame flicker, travel/transitions, busser sweeps, and blocked pulse/vignette
+pulse. Lifecycle reconciliation, blocked elapsed text, keyboard focus and
+controls, state announcements, and state salience remain active.
+
+Blocked is still explicit and static: the cook is fixed at the pass, with a
+high-contrast outline, home/pass tickets, and an elapsed timer. The visible
+state text is `AT THE PASS`; its semantic station control keeps an accessible
+name such as `Codex, Blocked — at the pass, open details`. Bell arcs are solid,
+and the escalation vignette uses fixed opacity when its blocked stage is active.
+The signal uses text and shape as well as color or motion.
+
+For the executable human acceptance record, use the [reduced-motion and
+VoiceOver checklist](docs/operations.md#reduced-motion-and-voiceover-acceptance).
+The checklist starts as `NOT RUN`; it is not evidence of a completed VoiceOver
+session.
 
 ## Verification commands
 
@@ -426,6 +493,9 @@ These are release bounds, not optimization targets:
   socket override, demo fallback, source-loss and recovery
   semantics, package and checksum verification, diagnostics,
   troubleshooting.
+- [docs/backlog.md](docs/backlog.md) — proposed initial-RC backlog with
+  implementation scope, dependencies, acceptance criteria, and validation.
+  Accepted work is tracked in GitHub issues.
 - [SECURITY.md](SECURITY.md) — supported versions, threat model, and private
   vulnerability reporting.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — setup, verification gates, and review

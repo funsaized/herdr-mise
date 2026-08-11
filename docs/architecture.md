@@ -89,7 +89,8 @@ WebSocket (`server/src/service.rs`, `server/Cargo.toml`).
   |                                                                |
   |   main.rs        tokio::main, binds 127.0.0.1:8686, axum srv  |
   |   discovery.rs   HERDR_SOCKET_PATH > XDG > HOME > ./.config    |
-  |   feed.rs        Feed, mode Live/Demo, 1.25 s coalescer       |
+  |   feed.rs        Atomic mode/status/roster, startup retry,     |
+  |                  Live/Demo, 1.25 s coalescer                   |
   |   adapter.rs     Herdr protocol normalizer (schema kept       |
   |                  here), snapshot+delta on internal bus         |
   |   demo.rs        Deterministic six-agent roster: Codex cycles, |
@@ -153,25 +154,19 @@ Two correctness rules enforced end-to-end:
   receives a fresh snapshot on `open`, not deltas relative to its
   previous session.
 
-## Demo fallback path
+## Demo fallback and automatic recovery
 
 ```
-  Feed::start
-      |
-      |--- adapter::fetch_snapshot(path, 2 s) --+
-      |                                         |
-      |                                  success?|
-      |                                         v
-      |                              normalize_snapshot_value
-      |                              (protocol == 17 or 19)
-      |                                         |
-      |                +----- yes --------------+------- no -----+
-      |                v                                  v
-      |       mode = Live                       mode = Demo
-      |       apply_live(...)                   replace_demo(demo::agents(0))
-      |       spawn run_live(...)               spawn run_demo(...)
-      v
-  ...
+  Feed::start -> install labeled demo roster -> spawn startup recovery
+                                                |
+                         fetch + normalize fresh snapshot
+                                                |
+              failure --------------------------+----------- success
+                 |                                             |
+       publish typed sourceStatus                    one FeedState write:
+       wait 250ms..4s, retry                         mode + connected + roster
+                 |                                             |
+                 +---------------- retry              broadcast full snapshot
 ```
 
 Demo content is deterministic at the process level: a fixed run start
@@ -179,9 +174,16 @@ timestamp, dwell measured in tens of seconds or minutes (not one-second
 churn), Codex repeating working → blocked → working → done with a stable
 id, Claude parked in `blocked`, and Gemini ending once per five-minute
 session before returning with a new id. The roster is always labeled
-`"mode": "demo"` in the snapshot, and the chrome renders the persistent
+`"mode": "demo"` and carries a typed, non-sensitive `sourceStatus` in the
+snapshot. The chrome renders the persistent
 *DEMO SERVICE* placard (`server/src/demo.rs`,
 `client/src/chrome/Chrome.tsx`).
+
+`FeedState` keeps mode, source status, and agents under one write lock. Recovery
+normalizes before acquiring that lock, replaces the complete roster, and then
+broadcasts a live snapshot. Source-loss recovery follows the same
+fresh-snapshot-first installation before health is restored, preserving the
+WebSocket snapshot-before-delta contract.
 
 ## Typed heartbeat and liveness
 
@@ -229,7 +231,7 @@ reconnects in 1 s.
                 |                                       v
                 |                                 broadcast -> WS frame
                 v
-        (loop until shutdown)
+        (runs for the process lifetime; process exit reaps it)
 ```
 
 `publish_high_frequency` is the production path for bursty

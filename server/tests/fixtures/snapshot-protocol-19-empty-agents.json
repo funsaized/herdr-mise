@@ -1,0 +1,20 @@
+{
+  "version": "0.8.0",
+  "protocol": 19,
+  "workspaces": [{"workspace_id": "ws-1", "label": "example"}],
+  "tabs": [],
+  "layouts": [],
+  "agents": [],
+  "panes": [
+    {
+      "pane_id": "terminal-1",
+      "workspace_id": "ws-1",
+      "agent_status": "unknown"
+    },
+    {
+      "pane_id": "terminal-2",
+      "workspace_id": "ws-1",
+      "agent_status": "idle"
+    }
+  ]
+}

@@ -67,3 +67,7 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 3px solid
 .stationA11yMirror { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); }
 .stationA11yMirror button { position:absolute; width:1px; height:1px; padding:0; border:0; }
 @keyframes blink { 50% { opacity:.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .canvasHost, .toggle i { transition: none; }
+  .disconnectCard p i { animation: none; }
+}

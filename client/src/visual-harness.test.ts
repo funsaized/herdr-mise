@@ -1,11 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentStore } from "./state/store";
 import { AgentWebSocketClient } from "./state/ws-client";
-import { createHintPersistence, createRuntimeStore } from "./runtime";
+import { createHintPersistence, createReducedMotionPreference, createRuntimeStore } from "./runtime";
 import { buildVisualFeed, initializeVisualMode, installVisualWebSocket, isVisualMode, parseVisualConfig } from "./visual-harness";
 import { stationIdentityLabels } from "./scene/kitchen-scene";
 
 afterEach(() => vi.useRealTimers());
+
+it("tracks reduced-motion changes in both directions and cleans up its media-query listener", () => {
+  let matches = true;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const query = {
+    get matches() { return matches; },
+    addEventListener: vi.fn((_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener)),
+    removeEventListener: vi.fn((_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener)),
+  } as unknown as MediaQueryList;
+  const preference = createReducedMotionPreference(query), changes: boolean[] = [];
+  expect(preference.current()).toBe(true);
+  const unsubscribe = preference.subscribe(value => changes.push(value));
+  matches = false;
+  for (const listener of listeners) listener({ matches } as MediaQueryListEvent);
+  matches = true;
+  for (const listener of listeners) listener({ matches } as MediaQueryListEvent);
+  expect(changes).toEqual([false, true]);
+  unsubscribe();
+  expect(query.removeEventListener).toHaveBeenCalledOnce();
+  expect(listeners.size).toBe(0);
+});
 
 describe("visual harness configuration", () => {
   it("parses every supported scene control", () => {
@@ -138,7 +159,7 @@ describe("visual WebSocket boundary", () => {
   it("shows a generic temporary answer cue only after blocked returns to working", () => {
     const now = Date.parse("2026-08-01T15:00:00.000Z"), store = new AgentStore({ now: () => now, setTimeout, clearTimeout });
     const hero = (state: "blocked" | "working") => ({ version: 1 as const, type: "delta" as const, mode: "demo" as const, operation: "upsert" as const, agent: { id: "hero", name: "Any agent", state, progress: state === "working" ? 0.7 : null, stateEnteredAt: new Date(now).toISOString(), accentIndex: 0, model: "codex", workspace: "/work/any", session: { runtimeMs: 1, tickets: 0 } } });
-    store.apply({ version: 1, type: "snapshot", mode: "demo", agents: [hero("blocked").agent] });
+    store.apply({ version: 1, type: "snapshot", mode: "demo", sourceStatus: "unavailableSocket", agents: [hero("blocked").agent] });
     store.apply(hero("working"));
     const agent = store.snapshot().agents.get("hero")!;
     expect(stationIdentityLabels(agent, "working", now).status).toContain("ANSWER RECEIVED");
@@ -148,7 +169,7 @@ describe("visual WebSocket boundary", () => {
   it("does not show the answer cue for initial working or idle returning to working", () => {
     const now = Date.parse("2026-08-01T15:00:00.000Z"), store = new AgentStore({ now: () => now, setTimeout, clearTimeout });
     const record = (state: "idle" | "working") => ({ id: "hero", name: "Any agent", state, progress: state === "working" ? 0.7 : null, stateEnteredAt: new Date(now).toISOString(), accentIndex: 0, model: "codex", workspace: "/work/any", session: { runtimeMs: 1, tickets: 0 } });
-    store.apply({ version: 1, type: "snapshot", mode: "demo", agents: [record("working")] });
+    store.apply({ version: 1, type: "snapshot", mode: "demo", sourceStatus: "unavailableSocket", agents: [record("working")] });
     expect(stationIdentityLabels(store.snapshot().agents.get("hero")!, "working", now).status).toContain("FIRE");
     store.apply({ version: 1, type: "delta", mode: "demo", operation: "upsert", agent: record("idle") });
     store.apply({ version: 1, type: "delta", mode: "demo", operation: "upsert", agent: record("working") });

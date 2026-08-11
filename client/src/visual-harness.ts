@@ -38,7 +38,7 @@ export function buildVisualFeed(config: VisualConfig, now = Date.now()): AgentSt
   const mixed = config.preset === "mixed";
   const initialState = config.preset === "ended" ? "done" : config.preset === "mixed" ? "working" : config.preset;
   const agents = Array.from({ length: config.agents }, (_, index) => agent(index, mixed ? mixedStates[index % mixedStates.length]! : initialState, now, mixed));
-  const snapshot: AgentStateEvent = { version: 1, type: "snapshot", mode: "demo", agents };
+  const snapshot: AgentStateEvent = { version: 1, type: "snapshot", mode: "demo", sourceStatus: "unavailableSocket", agents };
   if (config.preset !== "ended") return [snapshot];
   return [snapshot, ...agents.map(record => ({ version: 1 as const, type: "delta" as const, mode: "demo" as const, operation: "upsert" as const, agent: { ...record, state: "ended" as const } }))];
 }

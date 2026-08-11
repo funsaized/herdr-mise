@@ -6,7 +6,9 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     adapter::{self, Normalizer},
     demo,
-    protocol::{AgentRecord, AgentStateEvent, AppMode, DeltaOperation, PROTOCOL_VERSION},
+    protocol::{
+        AgentRecord, AgentStateEvent, AppMode, DeltaOperation, SourceStatus, PROTOCOL_VERSION,
+    },
 };
 
 #[derive(Clone)]
@@ -14,11 +16,16 @@ pub struct Feed {
     inner: Arc<Inner>,
 }
 struct Inner {
-    mode: RwLock<AppMode>,
-    agents: RwLock<HashMap<String, AgentRecord>>,
+    state: RwLock<FeedState>,
     pending: Mutex<HashMap<String, AgentRecord>>,
     changes: broadcast::Sender<AgentStateEvent>,
     health: watch::Sender<bool>,
+}
+
+struct FeedState {
+    mode: AppMode,
+    source_status: SourceStatus,
+    agents: HashMap<String, AgentRecord>,
 }
 
 impl Feed {
@@ -30,37 +37,26 @@ impl Feed {
         let (changes, _) = broadcast::channel(256);
         let (health, _) = watch::channel(true);
         let inner = Arc::new(Inner {
-            mode: RwLock::new(AppMode::Demo),
-            agents: RwLock::new(HashMap::new()),
+            state: RwLock::new(FeedState {
+                mode: AppMode::Demo,
+                source_status: SourceStatus::UnavailableSocket,
+                agents: HashMap::new(),
+            }),
             pending: Mutex::new(HashMap::new()),
             changes,
             health,
         });
         let feed = Self { inner };
         tokio::spawn(run_coalescer(feed.clone()));
-        match adapter::fetch_snapshot(&path, probe_timeout).await {
-            Ok(raw) => {
-                let mut normalizer = Normalizer::default();
-                let stamp = now();
-                match normalizer.normalize_snapshot_value(raw, &stamp) {
-                    Ok(snapshot) => {
-                        *feed.inner.mode.write().await = AppMode::Live;
-                        feed.apply_live(snapshot.agents, snapshot.ended_ids).await;
-                        tokio::spawn(run_live(feed.clone(), path, normalizer, shutdown));
-                    }
-                    Err(_) => {
-                        let started_at = Utc::now();
-                        feed.replace_demo(demo::agents(0, started_at)).await;
-                        tokio::spawn(run_demo(feed.clone(), shutdown, started_at));
-                    }
-                }
-            }
-            Err(_) => {
-                let started_at = Utc::now();
-                feed.replace_demo(demo::agents(0, started_at)).await;
-                tokio::spawn(run_demo(feed.clone(), shutdown, started_at));
-            }
-        }
+        let started_at = Utc::now();
+        feed.replace_demo(demo::agents(0, started_at)).await;
+        tokio::spawn(run_startup_recovery(
+            feed.clone(),
+            path,
+            probe_timeout,
+            shutdown,
+            started_at,
+        ));
         feed
     }
 
@@ -69,8 +65,15 @@ impl Feed {
         let (health, _) = watch::channel(true);
         let feed = Self {
             inner: Arc::new(Inner {
-                mode: RwLock::new(mode),
-                agents: RwLock::new(HashMap::new()),
+                state: RwLock::new(FeedState {
+                    source_status: if mode == AppMode::Live {
+                        SourceStatus::Connected
+                    } else {
+                        SourceStatus::UnavailableSocket
+                    },
+                    mode,
+                    agents: HashMap::new(),
+                }),
                 pending: Mutex::new(HashMap::new()),
                 changes,
                 health,
@@ -87,19 +90,13 @@ impl Feed {
         self.inner.health.subscribe()
     }
     pub async fn snapshot(&self) -> AgentStateEvent {
-        let mode = self.inner.mode.read().await.clone();
-        let mut agents = self
-            .inner
-            .agents
-            .read()
-            .await
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
+        let state = self.inner.state.read().await;
+        let mut agents = state.agents.values().cloned().collect::<Vec<_>>();
         agents.sort_by(|a, b| a.id.cmp(&b.id));
         AgentStateEvent::Snapshot {
             version: PROTOCOL_VERSION,
-            mode,
+            mode: state.mode.clone(),
+            source_status: state.source_status.clone(),
             agents,
         }
     }
@@ -117,9 +114,49 @@ impl Feed {
     async fn replace(&self, agents: Vec<AgentRecord>) {
         self.reconcile(agents, true).await;
     }
+    #[cfg(test)]
     async fn apply_live(&self, agents: Vec<AgentRecord>, ended_ids: Vec<String>) {
         self.reconcile(agents, false).await;
         self.end_ids(ended_ids).await;
+    }
+    async fn transition_to_live(&self, agents: Vec<AgentRecord>) {
+        self.inner.pending.lock().await.clear();
+        {
+            let mut state = self.inner.state.write().await;
+            state.mode = AppMode::Live;
+            state.source_status = SourceStatus::Connected;
+            state.agents = agents
+                .into_iter()
+                .map(|agent| (agent.id.clone(), agent))
+                .collect();
+            let mut agents = state.agents.values().cloned().collect::<Vec<_>>();
+            agents.sort_by(|a, b| a.id.cmp(&b.id));
+            let event = AgentStateEvent::Snapshot {
+                version: PROTOCOL_VERSION,
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                agents,
+            };
+            let _ = self.inner.changes.send(event);
+        }
+    }
+    async fn set_demo_status(&self, source_status: SourceStatus) {
+        {
+            let mut state = self.inner.state.write().await;
+            if state.mode != AppMode::Demo || state.source_status == source_status {
+                return;
+            }
+            state.source_status = source_status.clone();
+            let mut agents = state.agents.values().cloned().collect::<Vec<_>>();
+            agents.sort_by(|a, b| a.id.cmp(&b.id));
+            let event = AgentStateEvent::Snapshot {
+                version: PROTOCOL_VERSION,
+                mode: AppMode::Demo,
+                source_status,
+                agents,
+            };
+            let _ = self.inner.changes.send(event);
+        }
     }
     async fn apply_live_coalesced(&self, agents: Vec<AgentRecord>, ended_ids: Vec<String>) {
         {
@@ -131,13 +168,13 @@ impl Feed {
         self.end_ids(ended_ids).await;
     }
     async fn end_ids(&self, ended_ids: Vec<String>) {
-        let mode = self.inner.mode.read().await.clone();
         let mut pending = self.inner.pending.lock().await;
-        let mut stored = self.inner.agents.write().await;
+        let mut state = self.inner.state.write().await;
+        let mode = state.mode.clone();
         let stamp = now();
         for id in ended_ids {
             pending.remove(&id);
-            let Some(mut agent) = stored.remove(&id) else {
+            let Some(mut agent) = state.agents.remove(&id) else {
                 continue;
             };
             agent.state = crate::protocol::AgentState::Ended;
@@ -157,10 +194,10 @@ impl Feed {
             .into_iter()
             .partition(|agent| agent.state == crate::protocol::AgentState::Ended);
         if !ended.is_empty() {
-            let mode = self.inner.mode.read().await.clone();
-            let mut stored = self.inner.agents.write().await;
+            let mut state = self.inner.state.write().await;
+            let mode = state.mode.clone();
             for agent in ended {
-                if stored.remove(&agent.id).is_some() {
+                if state.agents.remove(&agent.id).is_some() {
                     let _ = self.inner.changes.send(AgentStateEvent::Delta {
                         version: PROTOCOL_VERSION,
                         mode: mode.clone(),
@@ -174,15 +211,15 @@ impl Feed {
         self.reconcile(active, true).await;
     }
     async fn reconcile(&self, incoming: Vec<AgentRecord>, authoritative: bool) {
-        let mode = self.inner.mode.read().await.clone();
-        let mut stored = self.inner.agents.write().await;
+        let mut state = self.inner.state.write().await;
+        let mode = state.mode.clone();
         let incoming_ids = incoming
             .iter()
             .map(|a| a.id.clone())
             .collect::<std::collections::HashSet<_>>();
         for agent in incoming {
-            if stored.get(&agent.id) != Some(&agent) {
-                stored.insert(agent.id.clone(), agent.clone());
+            if state.agents.get(&agent.id) != Some(&agent) {
+                state.agents.insert(agent.id.clone(), agent.clone());
                 let _ = self.inner.changes.send(AgentStateEvent::Delta {
                     version: PROTOCOL_VERSION,
                     mode: mode.clone(),
@@ -193,13 +230,14 @@ impl Feed {
             }
         }
         if authoritative {
-            let removed = stored
+            let removed = state
+                .agents
                 .keys()
                 .filter(|id| !incoming_ids.contains(*id))
                 .cloned()
                 .collect::<Vec<_>>();
             for id in removed {
-                stored.remove(&id);
+                state.agents.remove(&id);
                 let _ = self.inner.changes.send(AgentStateEvent::Delta {
                     version: PROTOCOL_VERSION,
                     mode: mode.clone(),
@@ -212,11 +250,49 @@ impl Feed {
     }
 }
 
-async fn run_demo(feed: Feed, shutdown: CancellationToken, started_at: chrono::DateTime<Utc>) {
+const RETRY_INITIAL: Duration = Duration::from_millis(250);
+const RETRY_MAX: Duration = Duration::from_secs(4);
+
+async fn run_startup_recovery(
+    feed: Feed,
+    path: PathBuf,
+    probe_timeout: Duration,
+    shutdown: CancellationToken,
+    started_at: chrono::DateTime<Utc>,
+) {
+    let mut normalizer = Normalizer::default();
     let mut step = 1;
-    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    let mut backoff = RETRY_INITIAL;
+    let mut demo_tick = tokio::time::interval(Duration::from_secs(1));
+    demo_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    demo_tick.tick().await;
     loop {
-        tokio::select! { _=shutdown.cancelled()=>break, _=interval.tick()=>{ feed.replace_demo(demo::agents(step, started_at)).await; step+=1; } }
+        let attempt = adapter::fetch_snapshot(&path, probe_timeout);
+        let result = tokio::select! {
+            _ = shutdown.cancelled() => return,
+            result = attempt => result.and_then(|raw| normalizer.normalize_snapshot_value(raw, &now())),
+        };
+        match result {
+            Ok(snapshot) => {
+                feed.transition_to_live(snapshot.agents).await;
+                tokio::spawn(run_live(feed, path, normalizer, shutdown));
+                return;
+            }
+            Err(error) => feed.set_demo_status(error.source_status()).await,
+        }
+        let delay = tokio::time::sleep(backoff);
+        tokio::pin!(delay);
+        loop {
+            tokio::select! {
+                _ = shutdown.cancelled() => return,
+                _ = &mut delay => break,
+                _ = demo_tick.tick() => {
+                    feed.replace_demo(demo::agents(step, started_at)).await;
+                    step += 1;
+                }
+            }
+        }
+        backoff = std::cmp::min(backoff.saturating_mul(2), RETRY_MAX);
     }
 }
 
@@ -247,29 +323,39 @@ async fn run_live(
     tokio::spawn(watch_events(path.clone(), wake_tx, shutdown.clone()));
     let mut interval = tokio::time::interval(Duration::from_secs(1));
     let mut failures = 0_u8;
+    let mut reconnecting = false;
     loop {
         tokio::select! { _=shutdown.cancelled()=>break, _=interval.tick()=>{}, event=wake_rx.recv()=>if event.is_none(){break} }
-        match adapter::fetch_snapshot(&path, Duration::from_secs(2))
-            .await
-            .and_then(|raw| normalizer.normalize_snapshot_value(raw, &now()))
-        {
+        let result = tokio::select! {
+            _ = shutdown.cancelled() => return,
+            result = adapter::fetch_snapshot(&path, Duration::from_secs(2)) => {
+                result.and_then(|raw| normalizer.normalize_snapshot_value(raw, &now()))
+            }
+        };
+        match result {
             Ok(snapshot) => {
                 failures = 0;
+                if reconnecting {
+                    feed.transition_to_live(snapshot.agents).await;
+                    reconnecting = false;
+                } else {
+                    // Event wakes can burst; all production snapshot upserts therefore use
+                    // the same bounded coalescer exercised by the wire-rate tests. Ended
+                    // transitions remain immediate so their final record is never lost.
+                    feed.apply_live_coalesced(snapshot.agents, snapshot.ended_ids)
+                        .await;
+                }
                 if !*feed.inner.health.borrow() {
                     // send() fails without storing when every receiver is gone,
                     // and all receivers live in already-closed connection
                     // handlers at this point; send_replace stores regardless.
                     feed.inner.health.send_replace(true);
                 }
-                // Event wakes can burst; all production snapshot upserts therefore use
-                // the same bounded coalescer exercised by the wire-rate tests. Ended
-                // transitions remain immediate so their final record is never lost.
-                feed.apply_live_coalesced(snapshot.agents, snapshot.ended_ids)
-                    .await
             }
             Err(_) => {
                 failures = failures.saturating_add(1);
                 if failures >= 3 && *feed.inner.health.borrow() {
+                    reconnecting = true;
                     feed.inner.health.send_replace(false);
                 }
             }
@@ -297,7 +383,10 @@ async fn watch_events(
                     }
                 }
             },
-            Err(_) => tokio::time::sleep(Duration::from_millis(500)).await,
+            Err(_) => tokio::select! {
+                _ = shutdown.cancelled() => return,
+                _ = tokio::time::sleep(Duration::from_millis(500)) => {},
+            },
         }
     }
 }
@@ -332,6 +421,16 @@ mod tests {
     }
 
     fn serve_snapshots(listener: UnixListener) -> tokio::task::JoinHandle<()> {
+        serve_snapshot_response(
+            listener,
+            include_bytes!("../tests/fixtures/snapshot-working.json"),
+        )
+    }
+
+    fn serve_snapshot_response(
+        listener: UnixListener,
+        response: &'static [u8],
+    ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             loop {
                 let Ok((stream, _)) = listener.accept().await else {
@@ -341,15 +440,23 @@ mod tests {
                     let mut stream = BufReader::new(stream);
                     let mut request = String::new();
                     stream.read_line(&mut request).await.unwrap();
-                    stream
-                        .get_mut()
-                        .write_all(include_bytes!("../tests/fixtures/snapshot-working.json"))
-                        .await
-                        .unwrap();
+                    stream.get_mut().write_all(response).await.unwrap();
                     stream.get_mut().write_all(b"\n").await.unwrap();
                 });
             }
         })
+    }
+
+    async fn wait_for_source_status(feed: &Feed, expected: SourceStatus) {
+        loop {
+            if matches!(
+                feed.snapshot().await,
+                AgentStateEvent::Snapshot { source_status, .. } if source_status == expected
+            ) {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
     }
 
     #[tokio::test]
@@ -476,6 +583,24 @@ mod tests {
         let server = serve_snapshots(listener);
         let shutdown = CancellationToken::new();
         let feed = Feed::start(path.clone(), Duration::from_secs(1), shutdown.clone()).await;
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if matches!(
+                    feed.snapshot().await,
+                    AgentStateEvent::Snapshot {
+                        mode: AppMode::Live,
+                        source_status: SourceStatus::Connected,
+                        agents,
+                        ..
+                    } if agents.len() == 1
+                ) {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("initial connected snapshot");
         {
             let mut health = feed.subscribe_health();
             server.abort();
@@ -518,9 +643,14 @@ mod tests {
         let server = serve_snapshots(listener);
         let shutdown = CancellationToken::new();
         let feed = Feed::start(path.clone(), Duration::from_secs(1), shutdown.clone()).await;
-        assert!(
-            matches!(feed.snapshot().await,AgentStateEvent::Snapshot{mode:AppMode::Live,agents,..} if agents.len()==1)
-        );
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if matches!(feed.snapshot().await,AgentStateEvent::Snapshot{mode:AppMode::Live,agents,..} if agents.len()==1) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.expect("startup snapshot");
         let mut health = feed.subscribe_health();
         server.abort();
         tokio::time::timeout(Duration::from_secs(4), async {
@@ -534,7 +664,8 @@ mod tests {
         .await
         .expect("source loss surfaced");
         std::fs::remove_file(&path).unwrap();
-        let restored = serve_snapshots(UnixListener::bind(&path).unwrap());
+        const RESTORED: &[u8] = br#"{"result":{"snapshot":{"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[{"pane_id":"p-restored","agent_status":"idle"}]}}}"#;
+        let restored = serve_snapshot_response(UnixListener::bind(&path).unwrap(), RESTORED);
         tokio::time::timeout(Duration::from_secs(3), async {
             loop {
                 health.changed().await.unwrap();
@@ -546,9 +677,129 @@ mod tests {
         .await
         .expect("source reconnected");
         assert!(
-            matches!(feed.snapshot().await,AgentStateEvent::Snapshot{mode:AppMode::Live,agents,..} if agents.len()==1)
+            matches!(feed.snapshot().await,AgentStateEvent::Snapshot{mode:AppMode::Live,agents,..} if agents.len()==1 && agents[0].id == "p-restored")
         );
         shutdown.cancel();
         restored.abort();
+    }
+
+    #[tokio::test]
+    async fn missing_source_then_live_source_replaces_demo_atomically() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("late.sock");
+        let shutdown = CancellationToken::new();
+        let feed = Feed::start(path.clone(), Duration::from_millis(100), shutdown.clone()).await;
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot {
+                mode: AppMode::Demo,
+                source_status: SourceStatus::UnavailableSocket,
+                agents,
+                ..
+            } if !agents.is_empty()
+        ));
+        let mut changes = feed.subscribe();
+        let listener = match UnixListener::bind(&path) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind stub socket: {error}"),
+        };
+        let server = serve_snapshots(listener);
+        let transition = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                if let AgentStateEvent::Snapshot {
+                    mode: AppMode::Live,
+                    source_status: SourceStatus::Connected,
+                    agents,
+                    ..
+                } = changes.recv().await.unwrap()
+                {
+                    break agents;
+                }
+            }
+        })
+        .await
+        .expect("same feed recovers without restart");
+        assert_eq!(transition.len(), 1);
+        assert_eq!(transition[0].id, "p-1");
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot { mode: AppMode::Live, source_status: SourceStatus::Connected, agents, .. }
+                if agents.len() == 1 && agents[0].id == "p-1"
+        ));
+        shutdown.cancel();
+        server.abort();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn startup_retry_uses_exponential_backoff_and_stops_on_shutdown() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("malformed.sock");
+        let listener = match UnixListener::bind(&path) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind stub socket: {error}"),
+        };
+        let (attempt_tx, mut attempt_rx) = tokio::sync::mpsc::unbounded_channel();
+        let server = tokio::spawn(async move {
+            let mut attempt = 0;
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    break;
+                };
+                attempt += 1;
+                let response: &[u8] = if attempt % 2 == 0 {
+                    b"{\"version\":\"0.7.5\",\"protocol\":999,\"workspaces\":[],\"tabs\":[],\"layouts\":[],\"agents\":[]}\n"
+                } else {
+                    b"not-json\n"
+                };
+                stream.write_all(response).await.unwrap();
+                attempt_tx.send(attempt).unwrap();
+            }
+        });
+        let shutdown = CancellationToken::new();
+        let feed = Feed::start(path, Duration::from_secs(2), shutdown.clone()).await;
+        assert_eq!(attempt_rx.recv().await, Some(1));
+        wait_for_source_status(&feed, SourceStatus::IncompatibleResponse).await;
+        tokio::time::advance(Duration::from_millis(249)).await;
+        assert!(matches!(
+            attempt_rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+        tokio::time::advance(Duration::from_millis(1)).await;
+        assert_eq!(attempt_rx.recv().await, Some(2));
+        wait_for_source_status(&feed, SourceStatus::UnsupportedProtocol).await;
+        tokio::time::advance(Duration::from_millis(499)).await;
+        assert!(matches!(
+            attempt_rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+        tokio::time::advance(Duration::from_millis(1)).await;
+        assert_eq!(attempt_rx.recv().await, Some(3));
+        wait_for_source_status(&feed, SourceStatus::IncompatibleResponse).await;
+        for (delay, expected) in [
+            (Duration::from_secs(1), 4),
+            (Duration::from_secs(2), 5),
+            (Duration::from_secs(4), 6),
+            (Duration::from_secs(4), 7),
+        ] {
+            tokio::time::advance(delay).await;
+            assert_eq!(attempt_rx.recv().await, Some(expected));
+            let status = if expected % 2 == 0 {
+                SourceStatus::UnsupportedProtocol
+            } else {
+                SourceStatus::IncompatibleResponse
+            };
+            wait_for_source_status(&feed, status).await;
+        }
+        shutdown.cancel();
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_secs(30)).await;
+        tokio::task::yield_now().await;
+        assert!(matches!(
+            attempt_rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+        server.abort();
     }
 }
