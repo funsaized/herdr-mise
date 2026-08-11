@@ -100,6 +100,7 @@ it; `P2` is explicitly non-blocking.
 
 ## BL-001 — Keep non-agent panes out of an empty kitchen
 
+- **Status:** Complete
 - **Priority:** P0
 - **Area:** adapter, protocol
 **Outcome:** An empty Herdr agent list renders the empty-kitchen state, not
