@@ -1,6 +1,7 @@
 # herdr-mise — implementation backlog
 
-> Status: proposed implementation backlog for the initial release-candidate cycle
+> Status: originating audit record for the initial release-candidate cycle; not
+> the live roadmap
 >
 > Product authority: [README.md](../README.md)
 >
@@ -8,15 +9,18 @@
 >
 > Operational and release authority: [operations.md](operations.md)
 
-This backlog turns the initial `v0.1.0-rc.1` audit into work that a developer can
-pick up without reconstructing the audit. It prioritizes one product outcome:
+This document preserves the evidence, proposed work, acceptance criteria, and
+validation commands produced by the initial `v0.1.0-rc.1` audit. It prioritizes
+one product outcome:
 herdr-mise must be a truthful, reliable, low-attention view of local Herdr
 agents, with blocked work unmistakable from across the room.
 
-GitHub issues remain the accepted public roadmap. When an item below is
-accepted, create one issue with the same ID and title, link back to this file,
-and keep implementation discussion on the issue. Do not implement multiple
-items in one pull request unless the dependency notes explicitly call for it.
+[GitHub issues](https://github.com/funsaized/herdr-mise/issues) are the current
+roadmap authority; their discussion, ownership, milestone, and status supersede
+this audit snapshot. BL-001 through BL-004 are tracked by
+[PR #16](https://github.com/funsaized/herdr-mise/pull/16) to avoid duplicating
+completed or in-flight work. BL-005 onward are tracked by their matching GitHub
+issues. This record must not accumulate issue comments or duplicate live status.
 
 ## Product loop to protect
 

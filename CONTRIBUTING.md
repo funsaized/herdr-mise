@@ -5,17 +5,20 @@ opinions; the docs below will save you time.
 
 ## Orientation
 
+- [GitHub issues](https://github.com/funsaized/herdr-mise/issues) — the current
+  authority for accepted bugs, planned work, ownership, and status. Issue
+  discussion and status supersede repository planning snapshots.
 - `docs/architecture.md` — how the pieces fit (Rust server, TypeScript client,
   versioned protocol).
 - `docs/operations.md` — how to run, develop, and verify locally.
-- `docs/backlog.md` — proposed initial-RC work, sequencing, acceptance criteria,
-  and item-specific verification. GitHub issues become authoritative as items
-  are accepted.
+- `docs/backlog.md` — the originating initial-RC audit backlog, retained for its
+  evidence, sequencing, acceptance criteria, and item-specific verification;
+  it is not a second live roadmap.
 - `README.md` — product behavior, deliberate boundaries, installation, and
   current verification commands. Code plus passing tests wins when prose and
   behavior disagree.
-- GitHub issues — accepted bugs and planned work. Do not treat old branches or
-  commit history as the current roadmap.
+- Do not treat the audit backlog, old branches, or commit history as the current
+  roadmap.
 
 ## Setup
 
