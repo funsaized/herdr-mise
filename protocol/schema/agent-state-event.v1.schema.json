@@ -11,6 +11,7 @@
   "$defs": {
     "version": { "const": 1 },
     "mode": { "enum": ["live", "demo"] },
+    "sourceStatus": { "enum": ["unavailableSocket", "timeout", "unsupportedProtocol", "incompatibleResponse", "connected"] },
     "agent": {
       "type": "object",
       "additionalProperties": false,
@@ -38,11 +39,12 @@
     "snapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "type", "mode", "agents"],
+      "required": ["version", "type", "mode", "sourceStatus", "agents"],
       "properties": {
         "version": { "$ref": "#/$defs/version" },
         "type": { "const": "snapshot" },
         "mode": { "$ref": "#/$defs/mode" },
+        "sourceStatus": { "$ref": "#/$defs/sourceStatus" },
         "agents": { "type": "array", "items": { "$ref": "#/$defs/agent" } }
       }
     },

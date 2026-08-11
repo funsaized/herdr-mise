@@ -138,7 +138,7 @@ describe("visual WebSocket boundary", () => {
   it("shows a generic temporary answer cue only after blocked returns to working", () => {
     const now = Date.parse("2026-08-01T15:00:00.000Z"), store = new AgentStore({ now: () => now, setTimeout, clearTimeout });
     const hero = (state: "blocked" | "working") => ({ version: 1 as const, type: "delta" as const, mode: "demo" as const, operation: "upsert" as const, agent: { id: "hero", name: "Any agent", state, progress: state === "working" ? 0.7 : null, stateEnteredAt: new Date(now).toISOString(), accentIndex: 0, model: "codex", workspace: "/work/any", session: { runtimeMs: 1, tickets: 0 } } });
-    store.apply({ version: 1, type: "snapshot", mode: "demo", agents: [hero("blocked").agent] });
+    store.apply({ version: 1, type: "snapshot", mode: "demo", sourceStatus: "unavailableSocket", agents: [hero("blocked").agent] });
     store.apply(hero("working"));
     const agent = store.snapshot().agents.get("hero")!;
     expect(stationIdentityLabels(agent, "working", now).status).toContain("ANSWER RECEIVED");
@@ -148,7 +148,7 @@ describe("visual WebSocket boundary", () => {
   it("does not show the answer cue for initial working or idle returning to working", () => {
     const now = Date.parse("2026-08-01T15:00:00.000Z"), store = new AgentStore({ now: () => now, setTimeout, clearTimeout });
     const record = (state: "idle" | "working") => ({ id: "hero", name: "Any agent", state, progress: state === "working" ? 0.7 : null, stateEnteredAt: new Date(now).toISOString(), accentIndex: 0, model: "codex", workspace: "/work/any", session: { runtimeMs: 1, tickets: 0 } });
-    store.apply({ version: 1, type: "snapshot", mode: "demo", agents: [record("working")] });
+    store.apply({ version: 1, type: "snapshot", mode: "demo", sourceStatus: "unavailableSocket", agents: [record("working")] });
     expect(stationIdentityLabels(store.snapshot().agents.get("hero")!, "working", now).status).toContain("FIRE");
     store.apply({ version: 1, type: "delta", mode: "demo", operation: "upsert", agent: record("idle") });
     store.apply({ version: 1, type: "delta", mode: "demo", operation: "upsert", agent: record("working") });

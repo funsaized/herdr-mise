@@ -13,7 +13,7 @@ use tokio::{
     time::timeout,
 };
 
-use crate::protocol::{AgentRecord, AgentState, SessionStats};
+use crate::protocol::{AgentRecord, AgentState, SessionStats, SourceStatus};
 
 pub const HERDR_PROTOCOLS: &[u64] = &[17, 19];
 
@@ -31,6 +31,19 @@ pub enum AdapterError {
     Protocol(u64),
     #[error("missing snapshot result")]
     MissingSnapshot,
+}
+
+impl AdapterError {
+    pub fn source_status(&self) -> SourceStatus {
+        match self {
+            Self::Io(_) => SourceStatus::UnavailableSocket,
+            Self::Timeout => SourceStatus::Timeout,
+            Self::Protocol(_) => SourceStatus::UnsupportedProtocol,
+            Self::Json(_) | Self::Remote(_) | Self::MissingSnapshot => {
+                SourceStatus::IncompatibleResponse
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -335,6 +348,24 @@ mod tests {
         assert!(n
             .normalize_snapshot_value(json!({"version":"0.7.5","protocol":17,"agents":[{}],"workspaces":[],"tabs":[],"panes":[],"layouts":[]}), "a")
             .is_err());
+    }
+
+    #[test]
+    fn maps_adapter_failures_to_non_sensitive_source_statuses() {
+        assert_eq!(
+            AdapterError::Io(io::Error::new(io::ErrorKind::NotFound, "/private/socket"))
+                .source_status(),
+            SourceStatus::UnavailableSocket
+        );
+        assert_eq!(AdapterError::Timeout.source_status(), SourceStatus::Timeout);
+        assert_eq!(
+            AdapterError::Protocol(999).source_status(),
+            SourceStatus::UnsupportedProtocol
+        );
+        assert_eq!(
+            AdapterError::MissingSnapshot.source_status(),
+            SourceStatus::IncompatibleResponse
+        );
     }
 
     #[test]

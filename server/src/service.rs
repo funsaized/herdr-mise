@@ -178,7 +178,11 @@ mod tests {
     use crate::protocol::{AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats};
     use axum::body::to_bytes;
     use std::future::IntoFuture;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+        net::UnixListener,
+    };
+    use tokio_util::sync::CancellationToken;
     use tower::ServiceExt;
     #[tokio::test]
     async fn serves_root_and_spa_fallback() {
@@ -476,6 +480,162 @@ mod tests {
             AgentStateEvent::Delta { .. }
         ));
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn source_loss_and_restore_serves_a_fresh_authoritative_snapshot() {
+        let directory = tempfile::tempdir().unwrap();
+        let source_path = directory.path().join("herdr.sock");
+        let (source_a_shutdown, source_a) =
+            start_realistic_herdr_stub(&source_path, "agent-a-live").await;
+        let feed_shutdown = CancellationToken::new();
+        let feed = Feed::start(
+            source_path.clone(),
+            Duration::from_millis(250),
+            feed_shutdown.clone(),
+        )
+        .await;
+        wait_for_agent(&feed, "agent-a-live").await;
+
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind test server: {error}"),
+        };
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(axum::serve(listener, router(feed.clone())).into_future());
+        let mut first_client = connect_websocket(address).await;
+        assert_snapshot_agent(&mut first_client, "agent-a-live").await;
+
+        source_a_shutdown.cancel();
+        source_a.await.unwrap();
+        std::fs::remove_file(&source_path).unwrap();
+        tokio::time::timeout(Duration::from_secs(6), async {
+            let mut header = [0_u8; 2];
+            loop {
+                first_client.read_exact(&mut header).await.unwrap();
+                if header[0] & 0x0f == 8 {
+                    break;
+                }
+                let length = (header[1] & 0x7f) as usize;
+                let mut payload = vec![0; length];
+                first_client.read_exact(&mut payload).await.unwrap();
+            }
+        })
+        .await
+        .expect("source loss closes the existing websocket");
+
+        let (source_b_shutdown, source_b) =
+            start_realistic_herdr_stub(&source_path, "agent-b-live").await;
+        wait_for_agent(&feed, "agent-b-live").await;
+        let mut fresh_client = connect_websocket(address).await;
+        assert_snapshot_agent(&mut fresh_client, "agent-b-live").await;
+
+        feed_shutdown.cancel();
+        source_b_shutdown.cancel();
+        source_b.await.unwrap();
+        server.abort();
+    }
+
+    async fn start_realistic_herdr_stub(
+        path: &std::path::Path,
+        agent_id: &'static str,
+    ) -> (CancellationToken, tokio::task::JoinHandle<()>) {
+        let listener = UnixListener::bind(path).unwrap();
+        let shutdown = CancellationToken::new();
+        let task_shutdown = shutdown.clone();
+        let task = tokio::spawn(async move {
+            loop {
+                let stream = tokio::select! {
+                    _ = task_shutdown.cancelled() => break,
+                    accepted = listener.accept() => accepted.unwrap().0,
+                };
+                let connection_shutdown = task_shutdown.clone();
+                tokio::spawn(async move {
+                    let mut stream = BufReader::new(stream);
+                    let mut request = String::new();
+                    if stream.read_line(&mut request).await.unwrap_or(0) == 0 {
+                        return;
+                    }
+                    let method = serde_json::from_str::<serde_json::Value>(&request)
+                        .ok()
+                        .and_then(|value| value.get("method")?.as_str().map(str::to_owned));
+                    match method.as_deref() {
+                        Some("session.snapshot") => {
+                            let response = serde_json::json!({
+                                "id": "herdr-mise-snapshot",
+                                "result": {
+                                    "type": "snapshot",
+                                    "snapshot": {
+                                        "version": "0.7.5",
+                                        "protocol": 19,
+                                        "workspaces": [],
+                                        "tabs": [],
+                                        "layouts": [],
+                                        "agents": [{
+                                            "pane_id": agent_id,
+                                            "agent_status": "working"
+                                        }]
+                                    }
+                                }
+                            });
+                            stream
+                                .get_mut()
+                                .write_all(format!("{response}\n").as_bytes())
+                                .await
+                                .unwrap();
+                        }
+                        Some("events.subscribe") => {
+                            stream
+                                .get_mut()
+                                .write_all(
+                                    b"{\"id\":\"herdr-mise-events\",\"result\":{\"type\":\"subscription_started\"}}\n",
+                                )
+                                .await
+                                .unwrap();
+                            connection_shutdown.cancelled().await;
+                        }
+                        _ => {}
+                    }
+                });
+            }
+        });
+        (shutdown, task)
+    }
+
+    async fn wait_for_agent(feed: &Feed, expected: &str) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if matches!(
+                    feed.snapshot().await,
+                    AgentStateEvent::Snapshot { mode: AppMode::Live, source_status: crate::protocol::SourceStatus::Connected, agents, .. }
+                        if agents.len() == 1 && agents[0].id == expected
+                ) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("feed did not recover with {expected}"));
+    }
+
+    async fn connect_websocket(address: std::net::SocketAddr) -> tokio::net::TcpStream {
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: http://localhost:8686\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        assert!(read_http_headers(&mut socket)
+            .await
+            .starts_with("HTTP/1.1 101"));
+        socket
+    }
+
+    async fn assert_snapshot_agent(socket: &mut tokio::net::TcpStream, expected: &str) {
+        let first = read_server_text(socket).await;
+        assert!(matches!(
+            serde_json::from_str::<AgentStateEvent>(&first).unwrap(),
+            AgentStateEvent::Snapshot { mode: AppMode::Live, source_status: crate::protocol::SourceStatus::Connected, agents, .. }
+                if agents.len() == 1 && agents[0].id == expected
+        ));
     }
 
     async fn read_server_text(stream: &mut tokio::net::TcpStream) -> String {

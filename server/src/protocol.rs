@@ -22,6 +22,16 @@ pub enum AppMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceStatus {
+    UnavailableSocket,
+    Timeout,
+    UnsupportedProtocol,
+    IncompatibleResponse,
+    Connected,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DeltaOperation {
     Upsert,
@@ -59,6 +69,7 @@ pub enum AgentStateEvent {
     Snapshot {
         version: u8,
         mode: AppMode,
+        source_status: SourceStatus,
         agents: Vec<AgentRecord>,
     },
     Delta {
@@ -96,6 +107,7 @@ mod tests {
 
         for name in [
             "snapshot.v1.json",
+            "snapshot-demo-unsupported.v1.json",
             "delta-upsert.v1.json",
             "delta-remove.v1.json",
             "heartbeat.v1.json",
