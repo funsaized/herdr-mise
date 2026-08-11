@@ -42,7 +42,7 @@ const horizontalBounds = (graphics: RecordingGraphics) => [
 
 describe("idle pose assignment", () => {
   it("cycles SMOKE, RECLINE, SLEEP, PREP and keeps an agent stable for the session", () => {
-    const assignments = new IdlePoseAssignments();
+    const assignments = new IdlePoseAssignments(() => 0);
     const ids = ["a", "b", "c", "d", "e"];
 
     expect(ids.map(id => assignments.for(id))).toEqual(["smoke", "recline", "sleep", "prep", "smoke"]);
@@ -50,8 +50,13 @@ describe("idle pose assignment", () => {
     expect(new Set(ids.slice(0, 4).map(id => assignments.for(id)))).toEqual(new Set(["smoke", "recline", "sleep", "prep"]));
   });
 
+  it("rotates the balanced pose sequence from a session-random starting point", () => {
+    const assignments = new IdlePoseAssignments(() => .5);
+    expect(["a", "b", "c", "d", "e"].map(id => assignments.for(id))).toEqual(["sleep", "prep", "smoke", "recline", "sleep"]);
+  });
+
   it("assigns decoration only to operationally idle agents", () => {
-    const assignments = new IdlePoseAssignments();
+    const assignments = new IdlePoseAssignments(() => 0);
     expect(assignedIdlePose("idle", "a", assignments)).toBe("smoke");
     for (const state of ["working", "blocked", "done", "ended"] as const) {
       expect(assignedIdlePose(state, state, assignments)).toBeNull();

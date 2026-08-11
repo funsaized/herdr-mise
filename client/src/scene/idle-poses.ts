@@ -27,11 +27,16 @@ export interface IdlePoseSample {
 /** Session-local idle-rank assignment, intentionally preserving roster discovery order. */
 export class IdlePoseAssignments {
   private readonly poses = new Map<string, IdlePose>();
+  private readonly offset: number;
+
+  constructor(random: () => number = Math.random) {
+    this.offset = Math.floor(random() * IDLE_POSES.length);
+  }
 
   for(agentId: string): IdlePose {
     const existing = this.poses.get(agentId);
     if (existing) return existing;
-    const pose = IDLE_POSES[this.poses.size % IDLE_POSES.length]!;
+    const pose = IDLE_POSES[(this.offset + this.poses.size) % IDLE_POSES.length]!;
     this.poses.set(agentId, pose);
     return pose;
   }
