@@ -10,7 +10,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "npm --prefix client run dev:visual -- --host 127.0.0.1 --port 4174 --strictPort",
+    command:
+      "npm --prefix client run dev:visual -- --host 127.0.0.1 --port 4174 --strictPort",
     cwd: "..",
     url: "http://127.0.0.1:4174",
     reuseExistingServer: false,

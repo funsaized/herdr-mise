@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { captureDurationMs, captureFrameCount, captureIntervalMs, gifFrameRate, remainingFrameDelay } from "./readme-media-config.mjs";
+import {
+  captureDurationMs,
+  captureFrameCount,
+  captureIntervalMs,
+  gifFrameRate,
+  remainingFrameDelay,
+} from "./readme-media-config.mjs";
 
 test("captures a smooth ten-second GIF at twenty frames per second", () => {
   assert.equal(gifFrameRate, 20);

@@ -1,2 +1,25 @@
 import { defineConfig } from "@playwright/test";
-export default defineConfig({testDir:".",timeout:60_000,retries:0,use:{baseURL:"http://127.0.0.1:4173",headless:true,trace:"retain-on-failure",screenshot:"only-on-failure",launchOptions:{args:["--use-angle=metal"]}},webServer:{command:"npm --prefix client run preview -- --host 127.0.0.1",cwd:"..",url:"http://127.0.0.1:4173",reuseExistingServer:false,timeout:30_000},reporter:[["line"],["html",{outputFolder:"artifacts/report",open:"never"}]],outputDir:"artifacts/results"});
+export default defineConfig({
+  testDir: ".",
+  timeout: 60_000,
+  retries: 0,
+  use: {
+    baseURL: "http://127.0.0.1:4173",
+    headless: true,
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    launchOptions: { args: ["--use-angle=metal"] },
+  },
+  webServer: {
+    command: "npm --prefix client run preview -- --host 127.0.0.1",
+    cwd: "..",
+    url: "http://127.0.0.1:4173",
+    reuseExistingServer: false,
+    timeout: 30_000,
+  },
+  reporter: [
+    ["line"],
+    ["html", { outputFolder: "artifacts/report", open: "never" }],
+  ],
+  outputDir: "artifacts/results",
+});
