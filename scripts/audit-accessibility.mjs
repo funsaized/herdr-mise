@@ -88,9 +88,9 @@ for (const [themeIndex, theme] of ["day", "dinner"].entries()) {
       failures.push(`${theme} ${path} ${ratio.toFixed(2)} < 4.5`);
   }
 }
-if (!/state==="blocked"[\s\S]*?\.circle\(/.test(scene))
+if (!/state\s*===\s*"blocked"[\s\S]*?\.circle\(/.test(scene))
   failures.push("blocked state lacks bell/circle shape");
-if (!/state==="done"[\s\S]*?\.ellipse\(/.test(scene))
+if (!/state\s*===\s*"done"[\s\S]*?\.ellipse\(/.test(scene))
   failures.push("done state lacks plate/ellipse shape");
 const liveRegion =
   app.match(/<div(?=[^>]*className="liveRegion")[^>]*>/)?.[0] ?? "";
