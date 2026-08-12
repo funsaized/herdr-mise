@@ -1,20 +1,324 @@
 import { execFileSync } from "node:child_process";
-import { expect,test,type CDPSession,type Page } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "@playwright/test";
 
-const agents=Array.from({length:12},(_,index)=>({id:`agent-${index}`,name:`agent-${index}`,state:index===3?"blocked":index===4?"done":index%2?"idle":"working",progress:.5,stateEnteredAt:new Date().toISOString(),accentIndex:index%12,model:"codex",workspace:`/work/${index}`,session:{runtimeMs:60_000,tickets:index}}));
-const snapshot={version:1,type:"snapshot",mode:"demo",agents};
-const hiddenCpuMeasurementMs=60_000;
-async function mockFeed(page:Page){await page.addInitScript(payload=>{class FeedSocket{static instance:FeedSocket;readyState=0;onopen:(()=>void)|null=null;onmessage:((event:{data:string})=>void)|null=null;onclose:(()=>void)|null=null;onerror:(()=>void)|null=null;heartbeat:number|null=null;constructor(){FeedSocket.instance=this;setTimeout(()=>{this.readyState=1;this.onopen?.();this.send(payload);this.heartbeat=window.setInterval(()=>this.send(payload),1_000);},20);}send(value:unknown){this.onmessage?.({data:JSON.stringify(value)});}pause(){if(this.heartbeat!==null){clearInterval(this.heartbeat);this.heartbeat=null;}}close(){this.readyState=3;this.pause();}}Object.defineProperty(window,"WebSocket",{value:FeedSocket});Object.defineProperty(window,"__miseFeed",{value:(value:unknown)=>FeedSocket.instance.send(value)});Object.defineProperty(window,"__misePauseFeed",{value:()=>FeedSocket.instance.pause()});},snapshot);}
-async function send(page:Page,value:unknown){await page.evaluate(payload=>(window as unknown as {__miseFeed(value:unknown):void}).__miseFeed(payload),value);}
-function metric(values:{name:string;value:number}[],name:string){return values.find(item=>item.name===name)?.value??0;}
-test.beforeEach(async({page},testInfo)=>{if(!testInfo.title.includes("opening handshake"))await mockFeed(page);});
+const agents = Array.from({ length: 12 }, (_, index) => ({
+  id: `agent-${index}`,
+  name: `agent-${index}`,
+  state:
+    index === 3
+      ? "blocked"
+      : index === 4
+        ? "done"
+        : index % 2
+          ? "idle"
+          : "working",
+  progress: 0.5,
+  stateEnteredAt: new Date().toISOString(),
+  accentIndex: index % 12,
+  model: "codex",
+  workspace: `/work/${index}`,
+  session: { runtimeMs: 60_000, tickets: index },
+}));
+const snapshot = { version: 1, type: "snapshot", mode: "demo", agents };
+const hiddenCpuMeasurementMs = 60_000;
+async function mockFeed(page: Page) {
+  await page.addInitScript((payload) => {
+    class FeedSocket {
+      static instance: FeedSocket;
+      readyState = 0;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      heartbeat: number | null = null;
+      constructor() {
+        FeedSocket.instance = this;
+        setTimeout(() => {
+          this.readyState = 1;
+          this.onopen?.();
+          this.send(payload);
+          this.heartbeat = window.setInterval(() => this.send(payload), 1_000);
+        }, 20);
+      }
+      send(value: unknown) {
+        this.onmessage?.({ data: JSON.stringify(value) });
+      }
+      pause() {
+        if (this.heartbeat !== null) {
+          clearInterval(this.heartbeat);
+          this.heartbeat = null;
+        }
+      }
+      close() {
+        this.readyState = 3;
+        this.pause();
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { value: FeedSocket });
+    Object.defineProperty(window, "__miseFeed", {
+      value: (value: unknown) => FeedSocket.instance.send(value),
+    });
+    Object.defineProperty(window, "__misePauseFeed", {
+      value: () => FeedSocket.instance.pause(),
+    });
+  }, snapshot);
+}
+async function send(page: Page, value: unknown) {
+  await page.evaluate(
+    (payload) =>
+      (window as unknown as { __miseFeed(value: unknown): void }).__miseFeed(
+        payload,
+      ),
+    value,
+  );
+}
+function metric(values: { name: string; value: number }[], name: string) {
+  return values.find((item) => item.name === name)?.value ?? 0;
+}
+test.beforeEach(async ({ page }, testInfo) => {
+  if (!testInfo.title.includes("opening handshake")) await mockFeed(page);
+});
 
-test("visual demo service at comp viewport",async({page})=>{await page.setViewportSize({width:1280,height:720});await page.clock.install({time:1_700_000_000_000});await page.addInitScript(()=>localStorage.setItem("mise-bell-hint","dismissed"));await page.goto("/");await page.clock.runFor(500);await expect(page.getByText("DEMO SERVICE")).toBeVisible();await expect(page.locator("canvas")).toBeVisible();await expect(page).toHaveScreenshot("demo-service.png",{maxDiffPixelRatio:.01,animations:"disabled"});});
-test("PR-1 cold start and stats",async({page})=>{const start=Date.now();await page.goto("/?stats");await expect(page.locator("canvas")).toBeVisible();await expect(page.getByText("DEMO SERVICE")).toBeVisible();const elapsed=Date.now()-start;console.log(`PR-1 cold start ${elapsed} ms`);expect(elapsed).toBeLessThanOrEqual(1500);await expect(page.getByLabel("Performance statistics")).toContainText("draw calls");});
-test("T-5.5/T-9.2 opening handshake times out into disconnected mode",async({page})=>{await page.addInitScript(()=>{Object.assign(window,{__openingStarted:0,__openingClosed:0});class OpeningSocket{readyState=0;onopen:(()=>void)|null=null;onmessage:((event:{data:string})=>void)|null=null;onclose:(()=>void)|null=null;onerror:(()=>void)|null=null;constructor(){(window as unknown as {__openingStarted:number}).__openingStarted=performance.now();}close(){this.readyState=3;(window as unknown as {__openingClosed:number}).__openingClosed=performance.now();}}Object.defineProperty(window,"WebSocket",{value:OpeningSocket});});await page.goto("/");await expect(page.getByText("Waiting for agents — start one in herdr")).toBeVisible({timeout:500});await expect(page.getByRole("alert").getByText("Lost connection to herdr")).toBeVisible({timeout:3_500});const timing=await page.evaluate(()=>{const values=window as unknown as {__openingStarted:number;__openingClosed:number};return{started:values.__openingStarted,closed:values.__openingClosed};}),elapsed=timing.closed-timing.started;console.log(`T-5.5 opening-handshake disconnect ${elapsed.toFixed(1)} ms`);expect(elapsed).toBeLessThanOrEqual(3_000);});
-test("PR-2 transfer and WebGL graph budgets",async()=>{const output=execFileSync(process.execPath,["scripts/check-bundle-budget.mjs"],{encoding:"utf8"});console.log(output.trim());expect(output).toContain("Loaded WebGL JS");});
+test("visual demo service at comp viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.clock.install({ time: 1_700_000_000_000 });
+  await page.addInitScript(() =>
+    localStorage.setItem("mise-bell-hint", "dismissed"),
+  );
+  await page.goto("/");
+  await page.clock.runFor(500);
+  await expect(page.getByText("DEMO SERVICE")).toBeVisible();
+  await expect(page.locator("canvas")).toBeVisible();
+  await expect(page).toHaveScreenshot("demo-service.png", {
+    maxDiffPixelRatio: 0.01,
+    animations: "disabled",
+  });
+});
+test("PR-1 cold start and stats", async ({ page }) => {
+  const start = Date.now();
+  await page.goto("/?stats");
+  await expect(page.locator("canvas")).toBeVisible();
+  await expect(page.getByText("DEMO SERVICE")).toBeVisible();
+  const elapsed = Date.now() - start;
+  console.log(`PR-1 cold start ${elapsed} ms`);
+  expect(elapsed).toBeLessThanOrEqual(1500);
+  await expect(page.getByLabel("Performance statistics")).toContainText(
+    "draw calls",
+  );
+});
+test("T-5.5/T-9.2 opening handshake times out into disconnected mode", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, { __openingStarted: 0, __openingClosed: 0 });
+    class OpeningSocket {
+      readyState = 0;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        (window as unknown as { __openingStarted: number }).__openingStarted =
+          performance.now();
+      }
+      close() {
+        this.readyState = 3;
+        (window as unknown as { __openingClosed: number }).__openingClosed =
+          performance.now();
+      }
+    }
+    Object.defineProperty(window, "WebSocket", { value: OpeningSocket });
+  });
+  await page.goto("/");
+  await expect(
+    page.getByText("Waiting for agents — start one in herdr"),
+  ).toBeVisible({ timeout: 500 });
+  await expect(
+    page.getByRole("alert").getByText("Lost connection to herdr"),
+  ).toBeVisible({ timeout: 3_500 });
+  const timing = await page.evaluate(() => {
+      const values = window as unknown as {
+        __openingStarted: number;
+        __openingClosed: number;
+      };
+      return {
+        started: values.__openingStarted,
+        closed: values.__openingClosed,
+      };
+    }),
+    elapsed = timing.closed - timing.started;
+  console.log(`T-5.5 opening-handshake disconnect ${elapsed.toFixed(1)} ms`);
+  expect(elapsed).toBeLessThanOrEqual(3_000);
+});
+test("PR-2 transfer and WebGL graph budgets", async () => {
+  const output = execFileSync(
+    process.execPath,
+    ["scripts/check-bundle-budget.mjs"],
+    { encoding: "utf8" },
+  );
+  console.log(output.trim());
+  expect(output).toContain("Loaded WebGL JS");
+});
 
-test("station heartbeats are no-op and replacement disposes retained views",async({page})=>{await page.goto("/?stats");await expect(page.locator("canvas")).toBeVisible();await page.evaluate(()=>(window as unknown as {__misePauseFeed():void}).__misePauseFeed());const idle={version:1,type:"snapshot",mode:"demo",agents:agents.map(agent=>({...agent,state:"idle",progress:null}))};await send(page,idle);await page.waitForTimeout(1_800);const before=await page.evaluate(()=>(window as unknown as {__miseSceneMetrics():{stationRebuilds:number;stationDisposals:number}}).__miseSceneMetrics());await send(page,idle);await send(page,idle);await send(page,idle);await page.waitForTimeout(200);const unchanged=await page.evaluate(()=>(window as unknown as {__miseSceneMetrics():{stationRebuilds:number;stationDisposals:number}}).__miseSceneMetrics());expect(unchanged.stationRebuilds).toBe(before.stationRebuilds);const replacements={...idle,agents:agents.map((agent,index)=>({...agent,id:`replacement-${index}`}))};await send(page,replacements);await page.waitForTimeout(200);const replaced=await page.evaluate(()=>(window as unknown as {__miseSceneMetrics():{stationRebuilds:number;stationDisposals:number}}).__miseSceneMetrics());console.log(`Retained stations: heartbeat rebuilds ${unchanged.stationRebuilds-before.stationRebuilds}, replacement disposals ${replaced.stationDisposals-before.stationDisposals}`);expect(replaced.stationDisposals-before.stationDisposals).toBe(12);});
-test("PR-3 event-to-pixel scheduling",async({page})=>{await page.goto("/");const changed={...agents[0],state:"blocked",stateEnteredAt:new Date().toISOString()};const latency=await page.evaluate(async payload=>{const before=performance.now();(window as unknown as {__miseFeed(value:unknown):void}).__miseFeed({version:1,type:"delta",mode:"demo",operation:"upsert",agent:payload});await new Promise(requestAnimationFrame);return performance.now()-before;},changed);console.log(`PR-3 event-to-next-pixel ${latency.toFixed(2)} ms`);expect(latency).toBeLessThanOrEqual(250);});
-test("PR-4 hidden CPU and resume",async({page})=>{test.setTimeout(75_000);await page.addInitScript(()=>{const native=requestAnimationFrame.bind(window);let frames=0;window.requestAnimationFrame=callback=>native(time=>{frames++;callback(time);});Object.defineProperty(window,"__rafCount",{value:()=>frames});});await page.goto("/");await expect(page.locator("canvas")).toBeVisible();const cdp=await page.context().newCDPSession(page);await cdp.send("Performance.enable");const rafBefore=await page.evaluate(()=>{Object.defineProperty(document,"hidden",{configurable:true,value:true});document.dispatchEvent(new Event("visibilitychange"));return(window as unknown as {__rafCount():number}).__rafCount();});await page.waitForTimeout(1_000);const before=await cdp.send("Performance.getMetrics"),start=Date.now();await page.waitForTimeout(hiddenCpuMeasurementMs);const after=await cdp.send("Performance.getMetrics"),wall=(Date.now()-start)/1000,cpu=(metric(after.metrics,"TaskDuration")-metric(before.metrics,"TaskDuration"))/wall*100,rafAfter=await page.evaluate(()=>(window as unknown as {__rafCount():number}).__rafCount());const resume=await page.evaluate(async()=>{Object.defineProperty(document,"hidden",{configurable:true,value:false});const start=performance.now();document.dispatchEvent(new Event("visibilitychange"));await new Promise(requestAnimationFrame);return performance.now()-start;});console.log(`PR-4 hidden CPU fixed ${hiddenCpuMeasurementMs} ms window: ${cpu.toFixed(3)}% of one core, hidden rAF ${rafAfter-rafBefore}, resume ${resume.toFixed(1)} ms`);expect(rafAfter-rafBefore).toBeLessThanOrEqual(1);expect(resume).toBeLessThanOrEqual(100);expect(cpu).toBeLessThanOrEqual(.1);});
-test("PR-6 production coalescer wire rate",async()=>{const output=execFileSync("cargo",["test","-p","herdr-mise-server","feed::tests::twelve_record_chatty_source_stays_below_wire_budget","--","--exact","--nocapture"],{encoding:"utf8",stdio:["ignore","pipe","inherit"]});console.log(output.trim());});
+test("station heartbeats are no-op and replacement disposes retained views", async ({
+  page,
+}) => {
+  await page.goto("/?stats");
+  await expect(page.locator("canvas")).toBeVisible();
+  await page.evaluate(() =>
+    (window as unknown as { __misePauseFeed(): void }).__misePauseFeed(),
+  );
+  const idle = {
+    version: 1,
+    type: "snapshot",
+    mode: "demo",
+    agents: agents.map((agent) => ({
+      ...agent,
+      state: "idle",
+      progress: null,
+    })),
+  };
+  await send(page, idle);
+  await page.waitForTimeout(1_800);
+  const before = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __miseSceneMetrics(): {
+          stationRebuilds: number;
+          stationDisposals: number;
+        };
+      }
+    ).__miseSceneMetrics(),
+  );
+  await send(page, idle);
+  await send(page, idle);
+  await send(page, idle);
+  await page.waitForTimeout(200);
+  const unchanged = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __miseSceneMetrics(): {
+          stationRebuilds: number;
+          stationDisposals: number;
+        };
+      }
+    ).__miseSceneMetrics(),
+  );
+  expect(unchanged.stationRebuilds).toBe(before.stationRebuilds);
+  const replacements = {
+    ...idle,
+    agents: agents.map((agent, index) => ({
+      ...agent,
+      id: `replacement-${index}`,
+    })),
+  };
+  await send(page, replacements);
+  await page.waitForTimeout(200);
+  const replaced = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __miseSceneMetrics(): {
+          stationRebuilds: number;
+          stationDisposals: number;
+        };
+      }
+    ).__miseSceneMetrics(),
+  );
+  console.log(
+    `Retained stations: heartbeat rebuilds ${unchanged.stationRebuilds - before.stationRebuilds}, replacement disposals ${replaced.stationDisposals - before.stationDisposals}`,
+  );
+  expect(replaced.stationDisposals - before.stationDisposals).toBe(12);
+});
+test("PR-3 event-to-pixel scheduling", async ({ page }) => {
+  await page.goto("/");
+  const changed = {
+    ...agents[0],
+    state: "blocked",
+    stateEnteredAt: new Date().toISOString(),
+  };
+  const latency = await page.evaluate(async (payload) => {
+    const before = performance.now();
+    (window as unknown as { __miseFeed(value: unknown): void }).__miseFeed({
+      version: 1,
+      type: "delta",
+      mode: "demo",
+      operation: "upsert",
+      agent: payload,
+    });
+    await new Promise(requestAnimationFrame);
+    return performance.now() - before;
+  }, changed);
+  console.log(`PR-3 event-to-next-pixel ${latency.toFixed(2)} ms`);
+  expect(latency).toBeLessThanOrEqual(250);
+});
+test("PR-4 hidden CPU and resume", async ({ page }) => {
+  test.setTimeout(75_000);
+  await page.addInitScript(() => {
+    const native = requestAnimationFrame.bind(window);
+    let frames = 0;
+    window.requestAnimationFrame = (callback) =>
+      native((time) => {
+        frames++;
+        callback(time);
+      });
+    Object.defineProperty(window, "__rafCount", { value: () => frames });
+  });
+  await page.goto("/");
+  await expect(page.locator("canvas")).toBeVisible();
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Performance.enable");
+  const rafBefore = await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    return (window as unknown as { __rafCount(): number }).__rafCount();
+  });
+  await page.waitForTimeout(1_000);
+  const before = await cdp.send("Performance.getMetrics"),
+    start = Date.now();
+  await page.waitForTimeout(hiddenCpuMeasurementMs);
+  const after = await cdp.send("Performance.getMetrics"),
+    wall = (Date.now() - start) / 1000,
+    cpu =
+      ((metric(after.metrics, "TaskDuration") -
+        metric(before.metrics, "TaskDuration")) /
+        wall) *
+      100,
+    rafAfter = await page.evaluate(() =>
+      (window as unknown as { __rafCount(): number }).__rafCount(),
+    );
+  const resume = await page.evaluate(async () => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    const start = performance.now();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await new Promise(requestAnimationFrame);
+    return performance.now() - start;
+  });
+  console.log(
+    `PR-4 hidden CPU fixed ${hiddenCpuMeasurementMs} ms window: ${cpu.toFixed(3)}% of one core, hidden rAF ${rafAfter - rafBefore}, resume ${resume.toFixed(1)} ms`,
+  );
+  expect(rafAfter - rafBefore).toBeLessThanOrEqual(1);
+  expect(resume).toBeLessThanOrEqual(100);
+  expect(cpu).toBeLessThanOrEqual(0.1);
+});
+test("PR-6 production coalescer wire rate", async () => {
+  const output = execFileSync(
+    "cargo",
+    [
+      "test",
+      "-p",
+      "herdr-mise-server",
+      "feed::tests::twelve_record_chatty_source_stays_below_wire_budget",
+      "--",
+      "--exact",
+      "--nocapture",
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+  );
+  console.log(output.trim());
+});

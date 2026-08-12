@@ -1,15 +1,19 @@
 {
   "version": "0.7.5",
   "protocol": 17,
-  "workspaces": [{"workspace_id": "fictional-kitchen", "label": "Example Kitchen"}],
+  "workspaces": [
+    { "workspace_id": "fictional-kitchen", "label": "Example Kitchen" }
+  ],
   "tabs": [],
   "panes": [],
   "layouts": [],
-  "agents": [{
-    "pane_id": "fictional-pane-17",
-    "workspace_id": "fictional-kitchen",
-    "agent": "example-agent",
-    "agent_status": "working",
-    "agent_session": {"value": "fictional-session-17"}
-  }]
+  "agents": [
+    {
+      "pane_id": "fictional-pane-17",
+      "workspace_id": "fictional-kitchen",
+      "agent": "example-agent",
+      "agent_status": "working",
+      "agent_session": { "value": "fictional-session-17" }
+    }
+  ]
 }

@@ -49,11 +49,11 @@ herdr-mise-v<VERSION>-<TARGET>.tar.gz.sha256
 
 Targets:
 
-| Platform | `TARGET` |
-|---|---|
-| macOS Apple Silicon | `aarch64-apple-darwin` |
-| macOS Intel | `x86_64-apple-darwin` |
-| Linux x86_64 | `x86_64-unknown-linux-gnu` |
+| Platform            | `TARGET`                   |
+| ------------------- | -------------------------- |
+| macOS Apple Silicon | `aarch64-apple-darwin`     |
+| macOS Intel         | `x86_64-apple-darwin`      |
+| Linux x86_64        | `x86_64-unknown-linux-gnu` |
 
 Download, verify, extract, and run from the upstream release:
 
@@ -129,11 +129,11 @@ client side. Source: `client/src/main.tsx`,
 
 #### Query contract
 
-| Parameter | Accepted values          | Default   | Notes |
-|-----------|--------------------------|-----------|-------|
-| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed` | `mixed` | Any other value falls back to `mixed`. |
-| `agents`  | Integer from `1` through `12` | `6`       | Absent, non-integer, non-finite, or out-of-range values fall back to `6`. |
-| `theme`   | `light\|dinner`          | `light`   | `dinner` selects the existing dark lighting. |
+| Parameter | Accepted values                              | Default | Notes                                                                     |
+| --------- | -------------------------------------------- | ------- | ------------------------------------------------------------------------- |
+| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed` | `mixed` | Any other value falls back to `mixed`.                                    |
+| `agents`  | Integer from `1` through `12`                | `6`     | Absent, non-integer, non-finite, or out-of-range values fall back to `6`. |
+| `theme`   | `light\|dinner`                              | `light` | `dinner` selects the existing dark lighting.                              |
 
 Parsing and validation are concentrated in
 `parseVisualConfig` (`client/src/visual-harness.ts`); both the
@@ -309,16 +309,16 @@ Copy this block for each candidate. The placeholders are intentionally blank;
 do not replace them with private paths, channel IDs, email addresses, or local
 deployment identifiers.
 
-| Field | Record |
-|---|---|
-| Date | `<YYYY-MM-DD>` |
-| Commit / candidate identifier | `<commit-or-candidate>` |
-| macOS | `<macOS version>` |
-| Browser | `<browser and version>` |
-| VoiceOver settings | `<verbosity, speech rate, punctuation, hints, navigation/rotor settings>` |
-| Tester | `<tester name or initials>` |
-| Overall result | `NOT RUN` |
-| Artifact / evidence notes | `<observed speech transcript, screenshot, recording, or none>` |
+| Field                         | Record                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| Date                          | `<YYYY-MM-DD>`                                                            |
+| Commit / candidate identifier | `<commit-or-candidate>`                                                   |
+| macOS                         | `<macOS version>`                                                         |
+| Browser                       | `<browser and version>`                                                   |
+| VoiceOver settings            | `<verbosity, speech rate, punctuation, hints, navigation/rotor settings>` |
+| Tester                        | `<tester name or initials>`                                               |
+| Overall result                | `NOT RUN`                                                                 |
+| Artifact / evidence notes     | `<observed speech transcript, screenshot, recording, or none>`            |
 
 ### VoiceOver and keyboard checklist
 
@@ -330,49 +330,49 @@ implementation handoff.
 
 #### Roles, names, and status surfaces
 
-| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
-|---|---|---|---|
-| VO-01 | Open Settings with the `Open settings` button. VoiceOver exposes a complementary panel named `Settings`, its `Settings` heading, and a `Close settings` button. | `NOT RUN` | |
-| VO-02 | In Settings, verify a `Service bell` switch exposes its on/off state; `Light`, `Dinner`, and `System` are buttons exposing pressed state; and selects are named `Done timeout`, `Faster bell after`, and `Screen-edge glow after`. | `NOT RUN` | |
-| VO-03 | Navigate the `Agent stations` navigation. Each station control is a button with a name shaped like `<agent>, <state>, open details`; verify the state words are human-readable (`Idle — prepping`, `Working — on the fire`, `Blocked — at the pass`, `Done — plated`, or `Ended — 86'd`). | `NOT RUN` | |
-| VO-04 | Activate an agent station control. VoiceOver exposes a complementary panel named `<agent> details`, the agent heading, its state label, a `Close panel` button, and the `Model`, `Workspace`, `Time in state`, `Tickets this session`, and `Session history` text. | `NOT RUN` | |
-| VO-05 | Open an 86 board row. VoiceOver exposes a complementary panel named `<agent> session summary`, the `86'D — SESSION ENDED` label, a `Close panel` button, and `Runtime`, `Tickets served`, `Ended at`, and `Final state` text. | `NOT RUN` | |
-| VO-06 | When the corresponding condition is present, verify status/alert semantics: `DEMO SERVICE` and `Waiting for agents — start one in herdr` are `status` surfaces; `GAS LEAK — SERVICE SUSPENDED` is an `alert`. | `NOT RUN` | |
-| VO-07 | Verify the live region is named `Agent state announcements`, is polite, and is atomic. It should expose only the current announcement, not a stale concatenation of prior announcements. | `NOT RUN` | |
+| ID    | Action and expected result                                                                                                                                                                                                                                                                | Status    | Observed VoiceOver speech / evidence |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------ |
+| VO-01 | Open Settings with the `Open settings` button. VoiceOver exposes a complementary panel named `Settings`, its `Settings` heading, and a `Close settings` button.                                                                                                                           | `NOT RUN` |                                      |
+| VO-02 | In Settings, verify a `Service bell` switch exposes its on/off state; `Light`, `Dinner`, and `System` are buttons exposing pressed state; and selects are named `Done timeout`, `Faster bell after`, and `Screen-edge glow after`.                                                        | `NOT RUN` |                                      |
+| VO-03 | Navigate the `Agent stations` navigation. Each station control is a button with a name shaped like `<agent>, <state>, open details`; verify the state words are human-readable (`Idle — prepping`, `Working — on the fire`, `Blocked — at the pass`, `Done — plated`, or `Ended — 86'd`). | `NOT RUN` |                                      |
+| VO-04 | Activate an agent station control. VoiceOver exposes a complementary panel named `<agent> details`, the agent heading, its state label, a `Close panel` button, and the `Model`, `Workspace`, `Time in state`, `Tickets this session`, and `Session history` text.                        | `NOT RUN` |                                      |
+| VO-05 | Open an 86 board row. VoiceOver exposes a complementary panel named `<agent> session summary`, the `86'D — SESSION ENDED` label, a `Close panel` button, and `Runtime`, `Tickets served`, `Ended at`, and `Final state` text.                                                             | `NOT RUN` |                                      |
+| VO-06 | When the corresponding condition is present, verify status/alert semantics: `DEMO SERVICE` and `Waiting for agents — start one in herdr` are `status` surfaces; `GAS LEAK — SERVICE SUSPENDED` is an `alert`.                                                                             | `NOT RUN` |                                      |
+| VO-07 | Verify the live region is named `Agent state announcements`, is polite, and is atomic. It should expose only the current announcement, not a stale concatenation of prior announcements.                                                                                                  | `NOT RUN` |                                      |
 
 #### Focus, Escape, and restoration
 
-| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
-|---|---|---|---|
-| FOCUS-01 | Activate `Open settings`. Initial focus lands on the `Settings` panel container, not an arbitrary background element. | `NOT RUN` | |
-| FOCUS-02 | Activate an `Agent stations` button for a live cook. Initial focus lands on the `<agent> details` panel container. | `NOT RUN` | |
-| FOCUS-03 | Open an ended-session summary. Initial focus lands on the `<agent> session summary` panel container. | `NOT RUN` | |
-| FOCUS-04 | With Settings focused, press `Escape`. Settings closes and the page returns to the settings trigger. Repeat with focus on an interactive Settings control to verify Escape remains global. | `NOT RUN` | |
-| FOCUS-05 | With an agent detail panel focused, press `Escape`; then repeat with an ended-session summary. The panel closes without changing the Herdr feed. | `NOT RUN` | |
-| FOCUS-06 | Open Settings from `Open settings`, close with its close button and with `Escape`, and verify focus returns to the originating `Open settings` trigger each time. | `NOT RUN` | |
-| FOCUS-07 | Open details by activating the originating semantic station control, close with the panel close button and with `Escape`, and verify focus returns to that same semantic station control. | `NOT RUN` | |
+| ID       | Action and expected result                                                                                                                                                                 | Status    | Observed VoiceOver speech / evidence |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------ |
+| FOCUS-01 | Activate `Open settings`. Initial focus lands on the `Settings` panel container, not an arbitrary background element.                                                                      | `NOT RUN` |                                      |
+| FOCUS-02 | Activate an `Agent stations` button for a live cook. Initial focus lands on the `<agent> details` panel container.                                                                         | `NOT RUN` |                                      |
+| FOCUS-03 | Open an ended-session summary. Initial focus lands on the `<agent> session summary` panel container.                                                                                       | `NOT RUN` |                                      |
+| FOCUS-04 | With Settings focused, press `Escape`. Settings closes and the page returns to the settings trigger. Repeat with focus on an interactive Settings control to verify Escape remains global. | `NOT RUN` |                                      |
+| FOCUS-05 | With an agent detail panel focused, press `Escape`; then repeat with an ended-session summary. The panel closes without changing the Herdr feed.                                           | `NOT RUN` |                                      |
+| FOCUS-06 | Open Settings from `Open settings`, close with its close button and with `Escape`, and verify focus returns to the originating `Open settings` trigger each time.                          | `NOT RUN` |                                      |
+| FOCUS-07 | Open details by activating the originating semantic station control, close with the panel close button and with `Escape`, and verify focus returns to that same semantic station control.  | `NOT RUN` |                                      |
 
 #### Keyboard operation and announcements
 
-| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
-|---|---|---|---|
-| KEY-01 | From the document body, use `ArrowRight`/`ArrowDown` to cycle stations forward and `ArrowLeft`/`ArrowUp` to cycle backward. Use `Tab` from the body as the documented forward cycle. Verify the visible focus ring and station identity change together. | `NOT RUN` | |
-| KEY-02 | With a station focused, press `Enter` to open details. Verify the station mirror buttons remain `tabindex="-1"` (AX/semantic controls, not ordinary Tab stops) and can still be activated through VoiceOver or the documented keyboard path. | `NOT RUN` | |
-| KEY-03 | In Settings and detail/summary panels, use `Tab` and `Shift+Tab` to reach every button, switch, and select. Operate buttons/switches with native keyboard activation, change each select with keyboard input, and use `Escape` to close. | `NOT RUN` | |
-| ANN-01 | Cause a real transition into blocked (the initial `blocked` snapshot has no prior state announcement). Expect exactly one concise live-region update with `<agent> blocked, just now`; for other state transitions record the emitted `<agent> <state>` wording. | `NOT RUN` | |
-| ANN-02 | Leave the page open through heartbeats, progress-only updates, and repeated observation of the same state. Expect no duplicate announcement and no stale announcement after the next real state transition. Record any VoiceOver repetition rather than treating it as a pass. | `NOT RUN` | |
+| ID     | Action and expected result                                                                                                                                                                                                                                                     | Status    | Observed VoiceOver speech / evidence |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------ |
+| KEY-01 | From the document body, use `ArrowRight`/`ArrowDown` to cycle stations forward and `ArrowLeft`/`ArrowUp` to cycle backward. Use `Tab` from the body as the documented forward cycle. Verify the visible focus ring and station identity change together.                       | `NOT RUN` |                                      |
+| KEY-02 | With a station focused, press `Enter` to open details. Verify the station mirror buttons remain `tabindex="-1"` (AX/semantic controls, not ordinary Tab stops) and can still be activated through VoiceOver or the documented keyboard path.                                   | `NOT RUN` |                                      |
+| KEY-03 | In Settings and detail/summary panels, use `Tab` and `Shift+Tab` to reach every button, switch, and select. Operate buttons/switches with native keyboard activation, change each select with keyboard input, and use `Escape` to close.                                       | `NOT RUN` |                                      |
+| ANN-01 | Cause a real transition into blocked (the initial `blocked` snapshot has no prior state announcement). Expect exactly one concise live-region update with `<agent> blocked, just now`; for other state transitions record the emitted `<agent> <state>` wording.               | `NOT RUN` |                                      |
+| ANN-02 | Leave the page open through heartbeats, progress-only updates, and repeated observation of the same state. Expect no duplicate announcement and no stale announcement after the next real state transition. Record any VoiceOver repetition rather than treating it as a pass. | `NOT RUN` |                                      |
 
 #### Reduced-motion startup and runtime changes
 
-| ID | Action and expected result | Status | Observed VoiceOver speech / evidence |
-|---|---|---|---|
-| RM-01 | Set the macOS Reduce Motion preference before opening/reloading the light-theme page. Verify startup is static: no idle pose/mark animation, steam particles, cook bob, flame flicker, travel/transition, busser sweep, or blocked pulse/vignette pulse. | `NOT RUN` | |
-| RM-02 | Repeat RM-01 with the dinner theme. Verify the same motion policy and confirm the blocked signal remains recognizable. | `NOT RUN` | |
-| RM-03 | Without reloading the page, change Reduce Motion from reduce to normal. Verify `prefers-reduced-motion` changes in place and adjacent normal-motion channels resume; do not interpret resuming decoration as a state change. | `NOT RUN` | |
-| RM-04 | Without reloading, change the preference from normal to reduce. Verify active particles, transitions, busser graphics, and pulses stop/clear immediately and remain static. | `NOT RUN` | |
-| RM-05 | While reduced motion is active, let the feed change states. Verify lifecycle labels, the blocked elapsed timer text, keyboard focus/selection, and the live announcement region continue to update. | `NOT RUN` | |
-| RM-06 | In light theme, inspect a blocked cook at the pass. Verify fixed cook-at-pass geometry, high-contrast outline, home/pass tickets, timer chip, `AT THE PASS` text, solid bell arcs, and fixed-opacity vignette at its escalation stage. Confirm the state is conveyed by text and shape, not color or motion alone. | `NOT RUN` | |
-| RM-07 | Repeat RM-06 in dinner theme. If the vignette stage is not reached during the session, record that sub-check as `NOT RUN` and include the configured threshold/wait in the evidence notes. | `NOT RUN` | |
+| ID    | Action and expected result                                                                                                                                                                                                                                                                                         | Status    | Observed VoiceOver speech / evidence |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------ |
+| RM-01 | Set the macOS Reduce Motion preference before opening/reloading the light-theme page. Verify startup is static: no idle pose/mark animation, steam particles, cook bob, flame flicker, travel/transition, busser sweep, or blocked pulse/vignette pulse.                                                           | `NOT RUN` |                                      |
+| RM-02 | Repeat RM-01 with the dinner theme. Verify the same motion policy and confirm the blocked signal remains recognizable.                                                                                                                                                                                             | `NOT RUN` |                                      |
+| RM-03 | Without reloading the page, change Reduce Motion from reduce to normal. Verify `prefers-reduced-motion` changes in place and adjacent normal-motion channels resume; do not interpret resuming decoration as a state change.                                                                                       | `NOT RUN` |                                      |
+| RM-04 | Without reloading, change the preference from normal to reduce. Verify active particles, transitions, busser graphics, and pulses stop/clear immediately and remain static.                                                                                                                                        | `NOT RUN` |                                      |
+| RM-05 | While reduced motion is active, let the feed change states. Verify lifecycle labels, the blocked elapsed timer text, keyboard focus/selection, and the live announcement region continue to update.                                                                                                                | `NOT RUN` |                                      |
+| RM-06 | In light theme, inspect a blocked cook at the pass. Verify fixed cook-at-pass geometry, high-contrast outline, home/pass tickets, timer chip, `AT THE PASS` text, solid bell arcs, and fixed-opacity vignette at its escalation stage. Confirm the state is conveyed by text and shape, not color or motion alone. | `NOT RUN` |                                      |
+| RM-07 | Repeat RM-06 in dinner theme. If the vignette stage is not reached during the session, record that sub-check as `NOT RUN` and include the configured threshold/wait in the evidence notes.                                                                                                                         | `NOT RUN` |                                      |
 
 ### Manual result boundary
 
@@ -424,7 +424,7 @@ The binary always binds to `127.0.0.1:8686` and that does not change.
 By default the `/ws` endpoint also rejects any browser `Origin` other
 than `http://localhost:8686` / `http://127.0.0.1:8686`, so a page
 served through a reverse proxy loads but its WebSocket is refused
-with HTTP 403 and the client shows *GAS LEAK — SERVICE SUSPENDED*.
+with HTTP 403 and the client shows _GAS LEAK — SERVICE SUSPENDED_.
 
 `HERDR_MISE_EXTRA_ORIGINS` opts additional exact browser origins into
 the `/ws` allowlist for setups like Caddy + Tailscale, where the
@@ -461,7 +461,7 @@ summary panel are demonstrable. Time-in-state and per-session ticket
 counts update on a five-second quantum so blocked escalation stages
 and done-timeout are reachable in a normal demo session.
 
-The chrome renders a persistent *DEMO SERVICE* placard
+The chrome renders a persistent _DEMO SERVICE_ placard
 (`client/src/chrome/Chrome.tsx` `ModeTreatment`) that is never
 dismissible. Demo is never mistakable for live.
 
@@ -603,14 +603,14 @@ gh secret set APPLE_API_ISSUER_ID
 gh secret set APPLE_API_PRIVATE_KEY_BASE64 < AuthKey.p8.base64
 ```
 
-| Secret | Contents |
-|---|---|
-| `APPLE_CERTIFICATE_P12_BASE64` | base64 of the Developer ID Application `.p12` |
-| `APPLE_CERTIFICATE_PASSWORD` | password protecting that `.p12` |
-| `APPLE_SIGNING_IDENTITY` | full `Developer ID Application: …` identity string |
-| `APPLE_API_KEY_ID` | App Store Connect API key ID |
-| `APPLE_API_ISSUER_ID` | App Store Connect issuer ID |
-| `APPLE_API_PRIVATE_KEY_BASE64` | base64 of the API key `.p8` |
+| Secret                         | Contents                                           |
+| ------------------------------ | -------------------------------------------------- |
+| `APPLE_CERTIFICATE_P12_BASE64` | base64 of the Developer ID Application `.p12`      |
+| `APPLE_CERTIFICATE_PASSWORD`   | password protecting that `.p12`                    |
+| `APPLE_SIGNING_IDENTITY`       | full `Developer ID Application: …` identity string |
+| `APPLE_API_KEY_ID`             | App Store Connect API key ID                       |
+| `APPLE_API_ISSUER_ID`          | App Store Connect issuer ID                        |
+| `APPLE_API_PRIVATE_KEY_BASE64` | base64 of the API key `.p8`                        |
 
 Delete the local `.base64` helpers after upload. Never commit source certs or
 encoded copies. GitHub's
@@ -921,12 +921,14 @@ versions that ship a protocol in the manifest are accepted by the
 adapter but are not part of the verified matrix above. The exact
 tested matrix is:
 
+<!-- prettier-ignore-start -->
 <!-- herdr-compatibility:start -->
 | Herdr release | Snapshot protocol |
 |---|---|
 | `0.7.5` | `17` |
 | `0.8.0` | `19` |
 <!-- herdr-compatibility:end -->
+<!-- prettier-ignore-end -->
 
 If you are on a Herdr version that reports a different protocol,
 either upgrade Herdr to a tested release or stay on the demo
@@ -956,7 +958,7 @@ workflow additionally checks source at the immutable commits recorded there.
   the manifest claim, public row, primary fixture, and adapter coverage
   together. Never leave a docs-only or runtime-only claim.
 
-### The overlay says *GAS LEAK — SERVICE SUSPENDED*
+### The overlay says _GAS LEAK — SERVICE SUSPENDED_
 
 - A typed heartbeat should arrive every 1 s. If it stops, the server
   has lost the herdr socket or the live loop has dropped to
@@ -980,7 +982,7 @@ workflow additionally checks source at the immutable commits recorded there.
   repeats working → blocked → working → done, Claude stays blocked,
   and Gemini ends once per five-minute session. If you want to see
   the blocked escalation stages more often, lower the `faster bell`
-  and `screen-edge glow` thresholds in *Settings* to 30 s and
+  and `screen-edge glow` thresholds in _Settings_ to 30 s and
   3 min respectively.
 - If you are running against a live herdr, the source of truth is
   the herdr pane — herdr-mise only reflects what herdr reports.

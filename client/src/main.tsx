@@ -5,4 +5,8 @@ import { initializeVisualMode } from "./visual-harness";
 import "./theme/global.css";
 
 initializeVisualMode(import.meta.env.MODE, window, location.search);
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);

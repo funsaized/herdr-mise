@@ -7,6 +7,8 @@
     "build": "npm --prefix client run build",
     "dev:visual": "npm --prefix client run dev:visual --",
     "bundle": "npm run build && cargo build --release --bin herdr-mise",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,json,css,md}\"",
     "package": "sh scripts/package-release.sh",
     "smoke": "sh scripts/smoke-release.sh",
     "validate:release": "sh scripts/validate-release.sh",
@@ -24,6 +26,7 @@
     "test:visual": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1"
+    "@playwright/test": "^1.62.1",
+    "prettier": "3.9.6"
   }
 }

@@ -32,6 +32,7 @@ jobs:
             client/package-lock.json
       - run: npm ci
       - run: npm ci --prefix client
+      - run: npm run format:check
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: cargo fmt --all --check

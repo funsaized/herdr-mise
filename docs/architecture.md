@@ -176,7 +176,7 @@ id, Claude parked in `blocked`, and Gemini ending once per five-minute
 session before returning with a new id. The roster is always labeled
 `"mode": "demo"` and carries a typed, non-sensitive `sourceStatus` in the
 snapshot. The chrome renders the persistent
-*DEMO SERVICE* placard (`server/src/demo.rs`,
+_DEMO SERVICE_ placard (`server/src/demo.rs`,
 `client/src/chrome/Chrome.tsx`).
 
 `FeedState` keeps mode, source status, and agents under one write lock. Recovery

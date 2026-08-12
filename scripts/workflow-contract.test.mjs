@@ -1,26 +1,31 @@
-import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import test from 'node:test';
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import test from "node:test";
 
-const workflowDirectory = '.github/workflows';
+const workflowDirectory = ".github/workflows";
 const workflows = Object.fromEntries(
   readdirSync(workflowDirectory)
-    .filter(name => /\.ya?ml$/.test(name))
+    .filter((name) => /\.ya?ml$/.test(name))
     .sort()
-    .map(name => [name, readFileSync(`${workflowDirectory}/${name}`, 'utf8')]),
+    .map((name) => [
+      name,
+      readFileSync(`${workflowDirectory}/${name}`, "utf8"),
+    ]),
 );
-const dependabot = readFileSync('.github/dependabot.yml', 'utf8');
-const gitleaks = readFileSync('.gitleaks.toml', 'utf8');
+const dependabot = readFileSync(".github/dependabot.yml", "utf8");
+const gitleaks = readFileSync(".gitleaks.toml", "utf8");
 
 function permissionMap(block, indent) {
-  const marker = `${' '.repeat(indent)}permissions:\n`;
+  const marker = `${" ".repeat(indent)}permissions:\n`;
   const start = block.indexOf(marker);
   if (start < 0) return null;
-  const lines = block.slice(start + marker.length).split('\n');
+  const lines = block.slice(start + marker.length).split("\n");
   const entries = {};
   for (const line of lines) {
     if (!line.trim()) continue;
-    const match = line.match(new RegExp(`^ {${indent + 2}}([a-z-]+): (read|write|none)$`));
+    const match = line.match(
+      new RegExp(`^ {${indent + 2}}([a-z-]+): (read|write|none)$`),
+    );
     if (!match) break;
     entries[match[1]] = match[2];
   }
@@ -28,7 +33,7 @@ function permissionMap(block, indent) {
 }
 
 function jobBlocks(source) {
-  const jobsStart = source.indexOf('\njobs:\n');
+  const jobsStart = source.indexOf("\njobs:\n");
   if (jobsStart < 0) return {};
   const jobs = {};
   const tail = source.slice(jobsStart + 7);
@@ -45,123 +50,205 @@ function samePermissions(actual, expected) {
   return actual !== null && JSON.stringify(actual) === JSON.stringify(expected);
 }
 
-export function auditWorkflowContract(candidateWorkflows, candidateDependabot, candidateGitleaks) {
+export function auditWorkflowContract(
+  candidateWorkflows,
+  candidateDependabot,
+  candidateGitleaks,
+) {
   const errors = [];
   const names = Object.keys(candidateWorkflows).sort();
 
   for (const [name, source] of Object.entries(candidateWorkflows)) {
-    for (const [lineIndex, line] of source.split('\n').entries()) {
+    for (const [lineIndex, line] of source.split("\n").entries()) {
       const uses = line.match(/^\s*-?\s*uses:\s*([^\s#]+)(?:\s+(#.*))?$/);
-      if (!uses || uses[1].startsWith('./')) continue;
+      if (!uses || uses[1].startsWith("./")) continue;
       const reference = uses[1].match(/^([^@]+)@(.+)$/);
       if (!reference || !/^[0-9a-f]{40}$/.test(reference[2])) {
-        errors.push(`${name}:${lineIndex + 1}: external action is not pinned to a full SHA`);
+        errors.push(
+          `${name}:${lineIndex + 1}: external action is not pinned to a full SHA`,
+        );
       }
       if (!uses[2] || !/^#\s*\S+/.test(uses[2])) {
-        errors.push(`${name}:${lineIndex + 1}: pinned action lacks a readable version comment`);
+        errors.push(
+          `${name}:${lineIndex + 1}: pinned action lacks a readable version comment`,
+        );
       }
     }
-    if (/^\s*pull_request_target:/m.test(source)) errors.push(`${name}: pull_request_target is forbidden`);
+    if (/^\s*pull_request_target:/m.test(source))
+      errors.push(`${name}: pull_request_target is forbidden`);
 
     const topPermissions = permissionMap(source, 0);
-    if (!samePermissions(topPermissions, { contents: 'read' })) {
-      errors.push(`${name}: top-level permissions must be exactly contents: read`);
+    if (!samePermissions(topPermissions, { contents: "read" })) {
+      errors.push(
+        `${name}: top-level permissions must be exactly contents: read`,
+      );
     }
 
     const jobs = jobBlocks(source);
     for (const [jobName, block] of Object.entries(jobs)) {
-      if (name !== 'release.yml' && !/^    timeout-minutes: [1-9][0-9]*$/m.test(block)) {
+      if (
+        name !== "release.yml" &&
+        !/^    timeout-minutes: [1-9][0-9]*$/m.test(block)
+      ) {
         errors.push(`${name}/${jobName}: timeout-minutes is required`);
       }
       const permissions = permissionMap(block, 4);
       if (permissions === null) continue;
-      const allowed = name === 'release.yml' && jobName === 'publish'
-        ? { contents: 'write' }
-        : name === 'codeql.yml' && jobName === 'analyze'
-          ? { actions: 'read', contents: 'read', 'security-events': 'write' }
-          : name === 'gitleaks.yml' && jobName === 'scan'
-            ? { contents: 'read', 'pull-requests': 'read' }
-            : null;
+      const allowed =
+        name === "release.yml" && jobName === "publish"
+          ? { contents: "write" }
+          : name === "codeql.yml" && jobName === "analyze"
+            ? { actions: "read", contents: "read", "security-events": "write" }
+            : name === "gitleaks.yml" && jobName === "scan"
+              ? { contents: "read", "pull-requests": "read" }
+              : null;
       if (!allowed || !samePermissions(permissions, allowed)) {
         errors.push(`${name}/${jobName}: job permissions exceed the contract`);
       }
     }
 
-    if (name !== 'release.yml') {
-      if (!/^concurrency:\n  group: .+\n  cancel-in-progress: true$/m.test(source)) {
+    if (name !== "release.yml") {
+      if (
+        !/^concurrency:\n  group: .+\n  cancel-in-progress: true$/m.test(source)
+      ) {
         errors.push(`${name}: cancellable concurrency is required`);
       }
     }
   }
 
-  for (const required of ['ci.yml', 'codeql.yml', 'dependency-review.yml', 'gitleaks.yml', 'herdr-compatibility-drift.yml', 'release.yml']) {
-    if (!names.includes(required)) errors.push(`${required}: required workflow is missing`);
-  }
-
-  const ci = candidateWorkflows['ci.yml'] ?? '';
-  if (!ci.includes('cargo install cargo-audit --version 0.22.2 --locked')) errors.push('ci.yml: pinned cargo-audit install is missing');
-  if (!ci.includes('cargo audit --file Cargo.lock --deny warnings')) errors.push('ci.yml: fail-closed Cargo.lock audit is missing');
-  if (!ci.includes('npm ci') || !ci.includes('npm ci --prefix client')) errors.push('ci.yml: npm lockfile installs are missing');
-  for (const line of ci.split('\n').filter(line => /cargo (test|check|build)\b/.test(line))) {
-    if (!line.includes('--locked')) errors.push('ci.yml: Cargo build/check/test must use --locked');
-  }
-
-  const codeql = candidateWorkflows['codeql.yml'] ?? '';
-  for (const matrixEntry of [
-    '- language: javascript-typescript\n            build-mode: none',
-    '- language: rust\n            build-mode: none',
+  for (const required of [
+    "ci.yml",
+    "codeql.yml",
+    "dependency-review.yml",
+    "gitleaks.yml",
+    "herdr-compatibility-drift.yml",
+    "release.yml",
   ]) {
-    if (!codeql.includes(matrixEntry)) errors.push(`codeql.yml: missing matrix entry ${matrixEntry.split('\n')[0]}`);
+    if (!names.includes(required))
+      errors.push(`${required}: required workflow is missing`);
   }
-  for (const action of ['github/codeql-action/init@', 'github/codeql-action/analyze@']) {
+
+  const ci = candidateWorkflows["ci.yml"] ?? "";
+  if (!ci.includes("cargo install cargo-audit --version 0.22.2 --locked"))
+    errors.push("ci.yml: pinned cargo-audit install is missing");
+  if (!ci.includes("cargo audit --file Cargo.lock --deny warnings"))
+    errors.push("ci.yml: fail-closed Cargo.lock audit is missing");
+  if (!ci.includes("npm ci") || !ci.includes("npm ci --prefix client"))
+    errors.push("ci.yml: npm lockfile installs are missing");
+  for (const line of ci
+    .split("\n")
+    .filter((line) => /cargo (test|check|build)\b/.test(line))) {
+    if (!line.includes("--locked"))
+      errors.push("ci.yml: Cargo build/check/test must use --locked");
+  }
+
+  const codeql = candidateWorkflows["codeql.yml"] ?? "";
+  for (const matrixEntry of [
+    "- language: javascript-typescript\n            build-mode: none",
+    "- language: rust\n            build-mode: none",
+  ]) {
+    if (!codeql.includes(matrixEntry))
+      errors.push(
+        `codeql.yml: missing matrix entry ${matrixEntry.split("\n")[0]}`,
+      );
+  }
+  for (const action of [
+    "github/codeql-action/init@",
+    "github/codeql-action/analyze@",
+  ]) {
     if (!codeql.includes(action)) errors.push(`codeql.yml: missing ${action}`);
   }
 
-  const dependencyReview = candidateWorkflows['dependency-review.yml'] ?? '';
-  if (!/^  pull_request:$/m.test(dependencyReview) || /pull-requests:\s*write/.test(dependencyReview)) {
-    errors.push('dependency-review.yml: review must be read-only on pull_request');
+  const dependencyReview = candidateWorkflows["dependency-review.yml"] ?? "";
+  if (
+    !/^  pull_request:$/m.test(dependencyReview) ||
+    /pull-requests:\s*write/.test(dependencyReview)
+  ) {
+    errors.push(
+      "dependency-review.yml: review must be read-only on pull_request",
+    );
   }
-  if (!dependencyReview.includes('actions/dependency-review-action@') || !dependencyReview.includes('fail-on-severity: moderate')) {
-    errors.push('dependency-review.yml: moderate dependency policy is missing');
+  if (
+    !dependencyReview.includes("actions/dependency-review-action@") ||
+    !dependencyReview.includes("fail-on-severity: moderate")
+  ) {
+    errors.push("dependency-review.yml: moderate dependency policy is missing");
   }
 
-  const leaks = candidateWorkflows['gitleaks.yml'] ?? '';
-  if (!/^  push:$/m.test(leaks) || !/^  pull_request:$/m.test(leaks)) errors.push('gitleaks.yml: push and pull_request triggers are required');
-  const leakScanPermissions = permissionMap(jobBlocks(leaks).scan ?? '', 4);
-  if (!samePermissions(leakScanPermissions, { contents: 'read', 'pull-requests': 'read' })) {
-    errors.push('gitleaks.yml/scan: job permissions must be exactly contents: read and pull-requests: read');
+  const leaks = candidateWorkflows["gitleaks.yml"] ?? "";
+  if (!/^  push:$/m.test(leaks) || !/^  pull_request:$/m.test(leaks))
+    errors.push("gitleaks.yml: push and pull_request triggers are required");
+  const leakScanPermissions = permissionMap(jobBlocks(leaks).scan ?? "", 4);
+  if (
+    !samePermissions(leakScanPermissions, {
+      contents: "read",
+      "pull-requests": "read",
+    })
+  ) {
+    errors.push(
+      "gitleaks.yml/scan: job permissions must be exactly contents: read and pull-requests: read",
+    );
   }
-  if (!leaks.includes('fetch-depth: 0') || !leaks.includes('GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml')) {
-    errors.push('gitleaks.yml: event-range checkout and repository config are required');
+  if (
+    !leaks.includes("fetch-depth: 0") ||
+    !leaks.includes("GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml")
+  ) {
+    errors.push(
+      "gitleaks.yml: event-range checkout and repository config are required",
+    );
   }
-  if (!leaks.includes('GITHUB_TOKEN: ${{ github.token }}')) errors.push('gitleaks.yml: GitHub token env is required');
-  if (!leaks.includes('GITLEAKS_VERSION: "8.30.1"')) errors.push('gitleaks.yml: hosted CLI must be pinned to 8.30.1');
-  if (!leaks.includes('GITLEAKS_ENABLE_COMMENTS: "false"')) errors.push('gitleaks.yml: PR comments must be disabled');
+  if (!leaks.includes("GITHUB_TOKEN: ${{ github.token }}"))
+    errors.push("gitleaks.yml: GitHub token env is required");
+  if (!leaks.includes('GITLEAKS_VERSION: "8.30.1"'))
+    errors.push("gitleaks.yml: hosted CLI must be pinned to 8.30.1");
+  if (!leaks.includes('GITLEAKS_ENABLE_COMMENTS: "false"'))
+    errors.push("gitleaks.yml: PR comments must be disabled");
 
-  const release = candidateWorkflows['release.yml'] ?? '';
-  if (!release.includes("push:\n    tags: ['v*']") || !release.includes("publish:\n    if: startsWith(github.ref, 'refs/tags/')")) {
-    errors.push('release.yml: publication must remain tag-only');
+  const release = candidateWorkflows["release.yml"] ?? "";
+  if (
+    !release.includes("push:\n    tags: ['v*']") ||
+    !release.includes("publish:\n    if: startsWith(github.ref, 'refs/tags/')")
+  ) {
+    errors.push("release.yml: publication must remain tag-only");
   }
-  if (!release.includes('concurrency:\n  group: release-${{ github.ref }}\n  cancel-in-progress: false')) {
-    errors.push('release.yml: release cancellation must remain disabled');
+  if (
+    !release.includes(
+      "concurrency:\n  group: release-${{ github.ref }}\n  cancel-in-progress: false",
+    )
+  ) {
+    errors.push("release.yml: release cancellation must remain disabled");
   }
-  for (const secretStep of ['Import Developer ID certificate', 'Notarize signed CLI binary']) {
+  for (const secretStep of [
+    "Import Developer ID certificate",
+    "Notarize signed CLI binary",
+  ]) {
     const step = release.slice(release.indexOf(`- name: ${secretStep}`));
     const boundary = step.search(/\n      - (?:name|uses):/);
     const block = boundary < 0 ? step : step.slice(0, boundary);
-    if (!block.includes("if: startsWith(github.ref, 'refs/tags/') && runner.os == 'macOS'") || !block.includes('secrets.')) {
+    if (
+      !block.includes(
+        "if: startsWith(github.ref, 'refs/tags/') && runner.os == 'macOS'",
+      ) ||
+      !block.includes("secrets.")
+    ) {
       errors.push(`release.yml: ${secretStep} must remain tag-gated`);
     }
   }
 
-  if (!/package-ecosystem: github-actions\n    directory: \/\n    schedule:\n      interval: weekly/.test(candidateDependabot)) {
-    errors.push('dependabot: weekly github-actions updates are required');
+  if (
+    !/package-ecosystem: github-actions\n    directory: \/\n    schedule:\n      interval: weekly/.test(
+      candidateDependabot,
+    )
+  ) {
+    errors.push("dependabot: weekly github-actions updates are required");
   }
-  if (!candidateGitleaks.includes('useDefault = true')
-      || !candidateGitleaks.includes("condition = \"AND\"")
-      || !candidateGitleaks.includes("paths = ['''^server/src/service\\.rs$''']")
-      || !candidateGitleaks.includes("regexes = ['''dGhlIHNhbXBsZSBub25jZQ==''']")) {
-    errors.push('gitleaks config: narrow RFC 6455 allowlist changed');
+  if (
+    !candidateGitleaks.includes("useDefault = true") ||
+    !candidateGitleaks.includes('condition = "AND"') ||
+    !candidateGitleaks.includes("paths = ['''^server/src/service\\.rs$''']") ||
+    !candidateGitleaks.includes("regexes = ['''dGhlIHNhbXBsZSBub25jZQ==''']")
+  ) {
+    errors.push("gitleaks config: narrow RFC 6455 allowlist changed");
   }
 
   return errors;
@@ -171,80 +258,238 @@ function mutateWorkflow(name, transform) {
   return { ...workflows, [name]: transform(workflows[name]) };
 }
 
-test('repository workflows satisfy the supply-chain contract', () => {
+test("repository workflows satisfy the supply-chain contract", () => {
   assert.deepEqual(auditWorkflowContract(workflows, dependabot, gitleaks), []);
 });
 
-test('contract rejects mutable refs and missing readable pin comments', () => {
-  const mutable = mutateWorkflow('ci.yml', source => source.replace(/actions\/checkout@[0-9a-f]{40}/, 'actions/checkout@v7'));
-  const uncommented = mutateWorkflow('ci.yml', source => source.replace(/(actions\/checkout@[0-9a-f]{40}) # v7\.0\.1/, '$1'));
-  assert.ok(auditWorkflowContract(mutable, dependabot, gitleaks).some(error => error.includes('not pinned')));
-  assert.ok(auditWorkflowContract(uncommented, dependabot, gitleaks).some(error => error.includes('version comment')));
+test("contract rejects mutable refs and missing readable pin comments", () => {
+  const mutable = mutateWorkflow("ci.yml", (source) =>
+    source.replace(/actions\/checkout@[0-9a-f]{40}/, "actions/checkout@v7"),
+  );
+  const uncommented = mutateWorkflow("ci.yml", (source) =>
+    source.replace(/(actions\/checkout@[0-9a-f]{40}) # v7\.0\.1/, "$1"),
+  );
+  assert.ok(
+    auditWorkflowContract(mutable, dependabot, gitleaks).some((error) =>
+      error.includes("not pinned"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(uncommented, dependabot, gitleaks).some((error) =>
+      error.includes("version comment"),
+    ),
+  );
 });
 
-test('contract rejects privileged PR triggers and broadened permissions', () => {
-  const trigger = mutateWorkflow('gitleaks.yml', source => source.replace('  pull_request:', '  pull_request_target:'));
-  const permission = mutateWorkflow('dependency-review.yml', source => source.replace('  contents: read', '  contents: read\n  pull-requests: write'));
-  assert.ok(auditWorkflowContract(trigger, dependabot, gitleaks).some(error => error.includes('pull_request_target')));
-  assert.ok(auditWorkflowContract(permission, dependabot, gitleaks).some(error => error.includes('top-level permissions')));
+test("contract rejects privileged PR triggers and broadened permissions", () => {
+  const trigger = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace("  pull_request:", "  pull_request_target:"),
+  );
+  const permission = mutateWorkflow("dependency-review.yml", (source) =>
+    source.replace(
+      "  contents: read",
+      "  contents: read\n  pull-requests: write",
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(trigger, dependabot, gitleaks).some((error) =>
+      error.includes("pull_request_target"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(permission, dependabot, gitleaks).some((error) =>
+      error.includes("top-level permissions"),
+    ),
+  );
 });
 
-test('contract rejects missing non-release controls and weakened scanner configuration', () => {
-  const timeout = mutateWorkflow('codeql.yml', source => source.replace('    timeout-minutes: 30\n', ''));
-  const concurrency = mutateWorkflow('ci.yml', source => source.replace('  cancel-in-progress: true', '  cancel-in-progress: false'));
-  const config = mutateWorkflow('gitleaks.yml', source => source.replace('/.gitleaks.toml', '/gitleaks.toml'));
-  assert.ok(auditWorkflowContract(timeout, dependabot, gitleaks).some(error => error.includes('timeout-minutes')));
-  assert.ok(auditWorkflowContract(concurrency, dependabot, gitleaks).some(error => error.includes('cancellable concurrency')));
-  assert.ok(auditWorkflowContract(config, dependabot, gitleaks).some(error => error.includes('repository config')));
+test("contract rejects missing non-release controls and weakened scanner configuration", () => {
+  const timeout = mutateWorkflow("codeql.yml", (source) =>
+    source.replace("    timeout-minutes: 30\n", ""),
+  );
+  const concurrency = mutateWorkflow("ci.yml", (source) =>
+    source.replace("  cancel-in-progress: true", "  cancel-in-progress: false"),
+  );
+  const config = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace("/.gitleaks.toml", "/gitleaks.toml"),
+  );
+  assert.ok(
+    auditWorkflowContract(timeout, dependabot, gitleaks).some((error) =>
+      error.includes("timeout-minutes"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(concurrency, dependabot, gitleaks).some((error) =>
+      error.includes("cancellable concurrency"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(config, dependabot, gitleaks).some((error) =>
+      error.includes("repository config"),
+    ),
+  );
 });
 
-test('contract requires the exact fork-safe Gitleaks job contract', () => {
-  const noPermissions = mutateWorkflow('gitleaks.yml', source => source.replace(
-    '    permissions:\n      contents: read\n      pull-requests: read\n',
-    '',
-  ));
-  const broadPermissions = mutateWorkflow('gitleaks.yml', source => source.replace(
-    '      pull-requests: read',
-    '      pull-requests: read\n      issues: write',
-  ));
-  const noToken = mutateWorkflow('gitleaks.yml', source => source.replace('          GITHUB_TOKEN: ${{ github.token }}\n', ''));
-  const noVersion = mutateWorkflow('gitleaks.yml', source => source.replace('          GITLEAKS_VERSION: "8.30.1"\n', ''));
-  const noConfig = mutateWorkflow('gitleaks.yml', source => source.replace('          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml\n', ''));
-  const comments = mutateWorkflow('gitleaks.yml', source => source.replace('GITLEAKS_ENABLE_COMMENTS: "false"', 'GITLEAKS_ENABLE_COMMENTS: "true"'));
-  const shallowCheckout = mutateWorkflow('gitleaks.yml', source => source.replace('fetch-depth: 0', 'fetch-depth: 1'));
+test("contract requires the exact fork-safe Gitleaks job contract", () => {
+  const noPermissions = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace(
+      "    permissions:\n      contents: read\n      pull-requests: read\n",
+      "",
+    ),
+  );
+  const broadPermissions = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace(
+      "      pull-requests: read",
+      "      pull-requests: read\n      issues: write",
+    ),
+  );
+  const noToken = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace("          GITHUB_TOKEN: ${{ github.token }}\n", ""),
+  );
+  const noVersion = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace('          GITLEAKS_VERSION: "8.30.1"\n', ""),
+  );
+  const noConfig = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace(
+      "          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml\n",
+      "",
+    ),
+  );
+  const comments = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace(
+      'GITLEAKS_ENABLE_COMMENTS: "false"',
+      'GITLEAKS_ENABLE_COMMENTS: "true"',
+    ),
+  );
+  const shallowCheckout = mutateWorkflow("gitleaks.yml", (source) =>
+    source.replace("fetch-depth: 0", "fetch-depth: 1"),
+  );
 
-  assert.ok(auditWorkflowContract(noPermissions, dependabot, gitleaks).some(error => error.includes('job permissions must be exactly')));
-  assert.ok(auditWorkflowContract(broadPermissions, dependabot, gitleaks).some(error => error.includes('job permissions')));
-  assert.ok(auditWorkflowContract(noToken, dependabot, gitleaks).some(error => error.includes('GitHub token env')));
-  assert.ok(auditWorkflowContract(noVersion, dependabot, gitleaks).some(error => error.includes('hosted CLI')));
-  assert.ok(auditWorkflowContract(noConfig, dependabot, gitleaks).some(error => error.includes('repository config')));
-  assert.ok(auditWorkflowContract(comments, dependabot, gitleaks).some(error => error.includes('comments must be disabled')));
-  assert.ok(auditWorkflowContract(shallowCheckout, dependabot, gitleaks).some(error => error.includes('event-range checkout')));
+  assert.ok(
+    auditWorkflowContract(noPermissions, dependabot, gitleaks).some((error) =>
+      error.includes("job permissions must be exactly"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(broadPermissions, dependabot, gitleaks).some(
+      (error) => error.includes("job permissions"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(noToken, dependabot, gitleaks).some((error) =>
+      error.includes("GitHub token env"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(noVersion, dependabot, gitleaks).some((error) =>
+      error.includes("hosted CLI"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(noConfig, dependabot, gitleaks).some((error) =>
+      error.includes("repository config"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(comments, dependabot, gitleaks).some((error) =>
+      error.includes("comments must be disabled"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(shallowCheckout, dependabot, gitleaks).some((error) =>
+      error.includes("event-range checkout"),
+    ),
+  );
 });
 
-test('contract rejects advisory, lockfile, CodeQL, and dependency-policy weakening', () => {
-  const audit = mutateWorkflow('ci.yml', source => source.replace('--version 0.22.2 --locked', '--version 0.22.3'));
-  const cargoLock = mutateWorkflow('ci.yml', source => source.replace('cargo check --workspace --locked', 'cargo check --workspace'));
-  const codeql = mutateWorkflow('codeql.yml', source => source.replace('language: rust', 'language: go'));
-  const dependency = mutateWorkflow('dependency-review.yml', source => source.replace('fail-on-severity: moderate', 'fail-on-severity: critical'));
-  assert.ok(auditWorkflowContract(audit, dependabot, gitleaks).some(error => error.includes('pinned cargo-audit')));
-  assert.ok(auditWorkflowContract(cargoLock, dependabot, gitleaks).some(error => error.includes('must use --locked')));
-  assert.ok(auditWorkflowContract(codeql, dependabot, gitleaks).some(error => error.includes('language: rust')));
-  assert.ok(auditWorkflowContract(dependency, dependabot, gitleaks).some(error => error.includes('moderate dependency policy')));
+test("contract rejects advisory, lockfile, CodeQL, and dependency-policy weakening", () => {
+  const audit = mutateWorkflow("ci.yml", (source) =>
+    source.replace("--version 0.22.2 --locked", "--version 0.22.3"),
+  );
+  const cargoLock = mutateWorkflow("ci.yml", (source) =>
+    source.replace(
+      "cargo check --workspace --locked",
+      "cargo check --workspace",
+    ),
+  );
+  const codeql = mutateWorkflow("codeql.yml", (source) =>
+    source.replace("language: rust", "language: go"),
+  );
+  const dependency = mutateWorkflow("dependency-review.yml", (source) =>
+    source.replace("fail-on-severity: moderate", "fail-on-severity: critical"),
+  );
+  assert.ok(
+    auditWorkflowContract(audit, dependabot, gitleaks).some((error) =>
+      error.includes("pinned cargo-audit"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(cargoLock, dependabot, gitleaks).some((error) =>
+      error.includes("must use --locked"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(codeql, dependabot, gitleaks).some((error) =>
+      error.includes("language: rust"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(dependency, dependabot, gitleaks).some((error) =>
+      error.includes("moderate dependency policy"),
+    ),
+  );
 });
 
-test('contract rejects release publication, cancellation, and signing-gate weakening', () => {
-  const publication = mutateWorkflow('release.yml', source => source.replace("if: startsWith(github.ref, 'refs/tags/')\n    needs: build", 'needs: build'));
-  const cancellation = mutateWorkflow('release.yml', source => source.replace('cancel-in-progress: false', 'cancel-in-progress: true'));
-  const signing = mutateWorkflow('release.yml', source => source.replace("if: startsWith(github.ref, 'refs/tags/') && runner.os == 'macOS'", "if: runner.os == 'macOS'"));
-  assert.ok(auditWorkflowContract(publication, dependabot, gitleaks).some(error => error.includes('tag-only')));
-  assert.ok(auditWorkflowContract(cancellation, dependabot, gitleaks).some(error => error.includes('cancellation')));
-  assert.ok(auditWorkflowContract(signing, dependabot, gitleaks).some(error => error.includes('tag-gated')));
+test("contract rejects release publication, cancellation, and signing-gate weakening", () => {
+  const publication = mutateWorkflow("release.yml", (source) =>
+    source.replace(
+      "if: startsWith(github.ref, 'refs/tags/')\n    needs: build",
+      "needs: build",
+    ),
+  );
+  const cancellation = mutateWorkflow("release.yml", (source) =>
+    source.replace("cancel-in-progress: false", "cancel-in-progress: true"),
+  );
+  const signing = mutateWorkflow("release.yml", (source) =>
+    source.replace(
+      "if: startsWith(github.ref, 'refs/tags/') && runner.os == 'macOS'",
+      "if: runner.os == 'macOS'",
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(publication, dependabot, gitleaks).some((error) =>
+      error.includes("tag-only"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(cancellation, dependabot, gitleaks).some((error) =>
+      error.includes("cancellation"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(signing, dependabot, gitleaks).some((error) =>
+      error.includes("tag-gated"),
+    ),
+  );
 });
 
-test('contract rejects maintenance and narrow allowlist drift', () => {
-  const noActions = dependabot.replace('package-ecosystem: github-actions', 'package-ecosystem: docker');
-  const broadAllowlist = gitleaks.replace('condition = "AND"', 'condition = "OR"');
-  assert.ok(auditWorkflowContract(workflows, noActions, gitleaks).some(error => error.includes('weekly github-actions')));
-  assert.ok(auditWorkflowContract(workflows, dependabot, broadAllowlist).some(error => error.includes('narrow RFC 6455')));
+test("contract rejects maintenance and narrow allowlist drift", () => {
+  const noActions = dependabot.replace(
+    "package-ecosystem: github-actions",
+    "package-ecosystem: docker",
+  );
+  const broadAllowlist = gitleaks.replace(
+    'condition = "AND"',
+    'condition = "OR"',
+  );
+  assert.ok(
+    auditWorkflowContract(workflows, noActions, gitleaks).some((error) =>
+      error.includes("weekly github-actions"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(workflows, dependabot, broadAllowlist).some((error) =>
+      error.includes("narrow RFC 6455"),
+    ),
+  );
 });

@@ -1,123 +1,1509 @@
-import { Application, CanvasTextPipe, CanvasTextSystem, Container, extensions, Graphics, GraphicsContextSystem, GraphicsPipe, Rectangle, Text, TextureStyle, Ticker, UPDATE_PRIORITY } from "pixi.js";
-import type { AgentMachine, AgentStore, BoardEntry, StoreEvent } from "../state/store";
+import {
+  Application,
+  CanvasTextPipe,
+  CanvasTextSystem,
+  Container,
+  extensions,
+  Graphics,
+  GraphicsContextSystem,
+  GraphicsPipe,
+  Rectangle,
+  Text,
+  TextureStyle,
+  Ticker,
+  UPDATE_PRIORITY,
+} from "pixi.js";
+import type {
+  AgentMachine,
+  AgentStore,
+  BoardEntry,
+  StoreEvent,
+} from "../state/store";
 import { BellController } from "../sound/bell";
-import { accentIndexForId, getTheme, paletteIndex, resolveTheme, type ResolvedTheme } from "../theme/theme";
+import {
+  accentIndexForId,
+  getTheme,
+  paletteIndex,
+  resolveTheme,
+  type ResolvedTheme,
+} from "../theme/theme";
 import { computeLayout, type Rect, type SceneLayout } from "./layout";
 import { ParticlePool } from "./particles";
 import { TransitionEngine } from "./transition";
-import { assignedIdlePose, drawIdlePose, idleAnimationFrame, IdlePoseAssignments, reducedIdlePoseSample, sampleIdlePose, type IdlePose } from "./idle-poses";
-import { reducedMotionPreference, type ReducedMotionPreference } from "../runtime";
+import {
+  assignedIdlePose,
+  drawIdlePose,
+  idleAnimationFrame,
+  IdlePoseAssignments,
+  reducedIdlePoseSample,
+  sampleIdlePose,
+  type IdlePose,
+} from "./idle-poses";
+import {
+  reducedMotionPreference,
+  type ReducedMotionPreference,
+} from "../runtime";
 
-export interface SceneHit { kind: "station" | "board"; id: string; rect: Rect }
-export interface KitchenSceneOptions { onHitLayout?: (hits: readonly SceneHit[]) => void; systemDark?: MediaQueryList; reducedMotion?:ReducedMotionPreference }
-export interface SceneMetrics { drawCalls: number; stationRebuilds:number; stationDisposals:number; idlePoses:Record<string,IdlePose>; blockedIndicators:number; stateIndicators:Record<string,number>;endedEntries:number; motion:{reduced:boolean;activeParticles:number;activeTransitions:number;activeBusserSweeps:number;continuous:boolean;preferenceChanges:number} }
-interface StationView { node:Container;staticBody:Graphics;dynamicBody:Graphics;selection:Graphics;name:Text;label:Text;timer:Text;hit:Rectangle;staticSignature:string;dynamicSignature:string;dataSignature:string }
-export const BUSSER_SWEEP_MS=700;
-export interface BusserSweepSample { progress:number;x:number;y:number;alpha:number }
-export function busserSweepSample(rect:Rect,startedAt:number,now:number):BusserSweepSample|null{const progress=Math.max(0,Math.min(1,(now-startedAt)/BUSSER_SWEEP_MS));if(now-startedAt>=BUSSER_SWEEP_MS)return null;const inset=Math.min(rect.width*.12,18),x=rect.x+inset+(rect.width-inset*2)*progress,y=rect.y+rect.height*.43,alpha=progress<.82?1:(1-progress)/.18;return{progress,x,y,alpha};}
-export function shouldDisposeRetainedStation(liveAgentIds:ReadonlySet<string>,id:string){return!liveAgentIds.has(id);}
-export function shouldReconcileBusserClear(activeSweepIds:ReadonlySet<string>,id:string){return activeSweepIds.has(id);}
-export function sceneMotionPolicy(reduced:boolean){const enabled=!reduced;return{idle:enabled,steam:enabled,cook:enabled,escalation:enabled,travel:enabled,busser:enabled,transitions:enabled};}
-export class BusserSweepTimeline { private sweeps=new Map<string,{rect:Rect;startedAt:number}>();start(id:string,rect:Rect,now:number){this.sweeps.set(id,{rect:{...rect},startedAt:now});}sample(id:string,now:number){const sweep=this.sweeps.get(id);if(!sweep)return null;const sample=busserSweepSample(sweep.rect,sweep.startedAt,now);if(!sample)this.sweeps.delete(id);return sample;}ids(){return[...this.sweeps.keys()];}has(id:string){return this.sweeps.has(id);}clear(){this.sweeps.clear();}get size(){return this.sweeps.size;}}
-const worldText = (fill: string, fontSize: number) => ({ fontFamily: getTheme().palette.typography.worldFamily, fontSize, fill, align: "center" as const });
-export function workspaceDisplayName(workspace:string){const value=workspace.trim();if(/^[A-Za-z]:[\\/]*$/.test(value))return"Unavailable";return value.split(/[\\/]+/).filter(Boolean).at(-1)??"Unavailable";}
-export function stationWorkspaceLabel(workspace:string){return{text:workspaceDisplayName(workspace).toUpperCase(),signature:workspace};}
-export function compactPixelText(value:string,maxCharacters=30){const text=value.trim();if(text.length<=maxCharacters)return text;if(maxCharacters<=3)return".".repeat(Math.max(0,maxCharacters));return`${text.slice(0,maxCharacters-3)}...`;}
-function compactStatus(model:string,suffix:string,maxCharacters:number){if(suffix.length>=maxCharacters)return suffix.slice(0,maxCharacters);const prefixBudget=Math.max(1,maxCharacters-suffix.length-3),prefix=compactPixelText(model,prefixBudget);return `${prefix} · ${suffix}`;}
-export function stationIdentityLabels(agent:Pick<AgentMachine,"name"|"model"|"workspace">&Partial<Pick<AgentMachine,"answerReceivedUntil">>,state:AgentMachine["targetState"],now=Date.now(),maxCharacters=30){const workspace=workspaceDisplayName(agent.workspace).toUpperCase(),labels={idle:"PREP",working:"FIRE",blocked:"AT THE PASS",done:"PLATED",ended:"86'D"}as const,answered=state==="working"&&(agent.answerReceivedUntil??0)>now,status=answered?"ANSWER RECEIVED":compactStatus(agent.model.toUpperCase(),labels[state],maxCharacters);return{name:compactPixelText(`${agent.name.toUpperCase()} · ${workspace}`,maxCharacters),status,signature:`${agent.name}:${agent.model}:${agent.workspace}`};}
-export function doorGeometry(layout:SceneLayout,ajar:boolean){const u=layout.unit,frame={x:layout.wall.width-34*u,y:layout.wall.height-36*u,width:(ajar?25:22)*u,height:36*u},innerPanel={x:layout.wall.width-31*u,y:frame.y+3*u,width:(ajar?18:16)*u,height:31*u},knob={x:layout.wall.width-17*u,y:frame.y+19*u,radius:u};return{frame,innerPanel,knob};}
-export function passBellGeometry(layout:SceneLayout){const u=layout.unit,baseX=layout.pass.x+layout.pass.width-13*u;return{base:{x:baseX,y:layout.pass.y+4.6*u},center:{x:baseX+3*u,y:layout.pass.y+3*u}};}
-function passLane(layout:SceneLayout,index:number){const count=Math.max(1,layout.stations.length),permutations:Partial<Record<number,readonly number[]>>={6:[0,2,1,3,5,4],12:[0,3,1,4,2,6,5,9,7,10,8,11]},permutation=permutations[count];return permutation?.[index]??index%count;}
-export function passFrontSlot(layout:SceneLayout,id:string){const stationIndex=layout.stations.findIndex(station=>station.id===id),index=stationIndex<0?hash(id)%Math.max(1,layout.stations.length):stationIndex,u=layout.unit,bell=passBellGeometry(layout),rightmost=bell.center.x-13*u,leftmost=layout.pass.x+8*u,laneCount=Math.max(1,layout.stations.length),lane=passLane(layout,index),maxSpacing=laneCount>=4?16*u:32*u,spacing=Math.min(maxSpacing,(rightmost-leftmost)/Math.max(1,laneCount-1));return{x:rightmost-lane*spacing,y:layout.pass.y+20*u};}
-export function blockedPassGeometry(layout:SceneLayout,id:string){const cook=passFrontSlot(layout,id),u=layout.unit,count=layout.stations.length,dense=count>6,stationIndex=layout.stations.findIndex(station=>station.id===id),index=stationIndex<0?hash(id)%Math.max(1,count):stationIndex,lane=passLane(layout,index),attachRight=dense&&lane>=count-3,ticketWidth=(dense?5:6.5)*u,timerWidth=(dense?7:13.4)*u,passClusterCenter=cook.x+(attachRight?9.25:dense?-9.25:-15)*u;return{cook,ticket:{x:passClusterCenter-ticketWidth/2,y:layout.pass.y+8.8*u,width:ticketWidth,height:7.6*u},timer:{x:passClusterCenter-timerWidth/2,y:layout.pass.y+18.2*u,width:timerWidth,height:4.4*u},bell:passBellGeometry(layout).center};}
-export function stationTicketGeometry(state:AgentMachine["targetState"],u:number){return state==="idle"?null:{x:6*u,y:2.5*u,width:7*u,height:9*u,blocked:state==="blocked"};}
-export function donePlateGeometry(stationWidth:number,u:number,counterY:number){const center={x:Math.min(stationWidth-14*u,stationWidth/2+8*u),y:counterY-u},radius={x:7*u,y:2*u},rays=[{x:center.x-u/2,y:center.y-8*u,width:u,height:3*u},{x:center.x-7*u,y:center.y-6*u,width:2*u,height:u},{x:center.x+5*u,y:center.y-6*u,width:2*u,height:u},{x:center.x-10*u,y:center.y-2*u,width:3*u,height:u},{x:center.x+7*u,y:center.y-2*u,width:3*u,height:u}];return{center,radius,rays};}
-extensions.add(GraphicsPipe, GraphicsContextSystem, CanvasTextPipe, CanvasTextSystem);
+export interface SceneHit {
+  kind: "station" | "board";
+  id: string;
+  rect: Rect;
+}
+export interface KitchenSceneOptions {
+  onHitLayout?: (hits: readonly SceneHit[]) => void;
+  systemDark?: MediaQueryList;
+  reducedMotion?: ReducedMotionPreference;
+}
+export interface SceneMetrics {
+  drawCalls: number;
+  stationRebuilds: number;
+  stationDisposals: number;
+  idlePoses: Record<string, IdlePose>;
+  blockedIndicators: number;
+  stateIndicators: Record<string, number>;
+  endedEntries: number;
+  motion: {
+    reduced: boolean;
+    activeParticles: number;
+    activeTransitions: number;
+    activeBusserSweeps: number;
+    continuous: boolean;
+    preferenceChanges: number;
+  };
+}
+interface StationView {
+  node: Container;
+  staticBody: Graphics;
+  dynamicBody: Graphics;
+  selection: Graphics;
+  name: Text;
+  label: Text;
+  timer: Text;
+  hit: Rectangle;
+  staticSignature: string;
+  dynamicSignature: string;
+  dataSignature: string;
+}
+export const BUSSER_SWEEP_MS = 700;
+export interface BusserSweepSample {
+  progress: number;
+  x: number;
+  y: number;
+  alpha: number;
+}
+export function busserSweepSample(
+  rect: Rect,
+  startedAt: number,
+  now: number,
+): BusserSweepSample | null {
+  const progress = Math.max(
+    0,
+    Math.min(1, (now - startedAt) / BUSSER_SWEEP_MS),
+  );
+  if (now - startedAt >= BUSSER_SWEEP_MS) return null;
+  const inset = Math.min(rect.width * 0.12, 18),
+    x = rect.x + inset + (rect.width - inset * 2) * progress,
+    y = rect.y + rect.height * 0.43,
+    alpha = progress < 0.82 ? 1 : (1 - progress) / 0.18;
+  return { progress, x, y, alpha };
+}
+export function shouldDisposeRetainedStation(
+  liveAgentIds: ReadonlySet<string>,
+  id: string,
+) {
+  return !liveAgentIds.has(id);
+}
+export function shouldReconcileBusserClear(
+  activeSweepIds: ReadonlySet<string>,
+  id: string,
+) {
+  return activeSweepIds.has(id);
+}
+export function sceneMotionPolicy(reduced: boolean) {
+  const enabled = !reduced;
+  return {
+    idle: enabled,
+    steam: enabled,
+    cook: enabled,
+    escalation: enabled,
+    travel: enabled,
+    busser: enabled,
+    transitions: enabled,
+  };
+}
+export class BusserSweepTimeline {
+  private sweeps = new Map<string, { rect: Rect; startedAt: number }>();
+  start(id: string, rect: Rect, now: number) {
+    this.sweeps.set(id, { rect: { ...rect }, startedAt: now });
+  }
+  sample(id: string, now: number) {
+    const sweep = this.sweeps.get(id);
+    if (!sweep) return null;
+    const sample = busserSweepSample(sweep.rect, sweep.startedAt, now);
+    if (!sample) this.sweeps.delete(id);
+    return sample;
+  }
+  ids() {
+    return [...this.sweeps.keys()];
+  }
+  has(id: string) {
+    return this.sweeps.has(id);
+  }
+  clear() {
+    this.sweeps.clear();
+  }
+  get size() {
+    return this.sweeps.size;
+  }
+}
+const worldText = (fill: string, fontSize: number) => ({
+  fontFamily: getTheme().palette.typography.worldFamily,
+  fontSize,
+  fill,
+  align: "center" as const,
+});
+export function workspaceDisplayName(workspace: string) {
+  const value = workspace.trim();
+  if (/^[A-Za-z]:[\\/]*$/.test(value)) return "Unavailable";
+  return (
+    value
+      .split(/[\\/]+/)
+      .filter(Boolean)
+      .at(-1) ?? "Unavailable"
+  );
+}
+export function stationWorkspaceLabel(workspace: string) {
+  return {
+    text: workspaceDisplayName(workspace).toUpperCase(),
+    signature: workspace,
+  };
+}
+export function compactPixelText(value: string, maxCharacters = 30) {
+  const text = value.trim();
+  if (text.length <= maxCharacters) return text;
+  if (maxCharacters <= 3) return ".".repeat(Math.max(0, maxCharacters));
+  return `${text.slice(0, maxCharacters - 3)}...`;
+}
+function compactStatus(model: string, suffix: string, maxCharacters: number) {
+  if (suffix.length >= maxCharacters) return suffix.slice(0, maxCharacters);
+  const prefixBudget = Math.max(1, maxCharacters - suffix.length - 3),
+    prefix = compactPixelText(model, prefixBudget);
+  return `${prefix} · ${suffix}`;
+}
+export function stationIdentityLabels(
+  agent: Pick<AgentMachine, "name" | "model" | "workspace"> &
+    Partial<Pick<AgentMachine, "answerReceivedUntil">>,
+  state: AgentMachine["targetState"],
+  now = Date.now(),
+  maxCharacters = 30,
+) {
+  const workspace = workspaceDisplayName(agent.workspace).toUpperCase(),
+    labels = {
+      idle: "PREP",
+      working: "FIRE",
+      blocked: "AT THE PASS",
+      done: "PLATED",
+      ended: "86'D",
+    } as const,
+    answered = state === "working" && (agent.answerReceivedUntil ?? 0) > now,
+    status = answered
+      ? "ANSWER RECEIVED"
+      : compactStatus(agent.model.toUpperCase(), labels[state], maxCharacters);
+  return {
+    name: compactPixelText(
+      `${agent.name.toUpperCase()} · ${workspace}`,
+      maxCharacters,
+    ),
+    status,
+    signature: `${agent.name}:${agent.model}:${agent.workspace}`,
+  };
+}
+export function doorGeometry(layout: SceneLayout, ajar: boolean) {
+  const u = layout.unit,
+    frame = {
+      x: layout.wall.width - 34 * u,
+      y: layout.wall.height - 36 * u,
+      width: (ajar ? 25 : 22) * u,
+      height: 36 * u,
+    },
+    innerPanel = {
+      x: layout.wall.width - 31 * u,
+      y: frame.y + 3 * u,
+      width: (ajar ? 18 : 16) * u,
+      height: 31 * u,
+    },
+    knob = { x: layout.wall.width - 17 * u, y: frame.y + 19 * u, radius: u };
+  return { frame, innerPanel, knob };
+}
+export function passBellGeometry(layout: SceneLayout) {
+  const u = layout.unit,
+    baseX = layout.pass.x + layout.pass.width - 13 * u;
+  return {
+    base: { x: baseX, y: layout.pass.y + 4.6 * u },
+    center: { x: baseX + 3 * u, y: layout.pass.y + 3 * u },
+  };
+}
+function passLane(layout: SceneLayout, index: number) {
+  const count = Math.max(1, layout.stations.length),
+    permutations: Partial<Record<number, readonly number[]>> = {
+      6: [0, 2, 1, 3, 5, 4],
+      12: [0, 3, 1, 4, 2, 6, 5, 9, 7, 10, 8, 11],
+    },
+    permutation = permutations[count];
+  return permutation?.[index] ?? index % count;
+}
+export function passFrontSlot(layout: SceneLayout, id: string) {
+  const stationIndex = layout.stations.findIndex(
+      (station) => station.id === id,
+    ),
+    index =
+      stationIndex < 0
+        ? hash(id) % Math.max(1, layout.stations.length)
+        : stationIndex,
+    u = layout.unit,
+    bell = passBellGeometry(layout),
+    rightmost = bell.center.x - 13 * u,
+    leftmost = layout.pass.x + 8 * u,
+    laneCount = Math.max(1, layout.stations.length),
+    lane = passLane(layout, index),
+    maxSpacing = laneCount >= 4 ? 16 * u : 32 * u,
+    spacing = Math.min(
+      maxSpacing,
+      (rightmost - leftmost) / Math.max(1, laneCount - 1),
+    );
+  return { x: rightmost - lane * spacing, y: layout.pass.y + 20 * u };
+}
+export function blockedPassGeometry(layout: SceneLayout, id: string) {
+  const cook = passFrontSlot(layout, id),
+    u = layout.unit,
+    count = layout.stations.length,
+    dense = count > 6,
+    stationIndex = layout.stations.findIndex((station) => station.id === id),
+    index = stationIndex < 0 ? hash(id) % Math.max(1, count) : stationIndex,
+    lane = passLane(layout, index),
+    attachRight = dense && lane >= count - 3,
+    ticketWidth = (dense ? 5 : 6.5) * u,
+    timerWidth = (dense ? 7 : 13.4) * u,
+    passClusterCenter = cook.x + (attachRight ? 9.25 : dense ? -9.25 : -15) * u;
+  return {
+    cook,
+    ticket: {
+      x: passClusterCenter - ticketWidth / 2,
+      y: layout.pass.y + 8.8 * u,
+      width: ticketWidth,
+      height: 7.6 * u,
+    },
+    timer: {
+      x: passClusterCenter - timerWidth / 2,
+      y: layout.pass.y + 18.2 * u,
+      width: timerWidth,
+      height: 4.4 * u,
+    },
+    bell: passBellGeometry(layout).center,
+  };
+}
+export function stationTicketGeometry(
+  state: AgentMachine["targetState"],
+  u: number,
+) {
+  return state === "idle"
+    ? null
+    : {
+        x: 6 * u,
+        y: 2.5 * u,
+        width: 7 * u,
+        height: 9 * u,
+        blocked: state === "blocked",
+      };
+}
+export function donePlateGeometry(
+  stationWidth: number,
+  u: number,
+  counterY: number,
+) {
+  const center = {
+      x: Math.min(stationWidth - 14 * u, stationWidth / 2 + 8 * u),
+      y: counterY - u,
+    },
+    radius = { x: 7 * u, y: 2 * u },
+    rays = [
+      { x: center.x - u / 2, y: center.y - 8 * u, width: u, height: 3 * u },
+      { x: center.x - 7 * u, y: center.y - 6 * u, width: 2 * u, height: u },
+      { x: center.x + 5 * u, y: center.y - 6 * u, width: 2 * u, height: u },
+      { x: center.x - 10 * u, y: center.y - 2 * u, width: 3 * u, height: u },
+      { x: center.x + 7 * u, y: center.y - 2 * u, width: 3 * u, height: u },
+    ];
+  return { center, radius, rays };
+}
+extensions.add(
+  GraphicsPipe,
+  GraphicsContextSystem,
+  CanvasTextPipe,
+  CanvasTextSystem,
+);
 
 export class KitchenScene {
-  readonly app = new Application(); readonly particles = new ParticlePool(); readonly transitions = new TransitionEngine(); readonly bell: BellController;
-  private readonly ticker=Ticker.system;private dirty=true;private readonly renderFrame=()=>{if(this.dirty){this.app.render();this.dirty=false;}};private readonly updateFrame=(ticker:Ticker)=>this.tick(ticker.deltaMS);
-  private room = new Container(); private stationLayer = new Container(); private particleLayer = new Container(); private escalationLayer = new Container(); private escalationGraphic=new Graphics();private escalationSignature="";private busserLayer=new Container();private busserSweeps=new BusserSweepTimeline();private busserGraphics=new Map<string,Graphics>();private boardLayer = new Container(); private stationNodes = new Map<string, Container>(); private stationViews = new Map<string,StationView>(); private steamNodes: Graphics[] = [];private stationRebuilds=0;private stationDisposals=0;
+  readonly app = new Application();
+  readonly particles = new ParticlePool();
+  readonly transitions = new TransitionEngine();
+  readonly bell: BellController;
+  private readonly ticker = Ticker.system;
+  private dirty = true;
+  private readonly renderFrame = () => {
+    if (this.dirty) {
+      this.app.render();
+      this.dirty = false;
+    }
+  };
+  private readonly updateFrame = (ticker: Ticker) => this.tick(ticker.deltaMS);
+  private room = new Container();
+  private stationLayer = new Container();
+  private particleLayer = new Container();
+  private escalationLayer = new Container();
+  private escalationGraphic = new Graphics();
+  private escalationSignature = "";
+  private busserLayer = new Container();
+  private busserSweeps = new BusserSweepTimeline();
+  private busserGraphics = new Map<string, Graphics>();
+  private boardLayer = new Container();
+  private stationNodes = new Map<string, Container>();
+  private stationViews = new Map<string, StationView>();
+  private steamNodes: Graphics[] = [];
+  private stationRebuilds = 0;
+  private stationDisposals = 0;
   private readonly idlePoses = new IdlePoseAssignments();
-  private hits: SceneHit[] = []; private lastHitSignature = ""; private focusedId:string|null=null; private lastTheme:ResolvedTheme|null=null; private boardSelection:string|null=null; private layout!: SceneLayout; private unsubscribe: (() => void) | null = null;private unsubscribeEvents:(()=>void)|null=null;private unsubscribeMotion:(()=>void)|null=null; private resizeObserver: ResizeObserver | null = null; private visibleHandler = () => this.onVisibility(); private themeHandler = () => this.redraw(); private lastSteam = 0; private lastVisualUpdate = 0; private destroyed = false; private currentDrawCalls=0; private lastDrawCalls=0;private reducedMotion:boolean;private preferenceChanges=0;
-  private systemDark: MediaQueryList;private motionPreference:ReducedMotionPreference;
-  private pointerHandler = (event: PointerEvent) => { const bounds = this.host.getBoundingClientRect(); const hit = this.hitTest(event.clientX - bounds.left, event.clientY - bounds.top); if (hit) this.store.select(hit.id); };
-  constructor(private store: AgentStore, private host: HTMLElement, private options: KitchenSceneOptions = {}) { this.systemDark = options.systemDark ?? matchMedia("(prefers-color-scheme: dark)");this.motionPreference=options.reducedMotion??reducedMotionPreference;this.reducedMotion=this.motionPreference.current(); this.bell = new BellController(store); }
+  private hits: SceneHit[] = [];
+  private lastHitSignature = "";
+  private focusedId: string | null = null;
+  private lastTheme: ResolvedTheme | null = null;
+  private boardSelection: string | null = null;
+  private layout!: SceneLayout;
+  private unsubscribe: (() => void) | null = null;
+  private unsubscribeEvents: (() => void) | null = null;
+  private unsubscribeMotion: (() => void) | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private visibleHandler = () => this.onVisibility();
+  private themeHandler = () => this.redraw();
+  private lastSteam = 0;
+  private lastVisualUpdate = 0;
+  private destroyed = false;
+  private currentDrawCalls = 0;
+  private lastDrawCalls = 0;
+  private reducedMotion: boolean;
+  private preferenceChanges = 0;
+  private systemDark: MediaQueryList;
+  private motionPreference: ReducedMotionPreference;
+  private pointerHandler = (event: PointerEvent) => {
+    const bounds = this.host.getBoundingClientRect();
+    const hit = this.hitTest(
+      event.clientX - bounds.left,
+      event.clientY - bounds.top,
+    );
+    if (hit) this.store.select(hit.id);
+  };
+  constructor(
+    private store: AgentStore,
+    private host: HTMLElement,
+    private options: KitchenSceneOptions = {},
+  ) {
+    this.systemDark =
+      options.systemDark ?? matchMedia("(prefers-color-scheme: dark)");
+    this.motionPreference = options.reducedMotion ?? reducedMotionPreference;
+    this.reducedMotion = this.motionPreference.current();
+    this.bell = new BellController(store);
+  }
   async init() {
     TextureStyle.defaultOptions.scaleMode = "nearest";
-    await this.app.init({ width: this.host.clientWidth || innerWidth, height: this.host.clientHeight || innerHeight, antialias: false, preference: "webgl", resolution: devicePixelRatio || 1, autoStart: false, skipExtensionImports: true });
-    if (this.destroyed) { this.app.destroy(true); return; }
-    this.app.canvas.className = "sceneCanvas"; this.host.appendChild(this.app.canvas); this.app.stage.addChild(this.room, this.stationLayer, this.particleLayer, this.escalationLayer,this.busserLayer);this.escalationLayer.addChild(this.escalationGraphic);
+    await this.app.init({
+      width: this.host.clientWidth || innerWidth,
+      height: this.host.clientHeight || innerHeight,
+      antialias: false,
+      preference: "webgl",
+      resolution: devicePixelRatio || 1,
+      autoStart: false,
+      skipExtensionImports: true,
+    });
+    if (this.destroyed) {
+      this.app.destroy(true);
+      return;
+    }
+    this.app.canvas.className = "sceneCanvas";
+    this.host.appendChild(this.app.canvas);
+    this.app.stage.addChild(
+      this.room,
+      this.stationLayer,
+      this.particleLayer,
+      this.escalationLayer,
+      this.busserLayer,
+    );
+    this.escalationLayer.addChild(this.escalationGraphic);
     this.instrumentDrawCalls();
-    for (let i = 0; i < this.particles.particles.length; i++) { const dot = new Graphics(); this.steamNodes.push(dot); this.particleLayer.addChild(dot); }
-    this.ticker.add(this.updateFrame);this.ticker.add(this.renderFrame,undefined,UPDATE_PRIORITY.LOW);
-    this.unsubscribe = this.store.subscribe(() => this.reconcile());this.unsubscribeEvents=this.store.onEvent(event=>this.onStoreEvent(event));this.unsubscribeMotion=this.motionPreference.subscribe(reduced=>this.onMotionPreference(reduced)); this.resizeObserver = new ResizeObserver(() => this.redraw()); this.resizeObserver.observe(this.host);
-    this.host.addEventListener("pointerdown", this.pointerHandler); document.addEventListener("visibilitychange", this.visibleHandler); this.systemDark.addEventListener("change", this.themeHandler);
-    this.redraw(); if (!document.hidden) this.ticker.start();
+    for (let i = 0; i < this.particles.particles.length; i++) {
+      const dot = new Graphics();
+      this.steamNodes.push(dot);
+      this.particleLayer.addChild(dot);
+    }
+    this.ticker.add(this.updateFrame);
+    this.ticker.add(this.renderFrame, undefined, UPDATE_PRIORITY.LOW);
+    this.unsubscribe = this.store.subscribe(() => this.reconcile());
+    this.unsubscribeEvents = this.store.onEvent((event) =>
+      this.onStoreEvent(event),
+    );
+    this.unsubscribeMotion = this.motionPreference.subscribe((reduced) =>
+      this.onMotionPreference(reduced),
+    );
+    this.resizeObserver = new ResizeObserver(() => this.redraw());
+    this.resizeObserver.observe(this.host);
+    this.host.addEventListener("pointerdown", this.pointerHandler);
+    document.addEventListener("visibilitychange", this.visibleHandler);
+    this.systemDark.addEventListener("change", this.themeHandler);
+    this.redraw();
+    if (!document.hidden) this.ticker.start();
   }
-  destroy() { this.destroyed = true; this.unsubscribe?.();this.unsubscribeEvents?.();this.unsubscribeMotion?.();this.unsubscribe=null;this.unsubscribeEvents=null;this.unsubscribeMotion=null; this.resizeObserver?.disconnect(); this.host.removeEventListener("pointerdown", this.pointerHandler); document.removeEventListener("visibilitychange", this.visibleHandler); this.systemDark.removeEventListener("change", this.themeHandler); this.ticker.remove(this.updateFrame);this.ticker.remove(this.renderFrame);this.bell.destroy(); this.particles.releaseAll();this.busserSweeps.clear();this.busserGraphics.clear(); if (this.app.renderer) this.app.destroy(true); }
-  hitTest(x: number, y: number) { return this.hits.find(hit => x >= hit.rect.x && y >= hit.rect.y && x <= hit.rect.x + hit.rect.width && y <= hit.rect.y + hit.rect.height) ?? null; }
-  focus(id:string|null){if(this.focusedId===id)return;this.focusedId=id;if(this.layout){this.drawStations(performance.now());this.dirty=true;}}
-  metrics():SceneMetrics { const idlePoses:Record<string,IdlePose>={},stateIndicators:Record<string,number>={},snapshot=this.store.snapshot(),agents=[...snapshot.agents.values()];for(const agent of agents){const pose=this.idlePoses.get(agent.id);if(agent.targetState==="idle"&&pose)idlePoses[agent.id]=pose;stateIndicators[agent.targetState]=(stateIndicators[agent.targetState]??0)+1;}const activeParticles=this.particles.activeCount,activeTransitions=this.transitions.activeCount(),activeBusserSweeps=this.busserSweeps.size,blockedIndicators=agents.filter(agent=>agent.targetState==="blocked").length;return {drawCalls:this.lastDrawCalls,stationRebuilds:this.stationRebuilds,stationDisposals:this.stationDisposals,idlePoses,blockedIndicators,stateIndicators,endedEntries:snapshot.board.length,motion:{reduced:this.reducedMotion,activeParticles,activeTransitions,activeBusserSweeps,continuous:!this.reducedMotion&&(activeParticles>0||activeTransitions>0||activeBusserSweeps>0||agents.some(agent=>agent.targetState==="idle"||agent.targetState==="working"||agent.targetState==="blocked")),preferenceChanges:this.preferenceChanges}}; }
-  resolvedTheme(): ResolvedTheme { return resolveTheme(this.store.snapshot().settings.theme, this.systemDark.matches); }
-  reconcile(force = false) { const snapshot=this.store.snapshot();if(document.hidden){this.ticker.stop();return;}if(snapshot.mode==="disconnected")this.ticker.stop();else this.ticker.start();const now = performance.now(); this.store.reconcileRendered(undefined, force); if (force) this.transitions.reconcile(); const ids = [...snapshot.agents.keys()],layoutIds=this.layout?.stations.map(station=>station.id)??[],boardSelection=snapshot.board.some(item=>item.id===snapshot.selectedId)?snapshot.selectedId:null; if (!this.layout || ids.join("|") !== layoutIds.join("|") || boardSelection!==this.boardSelection || this.lastTheme!==this.resolvedTheme()) this.redraw(); else this.drawStations(now);this.dirty=true; }
-  private redraw() { if (!this.app.renderer) return; const snapshot=this.store.snapshot();this.lastTheme=this.resolvedTheme();this.boardSelection=snapshot.board.some(item=>item.id===snapshot.selectedId)?snapshot.selectedId:null;const width = this.host.clientWidth || innerWidth, height = this.host.clientHeight || innerHeight; this.layout = computeLayout(width, height, [...snapshot.agents.keys()]); this.app.renderer.resize(width, height); this.drawRoom(); this.drawStations(performance.now());this.dirty=true; }
+  destroy() {
+    this.destroyed = true;
+    this.unsubscribe?.();
+    this.unsubscribeEvents?.();
+    this.unsubscribeMotion?.();
+    this.unsubscribe = null;
+    this.unsubscribeEvents = null;
+    this.unsubscribeMotion = null;
+    this.resizeObserver?.disconnect();
+    this.host.removeEventListener("pointerdown", this.pointerHandler);
+    document.removeEventListener("visibilitychange", this.visibleHandler);
+    this.systemDark.removeEventListener("change", this.themeHandler);
+    this.ticker.remove(this.updateFrame);
+    this.ticker.remove(this.renderFrame);
+    this.bell.destroy();
+    this.particles.releaseAll();
+    this.busserSweeps.clear();
+    this.busserGraphics.clear();
+    if (this.app.renderer) this.app.destroy(true);
+  }
+  hitTest(x: number, y: number) {
+    return (
+      this.hits.find(
+        (hit) =>
+          x >= hit.rect.x &&
+          y >= hit.rect.y &&
+          x <= hit.rect.x + hit.rect.width &&
+          y <= hit.rect.y + hit.rect.height,
+      ) ?? null
+    );
+  }
+  focus(id: string | null) {
+    if (this.focusedId === id) return;
+    this.focusedId = id;
+    if (this.layout) {
+      this.drawStations(performance.now());
+      this.dirty = true;
+    }
+  }
+  metrics(): SceneMetrics {
+    const idlePoses: Record<string, IdlePose> = {},
+      stateIndicators: Record<string, number> = {},
+      snapshot = this.store.snapshot(),
+      agents = [...snapshot.agents.values()];
+    for (const agent of agents) {
+      const pose = this.idlePoses.get(agent.id);
+      if (agent.targetState === "idle" && pose) idlePoses[agent.id] = pose;
+      stateIndicators[agent.targetState] =
+        (stateIndicators[agent.targetState] ?? 0) + 1;
+    }
+    const activeParticles = this.particles.activeCount,
+      activeTransitions = this.transitions.activeCount(),
+      activeBusserSweeps = this.busserSweeps.size,
+      blockedIndicators = agents.filter(
+        (agent) => agent.targetState === "blocked",
+      ).length;
+    return {
+      drawCalls: this.lastDrawCalls,
+      stationRebuilds: this.stationRebuilds,
+      stationDisposals: this.stationDisposals,
+      idlePoses,
+      blockedIndicators,
+      stateIndicators,
+      endedEntries: snapshot.board.length,
+      motion: {
+        reduced: this.reducedMotion,
+        activeParticles,
+        activeTransitions,
+        activeBusserSweeps,
+        continuous:
+          !this.reducedMotion &&
+          (activeParticles > 0 ||
+            activeTransitions > 0 ||
+            activeBusserSweeps > 0 ||
+            agents.some(
+              (agent) =>
+                agent.targetState === "idle" ||
+                agent.targetState === "working" ||
+                agent.targetState === "blocked",
+            )),
+        preferenceChanges: this.preferenceChanges,
+      },
+    };
+  }
+  resolvedTheme(): ResolvedTheme {
+    return resolveTheme(
+      this.store.snapshot().settings.theme,
+      this.systemDark.matches,
+    );
+  }
+  reconcile(force = false) {
+    const snapshot = this.store.snapshot();
+    if (document.hidden) {
+      this.ticker.stop();
+      return;
+    }
+    if (snapshot.mode === "disconnected") this.ticker.stop();
+    else this.ticker.start();
+    const now = performance.now();
+    this.store.reconcileRendered(undefined, force);
+    if (force) this.transitions.reconcile();
+    const ids = [...snapshot.agents.keys()],
+      layoutIds = this.layout?.stations.map((station) => station.id) ?? [],
+      boardSelection = snapshot.board.some(
+        (item) => item.id === snapshot.selectedId,
+      )
+        ? snapshot.selectedId
+        : null;
+    if (
+      !this.layout ||
+      ids.join("|") !== layoutIds.join("|") ||
+      boardSelection !== this.boardSelection ||
+      this.lastTheme !== this.resolvedTheme()
+    )
+      this.redraw();
+    else this.drawStations(now);
+    this.dirty = true;
+  }
+  private redraw() {
+    if (!this.app.renderer) return;
+    const snapshot = this.store.snapshot();
+    this.lastTheme = this.resolvedTheme();
+    this.boardSelection = snapshot.board.some(
+      (item) => item.id === snapshot.selectedId,
+    )
+      ? snapshot.selectedId
+      : null;
+    const width = this.host.clientWidth || innerWidth,
+      height = this.host.clientHeight || innerHeight;
+    this.layout = computeLayout(width, height, [...snapshot.agents.keys()]);
+    this.app.renderer.resize(width, height);
+    this.drawRoom();
+    this.drawStations(performance.now());
+    this.dirty = true;
+  }
   private drawRoom() {
-    const p = getTheme().palette, index = paletteIndex(this.resolvedTheme()), l = this.layout, u = l.unit; destroyChildren(this.room); this.boardLayer = new Container();
-    const room = new Graphics().rect(0, 0, l.wall.width, l.wall.height).fill(p.scene.wall[index]).rect(0, l.wall.height * 0.42, l.wall.width, l.wall.height * 0.58).fill(p.scene.wainscot[index]);
-    const tileW = 9 * u, tileH = 4.5 * u; for (let y = l.wall.height * 0.42; y < l.wall.height; y += tileH) { const row = Math.round(y / tileH); for (let x = row % 2 ? -tileW / 2 : 0; x < l.wall.width; x += tileW) room.rect(x, y, tileW, tileH).stroke({ color: p.scene.grout[index], width: Math.max(1, u * 0.25) }); }
-    room.rect(0, l.wall.height - u, l.wall.width, u).fill(p.scene.trim[index]).rect(0, l.wall.height, l.wall.width, this.app.renderer.height - l.wall.height).fill(p.scene.floor[index]); for (let x = 0; x < l.wall.width; x += 16 * u) room.moveTo(x, l.wall.height).lineTo(x, this.app.renderer.height).stroke({ color: p.scene.floorSeam[index], width: 1, alpha: 0.35 });
-    this.room.addChild(room); this.drawWindow(index); this.drawBoard(index); this.drawShelfAndDoor(index); this.drawPass(index); this.room.addChild(this.boardLayer);
+    const p = getTheme().palette,
+      index = paletteIndex(this.resolvedTheme()),
+      l = this.layout,
+      u = l.unit;
+    destroyChildren(this.room);
+    this.boardLayer = new Container();
+    const room = new Graphics()
+      .rect(0, 0, l.wall.width, l.wall.height)
+      .fill(p.scene.wall[index])
+      .rect(0, l.wall.height * 0.42, l.wall.width, l.wall.height * 0.58)
+      .fill(p.scene.wainscot[index]);
+    const tileW = 9 * u,
+      tileH = 4.5 * u;
+    for (let y = l.wall.height * 0.42; y < l.wall.height; y += tileH) {
+      const row = Math.round(y / tileH);
+      for (let x = row % 2 ? -tileW / 2 : 0; x < l.wall.width; x += tileW)
+        room.rect(x, y, tileW, tileH).stroke({
+          color: p.scene.grout[index],
+          width: Math.max(1, u * 0.25),
+        });
+    }
+    room
+      .rect(0, l.wall.height - u, l.wall.width, u)
+      .fill(p.scene.trim[index])
+      .rect(
+        0,
+        l.wall.height,
+        l.wall.width,
+        this.app.renderer.height - l.wall.height,
+      )
+      .fill(p.scene.floor[index]);
+    for (let x = 0; x < l.wall.width; x += 16 * u)
+      room
+        .moveTo(x, l.wall.height)
+        .lineTo(x, this.app.renderer.height)
+        .stroke({ color: p.scene.floorSeam[index], width: 1, alpha: 0.35 });
+    this.room.addChild(room);
+    this.drawWindow(index);
+    this.drawBoard(index);
+    this.drawShelfAndDoor(index);
+    this.drawPass(index);
+    this.room.addChild(this.boardLayer);
   }
-  private drawWindow(index: number) { const p=getTheme().palette,u=this.layout.unit,dark=index===1,x=8*u,y=6*u,w=26*u,h=17*u,g=new Graphics().rect(x-2*u,y-2*u,w+4*u,h+4*u).fill(p.scene.wood[index]).rect(x,y,w,h).fill(p.scene.sky[index]);if(dark){g.circle(x+20*u,y+4*u,2*u).fill(p.scene.cloud);for(const point of [[3,4],[8,9],[13,3],[6,12],[16,10]]as const)g.circle(x+point[0]*u,y+point[1]*u,Math.max(1,.35*u)).fill(p.scene.cloud);}else{g.ellipse(x+7*u,y+4*u,5*u,1.5*u).fill(p.scene.cloud).ellipse(x+18*u,y+10*u,5*u,1.5*u).fill(p.scene.cloud);}g.rect(x+w/2-u/2,y,u,h).fill(p.scene.wood[index]).rect(x,y+h/2-u/2,w,u).fill(p.scene.wood[index]).rect(x+20*u,y+h-4*u,3*u,3*u).fill(p.scene.ink).rect(x+19*u,y+h-2*u,5*u,2*u).fill(p.scene.ink);this.room.addChild(g); }
-  private drawBoard(index: number) { const p=getTheme().palette,u=this.layout.unit,width=Math.min(92*u,this.layout.wall.width*.36),x=(this.layout.wall.width-width)/2,y=4*u,height=Math.max(22*u,this.layout.wall.height-15*u);this.boardLayer.addChild(new Graphics().rect(x-2*u,y-2*u,width+4*u,height+4*u).fill(p.scene.wood[index]).rect(x,y,width,height).fill(p.scene.chalkboard[index]).rect(x+3*u,y+9*u,9*u,Math.max(1,.6*u)).fill(p.scene.chalk[index]));const title=new Text({text:"86",style:worldText(p.scene.chalk[index],Math.max(8,4*u))});title.position.set(x+3*u,y+1*u);this.boardLayer.addChild(title);this.hits=this.hits.filter(hit=>hit.kind!=="board");this.store.snapshot().board.slice(-3).forEach((entry,i)=>this.drawBoardRow(entry,x+3*u,y+(12+i*6)*u,width-6*u,index)); }
-  private drawBoardRow(entry:BoardEntry,x:number,y:number,width:number,index:number){const p=getTheme().palette,u=this.layout.unit,runtime=Math.max(1,Math.round(entry.runtimeMs/60_000)),tickets=entry.tickets>0?entry.tickets:"—";if(this.store.snapshot().selectedId===entry.id)this.boardLayer.addChild(new Graphics().rect(x-u,y-u,width,5*u).stroke({color:p.scene.chalk[index],width:Math.max(1,u*.5)}));const style=worldText(p.scene.chalk[index],Math.max(8,2.1*u)),name=new Text({text:entry.name.toUpperCase(),style}),facts=new Text({text:`${runtime}M   ${tickets}`,style});name.position.set(x,y);facts.anchor.set(1,0);facts.position.set(x+width,y);name.eventMode="static";name.cursor="pointer";name.on("pointertap",()=>this.store.select(entry.id));this.boardLayer.addChild(name,facts);this.hits.push({kind:"board",id:entry.id,rect:{x,y,width,height:5*u}});}
-  private drawShelfAndDoor(index:number){const p=getTheme().palette,u=this.layout.unit,x=this.layout.wall.width-73*u;this.room.addChild(new Graphics().rect(x,9*u,30*u,2*u).fill(p.scene.wood[index]).ellipse(x+6*u,7*u,5*u,2*u).stroke({color:p.scene.steel[2][index],width:u}).ellipse(x+18*u,7*u,5*u,2*u).stroke({color:p.scene.steel[2][index],width:u}));const door=doorGeometry(this.layout,this.store.snapshot().mode==="empty");this.room.addChild(new Graphics().rect(door.frame.x,door.frame.y,door.frame.width,door.frame.height).fill(p.scene.wood[index]).rect(door.innerPanel.x,door.innerPanel.y,door.innerPanel.width,door.innerPanel.height).fill(p.scene.ink).circle(door.knob.x,door.knob.y,door.knob.radius).fill(p.scene.brass));}
-  private drawPass(index:number){const p=getTheme().palette,u=this.layout.unit,pass=this.layout.pass,g=new Graphics(),poolAlpha=index===1?.42:.18;if(index===1)g.ellipse(pass.x+pass.width/2,pass.y+22*u,pass.width*.5,11*u).fill({color:p.semantic.tungstenDark,alpha:.18});for(let i=1;i<=3;i++){const x=pass.x+pass.width*i/4;g.rect(x-.5*u,pass.y-14*u,u,6*u).fill(p.scene.ink).rect(x-2*u,pass.y-8*u,4*u,1.6*u).fill(p.scene.brass).rect(x-3*u,pass.y-6.5*u,6*u,2.5*u).fill(p.scene.brass).rect(x-3*u,pass.y-4*u,6*u,u).fill(p.scene.copper).rect(x-1.2*u,pass.y-3*u,2.4*u,u).fill(index===1?p.semantic.tungstenDark:p.semantic.tungsten).ellipse(x,pass.y+7*u,9*u,3*u).fill({color:index===1?p.semantic.tungstenDark:p.semantic.tungsten,alpha:poolAlpha});}g.rect(pass.x,pass.y+6*u,pass.width,3*u).fill(p.scene.steel[1][index]).rect(pass.x,pass.y+9*u,pass.width,8*u).fill(p.scene.steel[0][index]).rect(pass.x,pass.y+16*u,pass.width,2*u).fill(p.scene.steel[2][index]).rect(pass.x+2*u,pass.y+11*u,pass.width-4*u,.7*u).fill(p.scene.steel[1][index]).rect(pass.x+3*u,pass.y+18*u,pass.width-6*u,3*u).fill({color:p.scene.shadow,alpha:.3});const bell=passBellGeometry(this.layout);g.rect(bell.base.x,bell.base.y,6*u,1.4*u).fill(p.scene.copper).ellipse(bell.base.x+3*u,pass.y+3.3*u,2*u,2.6*u).fill(p.scene.brass).rect(bell.base.x+2.6*u,pass.y+.2*u,.8*u,u).fill(p.scene.ink);this.room.addChild(g);}
-  private drawStations(now:number){const snapshot=this.store.snapshot(),index=paletteIndex(this.resolvedTheme()),active=new Set<string>();this.hits=this.hits.filter(hit=>hit.kind!=="station");for(const station of this.layout.stations){const agent=snapshot.agents.get(station.id);if(!agent)continue;active.add(agent.id);let view=this.stationViews.get(agent.id);if(!view){view=this.createStationView(agent);this.stationViews.set(agent.id,view);this.stationNodes.set(agent.id,view.node);}this.updateStation(view,agent,station,index,now);this.stationLayer.addChild(view.node);this.hits.push({kind:"station",id:agent.id,rect:station});}for(const[id,view]of this.stationViews)if(!active.has(id)&&!this.busserSweeps.has(id))this.disposeStation(id,view);const signature=this.hits.map(hit=>`${hit.kind}:${hit.id}:${hit.rect.x}:${hit.rect.y}:${hit.rect.width}:${hit.rect.height}`).join("|");if(signature!==this.lastHitSignature){this.lastHitSignature=signature;this.options.onHitLayout?.(this.hits);}}
-  private createStationView(agent:AgentMachine):StationView{const p=getTheme().palette,node=new Container(),staticBody=new Graphics(),dynamicBody=new Graphics(),selection=new Graphics(),name=new Text({text:stationWorkspaceLabel(agent.workspace).text,style:worldText(p.scene.ink,8)}),label=new Text({text:"",style:worldText(p.scene.muted,8)}),timer=new Text({text:"",style:worldText(p.semantic.blockedText,8)}),hit=new Rectangle();name.anchor.set(.5,0);label.anchor.set(.5,0);timer.anchor.set(.5,0);timer.visible=false;node.hitArea=hit;node.addChild(staticBody,dynamicBody,timer,selection,name,label);return{node,staticBody,dynamicBody,selection,name,label,timer,hit,staticSignature:"",dynamicSignature:"",dataSignature:""};}
-  private updateStation(view:StationView,agent:AgentMachine,rect:Rect&{scale:number},index:number,now:number){
-    const snapshot=this.store.snapshot(),p=getTheme().palette,u=this.layout.unit*rect.scale,{node,staticBody,dynamicBody:g,selection,name,label,timer,hit}=view,motion=sceneMotionPolicy(this.reducedMotion);node.position.set(rect.x,rect.y);hit.x=0;hit.y=-3*u;hit.width=rect.width;hit.height=rect.height+3*u;
-    const state=agent.targetState;let transition=motion.transitions?this.transitions.sample(agent.id,now):null;if(motion.transitions&&agent.renderedState!==state&&!transition){this.transitions.target(agent.id,agent.renderedState,state,now);transition=this.transitions.sample(agent.id,now);}
-    const counterY=19*u,passGeometry=blockedPassGeometry(this.layout,agent.id),slot=passGeometry.cook,home={x:rect.x+rect.width/2,y:rect.y+counterY},blockedProgress=motion.travel?(transition?.to==="blocked"?transition.progress:transition?.from==="blocked"?1-transition.progress:state==="blocked"?1:0):(state==="blocked"?1:0),eased=blockedProgress<.5?2*blockedProgress*blockedProgress:1-Math.pow(-2*blockedProgress+2,2)/2,cookX=home.x+(slot.x-home.x)*eased-rect.x,cookY=home.y+(slot.y-home.y)*eased-rect.y,passX=slot.x-rect.x,passY=slot.y-rect.y,geometrySignature=`${index}:${u}:${rect.width}:${rect.height}:${accentIndexForId(agent.id)}`;
-    if(view.staticSignature!==geometrySignature){const counterWidth=Math.max(20*u,rect.width-9*u),left=4.5*u,accent=p.accents[accentIndexForId(agent.id)]!;view.staticSignature=geometrySignature;staticBody.clear().rect(left,1.5*u,counterWidth,u).fill(p.scene.steel[2][index]).rect(left,1.5*u,u,6*u).fill(p.scene.steel[2][index]).rect(rect.width-7*u,-2*u,u,6*u).fill(p.scene.steel[2][index]).rect(rect.width-6*u,-2*u,5*u,3*u).fill(accent).rect(left,counterY,counterWidth,2*u).fill(p.scene.steel[1][index]).rect(left,counterY+2*u,counterWidth,7*u).fill(p.scene.steel[0][index]).rect(left,counterY+3*u,counterWidth,.7*u).fill({color:p.scene.steel[1][index],alpha:.65}).rect(left,counterY+9*u,counterWidth,1.5*u).fill(p.scene.steel[2][index]).rect(left+2*u,counterY+10.5*u,2*u,3*u).fill(p.scene.steel[2][index]).rect(left+counterWidth-4*u,counterY+10.5*u,2*u,3*u).fill(p.scene.steel[2][index]);this.stationRebuilds++;}
-    const idlePose=assignedIdlePose(state,agent.id,this.idlePoses),wallNow=Date.now(),elapsed=state==="blocked"?Math.max(0,wallNow-Date.parse(agent.stateEnteredAt)):0,elapsedText=state==="blocked"?formatElapsed(elapsed):"",selected=snapshot.selectedId===agent.id,focused=this.focusedId===agent.id,animationFrame=motion.idle&&idlePose?idleAnimationFrame(idlePose,now):motion.cook&&(state==="working"||state==="blocked")?Math.floor(now/125):0,transitionFrame=transition&&transition.progress<1?Math.round(transition.progress*1000):1000,progress=agent.progress===null?"null":Math.round(agent.progress*1000),identity=stationIdentityLabels(agent,state,wallNow,this.layout.banquet?18:30),dataSignature=`${geometrySignature}:${identity.signature}:${identity.status}:${state}:${idlePose??"none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}`,dynamicSignature=`${dataSignature}:${animationFrame}:${transitionFrame}`;
-    if(view.dynamicSignature===dynamicSignature)return;view.dynamicSignature=dynamicSignature;if(view.dataSignature!==dataSignature){view.dataSignature=dataSignature;this.stationRebuilds++;}g.clear();selection.clear();
-    const homeTicket=stationTicketGeometry(state,u),ticketColor=state==="done"?p.scene.ticketDone:state==="blocked"?p.semantic.blocked:p.scene.ticket;
-    if(homeTicket){const {x:ticketX,y:ticketY,width:ticketWidth,height:ticketHeight}=homeTicket;g.rect(ticketX,ticketY,ticketWidth,ticketHeight).fill(ticketColor).rect(ticketX+u,ticketY+1.5*u,ticketWidth-2*u,.7*u).fill(homeTicket.blocked?p.scene.ticket:p.scene.shadow).rect(ticketX+u,ticketY+3.5*u,ticketWidth-2*u,.7*u).fill(homeTicket.blocked?p.scene.ticket:p.scene.shadow);if(state==="working")g.rect(ticketX,ticketY+8*u,ticketWidth*Math.max(0,Math.min(1,agent.progress??0)),u).fill(p.semantic.done);if(state==="done")g.moveTo(ticketX+u,ticketY+4.5*u).lineTo(ticketX+3*u,ticketY+6.5*u).lineTo(ticketX+6*u,ticketY+1.5*u).stroke({color:p.semantic.done,width:Math.max(1,u)});}
-    if(state==="blocked")g.rect(3*u,counterY,Math.max(20*u,rect.width-6*u),9*u).stroke({color:p.semantic.blocked,width:Math.max(2,u)});
-    const bob=motion.cook?Math.sin((now+hash(agent.id)%700)/140)*u*.35:0,accent=p.accents[accentIndexForId(agent.id)]!;if(idlePose){const sample=motion.idle?sampleIdlePose(idlePose,now):reducedIdlePoseSample(idlePose);drawIdlePose(g,idlePose,sample,cookX,cookY,u,{coat:p.scene.coat[index],skin:p.scene.skin,ink:p.scene.ink,accent,wood:p.scene.wood[index],boot:p.scene.boot,chair:p.scene.chair,cigarette:p.scene.cigarette,smoke:[p.scene.smoke[0][index],p.scene.smoke[1][index]],green:p.semantic.done});}else drawCookSilhouette(g,cookX,cookY+bob,u,p.scene.coat[index],p.scene.skin,p.scene.ink,accent,state);
-    if(state==="working"){const flicker=motion.cook?Math.floor(now/120)%2:0,potX=rect.width/2+5*u;g.rect(potX-5*u,counterY-4*u,10*u,4*u).fill(p.scene.ink).rect(potX-4*u,counterY-5*u,8*u,u).fill(p.scene.steel[2][index]).rect(potX+5*u,counterY-3*u,3*u,u).fill(p.scene.steel[2][index]).rect(potX-3*u,counterY,2*u,u).fill(flicker?p.semantic.flameHighDark:p.semantic.flameDark).rect(potX+u,counterY,2*u,u).fill(flicker?p.semantic.flameDark:p.semantic.flameHighDark);}
-    if(state==="blocked"){const ticket=passGeometry.ticket,timerChip=passGeometry.timer,ticketX=ticket.x-rect.x,ticketY=ticket.y-rect.y,timerX=timerChip.x-rect.x,timerY=timerChip.y-rect.y;g.rect(ticketX,ticketY,ticket.width,ticket.height).fill(p.semantic.blocked).rect(ticketX+.8*u,ticketY+1.4*u,ticket.width-1.6*u,.7*u).fill(p.scene.ticket).rect(ticketX+.8*u,ticketY+3*u,ticket.width-1.6*u,.7*u).fill(p.scene.ticket).rect(timerX,timerY,timerChip.width,timerChip.height).fill({color:p.scene.ink,alpha:.82});timer.text=elapsedText;timer.style.fill=p.semantic.blockedText;timer.style.fontSize=Math.max(8,1.6*u);timer.position.set(timerX+timerChip.width/2,timerY+.6*u);timer.visible=true;}else timer.visible=false;
-    if(state==="done"){const plate=donePlateGeometry(rect.width,u,counterY),emphasis=index===1?p.semantic.tungstenDark:p.semantic.tungsten;for(const ray of plate.rays)g.rect(ray.x,ray.y,ray.width,ray.height).fill(emphasis);g.ellipse(plate.center.x,plate.center.y,plate.radius.x,plate.radius.y).fill(p.scene.ticket).ellipse(plate.center.x,plate.center.y,plate.radius.x-u,Math.max(u,plate.radius.y-u)).fill({color:p.semantic.done,alpha:.22}).ellipse(plate.center.x,plate.center.y,plate.radius.x-u,Math.max(u,plate.radius.y-u)).stroke({color:p.semantic.done,width:Math.max(1,u)});}
-    if(selected||focused){const color=index===1?p.semantic.flameHighDark:p.scene.ink,size=5*u,w=Math.max(20*u,rect.width-2*u),h=Math.min(rect.height,47*u);selection.moveTo(0,size).lineTo(0,0).lineTo(size,0).moveTo(w-size,0).lineTo(w,0).lineTo(w,size).moveTo(0,h-size).lineTo(0,h).lineTo(size,h).moveTo(w-size,h).lineTo(w,h).lineTo(w,h-size).stroke({color,width:Math.max(1,u)});}
-    const colors=p.scene.stationState;name.text=identity.name;name.style.fill=p.scene.stationName[index];name.style.fontSize=Math.max(9,2.1*u);name.position.set(rect.width/2,32*u);label.text=identity.status;label.style.fill=colors[state][index];label.style.fontSize=Math.max(8,1.8*u);label.position.set(rect.width/2,37*u);node.alpha=1;
+  private drawWindow(index: number) {
+    const p = getTheme().palette,
+      u = this.layout.unit,
+      dark = index === 1,
+      x = 8 * u,
+      y = 6 * u,
+      w = 26 * u,
+      h = 17 * u,
+      g = new Graphics()
+        .rect(x - 2 * u, y - 2 * u, w + 4 * u, h + 4 * u)
+        .fill(p.scene.wood[index])
+        .rect(x, y, w, h)
+        .fill(p.scene.sky[index]);
+    if (dark) {
+      g.circle(x + 20 * u, y + 4 * u, 2 * u).fill(p.scene.cloud);
+      for (const point of [
+        [3, 4],
+        [8, 9],
+        [13, 3],
+        [6, 12],
+        [16, 10],
+      ] as const)
+        g.circle(
+          x + point[0] * u,
+          y + point[1] * u,
+          Math.max(1, 0.35 * u),
+        ).fill(p.scene.cloud);
+    } else {
+      g.ellipse(x + 7 * u, y + 4 * u, 5 * u, 1.5 * u)
+        .fill(p.scene.cloud)
+        .ellipse(x + 18 * u, y + 10 * u, 5 * u, 1.5 * u)
+        .fill(p.scene.cloud);
+    }
+    g.rect(x + w / 2 - u / 2, y, u, h)
+      .fill(p.scene.wood[index])
+      .rect(x, y + h / 2 - u / 2, w, u)
+      .fill(p.scene.wood[index])
+      .rect(x + 20 * u, y + h - 4 * u, 3 * u, 3 * u)
+      .fill(p.scene.ink)
+      .rect(x + 19 * u, y + h - 2 * u, 5 * u, 2 * u)
+      .fill(p.scene.ink);
+    this.room.addChild(g);
   }
-  private tick(deltaMs:number){this.lastDrawCalls=this.currentDrawCalls;this.currentDrawCalls=0;const now=performance.now();this.bell.tick(Date.now());const snapshot=this.store.snapshot();if(snapshot.mode==="disconnected")return;const visualInterval=125;if(now-this.lastVisualUpdate>=visualInterval){const visualDelta=this.lastVisualUpdate?now-this.lastVisualUpdate:deltaMs;this.lastVisualUpdate=now;this.store.reconcileRendered();const motion=sceneMotionPolicy(this.reducedMotion);if(motion.steam){for(const agent of snapshot.agents.values())if(agent.targetState==="working"&&now-this.lastSteam>220){const rect=this.layout.stations.find(item=>item.id===agent.id);if(rect)this.particles.acquire(rect.x+rect.width/2,rect.y+rect.height*.35);}if(now-this.lastSteam>220)this.lastSteam=now;this.particles.update(visualDelta);}else this.particles.releaseAll();this.drawParticles();this.drawStations(now);this.drawEscalation(now);if(motion.busser)this.drawBusserSweeps(now);this.dirty=true;}}
-  private onStoreEvent(event:StoreEvent){if(event.type==="clear"){if(shouldReconcileBusserClear(new Set(this.busserSweeps.ids()),event.agentId))this.reconcile();return;}if(event.type!=="busser"||!this.layout)return;if(!sceneMotionPolicy(this.reducedMotion).busser){this.reconcile();return;}const rect=this.layout.stations.find(station=>station.id===event.agentId);if(!rect)return;this.busserSweeps.start(event.agentId,rect,performance.now());const prior=this.busserGraphics.get(event.agentId);if(prior){this.busserLayer.removeChild(prior);prior.destroy();}const graphic=new Graphics();this.busserGraphics.set(event.agentId,graphic);this.busserLayer.addChild(graphic);if(!document.hidden&&this.store.snapshot().mode!=="disconnected")this.ticker.start();}
-  private drawBusserSweeps(now:number){const p=getTheme().palette,index=paletteIndex(this.resolvedTheme()),u=this.layout.unit;for(const id of this.busserSweeps.ids()){const sample=this.busserSweeps.sample(id,now),graphic=this.busserGraphics.get(id);if(sample&&graphic){graphic.clear().roundRect(sample.x-5*u,sample.y-1.5*u,10*u,3*u,u).fill(p.scene.ticket).rect(sample.x-4*u,sample.y+1.5*u,8*u,u).fill(p.scene.steel[2][index]).rect(sample.x-3*u,sample.y+2.5*u,u,2*u).fill(p.scene.chalk[index]).rect(sample.x-u,sample.y+2.5*u,u,2*u).fill(p.scene.chalk[index]).rect(sample.x+u,sample.y+2.5*u,u,2*u).fill(p.scene.chalk[index]).rect(sample.x+3*u,sample.y+2.5*u,u,2*u).fill(p.scene.chalk[index]);graphic.alpha=sample.alpha;continue;}if(graphic){this.busserLayer.removeChild(graphic);graphic.destroy();this.busserGraphics.delete(id);}const view=this.stationViews.get(id),liveAgentIds=new Set(this.store.snapshot().agents.keys());if(view&&shouldDisposeRetainedStation(liveAgentIds,id))this.disposeStation(id,view);} }
-  private disposeStation(id:string,view:StationView){this.stationViews.delete(id);this.stationNodes.delete(id);this.stationLayer.removeChild(view.node);view.node.destroy(true);this.stationDisposals++;}
-  private drawEscalation(now:number){const settings=this.store.snapshot().settings,blocked=[...this.store.snapshot().agents.values()].filter(agent=>agent.targetState==="blocked"),elapsed=blocked.length?Math.max(...blocked.map(agent=>Math.max(0,Date.now()-Date.parse(agent.stateEnteredAt)))):0,stage=elapsed>=settings.escalationVignetteMs?2:elapsed>=settings.escalationFastMs?1:0,motion=sceneMotionPolicy(this.reducedMotion),pulseFrame=motion.escalation&&blocked.length?Math.floor(now/125):0,signature=`${blocked.length}:${stage}:${pulseFrame}:${this.reducedMotion}:${this.resolvedTheme()}:${this.layout.unit}:${this.app.renderer.width}:${this.app.renderer.height}`;if(signature===this.escalationSignature)return;this.escalationSignature=signature;const p=getTheme().palette,g=this.escalationGraphic,bell=passBellGeometry(this.layout).center;g.clear();if(blocked.length){const period=stage>=1?280:560;if(!motion.escalation||now%period<period/2)for(const radius of stage>=1?[3.5,5.5,7.5]:[3.5,5.5])g.arc(bell.x,bell.y,radius*this.layout.unit,-Math.PI*.85,-Math.PI*.15).stroke({color:p.semantic.blocked,width:Math.max(1,this.layout.unit)});}if(stage>=1)g.circle(bell.x,bell.y,10*this.layout.unit).fill({color:p.semantic.blocked,alpha:.12});if(stage===2){const pulse=motion.escalation?0.2+Math.sin(now/400)*.06:.2,width=this.app.renderer.width,height=this.app.renderer.height,edge=Math.max(12*this.layout.unit,Math.min(width,height)*.12);g.rect(0,0,width,edge).fill({color:p.semantic.blocked,alpha:pulse}).rect(0,height-edge,width,edge).fill({color:p.semantic.blocked,alpha:pulse}).rect(0,edge,edge,height-edge*2).fill({color:p.semantic.blocked,alpha:pulse}).rect(width-edge,edge,edge,height-edge*2).fill({color:p.semantic.blocked,alpha:pulse});}}
-  private drawParticles(){const p=getTheme().palette;for(let i=0;i<this.steamNodes.length;i++){const dot=this.steamNodes[i],particle=this.particles.particles[i];dot.clear();if(particle.active)dot.circle(particle.x,particle.y,Math.max(1,this.layout.unit)).fill({color:p.scene.cloud,alpha:Math.max(0,1-particle.age/particle.life)});}}
-  private onMotionPreference(reduced:boolean){if(this.reducedMotion===reduced)return;this.reducedMotion=reduced;this.preferenceChanges++;if(reduced){this.particles.releaseAll();this.transitions.reconcile();this.busserSweeps.clear();for(const graphic of this.busserGraphics.values()){this.busserLayer.removeChild(graphic);graphic.destroy();}this.busserGraphics.clear();this.drawParticles();}for(const view of this.stationViews.values())view.dynamicSignature="";this.escalationSignature="";this.reconcile(true);this.drawEscalation(performance.now());this.dirty=true;}
-  private onVisibility(){if(document.hidden)this.ticker.stop();else{this.reconcile(true);if(this.store.snapshot().mode!=="disconnected")this.ticker.start();}}
-  private instrumentDrawCalls(){const renderer=this.app.renderer as typeof this.app.renderer&{gl:{drawElements:(mode:number,count:number,type:number,offset:number)=>void;drawArrays:(mode:number,first:number,count:number)=>void}},gl=renderer.gl,drawElements=gl.drawElements.bind(gl),drawArrays=gl.drawArrays.bind(gl);gl.drawElements=(...args)=>{this.currentDrawCalls++;drawElements(...args);};gl.drawArrays=(...args)=>{this.currentDrawCalls++;drawArrays(...args);};}
+  private drawBoard(index: number) {
+    const p = getTheme().palette,
+      u = this.layout.unit,
+      width = Math.min(92 * u, this.layout.wall.width * 0.36),
+      x = (this.layout.wall.width - width) / 2,
+      y = 4 * u,
+      height = Math.max(22 * u, this.layout.wall.height - 15 * u);
+    this.boardLayer.addChild(
+      new Graphics()
+        .rect(x - 2 * u, y - 2 * u, width + 4 * u, height + 4 * u)
+        .fill(p.scene.wood[index])
+        .rect(x, y, width, height)
+        .fill(p.scene.chalkboard[index])
+        .rect(x + 3 * u, y + 9 * u, 9 * u, Math.max(1, 0.6 * u))
+        .fill(p.scene.chalk[index]),
+    );
+    const title = new Text({
+      text: "86",
+      style: worldText(p.scene.chalk[index], Math.max(8, 4 * u)),
+    });
+    title.position.set(x + 3 * u, y + 1 * u);
+    this.boardLayer.addChild(title);
+    this.hits = this.hits.filter((hit) => hit.kind !== "board");
+    this.store
+      .snapshot()
+      .board.slice(-3)
+      .forEach((entry, i) =>
+        this.drawBoardRow(
+          entry,
+          x + 3 * u,
+          y + (12 + i * 6) * u,
+          width - 6 * u,
+          index,
+        ),
+      );
+  }
+  private drawBoardRow(
+    entry: BoardEntry,
+    x: number,
+    y: number,
+    width: number,
+    index: number,
+  ) {
+    const p = getTheme().palette,
+      u = this.layout.unit,
+      runtime = Math.max(1, Math.round(entry.runtimeMs / 60_000)),
+      tickets = entry.tickets > 0 ? entry.tickets : "—";
+    if (this.store.snapshot().selectedId === entry.id)
+      this.boardLayer.addChild(
+        new Graphics()
+          .rect(x - u, y - u, width, 5 * u)
+          .stroke({ color: p.scene.chalk[index], width: Math.max(1, u * 0.5) }),
+      );
+    const style = worldText(p.scene.chalk[index], Math.max(8, 2.1 * u)),
+      name = new Text({ text: entry.name.toUpperCase(), style }),
+      facts = new Text({ text: `${runtime}M   ${tickets}`, style });
+    name.position.set(x, y);
+    facts.anchor.set(1, 0);
+    facts.position.set(x + width, y);
+    name.eventMode = "static";
+    name.cursor = "pointer";
+    name.on("pointertap", () => this.store.select(entry.id));
+    this.boardLayer.addChild(name, facts);
+    this.hits.push({
+      kind: "board",
+      id: entry.id,
+      rect: { x, y, width, height: 5 * u },
+    });
+  }
+  private drawShelfAndDoor(index: number) {
+    const p = getTheme().palette,
+      u = this.layout.unit,
+      x = this.layout.wall.width - 73 * u;
+    this.room.addChild(
+      new Graphics()
+        .rect(x, 9 * u, 30 * u, 2 * u)
+        .fill(p.scene.wood[index])
+        .ellipse(x + 6 * u, 7 * u, 5 * u, 2 * u)
+        .stroke({ color: p.scene.steel[2][index], width: u })
+        .ellipse(x + 18 * u, 7 * u, 5 * u, 2 * u)
+        .stroke({ color: p.scene.steel[2][index], width: u }),
+    );
+    const door = doorGeometry(
+      this.layout,
+      this.store.snapshot().mode === "empty",
+    );
+    this.room.addChild(
+      new Graphics()
+        .rect(door.frame.x, door.frame.y, door.frame.width, door.frame.height)
+        .fill(p.scene.wood[index])
+        .rect(
+          door.innerPanel.x,
+          door.innerPanel.y,
+          door.innerPanel.width,
+          door.innerPanel.height,
+        )
+        .fill(p.scene.ink)
+        .circle(door.knob.x, door.knob.y, door.knob.radius)
+        .fill(p.scene.brass),
+    );
+  }
+  private drawPass(index: number) {
+    const p = getTheme().palette,
+      u = this.layout.unit,
+      pass = this.layout.pass,
+      g = new Graphics(),
+      poolAlpha = index === 1 ? 0.42 : 0.18;
+    if (index === 1)
+      g.ellipse(
+        pass.x + pass.width / 2,
+        pass.y + 22 * u,
+        pass.width * 0.5,
+        11 * u,
+      ).fill({ color: p.semantic.tungstenDark, alpha: 0.18 });
+    for (let i = 1; i <= 3; i++) {
+      const x = pass.x + (pass.width * i) / 4;
+      g.rect(x - 0.5 * u, pass.y - 14 * u, u, 6 * u)
+        .fill(p.scene.ink)
+        .rect(x - 2 * u, pass.y - 8 * u, 4 * u, 1.6 * u)
+        .fill(p.scene.brass)
+        .rect(x - 3 * u, pass.y - 6.5 * u, 6 * u, 2.5 * u)
+        .fill(p.scene.brass)
+        .rect(x - 3 * u, pass.y - 4 * u, 6 * u, u)
+        .fill(p.scene.copper)
+        .rect(x - 1.2 * u, pass.y - 3 * u, 2.4 * u, u)
+        .fill(index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten)
+        .ellipse(x, pass.y + 7 * u, 9 * u, 3 * u)
+        .fill({
+          color: index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten,
+          alpha: poolAlpha,
+        });
+    }
+    g.rect(pass.x, pass.y + 6 * u, pass.width, 3 * u)
+      .fill(p.scene.steel[1][index])
+      .rect(pass.x, pass.y + 9 * u, pass.width, 8 * u)
+      .fill(p.scene.steel[0][index])
+      .rect(pass.x, pass.y + 16 * u, pass.width, 2 * u)
+      .fill(p.scene.steel[2][index])
+      .rect(pass.x + 2 * u, pass.y + 11 * u, pass.width - 4 * u, 0.7 * u)
+      .fill(p.scene.steel[1][index])
+      .rect(pass.x + 3 * u, pass.y + 18 * u, pass.width - 6 * u, 3 * u)
+      .fill({ color: p.scene.shadow, alpha: 0.3 });
+    const bell = passBellGeometry(this.layout);
+    g.rect(bell.base.x, bell.base.y, 6 * u, 1.4 * u)
+      .fill(p.scene.copper)
+      .ellipse(bell.base.x + 3 * u, pass.y + 3.3 * u, 2 * u, 2.6 * u)
+      .fill(p.scene.brass)
+      .rect(bell.base.x + 2.6 * u, pass.y + 0.2 * u, 0.8 * u, u)
+      .fill(p.scene.ink);
+    this.room.addChild(g);
+  }
+  private drawStations(now: number) {
+    const snapshot = this.store.snapshot(),
+      index = paletteIndex(this.resolvedTheme()),
+      active = new Set<string>();
+    this.hits = this.hits.filter((hit) => hit.kind !== "station");
+    for (const station of this.layout.stations) {
+      const agent = snapshot.agents.get(station.id);
+      if (!agent) continue;
+      active.add(agent.id);
+      let view = this.stationViews.get(agent.id);
+      if (!view) {
+        view = this.createStationView(agent);
+        this.stationViews.set(agent.id, view);
+        this.stationNodes.set(agent.id, view.node);
+      }
+      this.updateStation(view, agent, station, index, now);
+      this.stationLayer.addChild(view.node);
+      this.hits.push({ kind: "station", id: agent.id, rect: station });
+    }
+    for (const [id, view] of this.stationViews)
+      if (!active.has(id) && !this.busserSweeps.has(id))
+        this.disposeStation(id, view);
+    const signature = this.hits
+      .map(
+        (hit) =>
+          `${hit.kind}:${hit.id}:${hit.rect.x}:${hit.rect.y}:${hit.rect.width}:${hit.rect.height}`,
+      )
+      .join("|");
+    if (signature !== this.lastHitSignature) {
+      this.lastHitSignature = signature;
+      this.options.onHitLayout?.(this.hits);
+    }
+  }
+  private createStationView(agent: AgentMachine): StationView {
+    const p = getTheme().palette,
+      node = new Container(),
+      staticBody = new Graphics(),
+      dynamicBody = new Graphics(),
+      selection = new Graphics(),
+      name = new Text({
+        text: stationWorkspaceLabel(agent.workspace).text,
+        style: worldText(p.scene.ink, 8),
+      }),
+      label = new Text({ text: "", style: worldText(p.scene.muted, 8) }),
+      timer = new Text({
+        text: "",
+        style: worldText(p.semantic.blockedText, 8),
+      }),
+      hit = new Rectangle();
+    name.anchor.set(0.5, 0);
+    label.anchor.set(0.5, 0);
+    timer.anchor.set(0.5, 0);
+    timer.visible = false;
+    node.hitArea = hit;
+    node.addChild(staticBody, dynamicBody, timer, selection, name, label);
+    return {
+      node,
+      staticBody,
+      dynamicBody,
+      selection,
+      name,
+      label,
+      timer,
+      hit,
+      staticSignature: "",
+      dynamicSignature: "",
+      dataSignature: "",
+    };
+  }
+  private updateStation(
+    view: StationView,
+    agent: AgentMachine,
+    rect: Rect & { scale: number },
+    index: number,
+    now: number,
+  ) {
+    const snapshot = this.store.snapshot(),
+      p = getTheme().palette,
+      u = this.layout.unit * rect.scale,
+      {
+        node,
+        staticBody,
+        dynamicBody: g,
+        selection,
+        name,
+        label,
+        timer,
+        hit,
+      } = view,
+      motion = sceneMotionPolicy(this.reducedMotion);
+    node.position.set(rect.x, rect.y);
+    hit.x = 0;
+    hit.y = -3 * u;
+    hit.width = rect.width;
+    hit.height = rect.height + 3 * u;
+    const state = agent.targetState;
+    let transition = motion.transitions
+      ? this.transitions.sample(agent.id, now)
+      : null;
+    if (motion.transitions && agent.renderedState !== state && !transition) {
+      this.transitions.target(agent.id, agent.renderedState, state, now);
+      transition = this.transitions.sample(agent.id, now);
+    }
+    const counterY = 19 * u,
+      passGeometry = blockedPassGeometry(this.layout, agent.id),
+      slot = passGeometry.cook,
+      home = { x: rect.x + rect.width / 2, y: rect.y + counterY },
+      blockedProgress = motion.travel
+        ? transition?.to === "blocked"
+          ? transition.progress
+          : transition?.from === "blocked"
+            ? 1 - transition.progress
+            : state === "blocked"
+              ? 1
+              : 0
+        : state === "blocked"
+          ? 1
+          : 0,
+      eased =
+        blockedProgress < 0.5
+          ? 2 * blockedProgress * blockedProgress
+          : 1 - Math.pow(-2 * blockedProgress + 2, 2) / 2,
+      cookX = home.x + (slot.x - home.x) * eased - rect.x,
+      cookY = home.y + (slot.y - home.y) * eased - rect.y,
+      passX = slot.x - rect.x,
+      passY = slot.y - rect.y,
+      geometrySignature = `${index}:${u}:${rect.width}:${rect.height}:${accentIndexForId(agent.id)}`;
+    if (view.staticSignature !== geometrySignature) {
+      const counterWidth = Math.max(20 * u, rect.width - 9 * u),
+        left = 4.5 * u,
+        accent = p.accents[accentIndexForId(agent.id)]!;
+      view.staticSignature = geometrySignature;
+      staticBody
+        .clear()
+        .rect(left, 1.5 * u, counterWidth, u)
+        .fill(p.scene.steel[2][index])
+        .rect(left, 1.5 * u, u, 6 * u)
+        .fill(p.scene.steel[2][index])
+        .rect(rect.width - 7 * u, -2 * u, u, 6 * u)
+        .fill(p.scene.steel[2][index])
+        .rect(rect.width - 6 * u, -2 * u, 5 * u, 3 * u)
+        .fill(accent)
+        .rect(left, counterY, counterWidth, 2 * u)
+        .fill(p.scene.steel[1][index])
+        .rect(left, counterY + 2 * u, counterWidth, 7 * u)
+        .fill(p.scene.steel[0][index])
+        .rect(left, counterY + 3 * u, counterWidth, 0.7 * u)
+        .fill({ color: p.scene.steel[1][index], alpha: 0.65 })
+        .rect(left, counterY + 9 * u, counterWidth, 1.5 * u)
+        .fill(p.scene.steel[2][index])
+        .rect(left + 2 * u, counterY + 10.5 * u, 2 * u, 3 * u)
+        .fill(p.scene.steel[2][index])
+        .rect(left + counterWidth - 4 * u, counterY + 10.5 * u, 2 * u, 3 * u)
+        .fill(p.scene.steel[2][index]);
+      this.stationRebuilds++;
+    }
+    const idlePose = assignedIdlePose(state, agent.id, this.idlePoses),
+      wallNow = Date.now(),
+      elapsed =
+        state === "blocked"
+          ? Math.max(0, wallNow - Date.parse(agent.stateEnteredAt))
+          : 0,
+      elapsedText = state === "blocked" ? formatElapsed(elapsed) : "",
+      selected = snapshot.selectedId === agent.id,
+      focused = this.focusedId === agent.id,
+      animationFrame =
+        motion.idle && idlePose
+          ? idleAnimationFrame(idlePose, now)
+          : motion.cook && (state === "working" || state === "blocked")
+            ? Math.floor(now / 125)
+            : 0,
+      transitionFrame =
+        transition && transition.progress < 1
+          ? Math.round(transition.progress * 1000)
+          : 1000,
+      progress =
+        agent.progress === null ? "null" : Math.round(agent.progress * 1000),
+      identity = stationIdentityLabels(
+        agent,
+        state,
+        wallNow,
+        this.layout.banquet ? 18 : 30,
+      ),
+      dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}`,
+      dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`;
+    if (view.dynamicSignature === dynamicSignature) return;
+    view.dynamicSignature = dynamicSignature;
+    if (view.dataSignature !== dataSignature) {
+      view.dataSignature = dataSignature;
+      this.stationRebuilds++;
+    }
+    g.clear();
+    selection.clear();
+    const homeTicket = stationTicketGeometry(state, u),
+      ticketColor =
+        state === "done"
+          ? p.scene.ticketDone
+          : state === "blocked"
+            ? p.semantic.blocked
+            : p.scene.ticket;
+    if (homeTicket) {
+      const {
+        x: ticketX,
+        y: ticketY,
+        width: ticketWidth,
+        height: ticketHeight,
+      } = homeTicket;
+      g.rect(ticketX, ticketY, ticketWidth, ticketHeight)
+        .fill(ticketColor)
+        .rect(ticketX + u, ticketY + 1.5 * u, ticketWidth - 2 * u, 0.7 * u)
+        .fill(homeTicket.blocked ? p.scene.ticket : p.scene.shadow)
+        .rect(ticketX + u, ticketY + 3.5 * u, ticketWidth - 2 * u, 0.7 * u)
+        .fill(homeTicket.blocked ? p.scene.ticket : p.scene.shadow);
+      if (state === "working")
+        g.rect(
+          ticketX,
+          ticketY + 8 * u,
+          ticketWidth * Math.max(0, Math.min(1, agent.progress ?? 0)),
+          u,
+        ).fill(p.semantic.done);
+      if (state === "done")
+        g.moveTo(ticketX + u, ticketY + 4.5 * u)
+          .lineTo(ticketX + 3 * u, ticketY + 6.5 * u)
+          .lineTo(ticketX + 6 * u, ticketY + 1.5 * u)
+          .stroke({ color: p.semantic.done, width: Math.max(1, u) });
+    }
+    if (state === "blocked")
+      g.rect(
+        3 * u,
+        counterY,
+        Math.max(20 * u, rect.width - 6 * u),
+        9 * u,
+      ).stroke({ color: p.semantic.blocked, width: Math.max(2, u) });
+    const bob = motion.cook
+        ? Math.sin((now + (hash(agent.id) % 700)) / 140) * u * 0.35
+        : 0,
+      accent = p.accents[accentIndexForId(agent.id)]!;
+    if (idlePose) {
+      const sample = motion.idle
+        ? sampleIdlePose(idlePose, now)
+        : reducedIdlePoseSample(idlePose);
+      drawIdlePose(g, idlePose, sample, cookX, cookY, u, {
+        coat: p.scene.coat[index],
+        skin: p.scene.skin,
+        ink: p.scene.ink,
+        accent,
+        wood: p.scene.wood[index],
+        boot: p.scene.boot,
+        chair: p.scene.chair,
+        cigarette: p.scene.cigarette,
+        smoke: [p.scene.smoke[0][index], p.scene.smoke[1][index]],
+        green: p.semantic.done,
+      });
+    } else
+      drawCookSilhouette(
+        g,
+        cookX,
+        cookY + bob,
+        u,
+        p.scene.coat[index],
+        p.scene.skin,
+        p.scene.ink,
+        accent,
+        state,
+      );
+    if (state === "working") {
+      const flicker = motion.cook ? Math.floor(now / 120) % 2 : 0,
+        potX = rect.width / 2 + 5 * u;
+      g.rect(potX - 5 * u, counterY - 4 * u, 10 * u, 4 * u)
+        .fill(p.scene.ink)
+        .rect(potX - 4 * u, counterY - 5 * u, 8 * u, u)
+        .fill(p.scene.steel[2][index])
+        .rect(potX + 5 * u, counterY - 3 * u, 3 * u, u)
+        .fill(p.scene.steel[2][index])
+        .rect(potX - 3 * u, counterY, 2 * u, u)
+        .fill(flicker ? p.semantic.flameHighDark : p.semantic.flameDark)
+        .rect(potX + u, counterY, 2 * u, u)
+        .fill(flicker ? p.semantic.flameDark : p.semantic.flameHighDark);
+    }
+    if (state === "blocked") {
+      const ticket = passGeometry.ticket,
+        timerChip = passGeometry.timer,
+        ticketX = ticket.x - rect.x,
+        ticketY = ticket.y - rect.y,
+        timerX = timerChip.x - rect.x,
+        timerY = timerChip.y - rect.y;
+      g.rect(ticketX, ticketY, ticket.width, ticket.height)
+        .fill(p.semantic.blocked)
+        .rect(
+          ticketX + 0.8 * u,
+          ticketY + 1.4 * u,
+          ticket.width - 1.6 * u,
+          0.7 * u,
+        )
+        .fill(p.scene.ticket)
+        .rect(
+          ticketX + 0.8 * u,
+          ticketY + 3 * u,
+          ticket.width - 1.6 * u,
+          0.7 * u,
+        )
+        .fill(p.scene.ticket)
+        .rect(timerX, timerY, timerChip.width, timerChip.height)
+        .fill({ color: p.scene.ink, alpha: 0.82 });
+      timer.text = elapsedText;
+      timer.style.fill = p.semantic.blockedText;
+      timer.style.fontSize = Math.max(8, 1.6 * u);
+      timer.position.set(timerX + timerChip.width / 2, timerY + 0.6 * u);
+      timer.visible = true;
+    } else timer.visible = false;
+    if (state === "done") {
+      const plate = donePlateGeometry(rect.width, u, counterY),
+        emphasis = index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten;
+      for (const ray of plate.rays)
+        g.rect(ray.x, ray.y, ray.width, ray.height).fill(emphasis);
+      g.ellipse(plate.center.x, plate.center.y, plate.radius.x, plate.radius.y)
+        .fill(p.scene.ticket)
+        .ellipse(
+          plate.center.x,
+          plate.center.y,
+          plate.radius.x - u,
+          Math.max(u, plate.radius.y - u),
+        )
+        .fill({ color: p.semantic.done, alpha: 0.22 })
+        .ellipse(
+          plate.center.x,
+          plate.center.y,
+          plate.radius.x - u,
+          Math.max(u, plate.radius.y - u),
+        )
+        .stroke({ color: p.semantic.done, width: Math.max(1, u) });
+    }
+    if (selected || focused) {
+      const color = index === 1 ? p.semantic.flameHighDark : p.scene.ink,
+        size = 5 * u,
+        w = Math.max(20 * u, rect.width - 2 * u),
+        h = Math.min(rect.height, 47 * u);
+      selection
+        .moveTo(0, size)
+        .lineTo(0, 0)
+        .lineTo(size, 0)
+        .moveTo(w - size, 0)
+        .lineTo(w, 0)
+        .lineTo(w, size)
+        .moveTo(0, h - size)
+        .lineTo(0, h)
+        .lineTo(size, h)
+        .moveTo(w - size, h)
+        .lineTo(w, h)
+        .lineTo(w, h - size)
+        .stroke({ color, width: Math.max(1, u) });
+    }
+    const colors = p.scene.stationState;
+    name.text = identity.name;
+    name.style.fill = p.scene.stationName[index];
+    name.style.fontSize = Math.max(9, 2.1 * u);
+    name.position.set(rect.width / 2, 32 * u);
+    label.text = identity.status;
+    label.style.fill = colors[state][index];
+    label.style.fontSize = Math.max(8, 1.8 * u);
+    label.position.set(rect.width / 2, 37 * u);
+    node.alpha = 1;
+  }
+  private tick(deltaMs: number) {
+    this.lastDrawCalls = this.currentDrawCalls;
+    this.currentDrawCalls = 0;
+    const now = performance.now();
+    this.bell.tick(Date.now());
+    const snapshot = this.store.snapshot();
+    if (snapshot.mode === "disconnected") return;
+    const visualInterval = 125;
+    if (now - this.lastVisualUpdate >= visualInterval) {
+      const visualDelta = this.lastVisualUpdate
+        ? now - this.lastVisualUpdate
+        : deltaMs;
+      this.lastVisualUpdate = now;
+      this.store.reconcileRendered();
+      const motion = sceneMotionPolicy(this.reducedMotion);
+      if (motion.steam) {
+        for (const agent of snapshot.agents.values())
+          if (agent.targetState === "working" && now - this.lastSteam > 220) {
+            const rect = this.layout.stations.find(
+              (item) => item.id === agent.id,
+            );
+            if (rect)
+              this.particles.acquire(
+                rect.x + rect.width / 2,
+                rect.y + rect.height * 0.35,
+              );
+          }
+        if (now - this.lastSteam > 220) this.lastSteam = now;
+        this.particles.update(visualDelta);
+      } else this.particles.releaseAll();
+      this.drawParticles();
+      this.drawStations(now);
+      this.drawEscalation(now);
+      if (motion.busser) this.drawBusserSweeps(now);
+      this.dirty = true;
+    }
+  }
+  private onStoreEvent(event: StoreEvent) {
+    if (event.type === "clear") {
+      if (
+        shouldReconcileBusserClear(
+          new Set(this.busserSweeps.ids()),
+          event.agentId,
+        )
+      )
+        this.reconcile();
+      return;
+    }
+    if (event.type !== "busser" || !this.layout) return;
+    if (!sceneMotionPolicy(this.reducedMotion).busser) {
+      this.reconcile();
+      return;
+    }
+    const rect = this.layout.stations.find(
+      (station) => station.id === event.agentId,
+    );
+    if (!rect) return;
+    this.busserSweeps.start(event.agentId, rect, performance.now());
+    const prior = this.busserGraphics.get(event.agentId);
+    if (prior) {
+      this.busserLayer.removeChild(prior);
+      prior.destroy();
+    }
+    const graphic = new Graphics();
+    this.busserGraphics.set(event.agentId, graphic);
+    this.busserLayer.addChild(graphic);
+    if (!document.hidden && this.store.snapshot().mode !== "disconnected")
+      this.ticker.start();
+  }
+  private drawBusserSweeps(now: number) {
+    const p = getTheme().palette,
+      index = paletteIndex(this.resolvedTheme()),
+      u = this.layout.unit;
+    for (const id of this.busserSweeps.ids()) {
+      const sample = this.busserSweeps.sample(id, now),
+        graphic = this.busserGraphics.get(id);
+      if (sample && graphic) {
+        graphic
+          .clear()
+          .roundRect(sample.x - 5 * u, sample.y - 1.5 * u, 10 * u, 3 * u, u)
+          .fill(p.scene.ticket)
+          .rect(sample.x - 4 * u, sample.y + 1.5 * u, 8 * u, u)
+          .fill(p.scene.steel[2][index])
+          .rect(sample.x - 3 * u, sample.y + 2.5 * u, u, 2 * u)
+          .fill(p.scene.chalk[index])
+          .rect(sample.x - u, sample.y + 2.5 * u, u, 2 * u)
+          .fill(p.scene.chalk[index])
+          .rect(sample.x + u, sample.y + 2.5 * u, u, 2 * u)
+          .fill(p.scene.chalk[index])
+          .rect(sample.x + 3 * u, sample.y + 2.5 * u, u, 2 * u)
+          .fill(p.scene.chalk[index]);
+        graphic.alpha = sample.alpha;
+        continue;
+      }
+      if (graphic) {
+        this.busserLayer.removeChild(graphic);
+        graphic.destroy();
+        this.busserGraphics.delete(id);
+      }
+      const view = this.stationViews.get(id),
+        liveAgentIds = new Set(this.store.snapshot().agents.keys());
+      if (view && shouldDisposeRetainedStation(liveAgentIds, id))
+        this.disposeStation(id, view);
+    }
+  }
+  private disposeStation(id: string, view: StationView) {
+    this.stationViews.delete(id);
+    this.stationNodes.delete(id);
+    this.stationLayer.removeChild(view.node);
+    view.node.destroy(true);
+    this.stationDisposals++;
+  }
+  private drawEscalation(now: number) {
+    const settings = this.store.snapshot().settings,
+      blocked = [...this.store.snapshot().agents.values()].filter(
+        (agent) => agent.targetState === "blocked",
+      ),
+      elapsed = blocked.length
+        ? Math.max(
+            ...blocked.map((agent) =>
+              Math.max(0, Date.now() - Date.parse(agent.stateEnteredAt)),
+            ),
+          )
+        : 0,
+      stage =
+        elapsed >= settings.escalationVignetteMs
+          ? 2
+          : elapsed >= settings.escalationFastMs
+            ? 1
+            : 0,
+      motion = sceneMotionPolicy(this.reducedMotion),
+      pulseFrame =
+        motion.escalation && blocked.length ? Math.floor(now / 125) : 0,
+      signature = `${blocked.length}:${stage}:${pulseFrame}:${this.reducedMotion}:${this.resolvedTheme()}:${this.layout.unit}:${this.app.renderer.width}:${this.app.renderer.height}`;
+    if (signature === this.escalationSignature) return;
+    this.escalationSignature = signature;
+    const p = getTheme().palette,
+      g = this.escalationGraphic,
+      bell = passBellGeometry(this.layout).center;
+    g.clear();
+    if (blocked.length) {
+      const period = stage >= 1 ? 280 : 560;
+      if (!motion.escalation || now % period < period / 2)
+        for (const radius of stage >= 1 ? [3.5, 5.5, 7.5] : [3.5, 5.5])
+          g.arc(
+            bell.x,
+            bell.y,
+            radius * this.layout.unit,
+            -Math.PI * 0.85,
+            -Math.PI * 0.15,
+          ).stroke({
+            color: p.semantic.blocked,
+            width: Math.max(1, this.layout.unit),
+          });
+    }
+    if (stage >= 1)
+      g.circle(bell.x, bell.y, 10 * this.layout.unit).fill({
+        color: p.semantic.blocked,
+        alpha: 0.12,
+      });
+    if (stage === 2) {
+      const pulse = motion.escalation ? 0.2 + Math.sin(now / 400) * 0.06 : 0.2,
+        width = this.app.renderer.width,
+        height = this.app.renderer.height,
+        edge = Math.max(12 * this.layout.unit, Math.min(width, height) * 0.12);
+      g.rect(0, 0, width, edge)
+        .fill({ color: p.semantic.blocked, alpha: pulse })
+        .rect(0, height - edge, width, edge)
+        .fill({ color: p.semantic.blocked, alpha: pulse })
+        .rect(0, edge, edge, height - edge * 2)
+        .fill({ color: p.semantic.blocked, alpha: pulse })
+        .rect(width - edge, edge, edge, height - edge * 2)
+        .fill({ color: p.semantic.blocked, alpha: pulse });
+    }
+  }
+  private drawParticles() {
+    const p = getTheme().palette;
+    for (let i = 0; i < this.steamNodes.length; i++) {
+      const dot = this.steamNodes[i],
+        particle = this.particles.particles[i];
+      dot.clear();
+      if (particle.active)
+        dot.circle(particle.x, particle.y, Math.max(1, this.layout.unit)).fill({
+          color: p.scene.cloud,
+          alpha: Math.max(0, 1 - particle.age / particle.life),
+        });
+    }
+  }
+  private onMotionPreference(reduced: boolean) {
+    if (this.reducedMotion === reduced) return;
+    this.reducedMotion = reduced;
+    this.preferenceChanges++;
+    if (reduced) {
+      this.particles.releaseAll();
+      this.transitions.reconcile();
+      this.busserSweeps.clear();
+      for (const graphic of this.busserGraphics.values()) {
+        this.busserLayer.removeChild(graphic);
+        graphic.destroy();
+      }
+      this.busserGraphics.clear();
+      this.drawParticles();
+    }
+    for (const view of this.stationViews.values()) view.dynamicSignature = "";
+    this.escalationSignature = "";
+    this.reconcile(true);
+    this.drawEscalation(performance.now());
+    this.dirty = true;
+  }
+  private onVisibility() {
+    if (document.hidden) this.ticker.stop();
+    else {
+      this.reconcile(true);
+      if (this.store.snapshot().mode !== "disconnected") this.ticker.start();
+    }
+  }
+  private instrumentDrawCalls() {
+    const renderer = this.app.renderer as typeof this.app.renderer & {
+        gl: {
+          drawElements: (
+            mode: number,
+            count: number,
+            type: number,
+            offset: number,
+          ) => void;
+          drawArrays: (mode: number, first: number, count: number) => void;
+        };
+      },
+      gl = renderer.gl,
+      drawElements = gl.drawElements.bind(gl),
+      drawArrays = gl.drawArrays.bind(gl);
+    gl.drawElements = (...args) => {
+      this.currentDrawCalls++;
+      drawElements(...args);
+    };
+    gl.drawArrays = (...args) => {
+      this.currentDrawCalls++;
+      drawArrays(...args);
+    };
+  }
 }
-function drawCookSilhouette(g:Graphics,cx:number,base:number,u:number,coat:string,skin:string,ink:string,accent:string,state:AgentMachine["targetState"]){
+function drawCookSilhouette(
+  g: Graphics,
+  cx: number,
+  base: number,
+  u: number,
+  coat: string,
+  skin: string,
+  ink: string,
+  accent: string,
+  state: AgentMachine["targetState"],
+) {
   // A connected 14x21-unit cook: shoes/legs, apron body, arms, face and
   // two-tier toque. Each tier is independently legible at the 0.8x banquet scale.
-  g.rect(cx-5*u,base-2*u,3*u,2*u).fill(ink).rect(cx+2*u,base-2*u,3*u,2*u).fill(ink)
-    .rect(cx-4*u,base-6*u,3*u,5*u).fill(ink).rect(cx+u,base-6*u,3*u,5*u).fill(ink)
-    .rect(cx-6*u,base-15*u,12*u,10*u).fill(ink).rect(cx-5*u,base-14*u,10*u,9*u).fill(coat)
-    .rect(cx-4*u,base-12*u,8*u,2*u).fill(accent).rect(cx-3*u,base-10*u,6*u,5*u).fill(coat)
-    .rect(cx-6*u,base-13*u,2*u,6*u).fill(coat).rect(cx+4*u,base-13*u,2*u,6*u).fill(coat)
-    .rect(cx-6*u,base-8*u,2*u,2*u).fill(skin).rect(cx+4*u,base-8*u,2*u,2*u).fill(skin)
-    .rect(cx-4*u,base-19*u,8*u,5*u).fill(ink).rect(cx-3*u,base-18*u,6*u,4*u).fill(skin)
-    .rect(cx-2*u,base-17*u,u,u).fill(ink).rect(cx+u,base-17*u,u,u).fill(ink)
-    .rect(cx-6*u,base-22*u,12*u,3*u).fill(ink).rect(cx-5*u,base-23*u,10*u,3*u).fill(coat)
-    .rect(cx-3*u,base-25*u,6*u,3*u).fill(coat);
-  if(state==="done")g.rect(cx-7*u,base-11*u,4*u,2*u).fill(coat);
+  g.rect(cx - 5 * u, base - 2 * u, 3 * u, 2 * u)
+    .fill(ink)
+    .rect(cx + 2 * u, base - 2 * u, 3 * u, 2 * u)
+    .fill(ink)
+    .rect(cx - 4 * u, base - 6 * u, 3 * u, 5 * u)
+    .fill(ink)
+    .rect(cx + u, base - 6 * u, 3 * u, 5 * u)
+    .fill(ink)
+    .rect(cx - 6 * u, base - 15 * u, 12 * u, 10 * u)
+    .fill(ink)
+    .rect(cx - 5 * u, base - 14 * u, 10 * u, 9 * u)
+    .fill(coat)
+    .rect(cx - 4 * u, base - 12 * u, 8 * u, 2 * u)
+    .fill(accent)
+    .rect(cx - 3 * u, base - 10 * u, 6 * u, 5 * u)
+    .fill(coat)
+    .rect(cx - 6 * u, base - 13 * u, 2 * u, 6 * u)
+    .fill(coat)
+    .rect(cx + 4 * u, base - 13 * u, 2 * u, 6 * u)
+    .fill(coat)
+    .rect(cx - 6 * u, base - 8 * u, 2 * u, 2 * u)
+    .fill(skin)
+    .rect(cx + 4 * u, base - 8 * u, 2 * u, 2 * u)
+    .fill(skin)
+    .rect(cx - 4 * u, base - 19 * u, 8 * u, 5 * u)
+    .fill(ink)
+    .rect(cx - 3 * u, base - 18 * u, 6 * u, 4 * u)
+    .fill(skin)
+    .rect(cx - 2 * u, base - 17 * u, u, u)
+    .fill(ink)
+    .rect(cx + u, base - 17 * u, u, u)
+    .fill(ink)
+    .rect(cx - 6 * u, base - 22 * u, 12 * u, 3 * u)
+    .fill(ink)
+    .rect(cx - 5 * u, base - 23 * u, 10 * u, 3 * u)
+    .fill(coat)
+    .rect(cx - 3 * u, base - 25 * u, 6 * u, 3 * u)
+    .fill(coat);
+  if (state === "done")
+    g.rect(cx - 7 * u, base - 11 * u, 4 * u, 2 * u).fill(coat);
 }
-function hash(value:string){let result=2166136261;for(let i=0;i<value.length;i++){result^=value.charCodeAt(i);result=Math.imul(result,16777619);}return result>>>0;}
-function formatElapsed(elapsed:number){const seconds=Math.floor(elapsed/1000),minutes=Math.floor(seconds/60);return `${minutes}:${String(seconds%60).padStart(2,"0")}`;}
-function destroyChildren(container:Container){for(const child of container.removeChildren())child.destroy(true);}
+function hash(value: string) {
+  let result = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    result ^= value.charCodeAt(i);
+    result = Math.imul(result, 16777619);
+  }
+  return result >>> 0;
+}
+function formatElapsed(elapsed: number) {
+  const seconds = Math.floor(elapsed / 1000),
+    minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+function destroyChildren(container: Container) {
+  for (const child of container.removeChildren()) child.destroy(true);
+}

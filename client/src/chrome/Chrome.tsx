@@ -1,46 +1,536 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentMachine, AgentStore, BoardEntry, CoarseSlice, Settings, StatePeriod } from "../state/store";
+import type {
+  AgentMachine,
+  AgentStore,
+  BoardEntry,
+  CoarseSlice,
+  Settings,
+  StatePeriod,
+} from "../state/store";
 import type { SceneHit } from "../scene/kitchen-scene";
 import { resumeBellAudio } from "../sound/bell";
 import { tokens } from "../theme/tokens";
 import type { SourceDiagnostic } from "../../../protocol/generated/agent-state-event";
 
-export interface DebugMetrics { drawCalls: number; socketBytesPerSecond: number }
-export interface ChromeProps { store: AgentStore; coarse: CoarseSlice; hoveredId: string | null; focusedId: string | null; hits: readonly SceneHit[]; settingsOpen: boolean; statsOpen: boolean; lastUpdateSeconds: number; metrics: DebugMetrics; onCloseSettings(): void; onOpenSettings(): void; onDismissHint(): void; hintVisible: boolean }
-const stateWords = { idle: "Idle — prepping", working: "Working — on the fire", blocked: "Blocked — at the pass", done: "Done — plated", ended: "Ended — 86'd" } as const;
-const stateLabels = { idle: "IDLE — PREPPING", working: "WORKING — ON THE FIRE", blocked: "BLOCKED — AT THE PASS", done: "DONE — PLATED", ended: "86'D — SESSION ENDED" } as const;
-function duration(ms:number){const seconds=Math.max(0,Math.floor(ms/1000)),minutes=Math.floor(seconds/60),hours=Math.floor(minutes/60);return hours?`${hours}h ${minutes%60}m`:minutes?`${minutes}m ${seconds%60}s`:`${seconds}s`;}
-function stateColor(agent:AgentMachine){if(agent.targetState==="blocked")return tokens.semantic.blocked;if(agent.targetState==="working")return tokens.semantic.flame;if(agent.targetState==="done")return tokens.semantic.done;return tokens.scene.muted;}
-function useClock(active:boolean){const [now,setNow]=useState(Date.now());useEffect(()=>{if(!active)return;const timer=window.setInterval(()=>setNow(Date.now()),1_000);return()=>window.clearInterval(timer);},[active]);return now;}
-function FocusedPanel({className="panel",label,children}:{className?:string;label:string;children:React.ReactNode}){const ref=useRef<HTMLElement>(null);useEffect(()=>ref.current?.focus(),[]);return <aside ref={ref} className={className} aria-label={label} tabIndex={-1}>{children}</aside>;}
-
-export function Chrome(props:ChromeProps){
-  const snapshot=props.store.snapshot(),selectedAgent=props.coarse.selectedId?snapshot.agents.get(props.coarse.selectedId):undefined,selectedBoard=props.coarse.selectedId?snapshot.board.find(item=>item.id===props.coarse.selectedId):undefined;
-  const hoverHit=props.hits.find(hit=>hit.kind==="station"&&hit.id===(props.hoveredId??props.focusedId)),hoverAgent=hoverHit?snapshot.agents.get(hoverHit.id):undefined;
-  return <>
-    {hoverAgent&&hoverHit&&<Tooltip agent={hoverAgent} hit={hoverHit}/>}
-    {selectedAgent&&<DetailCard agent={selectedAgent} onClose={()=>props.store.select(null)}/>}
-    {selectedBoard&&<SessionSummary entry={selectedBoard} onClose={()=>props.store.select(null)}/>}
-    {props.settingsOpen&&<SettingsPanel settings={props.coarse.settings} onChange={patch=>props.store.setSettings(patch)} onClose={props.onCloseSettings}/>}
-    {!props.settingsOpen&&<button className="settingsTrigger" onClick={props.onOpenSettings} aria-label="Open settings">Settings</button>}
-    <ModeTreatment mode={props.coarse.mode} sourceStatus={props.coarse.sourceStatus} sourceDiagnostic={props.coarse.sourceDiagnostic} lastUpdateSeconds={props.lastUpdateSeconds}/>
-    {props.hintVisible&&<div className="firstHint" role="note">Blocked cooks ring the service bell. <button onClick={props.onDismissHint}>Got it</button></div>}
-    {props.statsOpen&&<StatsOverlay metrics={props.metrics}/>}
-  </>;
+export interface DebugMetrics {
+  drawCalls: number;
+  socketBytesPerSecond: number;
+}
+export interface ChromeProps {
+  store: AgentStore;
+  coarse: CoarseSlice;
+  hoveredId: string | null;
+  focusedId: string | null;
+  hits: readonly SceneHit[];
+  settingsOpen: boolean;
+  statsOpen: boolean;
+  lastUpdateSeconds: number;
+  metrics: DebugMetrics;
+  onCloseSettings(): void;
+  onOpenSettings(): void;
+  onDismissHint(): void;
+  hintVisible: boolean;
+}
+const stateWords = {
+  idle: "Idle — prepping",
+  working: "Working — on the fire",
+  blocked: "Blocked — at the pass",
+  done: "Done — plated",
+  ended: "Ended — 86'd",
+} as const;
+const stateLabels = {
+  idle: "IDLE — PREPPING",
+  working: "WORKING — ON THE FIRE",
+  blocked: "BLOCKED — AT THE PASS",
+  done: "DONE — PLATED",
+  ended: "86'D — SESSION ENDED",
+} as const;
+function duration(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000)),
+    minutes = Math.floor(seconds / 60),
+    hours = Math.floor(minutes / 60);
+  return hours
+    ? `${hours}h ${minutes % 60}m`
+    : minutes
+      ? `${minutes}m ${seconds % 60}s`
+      : `${seconds}s`;
+}
+function stateColor(agent: AgentMachine) {
+  if (agent.targetState === "blocked") return tokens.semantic.blocked;
+  if (agent.targetState === "working") return tokens.semantic.flame;
+  if (agent.targetState === "done") return tokens.semantic.done;
+  return tokens.scene.muted;
+}
+function useClock(active: boolean) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  return now;
+}
+function FocusedPanel({
+  className = "panel",
+  label,
+  children,
+}: {
+  className?: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => ref.current?.focus(), []);
+  return (
+    <aside ref={ref} className={className} aria-label={label} tabIndex={-1}>
+      {children}
+    </aside>
+  );
 }
 
-export function Tooltip({agent,hit}:{agent:AgentMachine;hit:SceneHit}){const now=useClock(true),style={left:hit.rect.x+hit.rect.width/2,top:Math.max(8,hit.rect.y-8)};return <div className="stationTooltip" style={style} role="tooltip"><strong>{agent.name}</strong><span>{stateWords[agent.targetState]}</span><time>{duration(now-Date.parse(agent.stateEnteredAt))} in state</time></div>;}
-function Fact({label,children,mono=false}:{label:string;children:React.ReactNode;mono?:boolean}){return <div className="fact"><span>{label}</span><b className={mono?"mono":undefined}>{children}</b></div>;}
-function HistoryStrip({history,now}:{history:readonly StatePeriod[];now:number}){const start=history[0]?.startedAt??now,total=Math.max(1,now-start);return <section className="sessionHistory" aria-label="Session history"><h3>SESSION HISTORY</h3><div className="historyStrip">{history.map((period,index)=>{const end=history[index+1]?.startedAt??now,width=Math.max(1,(end-period.startedAt)/total*100);return <i key={`${period.state}-${period.startedAt}`} data-state={period.state} style={{width:`${width}%`,background:historyColor(period.state)}} title={stateWords[period.state]}/>;})}</div><div className="historyTimes"><time>{new Date(start).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</time><span>now</span></div></section>;}
-function historyColor(state:StatePeriod["state"]){if(state==="blocked")return tokens.semantic.blocked;if(state==="working")return tokens.semantic.flame;if(state==="done")return tokens.semantic.done;return tokens.scene.ticketDone;}
-const availableText=(value:string)=>value.trim()||"Unavailable";
-const availableTickets=(value:number)=>value>0?value:"Unavailable";
-export function DetailCard({agent,onClose}:{agent:AgentMachine;onClose():void}){const now=useClock(true),color=stateColor(agent);return <FocusedPanel label={`${agent.name} details`}><PanelHeader name={agent.name} label={stateLabels[agent.targetState]} color={color} onClose={onClose}/><div className="facts"><Fact label="Model">{availableText(agent.model)}</Fact><Fact label="Workspace" mono>{availableText(agent.workspace)}</Fact><Fact label="Time in state">{duration(now-Date.parse(agent.stateEnteredAt))}</Fact><Fact label="Tickets this session">{availableTickets(agent.session.tickets)}</Fact></div><HistoryStrip history={agent.history} now={now}/></FocusedPanel>;}
-export function SessionSummary({entry,onClose}:{entry:BoardEntry;onClose():void}){const ended=new Date(entry.endedAt),color=entry.finalState==="blocked"?tokens.semantic.blocked:entry.finalState==="working"?tokens.semantic.flame:entry.finalState==="done"?tokens.semantic.done:tokens.scene.muted;return <FocusedPanel label={`${entry.name} session summary`}><PanelHeader name={entry.name} label="86'D — SESSION ENDED" color={tokens.scene.muted} onClose={onClose}/><div className="facts"><Fact label="Runtime">{duration(entry.runtimeMs)}</Fact><Fact label="Tickets served">{availableTickets(entry.tickets)}</Fact><Fact label="Ended at">{ended.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</Fact><Fact label="Final state"><span style={{color}}>{stateWords[entry.finalState]}</span></Fact></div></FocusedPanel>;}
-function PanelHeader({name,label,color,onClose}:{name:string;label:string;color:string;onClose():void}){return <header className="panelHeader"><div><h2>{name}</h2><div className="stateChip"><i style={{background:color}}/><span style={{color}}>{label}</span></div></div><button onClick={onClose} aria-label="Close panel">✕</button></header>;}
-function Toggle({on,label,onChange}:{on:boolean;label:string;onChange():void}){return <button role="switch" aria-label={label} aria-checked={on} className={`toggle ${on?"on":""}`} onClick={onChange}><i/></button>;}
-export function SettingsPanel({settings,onChange,onClose}:{settings:Settings;onChange(patch:Partial<Settings>):void;onClose():void}){const toggleSound=()=>{if(!settings.sound)void resumeBellAudio();onChange({sound:!settings.sound});};return <FocusedPanel className="panel settingsPanel" label="Settings"><header className="settingsHeader"><h2>Settings</h2><button onClick={onClose} aria-label="Close settings">✕</button></header><SettingRow title="Service bell" note="Single ding when an agent blocks"><Toggle label="Service bell" on={settings.sound} onChange={toggleSound}/></SettingRow><section className="settingBlock"><b>Theme</b><div className="segments">{([['light','Light'],['dark','Dinner'],['system','System']] as const).map(([value,label])=><button key={value} aria-pressed={settings.theme===value} onClick={()=>onChange({theme:value})}>{label}</button>)}</div></section><SettingRow title="Done timeout" note="Busser clears plated dishes after"><select aria-label="Done timeout" value={settings.doneTimeoutMs} onChange={event=>onChange({doneTimeoutMs:Number(event.target.value)})}><option value={300000}>5 min</option><option value={600000}>10 min</option><option value={1200000}>20 min</option></select></SettingRow><section className="settingBlock"><b>Blocked escalation</b><label>Faster bell after <select aria-label="Faster bell after" value={settings.escalationFastMs} onChange={event=>onChange({escalationFastMs:Number(event.target.value)})}><option value={30000}>30 sec</option><option value={60000}>1 min</option><option value={120000}>2 min</option></select></label><label>Screen-edge glow after <select aria-label="Screen-edge glow after" value={settings.escalationVignetteMs} onChange={event=>onChange({escalationVignetteMs:Number(event.target.value)})}><option value={180000}>3 min</option><option value={300000}>5 min</option><option value={600000}>10 min</option></select></label></section></FocusedPanel>;}
-function SettingRow({title,note,children}:{title:string;note:string;children:React.ReactNode}){return <section className="settingRow"><div><b>{title}</b><small>{note}</small></div>{children}</section>;}
-const sourceStatusText={unavailableSocket:"Herdr socket unavailable",timeout:"Herdr did not respond in time",unsupportedProtocol:"Herdr protocol is unsupported",incompatibleResponse:"Herdr returned an incompatible response",connected:"Connected to Herdr"} as const;
-export function ModeTreatment({mode,sourceStatus,sourceDiagnostic=null,lastUpdateSeconds}:{mode:CoarseSlice['mode'];sourceStatus:CoarseSlice['sourceStatus'];sourceDiagnostic?:SourceDiagnostic|null;lastUpdateSeconds:number}){const detail=sourceStatus==="unsupportedProtocol"&&sourceDiagnostic?` — observed ${sourceDiagnostic.observedProtocol}; supported: ${sourceDiagnostic.supportedProtocols.join(", ")}; ${sourceDiagnostic.nextAction}`:"";if(mode==="empty")return <div className="emptyPill" role="status">Waiting for agents — start one in herdr</div>;if(mode==="demo")return <div className="demoPlacard" role="status"><h2>DEMO SERVICE</h2><hr/><p>Mock feed — {sourceStatusText[sourceStatus]}{detail}. Nothing here is real.</p><small>POSTED PER ORDINANCE 86.86</small></div>;if(mode==="disconnected")return <div className="disconnectScrim"><div className="disconnectCard" role="alert"><h2>GAS LEAK — SERVICE SUSPENDED</h2><strong>Lost connection to herdr</strong><p><i/>Retrying — last update {lastUpdateSeconds}s ago</p><small>The kitchen will reopen on its own. If herdr isn't running, start it and mise will reconnect.</small></div></div>;return null;}
-export function StatsOverlay({metrics}:{metrics:DebugMetrics}){return <output className="statsOverlay" aria-label="Performance statistics"><b>MISE STATS</b><span>draw calls {metrics.drawCalls}</span><span>socket {metrics.socketBytesPerSecond} B/s</span></output>;}
+export function Chrome(props: ChromeProps) {
+  const snapshot = props.store.snapshot(),
+    selectedAgent = props.coarse.selectedId
+      ? snapshot.agents.get(props.coarse.selectedId)
+      : undefined,
+    selectedBoard = props.coarse.selectedId
+      ? snapshot.board.find((item) => item.id === props.coarse.selectedId)
+      : undefined;
+  const hoverHit = props.hits.find(
+      (hit) =>
+        hit.kind === "station" &&
+        hit.id === (props.hoveredId ?? props.focusedId),
+    ),
+    hoverAgent = hoverHit ? snapshot.agents.get(hoverHit.id) : undefined;
+  return (
+    <>
+      {hoverAgent && hoverHit && <Tooltip agent={hoverAgent} hit={hoverHit} />}
+      {selectedAgent && (
+        <DetailCard
+          agent={selectedAgent}
+          onClose={() => props.store.select(null)}
+        />
+      )}
+      {selectedBoard && (
+        <SessionSummary
+          entry={selectedBoard}
+          onClose={() => props.store.select(null)}
+        />
+      )}
+      {props.settingsOpen && (
+        <SettingsPanel
+          settings={props.coarse.settings}
+          onChange={(patch) => props.store.setSettings(patch)}
+          onClose={props.onCloseSettings}
+        />
+      )}
+      {!props.settingsOpen && (
+        <button
+          className="settingsTrigger"
+          onClick={props.onOpenSettings}
+          aria-label="Open settings"
+        >
+          Settings
+        </button>
+      )}
+      <ModeTreatment
+        mode={props.coarse.mode}
+        sourceStatus={props.coarse.sourceStatus}
+        sourceDiagnostic={props.coarse.sourceDiagnostic}
+        lastUpdateSeconds={props.lastUpdateSeconds}
+      />
+      {props.hintVisible && (
+        <div className="firstHint" role="note">
+          Blocked cooks ring the service bell.{" "}
+          <button onClick={props.onDismissHint}>Got it</button>
+        </div>
+      )}
+      {props.statsOpen && <StatsOverlay metrics={props.metrics} />}
+    </>
+  );
+}
+
+export function Tooltip({
+  agent,
+  hit,
+}: {
+  agent: AgentMachine;
+  hit: SceneHit;
+}) {
+  const now = useClock(true),
+    style = {
+      left: hit.rect.x + hit.rect.width / 2,
+      top: Math.max(8, hit.rect.y - 8),
+    };
+  return (
+    <div className="stationTooltip" style={style} role="tooltip">
+      <strong>{agent.name}</strong>
+      <span>{stateWords[agent.targetState]}</span>
+      <time>{duration(now - Date.parse(agent.stateEnteredAt))} in state</time>
+    </div>
+  );
+}
+function Fact({
+  label,
+  children,
+  mono = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="fact">
+      <span>{label}</span>
+      <b className={mono ? "mono" : undefined}>{children}</b>
+    </div>
+  );
+}
+function HistoryStrip({
+  history,
+  now,
+}: {
+  history: readonly StatePeriod[];
+  now: number;
+}) {
+  const start = history[0]?.startedAt ?? now,
+    total = Math.max(1, now - start);
+  return (
+    <section className="sessionHistory" aria-label="Session history">
+      <h3>SESSION HISTORY</h3>
+      <div className="historyStrip">
+        {history.map((period, index) => {
+          const end = history[index + 1]?.startedAt ?? now,
+            width = Math.max(1, ((end - period.startedAt) / total) * 100);
+          return (
+            <i
+              key={`${period.state}-${period.startedAt}`}
+              data-state={period.state}
+              style={{
+                width: `${width}%`,
+                background: historyColor(period.state),
+              }}
+              title={stateWords[period.state]}
+            />
+          );
+        })}
+      </div>
+      <div className="historyTimes">
+        <time>
+          {new Date(start).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </time>
+        <span>now</span>
+      </div>
+    </section>
+  );
+}
+function historyColor(state: StatePeriod["state"]) {
+  if (state === "blocked") return tokens.semantic.blocked;
+  if (state === "working") return tokens.semantic.flame;
+  if (state === "done") return tokens.semantic.done;
+  return tokens.scene.ticketDone;
+}
+const availableText = (value: string) => value.trim() || "Unavailable";
+const availableTickets = (value: number) => (value > 0 ? value : "Unavailable");
+export function DetailCard({
+  agent,
+  onClose,
+}: {
+  agent: AgentMachine;
+  onClose(): void;
+}) {
+  const now = useClock(true),
+    color = stateColor(agent);
+  return (
+    <FocusedPanel label={`${agent.name} details`}>
+      <PanelHeader
+        name={agent.name}
+        label={stateLabels[agent.targetState]}
+        color={color}
+        onClose={onClose}
+      />
+      <div className="facts">
+        <Fact label="Model">{availableText(agent.model)}</Fact>
+        <Fact label="Workspace" mono>
+          {availableText(agent.workspace)}
+        </Fact>
+        <Fact label="Time in state">
+          {duration(now - Date.parse(agent.stateEnteredAt))}
+        </Fact>
+        <Fact label="Tickets this session">
+          {availableTickets(agent.session.tickets)}
+        </Fact>
+      </div>
+      <HistoryStrip history={agent.history} now={now} />
+    </FocusedPanel>
+  );
+}
+export function SessionSummary({
+  entry,
+  onClose,
+}: {
+  entry: BoardEntry;
+  onClose(): void;
+}) {
+  const ended = new Date(entry.endedAt),
+    color =
+      entry.finalState === "blocked"
+        ? tokens.semantic.blocked
+        : entry.finalState === "working"
+          ? tokens.semantic.flame
+          : entry.finalState === "done"
+            ? tokens.semantic.done
+            : tokens.scene.muted;
+  return (
+    <FocusedPanel label={`${entry.name} session summary`}>
+      <PanelHeader
+        name={entry.name}
+        label="86'D — SESSION ENDED"
+        color={tokens.scene.muted}
+        onClose={onClose}
+      />
+      <div className="facts">
+        <Fact label="Runtime">{duration(entry.runtimeMs)}</Fact>
+        <Fact label="Tickets served">{availableTickets(entry.tickets)}</Fact>
+        <Fact label="Ended at">
+          {ended.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </Fact>
+        <Fact label="Final state">
+          <span style={{ color }}>{stateWords[entry.finalState]}</span>
+        </Fact>
+      </div>
+    </FocusedPanel>
+  );
+}
+function PanelHeader({
+  name,
+  label,
+  color,
+  onClose,
+}: {
+  name: string;
+  label: string;
+  color: string;
+  onClose(): void;
+}) {
+  return (
+    <header className="panelHeader">
+      <div>
+        <h2>{name}</h2>
+        <div className="stateChip">
+          <i style={{ background: color }} />
+          <span style={{ color }}>{label}</span>
+        </div>
+      </div>
+      <button onClick={onClose} aria-label="Close panel">
+        ✕
+      </button>
+    </header>
+  );
+}
+function Toggle({
+  on,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  label: string;
+  onChange(): void;
+}) {
+  return (
+    <button
+      role="switch"
+      aria-label={label}
+      aria-checked={on}
+      className={`toggle ${on ? "on" : ""}`}
+      onClick={onChange}
+    >
+      <i />
+    </button>
+  );
+}
+export function SettingsPanel({
+  settings,
+  onChange,
+  onClose,
+}: {
+  settings: Settings;
+  onChange(patch: Partial<Settings>): void;
+  onClose(): void;
+}) {
+  const toggleSound = () => {
+    if (!settings.sound) void resumeBellAudio();
+    onChange({ sound: !settings.sound });
+  };
+  return (
+    <FocusedPanel className="panel settingsPanel" label="Settings">
+      <header className="settingsHeader">
+        <h2>Settings</h2>
+        <button onClick={onClose} aria-label="Close settings">
+          ✕
+        </button>
+      </header>
+      <SettingRow title="Service bell" note="Single ding when an agent blocks">
+        <Toggle
+          label="Service bell"
+          on={settings.sound}
+          onChange={toggleSound}
+        />
+      </SettingRow>
+      <section className="settingBlock">
+        <b>Theme</b>
+        <div className="segments">
+          {(
+            [
+              ["light", "Light"],
+              ["dark", "Dinner"],
+              ["system", "System"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              aria-pressed={settings.theme === value}
+              onClick={() => onChange({ theme: value })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
+      <SettingRow title="Done timeout" note="Busser clears plated dishes after">
+        <select
+          aria-label="Done timeout"
+          value={settings.doneTimeoutMs}
+          onChange={(event) =>
+            onChange({ doneTimeoutMs: Number(event.target.value) })
+          }
+        >
+          <option value={300000}>5 min</option>
+          <option value={600000}>10 min</option>
+          <option value={1200000}>20 min</option>
+        </select>
+      </SettingRow>
+      <section className="settingBlock">
+        <b>Blocked escalation</b>
+        <label>
+          Faster bell after{" "}
+          <select
+            aria-label="Faster bell after"
+            value={settings.escalationFastMs}
+            onChange={(event) =>
+              onChange({ escalationFastMs: Number(event.target.value) })
+            }
+          >
+            <option value={30000}>30 sec</option>
+            <option value={60000}>1 min</option>
+            <option value={120000}>2 min</option>
+          </select>
+        </label>
+        <label>
+          Screen-edge glow after{" "}
+          <select
+            aria-label="Screen-edge glow after"
+            value={settings.escalationVignetteMs}
+            onChange={(event) =>
+              onChange({ escalationVignetteMs: Number(event.target.value) })
+            }
+          >
+            <option value={180000}>3 min</option>
+            <option value={300000}>5 min</option>
+            <option value={600000}>10 min</option>
+          </select>
+        </label>
+      </section>
+    </FocusedPanel>
+  );
+}
+function SettingRow({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="settingRow">
+      <div>
+        <b>{title}</b>
+        <small>{note}</small>
+      </div>
+      {children}
+    </section>
+  );
+}
+const sourceStatusText = {
+  unavailableSocket: "Herdr socket unavailable",
+  timeout: "Herdr did not respond in time",
+  unsupportedProtocol: "Herdr protocol is unsupported",
+  incompatibleResponse: "Herdr returned an incompatible response",
+  connected: "Connected to Herdr",
+} as const;
+export function ModeTreatment({
+  mode,
+  sourceStatus,
+  sourceDiagnostic = null,
+  lastUpdateSeconds,
+}: {
+  mode: CoarseSlice["mode"];
+  sourceStatus: CoarseSlice["sourceStatus"];
+  sourceDiagnostic?: SourceDiagnostic | null;
+  lastUpdateSeconds: number;
+}) {
+  const detail =
+    sourceStatus === "unsupportedProtocol" && sourceDiagnostic
+      ? ` — observed ${sourceDiagnostic.observedProtocol}; supported: ${sourceDiagnostic.supportedProtocols.join(", ")}; ${sourceDiagnostic.nextAction}`
+      : "";
+  if (mode === "empty")
+    return (
+      <div className="emptyPill" role="status">
+        Waiting for agents — start one in herdr
+      </div>
+    );
+  if (mode === "demo")
+    return (
+      <div className="demoPlacard" role="status">
+        <h2>DEMO SERVICE</h2>
+        <hr />
+        <p>
+          Mock feed — {sourceStatusText[sourceStatus]}
+          {detail}. Nothing here is real.
+        </p>
+        <small>POSTED PER ORDINANCE 86.86</small>
+      </div>
+    );
+  if (mode === "disconnected")
+    return (
+      <div className="disconnectScrim">
+        <div className="disconnectCard" role="alert">
+          <h2>GAS LEAK — SERVICE SUSPENDED</h2>
+          <strong>Lost connection to herdr</strong>
+          <p>
+            <i />
+            Retrying — last update {lastUpdateSeconds}s ago
+          </p>
+          <small>
+            The kitchen will reopen on its own. If herdr isn't running, start it
+            and mise will reconnect.
+          </small>
+        </div>
+      </div>
+    );
+  return null;
+}
+export function StatsOverlay({ metrics }: { metrics: DebugMetrics }) {
+  return (
+    <output className="statsOverlay" aria-label="Performance statistics">
+      <b>MISE STATS</b>
+      <span>draw calls {metrics.drawCalls}</span>
+      <span>socket {metrics.socketBytesPerSecond} B/s</span>
+    </output>
+  );
+}

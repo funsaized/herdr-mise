@@ -74,12 +74,14 @@ matrix below; only snapshots outside that manifest-derived set trigger
 `unsupportedProtocol`. Other product versions on those protocols are accepted
 but are not part of the verified release matrix.
 
+<!-- prettier-ignore-start -->
 <!-- herdr-compatibility:start -->
 | Herdr release | Snapshot protocol |
 |---|---|
 | `0.7.5` | `17` |
 | `0.8.0` | `19` |
 <!-- herdr-compatibility:end -->
+<!-- prettier-ignore-end -->
 
 The authoritative evidence is `compatibility/herdr.json`; each row names its
 immutable upstream commit and manually sanitized fixture. Run
@@ -98,8 +100,8 @@ The GIF and screens below are repeatable captures from the isolated visual
 playground's deterministic feed. Regenerate them with `npm run capture:readme`
 (Playwright Chromium and `ffmpeg` required).
 
-| Mixed lunch service | Mixed dinner service | Settings |
-|---|---|---|
+| Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
 
 ## What it is and what it intentionally doesn't show
@@ -132,13 +134,13 @@ Cooks move through five states. The tokens module owns their visual
 signatures; service red `#d8342c` is reserved for `blocked` and nothing else
 (`client/src/theme/tokens.ts`, `scripts/audit-tokens.mjs`).
 
-| State      | Kitchen metaphor      | Where the cook is                | Visual signature                         |
-|------------|-----------------------|----------------------------------|------------------------------------------|
-| `idle`     | Prepping              | Home station                     | Slow chop/wipe loop, no ticket            |
-| `working`  | On the fire           | Home station                     | Flame + steam, white ticket, green edge  |
-| `blocked`  | At the pass           | Pass front, red ticket at pass   | Red ring arcs, elapsed timer chip        |
-| `done`     | Plated                | Home station                     | Plate under lamps, ticket spiked (gray)  |
-| `ended`    | 86'd                  | Exits through back door          | Chalk row appended to the 86 board        |
+| State     | Kitchen metaphor | Where the cook is              | Visual signature                        |
+| --------- | ---------------- | ------------------------------ | --------------------------------------- |
+| `idle`    | Prepping         | Home station                   | Slow chop/wipe loop, no ticket          |
+| `working` | On the fire      | Home station                   | Flame + steam, white ticket, green edge |
+| `blocked` | At the pass      | Pass front, red ticket at pass | Red ring arcs, elapsed timer chip       |
+| `done`    | Plated           | Home station                   | Plate under lamps, ticket spiked (gray) |
+| `ended`   | 86'd             | Exits through back door        | Chalk row appended to the 86 board      |
 
 State machine and rendering limits are enforced in code:
 
@@ -157,7 +159,7 @@ chrome surfaces honestly:
 - **Demo service.** Until a compatible Herdr snapshot is available, the
   server runs a deterministic mock
   roster (`server/src/demo.rs`) and a persistent
-  *DEMO SERVICE* placard is rendered in the chrome
+  _DEMO SERVICE_ placard is rendered in the chrome
   (`client/src/chrome/Chrome.tsx` `ModeTreatment`). The placard is not
   dismissible and names the actual non-sensitive condition: unavailable
   socket, timeout, unsupported protocol, or incompatible response. The server
@@ -169,11 +171,11 @@ chrome surfaces honestly:
   from firing on a quiet live feed
   (`server/src/service.rs`, `protocol/fixtures/heartbeat.v1.json`).
   When the WebSocket stays silent for ~2.9 s the client surfaces
-  *GAS LEAK — SERVICE SUSPENDED* and a `Retrying — last update Ns ago`
+  _GAS LEAK — SERVICE SUSPENDED_ and a `Retrying — last update Ns ago`
   counter, reconnects in 1 s, and resyncs from a fresh snapshot
   (`client/src/state/ws-client.ts`, `client/src/chrome/Chrome.tsx`).
 - **Empty kitchen.** Connected with zero agents, the chrome shows a
-  lower-center pill *Waiting for agents — start one in herdr* and the
+  lower-center pill _Waiting for agents — start one in herdr_ and the
   back door sits ajar.
 
 ## Prerequisites
@@ -288,11 +290,11 @@ archive contains the `herdr-mise` executable, the project `LICENSE`, and a
 generated `THIRD_PARTY_NOTICES.txt` covering locked Rust and JavaScript
 dependencies plus the bundled fonts.
 
-| Platform | Target triple | Archive |
-|---|---|---|
-| macOS Apple Silicon | `aarch64-apple-darwin` | `herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz` |
-| macOS Intel | `x86_64-apple-darwin` | `herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz` |
-| Linux x86_64 | `x86_64-unknown-linux-gnu` | `herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz` |
+| Platform            | Target triple              | Archive                                                  |
+| ------------------- | -------------------------- | -------------------------------------------------------- |
+| macOS Apple Silicon | `aarch64-apple-darwin`     | `herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz`     |
+| macOS Intel         | `x86_64-apple-darwin`      | `herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz`      |
+| Linux x86_64        | `x86_64-unknown-linux-gnu` | `herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz` |
 
 Always download the archive **and** its `.sha256` sidecar, verify the checksum
 before extraction, and allow any failed step to prevent execution. The sole
@@ -427,23 +429,23 @@ session.
 These are the exact commands the project uses as gates. Each is
 locally runnable today.
 
-| Gate                      | Command                              | Notes |
-|---------------------------|--------------------------------------|-------|
-| Rust format               | `cargo fmt --all --check`            | |
-| Rust check                | `cargo check --workspace`            | |
-| Rust tests                | `cargo test --workspace --locked`    | typed heartbeat, snapshot-before-delta, protocol-17/19 adapter, ended eviction, coalescer, WS origin policy and extra-origin opt-in |
-| Client typecheck          | `npm run typecheck`                  | |
-| Client lint               | `npm run lint`                       | |
-| Client tests              | `npm test`                           | store, WebSocket, visual harness, chrome, settings, protocol fixtures, layout and sound |
-| Token audit               | `npm run audit:tokens`               | service red must be blocked-only |
-| Architecture audit        | `npm run audit:architecture`         | native Pixi classes only |
-| Accessibility audit       | `npm run audit:accessibility`        | Chrome and day/dinner station-label contrast ≥ 4.5:1 |
-| Production build          | `npm run build`                      | |
-| Bundle budget             | `npm run check:bundle`               | WebGL gzip ≤ 400 KB, total transfer ≤ 1.5 MB |
-| Embedded-binary smoke     | `npm run smoke`                      | binds 127.0.0.1:8686, demo roster of 12, graceful shutdown |
-| Server resource assertions| `npm run measure:server`             | RSS ≤ 50 MiB, CPU ≤ 1% |
-| Release pipeline check    | `npm run validate:release`           | validates the locally available target; tagged builds validate all three release targets |
-| Performance suite         | `npm run perf`                       | Browser startup, bundle, latency, hidden-tab, and wire-traffic gates; server resources are covered separately |
+| Gate                       | Command                           | Notes                                                                                                                               |
+| -------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Rust format                | `cargo fmt --all --check`         |                                                                                                                                     |
+| Rust check                 | `cargo check --workspace`         |                                                                                                                                     |
+| Rust tests                 | `cargo test --workspace --locked` | typed heartbeat, snapshot-before-delta, protocol-17/19 adapter, ended eviction, coalescer, WS origin policy and extra-origin opt-in |
+| Client typecheck           | `npm run typecheck`               |                                                                                                                                     |
+| Client lint                | `npm run lint`                    |                                                                                                                                     |
+| Client tests               | `npm test`                        | store, WebSocket, visual harness, chrome, settings, protocol fixtures, layout and sound                                             |
+| Token audit                | `npm run audit:tokens`            | service red must be blocked-only                                                                                                    |
+| Architecture audit         | `npm run audit:architecture`      | native Pixi classes only                                                                                                            |
+| Accessibility audit        | `npm run audit:accessibility`     | Chrome and day/dinner station-label contrast ≥ 4.5:1                                                                                |
+| Production build           | `npm run build`                   |                                                                                                                                     |
+| Bundle budget              | `npm run check:bundle`            | WebGL gzip ≤ 400 KB, total transfer ≤ 1.5 MB                                                                                        |
+| Embedded-binary smoke      | `npm run smoke`                   | binds 127.0.0.1:8686, demo roster of 12, graceful shutdown                                                                          |
+| Server resource assertions | `npm run measure:server`          | RSS ≤ 50 MiB, CPU ≤ 1%                                                                                                              |
+| Release pipeline check     | `npm run validate:release`        | validates the locally available target; tagged builds validate all three release targets                                            |
+| Performance suite          | `npm run perf`                    | Browser startup, bundle, latency, hidden-tab, and wire-traffic gates; server resources are covered separately                       |
 
 ## Performance policy
 

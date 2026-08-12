@@ -15,68 +15,161 @@ const STATE_WORDS = {
 const IDENTITIES = ["Codex", "Claude", "Hermes", "OpenClaw", "Gemini", "Aider"];
 
 function expectedNames(preset: string, count: number) {
-  return new Set(Array.from({ length: count }, (_, index) => {
-    if (preset !== "mixed") return `mise-${String(index + 1).padStart(2, "0")}`;
-    const cycle = Math.floor(index / IDENTITIES.length) + 1;
-    return `${IDENTITIES[index % IDENTITIES.length]}${cycle > 1 ? `-${cycle}` : ""}`;
-  }));
+  return new Set(
+    Array.from({ length: count }, (_, index) => {
+      if (preset !== "mixed")
+        return `mise-${String(index + 1).padStart(2, "0")}`;
+      const cycle = Math.floor(index / IDENTITIES.length) + 1;
+      return `${IDENTITIES[index % IDENTITIES.length]}${cycle > 1 ? `-${cycle}` : ""}`;
+    }),
+  );
 }
 
 function watchErrors(page: Page) {
   const errors: string[] = [];
-  page.on("pageerror", error => errors.push(String(error)));
-  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
-  page.on("requestfailed", request => errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "request failed"}`));
+  page.on("pageerror", (error) => errors.push(String(error)));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  page.on("requestfailed", (request) =>
+    errors.push(
+      `${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "request failed"}`,
+    ),
+  );
   return errors;
 }
 
-type MotionMetrics={motion:{reduced:boolean;activeParticles:number;activeTransitions:number;activeBusserSweeps:number;continuous:boolean;preferenceChanges:number};blockedIndicators:number;stateIndicators:Record<string,number>;endedEntries:number};
-const sceneMetrics=(page:Page)=>page.evaluate(()=>(window as typeof window&{__miseSceneMetrics?:()=>MotionMetrics}).__miseSceneMetrics?.());
+type MotionMetrics = {
+  motion: {
+    reduced: boolean;
+    activeParticles: number;
+    activeTransitions: number;
+    activeBusserSweeps: number;
+    continuous: boolean;
+    preferenceChanges: number;
+  };
+  blockedIndicators: number;
+  stateIndicators: Record<string, number>;
+  endedEntries: number;
+};
+const sceneMetrics = (page: Page) =>
+  page.evaluate(() =>
+    (
+      window as typeof window & { __miseSceneMetrics?: () => MotionMetrics }
+    ).__miseSceneMetrics?.(),
+  );
 
-const placard = (page: Page) => page.getByRole("status").filter({ hasText: "DEMO SERVICE" });
+const placard = (page: Page) =>
+  page.getByRole("status").filter({ hasText: "DEMO SERVICE" });
 
-test("reduced motion is static before blocked-scene startup in light and dinner themes",async({page})=>{
-  const errors=watchErrors(page);
-  await page.emulateMedia({reducedMotion:"reduce"});
-  for(const theme of ["light","dinner"]){
+test("reduced motion is static before blocked-scene startup in light and dinner themes", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const theme of ["light", "dinner"]) {
     await page.goto(`/?preset=blocked&agents=1&theme=${theme}&stats`);
     await expect(placard(page)).toBeVisible();
-    await expect(page.getByRole("button",{name:"mise-01, Blocked — at the pass, open details"})).toHaveCount(1);
-    await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,activeParticles:0,activeTransitions:0,activeBusserSweeps:0,continuous:false},blockedIndicators:1});
+    await expect(
+      page.getByRole("button", {
+        name: "mise-01, Blocked — at the pass, open details",
+      }),
+    ).toHaveCount(1);
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        motion: {
+          reduced: true,
+          activeParticles: 0,
+          activeTransitions: 0,
+          activeBusserSweeps: 0,
+          continuous: false,
+        },
+        blockedIndicators: 1,
+      });
   }
   expect(errors).toEqual([]);
 });
 
-test("runtime preference changes preserve mixed lifecycle truth in both directions",async({page})=>{
-  const errors=watchErrors(page),hero=(state:string)=>page.getByRole("button",{name:`Codex, ${state}, open details`});
-  await page.emulateMedia({reducedMotion:"reduce"});
+test("runtime preference changes preserve mixed lifecycle truth in both directions", async ({
+  page,
+}) => {
+  const errors = watchErrors(page),
+    hero = (state: string) =>
+      page.getByRole("button", { name: `Codex, ${state}, open details` });
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?preset=mixed&agents=6&stats");
   await expect(hero("Working — on the fire")).toHaveCount(1);
-  await page.emulateMedia({reducedMotion:"no-preference"});
-  await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:false,continuous:true,preferenceChanges:1}});
-  await expect(hero("Blocked — at the pass")).toHaveCount(1,{timeout:8_000});
-  await expect(page.getByLabel("Agent state announcements")).toHaveText("Codex blocked, just now");
-  await page.emulateMedia({reducedMotion:"reduce"});
-  await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,activeParticles:0,activeTransitions:0,activeBusserSweeps:0,continuous:false,preferenceChanges:2},blockedIndicators:3});
-  await expect(hero("Working — on the fire")).toHaveCount(1,{timeout:5_000});
-  await expect(hero("Done — plated")).toHaveCount(1,{timeout:5_000});
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({
+      motion: { reduced: false, continuous: true, preferenceChanges: 1 },
+    });
+  await expect(hero("Blocked — at the pass")).toHaveCount(1, {
+    timeout: 8_000,
+  });
+  await expect(page.getByLabel("Agent state announcements")).toHaveText(
+    "Codex blocked, just now",
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({
+      motion: {
+        reduced: true,
+        activeParticles: 0,
+        activeTransitions: 0,
+        activeBusserSweeps: 0,
+        continuous: false,
+        preferenceChanges: 2,
+      },
+      blockedIndicators: 3,
+    });
+  await expect(hero("Working — on the fire")).toHaveCount(1, {
+    timeout: 5_000,
+  });
+  await expect(hero("Done — plated")).toHaveCount(1, { timeout: 5_000 });
   expect(errors).toEqual([]);
 });
 
-test("reduced startup preserves idle working blocked waiting and ended state indicators",async({page})=>{
-  const errors=watchErrors(page);
-  await page.emulateMedia({reducedMotion:"reduce"});
-  for(const [preset,label] of [["idle","Idle — prepping"],["working","Working — on the fire"],["blocked","Blocked — at the pass"]] as const){
+test("reduced startup preserves idle working blocked waiting and ended state indicators", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const [preset, label] of [
+    ["idle", "Idle — prepping"],
+    ["working", "Working — on the fire"],
+    ["blocked", "Blocked — at the pass"],
+  ] as const) {
     await page.goto(`/?preset=${preset}&agents=1&stats`);
-    await expect(page.getByRole("button",{name:`mise-01, ${label}, open details`})).toHaveCount(1);
-    await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,continuous:false},stateIndicators:{[preset]:1},endedEntries:0});
+    await expect(
+      page.getByRole("button", { name: `mise-01, ${label}, open details` }),
+    ).toHaveCount(1);
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        motion: { reduced: true, continuous: false },
+        stateIndicators: { [preset]: 1 },
+        endedEntries: 0,
+      });
   }
-  await page.setViewportSize({width:1280,height:720});
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=ended&agents=1&stats");
-  await expect(page.getByRole("status").filter({hasText:"Waiting for agents"})).toBeVisible();
-  await expect.poll(async()=>sceneMetrics(page)).toMatchObject({motion:{reduced:true,continuous:false},endedEntries:1});
-  await page.mouse.click((1280-368)/2+3*4+16,(4+12)*4+4);
-  await expect(page.getByRole("complementary",{name:"mise-01 session summary"})).toContainText("86'D — SESSION ENDED");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Waiting for agents" }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({
+      motion: { reduced: true, continuous: false },
+      endedEntries: 1,
+    });
+  await page.mouse.click((1280 - 368) / 2 + 3 * 4 + 16, (4 + 12) * 4 + 4);
+  await expect(
+    page.getByRole("complementary", { name: "mise-01 session summary" }),
+  ).toContainText("86'D — SESSION ENDED");
   expect(errors).toEqual([]);
 });
 
@@ -89,10 +182,14 @@ async function collectStationNames(page: Page, expected: number) {
   while (names.size < expected && Date.now() < deadline) {
     await page.keyboard.press("ArrowRight");
     try {
-      const name = await page.getByRole("tooltip").locator("strong")
+      const name = await page
+        .getByRole("tooltip")
+        .locator("strong")
         .textContent({ timeout: 1_000 });
       if (name) names.add(name);
-    } catch { /* scene hits not ready yet */ }
+    } catch {
+      /* scene hits not ready yet */
+    }
   }
   return names;
 }
@@ -104,9 +201,13 @@ for (const preset of ["idle", "working", "blocked", "done", "mixed"] as const) {
       await page.goto(`/?preset=${preset}&agents=${count}`);
       await expect(placard(page)).toBeVisible();
       const names = await collectStationNames(page, count);
-      expect([...names].sort()).toEqual([...expectedNames(preset, count)].sort());
+      expect([...names].sort()).toEqual(
+        [...expectedNames(preset, count)].sort(),
+      );
       if (preset !== "mixed") {
-        await expect(page.getByRole("tooltip")).toContainText(STATE_WORDS[preset]);
+        await expect(page.getByRole("tooltip")).toContainText(
+          STATE_WORDS[preset],
+        );
       }
       expect(errors).toEqual([]);
     });
@@ -114,12 +215,16 @@ for (const preset of ["idle", "working", "blocked", "done", "mixed"] as const) {
 }
 
 for (const count of COUNTS) {
-  test(`ended x ${count} empties the kitchen onto the 86 board`, async ({ page }) => {
+  test(`ended x ${count} empties the kitchen onto the 86 board`, async ({
+    page,
+  }) => {
     const errors = watchErrors(page);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`/?preset=ended&agents=${count}`);
     // All records are 86'd, so the truthful mode treatment is the empty pill.
-    await expect(page.getByRole("status").filter({ hasText: "Waiting for agents" })).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Waiting for agents" }),
+    ).toBeVisible();
     // Ended records pass through the store before the first frame, so no
     // active station exists to focus.
     await page.keyboard.press("ArrowRight");
@@ -140,19 +245,29 @@ test("dinner theme URL selects the dark lighting setting", async ({ page }) => {
   await page.goto("/?preset=blocked&agents=12&theme=dinner");
   await expect(placard(page)).toBeVisible();
   await page.getByRole("button", { name: "Open settings" }).click();
-  await expect(page.getByRole("button", { name: "Dinner" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Dinner" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 });
 
 test("idle cooks expose all four stable decorative poses", async ({ page }) => {
   await page.goto("/?preset=idle&agents=6&stats");
   await expect(placard(page)).toBeVisible();
-  const readPoses = () => page.evaluate(() => {
-    const metrics = (window as typeof window & { __miseSceneMetrics?: () => { idlePoses: Record<string, string> } }).__miseSceneMetrics?.();
-    return metrics?.idlePoses ?? {};
-  });
+  const readPoses = () =>
+    page.evaluate(() => {
+      const metrics = (
+        window as typeof window & {
+          __miseSceneMetrics?: () => { idlePoses: Record<string, string> };
+        }
+      ).__miseSceneMetrics?.();
+      return metrics?.idlePoses ?? {};
+    });
   await expect.poll(async () => Object.keys(await readPoses()).length).toBe(6);
   const first = await readPoses();
-  expect(new Set(Object.values(first))).toEqual(new Set(["smoke", "recline", "sleep", "prep"]));
+  expect(new Set(Object.values(first))).toEqual(
+    new Set(["smoke", "recline", "sleep", "prep"]),
+  );
   await page.waitForTimeout(500);
   expect(await readPoses()).toEqual(first);
 });
@@ -188,15 +303,23 @@ test("visual mode never touches persisted storage", async ({ page }) => {
   await expect(page.getByRole("note")).toBeVisible();
 });
 
-test("HMR socket delegates to native WebSocket and feed stays live past the stale timeout", async ({ page }) => {
+test("HMR socket delegates to native WebSocket and feed stays live past the stale timeout", async ({
+  page,
+}) => {
   const errors = watchErrors(page);
   const viteMessages: string[] = [];
-  page.on("console", message => { if (message.text().includes("[vite]")) viteMessages.push(message.text()); });
+  page.on("console", (message) => {
+    if (message.text().includes("[vite]")) viteMessages.push(message.text());
+  });
   await page.goto("/?preset=working&agents=6");
   await expect(placard(page)).toBeVisible();
   // Vite's HMR client connects over a non-/ws WebSocket; it only succeeds if
   // the visual override delegated to the captured native constructor.
-  await expect.poll(() => viteMessages.some(text => text.includes("connected")), { timeout: 10_000 }).toBe(true);
+  await expect
+    .poll(() => viteMessages.some((text) => text.includes("connected")), {
+      timeout: 10_000,
+    })
+    .toBe(true);
   // The client marks the feed disconnected after 2.9s without frames; mock
   // heartbeats every 2s must keep it alive well past that.
   await page.waitForTimeout(6_500);
@@ -205,26 +328,34 @@ test("HMR socket delegates to native WebSocket and feed stays live past the stal
   expect(errors).toEqual([]);
 });
 
-test("semantic station controls are AX-only Tab exclusions and restore focus after details close", async ({ page }) => {
-  await page.emulateMedia({reducedMotion:"reduce"});
+test("semantic station controls are AX-only Tab exclusions and restore focus after details close", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?preset=working&agents=2");
-  const station = page.getByRole("button", { name: "mise-01, Working — on the fire, open details" });
+  const station = page.getByRole("button", {
+    name: "mise-01, Working — on the fire, open details",
+  });
   await expect(station).toHaveAttribute("tabindex", "-1");
   await station.evaluate((element) => (element as HTMLButtonElement).click());
-  const panel=page.getByRole("complementary", { name: "mise-01 details" });
+  const panel = page.getByRole("complementary", { name: "mise-01 details" });
   await expect(panel).toBeVisible();
   await expect(panel).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("complementary", { name: "mise-01 details" })).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "mise-01 details" }),
+  ).toHaveCount(0);
   await expect(station).toBeFocused();
 });
 
 test("settings restores focus to its visible trigger", async ({ page }) => {
-  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?preset=working&agents=1");
   const trigger = page.getByRole("button", { name: "Open settings" });
   await trigger.click();
-  await expect(page.getByRole("complementary",{name:"Settings"})).toBeFocused();
+  await expect(
+    page.getByRole("complementary", { name: "Settings" }),
+  ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
 });

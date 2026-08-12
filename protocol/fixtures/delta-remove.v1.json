@@ -1,1 +1,7 @@
-{"version":1,"type":"delta","mode":"live","operation":"remove","agentId":"agent-02"}
+{
+  "version": 1,
+  "type": "delta",
+  "mode": "live",
+  "operation": "remove",
+  "agentId": "agent-02"
+}

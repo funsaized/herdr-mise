@@ -1,1 +1,4 @@
-{"event":"pane_exited","data":{"type":"pane_exited","pane_id":"p-1","workspace_id":"ws-1"}}
+{
+  "event": "pane_exited",
+  "data": { "type": "pane_exited", "pane_id": "p-1", "workspace_id": "ws-1" }
+}
