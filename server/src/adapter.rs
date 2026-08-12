@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
     io,
     path::Path,
+    sync::LazyLock,
     time::Duration,
 };
 use tokio::{
@@ -13,9 +14,36 @@ use tokio::{
     time::timeout,
 };
 
-use crate::protocol::{AgentRecord, AgentState, SessionStats, SourceStatus};
+use crate::protocol::{AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus};
 
-pub const HERDR_PROTOCOLS: &[u64] = &[17, 19];
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CompatibilityManifest {
+    schema_version: u64,
+    supported: Vec<CompatibilityEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CompatibilityEntry {
+    protocol: u64,
+}
+
+static COMPATIBILITY: LazyLock<CompatibilityManifest> = LazyLock::new(|| {
+    let manifest: CompatibilityManifest =
+        serde_json::from_str(include_str!("../../compatibility/herdr.json"))
+            .expect("checked Herdr compatibility manifest");
+    assert_eq!(manifest.schema_version, 1, "supported manifest schema");
+    manifest
+});
+
+pub fn supported_protocols() -> Vec<u64> {
+    COMPATIBILITY
+        .supported
+        .iter()
+        .map(|entry| entry.protocol)
+        .collect()
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AdapterError {
@@ -42,6 +70,18 @@ impl AdapterError {
             Self::Json(_) | Self::Remote(_) | Self::MissingSnapshot => {
                 SourceStatus::IncompatibleResponse
             }
+        }
+    }
+
+    pub fn source_diagnostic(&self) -> Option<SourceDiagnostic> {
+        match self {
+            Self::Protocol(observed_protocol) => Some(SourceDiagnostic {
+                observed_protocol: *observed_protocol,
+                supported_protocols: supported_protocols(),
+                next_action: "upgrade or downgrade Herdr to a tested release, then retry"
+                    .to_owned(),
+            }),
+            _ => None,
         }
     }
 }
@@ -121,11 +161,11 @@ impl Normalizer {
             .or_else(|| value.get("snapshot").cloned())
             .unwrap_or(value);
         let raw: RawSnapshot = serde_json::from_value(snapshot_value)?;
-        if !HERDR_PROTOCOLS.contains(&raw.protocol) {
+        if !supported_protocols().contains(&raw.protocol) {
             return Err(AdapterError::Protocol(raw.protocol));
         }
-        // Herdr protocols 17 and 19 expose the snapshot fields consumed below. The
-        // product version is intentionally descriptive so patch releases keep working.
+        // Every manifest-supported protocol exposes the snapshot fields consumed below.
+        // The product version is intentionally descriptive so patch releases keep working.
         let _server_version = &raw.version;
         let _ = (&raw.tabs, &raw.layouts);
         let workspaces: HashMap<_, _> = raw
@@ -369,6 +409,26 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_diagnostic_is_actionable_and_malformed_remains_distinct() {
+        let unsupported = AdapterError::Protocol(23);
+        let diagnostic = unsupported.source_diagnostic().expect("diagnostic");
+        assert_eq!(diagnostic.observed_protocol, 23);
+        assert_eq!(diagnostic.supported_protocols, vec![17, 19]);
+        assert!(diagnostic
+            .next_action
+            .contains("upgrade or downgrade Herdr"));
+        assert!(!diagnostic.next_action.contains('/'));
+
+        let malformed =
+            AdapterError::Json(serde_json::from_str::<Value>("private-token=secret").unwrap_err());
+        assert_eq!(
+            malformed.source_status(),
+            SourceStatus::IncompatibleResponse
+        );
+        assert_eq!(malformed.source_diagnostic(), None);
+    }
+
+    #[test]
     fn accepts_compatible_protocol_across_patch_versions() {
         let mut n = Normalizer::default();
         let mut compatible = raw("idle");
@@ -376,6 +436,36 @@ mod tests {
         assert!(n
             .normalize_snapshot_value(compatible, "2026-07-31T00:00:00Z")
             .is_ok());
+    }
+
+    #[test]
+    fn compatibility_manifest_drives_runtime_protocols_and_fixture_mapping() {
+        assert_eq!(supported_protocols(), vec![17, 19]);
+
+        let cases = [
+            (
+                include_str!("../tests/fixtures/snapshot-herdr-0.7.5-p17.json"),
+                "fictional-session-17",
+                AgentState::Working,
+                "Example Kitchen",
+            ),
+            (
+                include_str!("../tests/fixtures/snapshot-herdr-0.8.0-p19.json"),
+                "fictional-session-19",
+                AgentState::Blocked,
+                "Example Pantry",
+            ),
+        ];
+        for (fixture, id, state, workspace) in cases {
+            let mut normalizer = Normalizer::default();
+            let normalized = normalizer
+                .normalize_snapshot_value(serde_json::from_str(fixture).unwrap(), "fixture-time")
+                .unwrap();
+            assert_eq!(normalized.agents.len(), 1);
+            assert_eq!(normalized.agents[0].id, id);
+            assert_eq!(normalized.agents[0].state, state);
+            assert_eq!(normalized.agents[0].workspace, workspace);
+        }
     }
 
     #[test]

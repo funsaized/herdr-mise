@@ -69,20 +69,22 @@ Troubleshooting: [Herdr socket unavailable](docs/operations.md#herdr-socket-unav
 
 ### Tested Herdr compatibility
 
-The adapter (`server/src/adapter.rs`) accepts protocols **17** and
-**19**; only snapshots outside that set trigger
-`unsupportedProtocol`. Other product versions on 17/19 are accepted
-but not part of the verified matrix below.
+The adapter (`server/src/adapter.rs`) accepts the protocols in the verified
+matrix below; only snapshots outside that manifest-derived set trigger
+`unsupportedProtocol`. Other product versions on those protocols are accepted
+but are not part of the verified release matrix.
 
+<!-- herdr-compatibility:start -->
 | Herdr release | Snapshot protocol |
-|---------------|-------------------|
-| `0.7.5`       | `17`              |
-| `0.8.0`       | `19`              |
+|---|---|
+| `0.7.5` | `17` |
+| `0.8.0` | `19` |
+<!-- herdr-compatibility:end -->
 
-Evidence: `server/tests/fixtures/snapshot-working.json`,
-`snapshot-unknown-fields.json`,
-`snapshot-protocol-19-empty-agents.json`, plus a live
-`herdr api snapshot` for `0.8.0`.
+The authoritative evidence is `compatibility/herdr.json`; each row names its
+immutable upstream commit and manually sanitized fixture. Run
+`npm run check:herdr-compatibility` to check runtime, docs, fixtures, and
+fixture privacy without network access or credentials.
 
 ### Relationship
 

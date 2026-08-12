@@ -32,6 +32,14 @@ pub enum SourceStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceDiagnostic {
+    pub observed_protocol: u64,
+    pub supported_protocols: Vec<u64>,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DeltaOperation {
     Upsert,
@@ -70,6 +78,8 @@ pub enum AgentStateEvent {
         version: u8,
         mode: AppMode,
         source_status: SourceStatus,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_diagnostic: Option<SourceDiagnostic>,
         agents: Vec<AgentRecord>,
     },
     Delta {

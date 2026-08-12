@@ -32,6 +32,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - run: npm run check:herdr-compatibility
       - run: npm run test:visual
       - run: npm run audit:tokens
       - run: npm run audit:accessibility

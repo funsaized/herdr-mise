@@ -7,7 +7,8 @@ use crate::{
     adapter::{self, Normalizer},
     demo,
     protocol::{
-        AgentRecord, AgentStateEvent, AppMode, DeltaOperation, SourceStatus, PROTOCOL_VERSION,
+        AgentRecord, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic, SourceStatus,
+        PROTOCOL_VERSION,
     },
 };
 
@@ -25,6 +26,7 @@ struct Inner {
 struct FeedState {
     mode: AppMode,
     source_status: SourceStatus,
+    source_diagnostic: Option<SourceDiagnostic>,
     agents: HashMap<String, AgentRecord>,
 }
 
@@ -40,6 +42,7 @@ impl Feed {
             state: RwLock::new(FeedState {
                 mode: AppMode::Demo,
                 source_status: SourceStatus::UnavailableSocket,
+                source_diagnostic: None,
                 agents: HashMap::new(),
             }),
             pending: Mutex::new(HashMap::new()),
@@ -71,6 +74,7 @@ impl Feed {
                     } else {
                         SourceStatus::UnavailableSocket
                     },
+                    source_diagnostic: None,
                     mode,
                     agents: HashMap::new(),
                 }),
@@ -97,6 +101,7 @@ impl Feed {
             version: PROTOCOL_VERSION,
             mode: state.mode.clone(),
             source_status: state.source_status.clone(),
+            source_diagnostic: state.source_diagnostic.clone(),
             agents,
         }
     }
@@ -125,6 +130,7 @@ impl Feed {
             let mut state = self.inner.state.write().await;
             state.mode = AppMode::Live;
             state.source_status = SourceStatus::Connected;
+            state.source_diagnostic = None;
             state.agents = agents
                 .into_iter()
                 .map(|agent| (agent.id.clone(), agent))
@@ -135,24 +141,32 @@ impl Feed {
                 version: PROTOCOL_VERSION,
                 mode: AppMode::Live,
                 source_status: SourceStatus::Connected,
+                source_diagnostic: None,
                 agents,
             };
             let _ = self.inner.changes.send(event);
         }
     }
-    async fn set_demo_status(&self, source_status: SourceStatus) {
+    async fn set_demo_error(&self, error: &adapter::AdapterError) {
+        let source_status = error.source_status();
+        let source_diagnostic = error.source_diagnostic();
         {
             let mut state = self.inner.state.write().await;
-            if state.mode != AppMode::Demo || state.source_status == source_status {
+            if state.mode != AppMode::Demo
+                || (state.source_status == source_status
+                    && state.source_diagnostic == source_diagnostic)
+            {
                 return;
             }
             state.source_status = source_status.clone();
+            state.source_diagnostic = source_diagnostic.clone();
             let mut agents = state.agents.values().cloned().collect::<Vec<_>>();
             agents.sort_by(|a, b| a.id.cmp(&b.id));
             let event = AgentStateEvent::Snapshot {
                 version: PROTOCOL_VERSION,
                 mode: AppMode::Demo,
                 source_status,
+                source_diagnostic,
                 agents,
             };
             let _ = self.inner.changes.send(event);
@@ -278,7 +292,7 @@ async fn run_startup_recovery(
                 tokio::spawn(run_live(feed, path, normalizer, shutdown));
                 return;
             }
-            Err(error) => feed.set_demo_status(error.source_status()).await,
+            Err(error) => feed.set_demo_error(&error).await,
         }
         let delay = tokio::time::sleep(backoff);
         tokio::pin!(delay);
@@ -457,6 +471,36 @@ mod tests {
             }
             tokio::task::yield_now().await;
         }
+    }
+
+    #[tokio::test]
+    async fn unsupported_snapshot_exposes_safe_actionable_diagnostic() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("unsupported.sock");
+        let listener = match UnixListener::bind(&path) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind stub socket: {error}"),
+        };
+        const UNSUPPORTED: &[u8] = br#"{"version":"9.9.9","protocol":23,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}"#;
+        let server = serve_snapshot_response(listener, UNSUPPORTED);
+        let shutdown = CancellationToken::new();
+        let feed = Feed::start(path, Duration::from_secs(1), shutdown.clone()).await;
+        wait_for_source_status(&feed, SourceStatus::UnsupportedProtocol).await;
+        match feed.snapshot().await {
+            AgentStateEvent::Snapshot {
+                source_status: SourceStatus::UnsupportedProtocol,
+                source_diagnostic: Some(diagnostic),
+                ..
+            } => {
+                assert_eq!(diagnostic.observed_protocol, 23);
+                assert_eq!(diagnostic.supported_protocols, vec![17, 19]);
+                assert!(diagnostic.next_action.contains("retry"));
+            }
+            event => panic!("missing unsupported diagnostic: {event:?}"),
+        }
+        shutdown.cancel();
+        server.abort();
     }
 
     #[tokio::test]
