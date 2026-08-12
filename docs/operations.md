@@ -754,6 +754,90 @@ This is the same gate the CI workflow runs on non-tag validation paths. It:
 4. Runs `scripts/measure-server.sh`, which samples the running
    process and asserts RSS ≤ 50 MiB and CPU ≤ 1% of one core.
 
+## Supply-chain checks
+
+Every external action in `.github/workflows/` is pinned to a full upstream
+commit SHA. The trailing version comment is for maintainers; the SHA is the
+executed identity. The weekly `github-actions` entry in
+`.github/dependabot.yml` proposes pin updates while preserving that model.
+`scripts/workflow-contract.test.mjs` audits every workflow and uses mutation
+fixtures to prove that mutable references and weakened security controls are
+rejected.
+
+Hosted pull requests run the following checks:
+
+- CI installs npm dependencies with the committed lockfiles, runs Cargo
+  build/check/test commands with `--locked`, and installs exactly
+  `cargo-audit` 0.22.2 with `--locked` before auditing the committed
+  `Cargo.lock`.
+- CodeQL analyzes the explicit `javascript-typescript` and `rust` matrix.
+  Both use the supported `build-mode: none`; no autobuild step is required.
+- Dependency review rejects newly introduced vulnerabilities of moderate or
+  greater severity. It reports through the check run and does not write a PR
+  comment.
+- Gitleaks 8.30.1 scans the push or pull-request event's commit range with
+  `.gitleaks.toml`. Checkout fetches complete history so the range and its
+  parents resolve, but the hosted scan does not rescan unrelated historical
+  commits. Findings are redacted and PR comments are disabled. The config
+  extends the default rules and allows only the RFC 6455 sample WebSocket
+  nonce, constrained by both its exact value and the exact
+  `server/src/service.rs` path. This is a standards fixture exception, not a
+  general test-file allowlist.
+
+Run the equivalent repository-controlled checks from a full local clone:
+
+```sh
+npm ci
+npm ci --prefix client
+npm test
+
+cargo install cargo-audit --version 0.22.2 --locked
+cargo audit --file Cargo.lock --deny warnings
+
+gitleaks git --config .gitleaks.toml --redact . # use Gitleaks 8.30.1
+```
+
+Run the local Gitleaks command from a complete clone with Gitleaks 8.30.1. It
+scans all repository history, so it is a stricter superset of the hosted
+event-range scan. Version 8.30.1 supports the root plural `[[allowlists]]` and
+`condition = "AND"` used by this repository. CodeQL SARIF upload and GitHub
+dependency review have no repository-local equivalent; use the ordinary
+locked build/test commands for fast feedback, then rely on their pull-request
+checks for authoritative results.
+
+The advisory check intentionally fails closed: `--deny warnings` rejects
+vulnerabilities as well as warning categories including unmaintained, unsound,
+and yanked dependencies. The executable and its installation resolution are
+pinned, while findings can still change as the live RustSec advisory database
+is updated. There are no ignored advisories. If a future advisory is proven
+non-applicable and cannot yet be fixed, add only its exact `RUSTSEC-*` ID to a
+committed `.cargo/audit.toml` `[advisories].ignore` list. Its adjacent TOML
+comment must record the affected dependency path or feature, reason, owner,
+and review or expiry date. Never use a wildcard, a crate-wide suppression, or
+an undocumented workflow `--ignore`; remove the exception when the dependency
+graph changes.
+
+All workflows declare permissions explicitly. Pull-request workflows use
+`pull_request`, never `pull_request_target`; they require read-only contents
+except for CodeQL's `security-events: write` result upload. The Gitleaks scan
+passes the automatic `github.token` explicitly and grants that job exactly
+`contents: read` plus `pull-requests: read`, which the pinned action needs to
+list a PR's commits. Those read scopes remain fork-safe, and fork pull requests
+receive no repository secrets. GitHub downgrades CodeQL's write permission for
+fork pull requests. The only `contents: write` grant remains the release
+publish job, which is gated to `v*` tags. Apple signing and notarization secret
+paths are likewise tag- and macOS-gated. Non-release workflows use bounded
+timeouts and cancel superseded runs; release cancellation remains disabled so
+publication cannot be interrupted midway.
+
+Some controls can only be verified on GitHub: code-scanning enablement and
+SARIF ingestion, CodeQL behavior when a fork token cannot upload results, the
+dependency graph and dependency-review availability, branch-protection
+required checks, Gitleaks licensing for organization-owned repositories,
+hosted-runner compatibility, and Dependabot's actual SHA update PRs. Validate
+those settings and observe both a same-repository and fork pull request before
+treating all hosted checks as enforced.
+
 ## Diagnostics
 
 ### `?stats` overlay
