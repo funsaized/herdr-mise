@@ -1,19 +1,15 @@
 {
   "version": "0.8.0",
   "protocol": 19,
-  "workspaces": [
-    { "workspace_id": "fictional-pantry", "label": "Example Pantry" }
-  ],
+  "workspaces": [{"workspace_id": "fictional-pantry", "label": "Example Pantry"}],
   "tabs": [],
   "panes": [],
   "layouts": [],
-  "agents": [
-    {
-      "pane_id": "fictional-pane-19",
-      "workspace_id": "fictional-pantry",
-      "display_agent": "example-reviewer",
-      "agent_status": "blocked",
-      "agent_session": { "value": "fictional-session-19" }
-    }
-  ]
+  "agents": [{
+    "pane_id": "fictional-pane-19",
+    "workspace_id": "fictional-pantry",
+    "display_agent": "example-reviewer",
+    "agent_status": "blocked",
+    "agent_session": {"value": "fictional-session-19"}
+  }]
 }

@@ -1,7 +1,7 @@
 {
   "version": "0.8.0",
   "protocol": 19,
-  "workspaces": [{ "workspace_id": "ws-1", "label": "example" }],
+  "workspaces": [{"workspace_id": "ws-1", "label": "example"}],
   "tabs": [],
   "layouts": [],
   "agents": [],

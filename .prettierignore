@@ -8,6 +8,7 @@ target/
 server/target/
 
 protocol/generated/
+server/tests/fixtures/
 THIRD_PARTY_NOTICES.txt
 client/public/
 third_party/
