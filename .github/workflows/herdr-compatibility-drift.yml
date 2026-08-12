@@ -5,17 +5,23 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+
+concurrency:
+  group: herdr-compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: herdrdev/herdr
           ref: ef4c23f5775bb8cfec05f05d0844226ff959a07a
           path: upstream/herdr-075
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: herdrdev/herdr
           ref: 346411fa21afd297f5ed3b3fa56f9e3fbf7654b7
