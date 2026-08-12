@@ -5,21 +5,23 @@ import type {
 } from "../../protocol/generated/agent-state-event";
 import {
   blockedPassGeometry,
-  BUSSER_SWEEP_MS,
-  BusserSweepTimeline,
-  busserSweepSample,
   compactPixelText,
   donePlateGeometry,
   doorGeometry,
   passBellGeometry,
   passFrontSlot,
-  sceneMotionPolicy,
-  shouldDisposeRetainedStation,
-  shouldReconcileBusserClear,
   stationIdentityLabels,
   stationTicketGeometry,
   stationWorkspaceLabel,
   workspaceDisplayName,
+} from "./scene/geometry";
+import {
+  BUSSER_SWEEP_MS,
+  BusserSweepTimeline,
+  busserSweepSample,
+  sceneMotionPolicy,
+  shouldDisposeRetainedStation,
+  shouldReconcileBusserClear,
 } from "./scene/kitchen-scene";
 import { computeLayout, stationVisualMetrics } from "./scene/layout";
 import { ParticlePool } from "./scene/particles";
