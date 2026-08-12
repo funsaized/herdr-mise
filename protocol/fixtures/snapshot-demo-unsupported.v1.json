@@ -1,1 +1,1 @@
-{"version":1,"type":"snapshot","mode":"demo","sourceStatus":"unsupportedProtocol","agents":[]}
+{"version":1,"type":"snapshot","mode":"demo","sourceStatus":"unsupportedProtocol","sourceDiagnostic":{"observedProtocol":23,"supportedProtocols":[17,19],"nextAction":"upgrade or downgrade Herdr to a tested release, then retry"},"agents":[]}

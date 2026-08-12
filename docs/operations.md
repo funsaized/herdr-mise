@@ -829,25 +829,48 @@ protocol outside the supported set. The chrome shows the persistent
 `DEMO SERVICE` placard and the typed `sourceStatus` is
 `unsupportedProtocol` (`server/src/adapter.rs` `AdapterError::Protocol`).
 
-The adapter only accepts protocols `17` and `19`
-(`HERDR_PROTOCOLS = &[17, 19]`). A snapshot with any other
+The adapter derives its supported protocols from
+`compatibility/herdr.json`. A snapshot with any other
 `protocol` value is rejected as `unsupportedProtocol`; this is the
 only path that produces that demo condition. Other product
-versions that ship protocol `17` or `19` are accepted by the
+versions that ship a protocol in the manifest are accepted by the
 adapter but are not part of the verified matrix above. The exact
 tested matrix is:
 
+<!-- herdr-compatibility:start -->
 | Herdr release | Snapshot protocol |
-|---------------|-------------------|
-| `0.7.5`       | `17`              |
-| `0.8.0`       | `19`              |
+|---|---|
+| `0.7.5` | `17` |
+| `0.8.0` | `19` |
+<!-- herdr-compatibility:end -->
 
 If you are on a Herdr version that reports a different protocol,
 either upgrade Herdr to a tested release or stay on the demo
 placard; the binary will not synthesize a live feed outside the
-supported protocol set. Herdr releases on protocol `17` or `19`
+supported protocol set. Herdr releases on a supported protocol
 that are not in the verified table above are accepted by the
 adapter but are outside the tested release matrix.
+
+The demo snapshot includes a safe diagnostic for this case: the observed
+protocol, the supported protocol list, and the action to upgrade or downgrade
+Herdr to a tested release and retry. Malformed or incomplete snapshots remain
+`incompatibleResponse` and never echo payloads or local paths.
+
+#### Maintaining Herdr support
+
+`compatibility/herdr.json` is the single authority. Run
+`npm run check:herdr-compatibility` locally; it is deterministic, read-only,
+credential-free, and does not contact the network. The scheduled/manual
+workflow additionally checks source at the immutable commits recorded there.
+
+- Add support only after inspecting an immutable upstream commit. Add one
+  manually sanitized fictional fixture, its manifest row, and adapter mapping
+  coverage together, then update both marked public tables and run all gates.
+- Deprecate support by retaining its fixture and tests, recording the decision
+  and removal target in the same change, and keeping diagnostics truthful.
+- Remove support only through a deliberate compatibility change that removes
+  the manifest claim, public row, primary fixture, and adapter coverage
+  together. Never leave a docs-only or runtime-only claim.
 
 ### The overlay says *GAS LEAK — SERVICE SUSPENDED*
 

@@ -12,6 +12,16 @@
     "version": { "const": 1 },
     "mode": { "enum": ["live", "demo"] },
     "sourceStatus": { "enum": ["unavailableSocket", "timeout", "unsupportedProtocol", "incompatibleResponse", "connected"] },
+    "sourceDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observedProtocol", "supportedProtocols", "nextAction"],
+      "properties": {
+        "observedProtocol": { "type": "integer", "minimum": 0 },
+        "supportedProtocols": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "integer", "minimum": 0 } },
+        "nextAction": { "type": "string", "minLength": 1 }
+      }
+    },
     "agent": {
       "type": "object",
       "additionalProperties": false,
@@ -45,6 +55,7 @@
         "type": { "const": "snapshot" },
         "mode": { "$ref": "#/$defs/mode" },
         "sourceStatus": { "$ref": "#/$defs/sourceStatus" },
+        "sourceDiagnostic": { "$ref": "#/$defs/sourceDiagnostic" },
         "agents": { "type": "array", "items": { "$ref": "#/$defs/agent" } }
       }
     },

@@ -1,4 +1,4 @@
-import type { AgentRecord, AgentStateEvent, AppMode as FeedMode, SourceStatus } from "../../../protocol/generated/agent-state-event";
+import type { AgentRecord, AgentStateEvent, AppMode as FeedMode, SourceDiagnostic, SourceStatus } from "../../../protocol/generated/agent-state-event";
 import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings, type SettingsStorage } from "./settings-storage";
 
@@ -7,8 +7,8 @@ export interface Settings { sound: boolean; doneTimeoutMs: number; escalationFas
 export interface BoardEntry { id: string; name: string; runtimeMs: number; tickets: number; endedAt: number; finalState: AgentRecord["state"] }
 export interface StatePeriod { state: AgentRecord["state"]; startedAt: number }
 export interface AgentMachine extends AgentRecord { targetState: AgentRecord["state"]; renderedState: AgentRecord["state"]; transitionStartedAt: number; clearAt: number | null; answerReceivedUntil: number | null; revision: number; history: readonly StatePeriod[] }
-export interface StoreSnapshot { agents: ReadonlyMap<string, AgentMachine>; board: readonly BoardEntry[]; mode: AppMode; feedMode: FeedMode; sourceStatus: SourceStatus; selectedId: string | null; settings: Settings; lastUpdateAt: number }
-export interface CoarseSlice { count: number; blocked: number; done: number; mode: AppMode; sourceStatus: SourceStatus; selectedId: string | null; settings: Settings }
+export interface StoreSnapshot { agents: ReadonlyMap<string, AgentMachine>; board: readonly BoardEntry[]; mode: AppMode; feedMode: FeedMode; sourceStatus: SourceStatus; sourceDiagnostic: SourceDiagnostic | null; selectedId: string | null; settings: Settings; lastUpdateAt: number }
+export interface CoarseSlice { count: number; blocked: number; done: number; mode: AppMode; sourceStatus: SourceStatus; sourceDiagnostic: SourceDiagnostic | null; selectedId: string | null; settings: Settings }
 export type StoreEvent = { type: "clear" | "busser"; agentId: string } | { type: "ended"; entry: BoardEntry } | { type: "state"; agentId: string; from?: AgentRecord["state"]; to: AgentRecord["state"] };
 type Listener<T> = (value: T) => void;
 export interface Scheduler { now(): number; setTimeout(fn: () => void, ms: number): unknown; clearTimeout(id: unknown): void }
@@ -21,6 +21,7 @@ export class AgentStore {
   private mode: AppMode = "empty";
   private feedMode: FeedMode = "live";
   private sourceStatus: SourceStatus = "connected";
+  private sourceDiagnostic: SourceDiagnostic | null = null;
   private selectedId: string | null = null;
   private settings: Settings;
   private lastUpdateAt = 0;
@@ -29,8 +30,8 @@ export class AgentStore {
   private eventListeners = new Set<Listener<StoreEvent>>();
   private doneTimers = new Map<string, unknown>();
   constructor(private scheduler: Scheduler = nativeScheduler, settings: Partial<Settings> = {}, private settingsStorage: SettingsStorage | null = null) { this.settings = { ...loadSettings(settingsStorage, defaultSettings), ...settings }; }
-  snapshot(): StoreSnapshot { return { agents: this.agents, board: this.board, mode: this.mode, feedMode: this.feedMode, sourceStatus: this.sourceStatus, selectedId: this.selectedId, settings: this.settings, lastUpdateAt: this.lastUpdateAt }; }
-  coarse(): CoarseSlice { const values = [...this.agents.values()]; return { count: values.length, blocked: values.filter(a => a.targetState === "blocked").length, done: values.filter(a => a.targetState === "done").length, mode: this.mode, sourceStatus: this.sourceStatus, selectedId: this.selectedId, settings: this.settings }; }
+  snapshot(): StoreSnapshot { return { agents: this.agents, board: this.board, mode: this.mode, feedMode: this.feedMode, sourceStatus: this.sourceStatus, sourceDiagnostic: this.sourceDiagnostic, selectedId: this.selectedId, settings: this.settings, lastUpdateAt: this.lastUpdateAt }; }
+  coarse(): CoarseSlice { const values = [...this.agents.values()]; return { count: values.length, blocked: values.filter(a => a.targetState === "blocked").length, done: values.filter(a => a.targetState === "done").length, mode: this.mode, sourceStatus: this.sourceStatus, sourceDiagnostic: this.sourceDiagnostic, selectedId: this.selectedId, settings: this.settings }; }
   subscribe(listener: () => void) { this.changeListeners.add(listener); return () => { this.changeListeners.delete(listener); }; }
   subscribeCoarse(listener: Listener<CoarseSlice>) { this.coarseListeners.add(listener); return () => { this.coarseListeners.delete(listener); }; }
   onEvent(listener: Listener<StoreEvent>) { this.eventListeners.add(listener); return () => { this.eventListeners.delete(listener); }; }
@@ -43,6 +44,7 @@ export class AgentStore {
     const before = this.coarse(); this.feedMode = event.mode; this.lastUpdateAt = this.scheduler.now();
     if (event.type === "snapshot") {
       this.sourceStatus = event.sourceStatus;
+      this.sourceDiagnostic = event.sourceDiagnostic ?? null;
       const incoming = new Set(event.agents.map(agent => agent.id));
       for (const id of this.agents.keys()) if (!incoming.has(id)) this.remove(id);
       for (const agent of event.agents) this.upsert(agent);
@@ -87,4 +89,4 @@ export class AgentStore {
   private emitChange() { for (const listener of this.changeListeners) listener(); }
   private emitEvent(event: StoreEvent) { for (const listener of this.eventListeners) listener(event); }
 }
-function sameCoarse(a: CoarseSlice, b: CoarseSlice) { return a.count === b.count && a.blocked === b.blocked && a.done === b.done && a.mode === b.mode && a.sourceStatus === b.sourceStatus && a.selectedId === b.selectedId && a.settings === b.settings; }
+function sameCoarse(a: CoarseSlice, b: CoarseSlice) { return a.count === b.count && a.blocked === b.blocked && a.done === b.done && a.mode === b.mode && a.sourceStatus === b.sourceStatus && a.sourceDiagnostic === b.sourceDiagnostic && a.selectedId === b.selectedId && a.settings === b.settings; }

@@ -1,0 +1,23 @@
+name: Herdr compatibility drift
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: herdrdev/herdr
+          ref: ef4c23f5775bb8cfec05f05d0844226ff959a07a
+          path: upstream/herdr-075
+      - uses: actions/checkout@v7
+        with:
+          repository: herdrdev/herdr
+          ref: 346411fa21afd297f5ed3b3fa56f9e3fbf7654b7
+          path: upstream/herdr-080
+      - run: npm run check:herdr-compatibility -- --upstream=0.7.5=upstream/herdr-075 --upstream=0.8.0=upstream/herdr-080

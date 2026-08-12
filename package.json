@@ -14,6 +14,7 @@
     "typecheck": "npm --prefix client run typecheck",
     "lint": "npm --prefix client run lint",
     "test": "node --test scripts/*.test.mjs && npm --prefix client run test",
+    "check:herdr-compatibility": "node scripts/check-herdr-compatibility.mjs",
     "audit:tokens": "node scripts/audit-tokens.mjs",
     "audit:architecture": "node scripts/audit-pixi-architecture.mjs",
     "audit:accessibility": "node scripts/audit-accessibility.mjs",
