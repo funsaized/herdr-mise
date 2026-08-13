@@ -390,7 +390,7 @@ $HERDR_BIN_PATH plugin pane open \
   --focus
 ```
 
-The equivalent CLI is `herdr plugin action invoke --plugin mise.kitchen open`
+The equivalent CLI is `herdr plugin action invoke open --plugin mise.kitchen`
 (verified against `herdr plugin action invoke --help` on Herdr 0.8.0;
 older `run` wording in some third-party docs is not the current
 subcommand). When the manifest is linked in a Herdr session, the
