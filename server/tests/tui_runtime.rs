@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use herdr_mise_server::{
     feed::Feed,
-    protocol::AppMode,
+    protocol::{AgentRecord, AgentState, AppMode, SessionStats},
     runtime::{parse_mode, Mode},
     tui::{state::AgentTable, BindWarning},
 };
@@ -38,11 +38,38 @@ fn bind_conflict_becomes_one_tui_warning() {
 
 #[tokio::test]
 async fn fixed_feed_snapshot_applies_through_real_reducer() {
-    let feed = Feed::fixed(AppMode::Demo, vec![]).await;
+    let active = AgentRecord {
+        id: "fixed-a".into(),
+        name: "Fixed A".into(),
+        state: AgentState::Blocked,
+        progress: None,
+        state_entered_at: "2026-08-13T12:00:00Z".into(),
+        accent_index: 1,
+        model: "codex".into(),
+        workspace: "/work/fixed".into(),
+        session: SessionStats {
+            runtime_ms: 60_000,
+            tickets: 2,
+        },
+    };
+    let mut ended = active.clone();
+    ended.state = AgentState::Ended;
+    ended.session.runtime_ms = 90_000;
+    ended.session.tickets = 3;
+    let feed = Feed::fixed(AppMode::Live, vec![active]).await;
+    let mut receiver = feed.subscribe();
     let mut table = AgentTable::default();
     table.apply(feed.snapshot().await);
-    assert_eq!(table.mode(), AppMode::Demo);
+    assert_eq!(table.mode(), AppMode::Live);
+    assert_eq!(table.agents().count(), 1);
+    feed.publish(ended).await;
+    table.apply(receiver.recv().await.unwrap());
     assert_eq!(table.agents().count(), 0);
+    assert_eq!(table.board().len(), 1);
+    assert_eq!(table.board()[0].id, "fixed-a");
+    assert_eq!(table.board()[0].final_state, AgentState::Blocked);
+    assert_eq!(table.board()[0].runtime_ms, 90_000);
+    assert_eq!(table.board()[0].tickets, 3);
 }
 
 #[test]
