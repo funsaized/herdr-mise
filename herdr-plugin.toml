@@ -1,0 +1,22 @@
+id = "mise.kitchen"
+name = "Mise"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Your coding agents as line cooks — kitchen status in a pane"
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["cargo", "build", "--release"]
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "kitchen"
+title = "Mise Kitchen"
+placement = "split"
+command = ["./target/release/herdr-mise", "--tui"]
+
+[[actions]]
+id = "open"
+title = "Open Mise Kitchen"
+contexts = ["workspace"]
+command = ["sh", "-c", "$HERDR_BIN_PATH plugin pane open --plugin mise.kitchen --entrypoint kitchen --placement split --direction right --focus"]

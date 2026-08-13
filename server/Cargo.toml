@@ -28,6 +28,7 @@ thiserror = "2"
 jsonschema = "0.18"
 tempfile = "3"
 tokio = { version = "1", features = ["full", "test-util"] }
+toml = "0.8"
 tower = { version = "0.5", features = ["util"] }
 
 [build-dependencies]
