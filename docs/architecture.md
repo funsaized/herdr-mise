@@ -106,7 +106,7 @@ Process modes (parsed in `server/src/runtime.rs`; no CLI crate):
 - A panic hook installed before entering raw mode restores the
   terminal (raw mode off, alternate screen left) so a crashing pane
   never garbles the enclosing Herdr session.
-- Rendering is `view::draw(frame, &AgentTable, now: DateTime<Utc>, tick: u64)`
+- Rendering is `view::draw(frame, &AgentTable, warning: Option<&str>, now: DateTime<Utc>, tick: u64)`
   — pure of explicit inputs. No `Utc::now()` or RNG inside `view.rs`
   or `theme.rs`; the loop samples the clock once per tick. This is
   what makes the four committed `TestBackend` goldens deterministic.

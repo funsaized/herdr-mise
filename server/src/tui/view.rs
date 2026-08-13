@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
     Frame,
@@ -103,6 +103,23 @@ fn status_lines(
     (title.into(), status)
 }
 
+fn wrapped_line_count(text: &str, width: u16) -> u16 {
+    let width = usize::from(width.max(1));
+    let mut lines = 1_u16;
+    let mut used = 0_usize;
+    for word in text.split_whitespace() {
+        let word_width = word.chars().count();
+        let needed = word_width + usize::from(used > 0);
+        if used > 0 && used + needed > width {
+            lines += 1;
+            used = word_width;
+        } else {
+            used += needed;
+        }
+    }
+    lines
+}
+
 pub fn draw(
     frame: &mut Frame<'_>,
     table: &AgentTable,
@@ -111,16 +128,37 @@ pub fn draw(
     tick: u64,
 ) {
     let compact = frame.area().height < 20;
+    let agent_count = table.agents().count();
+    let (title, source_copy) = status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        agent_count,
+    );
+    let content_height = 1 + wrapped_line_count(&source_copy, frame.area().width);
+    let mut header = Paragraph::new(vec![
+        Line::from(Span::styled(
+            title,
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(source_copy),
+    ])
+    .wrap(Wrap { trim: true });
+    let baseline_height = if compact { 2 } else { 4 };
+    let header_height = baseline_height.max(content_height + u16::from(!compact));
+    if !compact {
+        header = header.block(Block::default().borders(Borders::BOTTOM));
+    }
     let constraints = if compact {
         [
-            Constraint::Length(2),
+            Constraint::Length(header_height),
             Constraint::Min(3),
             Constraint::Length(3),
             Constraint::Length(2),
         ]
     } else {
         [
-            Constraint::Length(4),
+            Constraint::Length(header_height),
             Constraint::Min(8),
             Constraint::Length(6),
             Constraint::Length(2),
@@ -130,24 +168,6 @@ pub fn draw(
         .direction(Direction::Vertical)
         .constraints(constraints)
         .split(frame.area());
-    let agent_count = table.agents().count();
-    let (title, source_copy) = status_lines(
-        table.mode(),
-        table.source_status(),
-        table.source_diagnostic(),
-        agent_count,
-    );
-    let mut header = Paragraph::new(vec![
-        Line::from(Span::styled(
-            title,
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
-        Line::from(source_copy),
-    ])
-    .wrap(Wrap { trim: true });
-    if !compact {
-        header = header.block(Block::default().borders(Borders::BOTTOM));
-    }
     frame.render_widget(header, areas[0]);
     let rows = table.agents().map(|agent| {
         let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
@@ -218,11 +238,7 @@ pub fn draw(
     });
     frame.render_widget(
         Table::new(board_rows, [Constraint::Min(1)])
-            .style(
-                Style::default()
-                    .fg(Color::Rgb(0xe9, 0xe4, 0xd0))
-                    .bg(Color::Rgb(0x24, 0x35, 0x29)),
-            )
+            .style(Style::default().fg(theme::CHALK).bg(theme::CHALKBOARD))
             .block(Block::default().borders(Borders::ALL).title("86 BOARD")),
         areas[2],
     );
@@ -239,7 +255,7 @@ mod tests {
     use crate::protocol::{
         AgentRecord, AgentStateEvent, DeltaOperation, SessionStats, SourceDiagnostic, SourceStatus,
     };
-    use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
+    use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
     fn record(id: &str, state: AgentState) -> AgentRecord {
         AgentRecord {
@@ -559,5 +575,45 @@ mod tests {
         assert!(rendered.contains("bind warning"));
         assert!(rendered.contains("q / Esc quit"));
         assert!(rendered.contains("tick 7"));
+    }
+
+    #[test]
+    fn unsupported_source_treatment_stays_actionable_at_narrow_sizes() {
+        let mut table = AgentTable::default();
+        table.apply(fixture("snapshot-demo-unsupported.v1.json"));
+        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        for (width, height) in [(80, 24), (60, 12)] {
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).unwrap();
+            terminal
+                .draw(|frame| draw(frame, &table, None, now, 7))
+                .unwrap();
+            let rendered = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            let rendered = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
+            for expected in [
+                "MISE — DEMO SERVICE",
+                "Mock feed",
+                "unsupported",
+                "observed 23",
+                "supported: 17, 19",
+                "upgrade or downgrade Herdr to a tested release, then retry",
+                "Nothing here is real",
+                "q / Esc quit",
+            ] {
+                assert!(
+                    rendered.contains(expected),
+                    "{width}x{height} missing {expected:?} in {rendered:?}"
+                );
+            }
+        }
     }
 }

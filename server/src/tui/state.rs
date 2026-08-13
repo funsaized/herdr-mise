@@ -49,10 +49,18 @@ impl AgentTable {
                 let prior_agents = std::mem::take(&mut self.agents);
                 for agent in agents {
                     if agent.state == AgentState::Ended {
-                        let prior = prior_agents.iter().find(|prior| prior.id == agent.id);
-                        self.end(agent, prior.map(|prior| prior.state.clone()));
+                        let current = self.agents.iter().position(|entry| entry.id == agent.id);
+                        let prior_state = current
+                            .map(|index| self.agents.remove(index).state)
+                            .or_else(|| {
+                                prior_agents
+                                    .iter()
+                                    .find(|prior| prior.id == agent.id)
+                                    .map(|prior| prior.state.clone())
+                            });
+                        self.end(agent, prior_state);
                     } else {
-                        self.agents.push(agent);
+                        self.upsert(agent);
                     }
                 }
             }
@@ -111,12 +119,18 @@ impl AgentTable {
 
     fn end(&mut self, agent: AgentRecord, prior_final_state: Option<AgentState>) {
         if let Some(index) = self.board.iter().position(|entry| entry.id == agent.id) {
-            let existing = &mut self.board[index];
+            let mut existing = self.board.remove(index);
             existing.name = agent.name;
             existing.runtime_ms = agent.session.runtime_ms;
             existing.tickets = agent.session.tickets;
             if let Some(final_state) = prior_final_state {
                 existing.final_state = final_state;
+                self.board.push(existing);
+                if self.board.len() > 3 {
+                    self.board.remove(0);
+                }
+            } else {
+                self.board.insert(index, existing);
             }
             return;
         }
@@ -319,5 +333,66 @@ mod tests {
             (table.board()[1].runtime_ms, table.board()[1].tickets),
             (333, 33)
         );
+    }
+
+    #[test]
+    fn active_agent_ending_again_moves_to_newest_before_board_cap() {
+        let mut table = AgentTable::default();
+        for id in ["a", "b", "c"] {
+            table.apply(upsert(record(id, AgentState::Working, 1, 1)));
+            table.apply(upsert(record(id, AgentState::Ended, 10, 1)));
+        }
+
+        table.apply(upsert(record("a", AgentState::Blocked, 20, 2)));
+        table.apply(upsert(record("a", AgentState::Ended, 50, 5)));
+        table.apply(upsert(record("d", AgentState::Working, 30, 3)));
+        table.apply(upsert(record("d", AgentState::Ended, 40, 4)));
+
+        assert_eq!(
+            table
+                .board()
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["c", "a", "d"]
+        );
+        assert_eq!(table.board()[1].final_state, AgentState::Blocked);
+        assert_eq!(
+            (table.board()[1].runtime_ms, table.board()[1].tickets),
+            (50, 5)
+        );
+    }
+
+    #[test]
+    fn snapshot_duplicate_ids_keep_first_position_and_last_value() {
+        let mut first_a = record("a", AgentState::Idle, 10, 1);
+        first_a.name = "first-a".into();
+        let mut last_a = record("a", AgentState::Blocked, 30, 3);
+        last_a.name = "last-a".into();
+        table_snapshot_duplicate_assertion(first_a, last_a);
+    }
+
+    fn table_snapshot_duplicate_assertion(first_a: AgentRecord, last_a: AgentRecord) {
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![
+                first_a,
+                record("b", AgentState::Working, 20, 2),
+                last_a.clone(),
+            ],
+        });
+        let agents = table.agents().collect::<Vec<_>>();
+        assert_eq!(
+            agents
+                .iter()
+                .map(|agent| agent.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert_eq!(agents[0], &last_a);
     }
 }

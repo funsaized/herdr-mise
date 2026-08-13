@@ -16,6 +16,8 @@ pub const ACCENTS: [Color; 12] = [
     Color::Rgb(0x9a, 0x6f, 0x7f),
     Color::Rgb(0x6f, 0x8a, 0x9a),
 ];
+pub const CHALK: Color = Color::Rgb(0xe9, 0xe4, 0xd0);
+pub const CHALKBOARD: Color = Color::Rgb(0x24, 0x35, 0x29);
 
 pub fn accent(index: u8) -> Color {
     ACCENTS[usize::from(index) % ACCENTS.len()]
@@ -75,5 +77,11 @@ mod tests {
             state_color(&AgentState::Ended),
             Color::Rgb(0x8a, 0x82, 0x72)
         );
+    }
+
+    #[test]
+    fn board_colors_are_exact_client_tokens() {
+        assert_eq!(CHALK, Color::Rgb(0xe9, 0xe4, 0xd0));
+        assert_eq!(CHALKBOARD, Color::Rgb(0x24, 0x35, 0x29));
     }
 }
