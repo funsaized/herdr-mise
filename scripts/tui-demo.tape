@@ -13,19 +13,19 @@
 # cleanup traps; the tape does no cleanup itself.
 #
 # Why these settings:
-#   - Width 110 / Height 28: matches the Phase 1/2 golden harness
-#     and the integrated 110x24 layout (cells). 28 rows gives the status
-#     header + 86 board + station grid + footer all visible at the same
-#     time, the same view the 30-minute real-pane review uses.
+#   - Width 1100 / Height 560: captures approximately 110 columns by 28
+#     rows. The committed scene goldens use an 80x24-cell harness; this
+#     larger capture keeps the status header + 86 board + station grid +
+#     footer visible at the same time, matching the 30-minute pane review.
 #   - FontSize 14, monospace: the only theme where every glyph
 #     (`▀`, `·`, `!!`, `✓`, accent symbols) renders legibly at the
 #     released terminal capture resolution.
 #   - Framerate 20: matches `scripts/readme-media-config.mjs`
 #     `gifFrameRate`. Keeping browser/TUI captures at the same rate
 #     makes the README side-by-side comparison visually consistent.
-#   - Padding 24, MarginFill #0b141a: matches the dark wall color from
-#     `server/src/tui/theme.rs::WALL`. The "margin" never bleeds into
-#     the captured pane area, so the GIF background is honest.
+#   - Padding 24, MarginFill #0b141a: capture chrome outside the terminal
+#     pane. The margin never bleeds into the pane area, so it does not
+#     represent the scene's `theme::WALL` color.
 
 Output docs/assets/herdr-mise-tui-demo.gif
 

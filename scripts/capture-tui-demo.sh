@@ -185,7 +185,7 @@ with open(path, "w") as f:
 PY
 
 # Frame-count floor: 8 s of sleep + 0.5 s quit tail at 20 fps
-# must produce at least ~150 frames; below that the tape ran into the
+# must produce at least 120 frames; below that the tape ran into the
 # fallback path (binary exited, ttyd closed early).
 if [[ -n "$FRAME_COUNT" && "$FRAME_COUNT" -lt 120 ]]; then
   fail 7 "GIF has only $FRAME_COUNT frames; expected >=120. Tape likely exited early."

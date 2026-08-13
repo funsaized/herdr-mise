@@ -122,9 +122,16 @@ fn overlay(
     if y >= area.height || x >= area.width {
         return;
     }
+    let line = Line::from(text);
+    let text_width = u16::try_from(line.width()).unwrap_or(u16::MAX);
     frame.render_widget(
-        Paragraph::new(Line::from(text)).style(Style::default().fg(mapped(color, mode))),
-        Rect::new(area.x + x, area.y + y, width.min(area.width - x), 1),
+        Paragraph::new(line).style(Style::default().fg(mapped(color, mode))),
+        Rect::new(
+            area.x + x,
+            area.y + y,
+            width.min(text_width).min(area.width - x),
+            1,
+        ),
     );
 }
 
@@ -587,6 +594,41 @@ mod tests {
     fn render_dump(table: &AgentTable, width: u16, height: u16) -> String {
         let terminal = render(table, width, height, ColorMode::Truecolor, 9);
         buffer_dump(terminal.backend().buffer())
+    }
+
+    #[test]
+    fn short_overlay_preserves_trailing_scene_pixels() {
+        let mut terminal = Terminal::new(TestBackend::new(5, 1)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                let mut canvas = PixelCanvas::new(5, 2, theme::WALL, ColorMode::Truecolor);
+                canvas.fill_rect(0, 0, 5, 2, theme::state_color(&AgentState::Blocked));
+                frame.render_widget(&canvas, area);
+                overlay(
+                    frame,
+                    area,
+                    0,
+                    0,
+                    5,
+                    "X".into(),
+                    theme::CHALK,
+                    ColorMode::Truecolor,
+                );
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer.cell((0, 0)).unwrap().fg, theme::CHALK);
+        for x in 1..5 {
+            let cell = buffer.cell((x, 0)).unwrap();
+            assert_eq!(cell.symbol(), "▀");
+            assert_eq!(
+                cell.fg,
+                theme::state_color(&AgentState::Blocked),
+                "overlay restyled trailing scene pixel at x={x}"
+            );
+        }
     }
 
     #[test]
