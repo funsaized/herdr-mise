@@ -114,7 +114,20 @@ With no Herdr session available, the binary renders the truthful
 
 ![The release binary running as a Herdr pane under the truthful DEMO SERVICE fallback](docs/assets/herdr-mise-tui-demo.gif)
 
-Regenerate it with `scripts/capture-tui-demo.sh` from the repo root;
+The same pane remains readable across the states that matter during service:
+
+| Live kitchen                                                                                                                | Blocked at the pass                                                                                                                                        | Compact fallback                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![A live Herdr-connected kitchen with plated and working agents in the cell-art scene](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude at the pass with a red room border, pass banner, and station banner](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the table and 86-board fallback below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
+
+The live capture proves the linked Herdr feed; the blocked capture shows the
+non-color pass text, station banner, and border escalation; and the compact
+capture shows the deterministic table fallback used below the scene's `80×24`
+cell minimum. The blocked and compact examples retain the persistent
+`MISE — DEMO SERVICE` treatment, so deterministic mock data is never presented
+as live agent state.
+
+Regenerate the GIF with `scripts/capture-tui-demo.sh` from the repo root;
 the wrapper refuses to substitute another tool if `vhs` is missing.
 The browser/TUI parity audit, including every Done/Deferred row and
 the rationale for each deferral, is in
