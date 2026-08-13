@@ -12,6 +12,8 @@ not aggregate remote servers. It is a window, not an office.
 
 Install Herdr, then download, verify, and run herdr-mise
 `v0.1.0-rc.1`. Reach a truthful live kitchen in under five minutes.
+This prerelease is currently the only public herdr-mise release; no stable
+herdr-mise release exists yet.
 Detailed platform commands live in
 [Operations — local run](docs/operations.md#local-run).
 
@@ -192,6 +194,9 @@ chrome surfaces honestly:
 No system-level install, no Homebrew formula, no launchd unit. The
 binary binds to `127.0.0.1:8686` only and is not registered to start
 on login.
+
+Release-candidate and future stable release policy, evidence gates, recovery,
+and retirement order are documented in [Release operations](docs/releasing.md).
 
 ## Local development
 

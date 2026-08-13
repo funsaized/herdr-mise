@@ -39,8 +39,10 @@ embedded into the binary by `rust-embed` at compile time
 
 ### Run the release archive
 
-Public distribution is the GitHub **prerelease** created by pushing a matching
-`v*` tag. Each asset pair is:
+The current public distribution is the GitHub **prerelease** `v0.1.0-rc.1`;
+there is no stable herdr-mise release yet. Future matching `v*` tags are
+classified as prerelease or stable under the fail-closed process in
+[Release operations](releasing.md). Each asset pair is:
 
 ```text
 herdr-mise-v<VERSION>-<TARGET>.tar.gz

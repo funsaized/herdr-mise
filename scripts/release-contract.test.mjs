@@ -10,6 +10,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { classifyReleaseTag, validateReleaseTag } from "./release-policy.mjs";
+import { evaluateStableReleaseGate } from "./stable-release-gate.mjs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const cargo = readFileSync("server/Cargo.toml", "utf8");
@@ -22,11 +24,217 @@ const browserSmoke = readFileSync("scripts/smoke-browser.mjs", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const operations = readFileSync("docs/operations.md", "utf8");
 
+test("strict release tags distinguish prereleases from stable releases", () => {
+  assert.deepEqual(classifyReleaseTag("v0.1.0-rc.1"), {
+    tag: "v0.1.0-rc.1",
+    version: "0.1.0-rc.1",
+    releaseClass: "prerelease",
+    isPrerelease: true,
+  });
+  assert.deepEqual(classifyReleaseTag("v0.1.0"), {
+    tag: "v0.1.0",
+    version: "0.1.0",
+    releaseClass: "stable",
+    isPrerelease: false,
+  });
+});
+
+test("release tags require canonical SemVer with a v prefix and no build metadata", () => {
+  for (const invalid of [
+    "0.1.0",
+    "v01.1.0",
+    "v0.01.0",
+    "v0.1.00",
+    "v0.1",
+    "v0.1.0-rc.01",
+    "v0.1.0-",
+    "v0.1.0+build.1",
+    "v0.1.0-rc.1+build.1",
+    "v0.1.0/rc.1",
+  ]) {
+    assert.throws(() => classifyReleaseTag(invalid), /invalid release tag/i);
+  }
+});
+
+test("release tags must exactly match the authoritative Cargo version", () => {
+  assert.deepEqual(validateReleaseTag("v0.1.0-rc.1", "0.1.0-rc.1"), {
+    tag: "v0.1.0-rc.1",
+    version: "0.1.0-rc.1",
+    releaseClass: "prerelease",
+    isPrerelease: true,
+  });
+  assert.throws(
+    () => validateReleaseTag("v0.1.0", "0.1.1"),
+    /does not match authoritative Cargo version/i,
+  );
+});
+
+function createStableGateFixture(result = "PASS", emitPassMarker = true) {
+  const temp = mkdtempSync(join(tmpdir(), "herdr-mise-stable-gate-"));
+  const evidence = join(temp, "evidence.json");
+  const validator = join(temp, "validator.mjs");
+  const tag = "v0.1.0";
+  const commit = "a".repeat(40);
+  writeFileSync(
+    evidence,
+    `${JSON.stringify({
+      accepted_rc: {
+        tag: "v0.1.0-rc.1",
+        version: "0.1.0-rc.1",
+        commit: "b".repeat(40),
+        artifacts: [
+          {
+            target: "aarch64-apple-darwin",
+            archive: "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
+            sha256: "c".repeat(64),
+          },
+        ],
+      },
+      promotion: {
+        tag,
+        version: "0.1.0",
+        commit,
+      },
+      result,
+    })}\n`,
+  );
+  writeFileSync(
+    validator,
+    `import { readFileSync } from "node:fs";
+const value = (name) => process.argv[process.argv.indexOf(name) + 1];
+const evidence = JSON.parse(readFileSync(value("--evidence"), "utf8"));
+const candidate = evidence.promotion;
+const exact = candidate.tag === value("--promotion-tag") &&
+  candidate.version === value("--promotion-version") &&
+  candidate.commit === value("--promotion-commit");
+if (!exact || evidence.result !== "PASS") process.exit(1);
+${emitPassMarker ? 'process.stdout.write("acceptance_evidence=PASS\\n");' : ""}
+`,
+  );
+  return { temp, evidence, validator, tag, commit };
+}
+
+test("RC release evaluation does not require stable acceptance evidence", () => {
+  assert.deepEqual(
+    evaluateStableReleaseGate({
+      tag: "v0.1.0-rc.1",
+      cargoVersion: "0.1.0-rc.1",
+      commit: "a".repeat(40),
+    }),
+    { required: false, releaseClass: "prerelease" },
+  );
+});
+
+test("stable release evaluation fails closed without evidence", () => {
+  const fixture = createStableGateFixture();
+  try {
+    assert.throws(
+      () =>
+        evaluateStableReleaseGate({
+          tag: fixture.tag,
+          cargoVersion: "0.1.0",
+          commit: fixture.commit,
+          validatorPath: fixture.validator,
+        }),
+      /stable acceptance evidence path is required/i,
+    );
+  } finally {
+    rmSync(fixture.temp, { recursive: true, force: true });
+  }
+});
+
+test("stable release evaluation rejects failed or incomplete evidence", () => {
+  const fixture = createStableGateFixture("NOT_RUN");
+  try {
+    assert.throws(
+      () =>
+        evaluateStableReleaseGate({
+          tag: fixture.tag,
+          cargoVersion: "0.1.0",
+          commit: fixture.commit,
+          evidencePath: fixture.evidence,
+          validatorPath: fixture.validator,
+        }),
+      /acceptance evidence validation failed/i,
+    );
+  } finally {
+    rmSync(fixture.temp, { recursive: true, force: true });
+  }
+});
+
+test("stable release evaluation rejects a validator that exits zero without its PASS marker", () => {
+  const fixture = createStableGateFixture("PASS", false);
+  try {
+    assert.throws(
+      () =>
+        evaluateStableReleaseGate({
+          tag: fixture.tag,
+          cargoVersion: "0.1.0",
+          commit: fixture.commit,
+          evidencePath: fixture.evidence,
+          validatorPath: fixture.validator,
+        }),
+      /required PASS marker/i,
+    );
+  } finally {
+    rmSync(fixture.temp, { recursive: true, force: true });
+  }
+});
+
+test("stable release evaluation accepts complete RC evidence for the exact promotion", () => {
+  const fixture = createStableGateFixture();
+  try {
+    assert.deepEqual(
+      evaluateStableReleaseGate({
+        tag: fixture.tag,
+        cargoVersion: "0.1.0",
+        commit: fixture.commit,
+        evidencePath: fixture.evidence,
+        validatorPath: fixture.validator,
+      }),
+      {
+        required: true,
+        releaseClass: "stable",
+      },
+    );
+  } finally {
+    rmSync(fixture.temp, { recursive: true, force: true });
+  }
+});
+
+test("workflow gates stable publication before release creation and keeps RCs prereleases", () => {
+  assert.match(workflow, /stable_acceptance:\n[\s\S]*needs: classify_release/);
+  assert.match(workflow, /environment: stable-release/);
+  assert.match(workflow, /STABLE_ACCEPTANCE_EVIDENCE_BASE64/);
+  const stableGate = workflow.indexOf("stable_acceptance:");
+  const publish = workflow.indexOf("publish:");
+  const create = workflow.indexOf("gh release create");
+  assert.ok(stableGate >= 0 && stableGate < publish && publish < create);
+  assert.match(workflow, /needs\.stable_acceptance\.result == 'success'/);
+  const stableJob = workflow.slice(stableGate, publish);
+  assert.doesNotMatch(
+    stableJob,
+    /download-artifact|--artifacts|artifact-sha256/,
+  );
+  assert.match(stableJob, /--promotion-tag "\$GITHUB_REF_NAME"/);
+  assert.match(stableJob, /--promotion-commit "\$GITHUB_SHA"/);
+  assert.match(workflow, /--prerelease/);
+  assert.match(workflow, /release_class.*prerelease/);
+  assert.match(workflow, /release_class.*stable/);
+  assert.match(workflow, /expected_prerelease/);
+  assert.match(workflow, /--retry 3 --retry-all-errors/);
+  assert.match(
+    workflow,
+    /notes_template="docs\/releases\/\$\{GITHUB_REF_NAME\}\.md"/,
+  );
+  assert.match(workflow, /notes_file="\$RUNNER_TEMP\/release-notes\.md"/);
+});
+
 test("release workflow keeps publication tag-only and covers every target", () => {
   assert.match(workflow, /push:\n    tags: \['v\*'\]/);
   assert.match(
     workflow,
-    /publish:\n    if: startsWith\(github\.ref, 'refs\/tags\/'\)/,
+    /publish:\n    if: >-[\s\S]{0,300}startsWith\(github\.ref, 'refs\/tags\/'\)/,
   );
   for (const target of [
     "aarch64-apple-darwin",
@@ -60,7 +268,10 @@ test("release version has one authoritative prerelease value", () => {
   );
   assert.ok(packager.includes("server/Cargo.toml"));
   assert.match(packager, /version=\$\(sed /);
-  assert.match(workflow, /test "\$GITHUB_REF_NAME" = "v\$version"/);
+  assert.match(
+    workflow,
+    /node scripts\/release-policy\.mjs classify-tag "\$GITHUB_REF_NAME"/,
+  );
 });
 
 test("packaging normalizes archive ownership with native GNU and BSD tar flags", () => {

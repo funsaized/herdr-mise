@@ -251,6 +251,28 @@ test("dinner theme URL selects the dark lighting setting", async ({ page }) => {
   );
 });
 
+// Stable acceptance calls this visual-product coverage: deterministic browser
+// fixtures prove layout/theme behavior, never the presence of live agents.
+for (const theme of ["light", "dinner"] as const) {
+  for (const count of [1, 6, 12] as const) {
+    test(`visual-product mixed x ${count} x ${theme}`, async ({ page }) => {
+      const errors = watchErrors(page);
+      await page.goto(`/?preset=mixed&agents=${count}&theme=${theme}`);
+      await expect(placard(page)).toBeVisible();
+      expect([...(await collectStationNames(page, count))].sort()).toEqual(
+        [...expectedNames("mixed", count)].sort(),
+      );
+      await page.getByRole("button", { name: "Open settings" }).click();
+      await expect(
+        page.getByRole("button", {
+          name: theme === "dinner" ? "Dinner" : "Light",
+        }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(errors).toEqual([]);
+    });
+  }
+}
+
 test("idle cooks expose all four stable decorative poses", async ({ page }) => {
   await page.goto("/?preset=idle&agents=6&stats");
   await expect(placard(page)).toBeVisible();

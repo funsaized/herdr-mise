@@ -23,7 +23,9 @@
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "capture:readme": "node scripts/capture-readme-media.mjs",
     "perf": "playwright test --config perf/playwright.config.ts",
-    "test:visual": "playwright test --config e2e/playwright.config.ts"
+    "test:visual": "playwright test --config e2e/playwright.config.ts",
+    "test:acceptance": "node --test scripts/acceptance-evidence.test.mjs scripts/public-artifact.test.mjs",
+    "validate:acceptance-evidence": "node scripts/validate-acceptance-evidence.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

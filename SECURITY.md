@@ -27,4 +27,11 @@ of scope here — report those upstream.
 
 ## Supported versions
 
-Only the latest release is supported with fixes.
+The project currently has prerelease builds only. Until a stable release is
+published, only the newest public prerelease is eligible for security fixes;
+older prereleases are unsupported.
+
+After a stable release exists, only the newest stable release is supported.
+Prereleases published after that point are evaluation builds and receive fixes
+only when explicitly identified as supported in their release notes. This
+policy does not claim that a stable release is available today.
