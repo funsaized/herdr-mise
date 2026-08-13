@@ -60,7 +60,7 @@ fn source_status_text(status: &SourceStatus) -> &'static str {
     }
 }
 
-fn status_lines(
+pub(crate) fn status_lines(
     mode: AppMode,
     source_status: &SourceStatus,
     diagnostic: Option<&SourceDiagnostic>,

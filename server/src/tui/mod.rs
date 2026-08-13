@@ -1,4 +1,5 @@
 pub mod canvas;
+pub mod scene;
 pub mod state;
 pub mod theme;
 pub mod view;
@@ -26,6 +27,43 @@ use tokio_util::sync::CancellationToken;
 
 use crate::feed::Feed;
 use state::AgentTable;
+
+const SCENE_TICK_INTERVAL: Duration = Duration::from_millis(100);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TerminalCapabilities {
+    color_mode: canvas::ColorMode,
+    scene_supported: bool,
+}
+
+fn terminal_capabilities(
+    term: Option<&str>,
+    colorterm: Option<&str>,
+    no_color: bool,
+) -> TerminalCapabilities {
+    let color_mode = if colorterm.is_some_and(|value| {
+        let value = value.to_ascii_lowercase();
+        value.contains("truecolor") || value.contains("24bit")
+    }) {
+        canvas::ColorMode::Truecolor
+    } else {
+        canvas::ColorMode::Xterm256
+    };
+    TerminalCapabilities {
+        color_mode,
+        scene_supported: !no_color && !term.is_some_and(|value| value.eq_ignore_ascii_case("dumb")),
+    }
+}
+
+fn startup_terminal_capabilities() -> TerminalCapabilities {
+    let term = std::env::var_os("TERM");
+    let colorterm = std::env::var_os("COLORTERM");
+    terminal_capabilities(
+        term.as_deref().and_then(std::ffi::OsStr::to_str),
+        colorterm.as_deref().and_then(std::ffi::OsStr::to_str),
+        std::env::var_os("NO_COLOR").is_some(),
+    )
+}
 
 #[derive(Debug, PartialEq)]
 enum FeedDecision<T> {
@@ -115,16 +153,28 @@ impl Drop for TerminalGuard {
 }
 
 pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) -> io::Result<()> {
+    let capabilities = startup_terminal_capabilities();
     let _guard = TerminalGuard::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let mut events = EventStream::new();
     let mut receiver = feed.subscribe();
     let mut table = AgentTable::default();
     table.apply(feed.snapshot().await);
-    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
     loop {
-        terminal.draw(|frame| view::draw(frame, &table, warning.message(), Utc::now(), tick))?;
+        let now = Utc::now();
+        terminal.draw(|frame| {
+            scene::draw(
+                frame,
+                &table,
+                warning.message(),
+                now,
+                tick,
+                capabilities.color_mode,
+                capabilities.scene_supported,
+            )
+        })?;
         tokio::select! {
             _ = shutdown.cancelled() => break,
             _ = interval.tick() => tick = tick.wrapping_add(1),
@@ -147,6 +197,33 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn startup_capability_detection_is_injectable_and_non_interactive() {
+        assert_eq!(
+            terminal_capabilities(Some("xterm-256color"), Some("truecolor"), false),
+            TerminalCapabilities {
+                color_mode: canvas::ColorMode::Truecolor,
+                scene_supported: true
+            }
+        );
+        assert_eq!(
+            terminal_capabilities(Some("xterm-256color"), None, false),
+            TerminalCapabilities {
+                color_mode: canvas::ColorMode::Xterm256,
+                scene_supported: true
+            }
+        );
+        assert!(!terminal_capabilities(Some("dumb"), Some("truecolor"), false).scene_supported);
+        assert!(
+            !terminal_capabilities(Some("xterm-256color"), Some("truecolor"), true).scene_supported
+        );
+    }
+
+    #[test]
+    fn scene_tick_interval_is_ten_hertz() {
+        assert_eq!(SCENE_TICK_INTERVAL, Duration::from_millis(100));
+    }
+
     #[test]
     fn panic_hook_contract_is_installed_before_raw_mode_helper_returns() {
         install_panic_restore_hook();

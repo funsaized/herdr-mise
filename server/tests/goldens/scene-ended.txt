@@ -1,0 +1,461 @@
+AREA 80x24
+TEXT 00 "▀▀MISE — LIVE▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 00 000..002 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 002..003 symbol="M" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 003..004 symbol="I" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 004..005 symbol="S" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 005..006 symbol="E" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 006..007 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 007..008 symbol="—" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 008..009 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 009..010 symbol="L" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 010..011 symbol="I" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 011..012 symbol="V" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 012..013 symbol="E" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 013..078 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 00 078..080 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 01 "▀▀Waiting for agents — start one in herdr▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀86 BOARD▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 01 000..002 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 002..003 symbol="W" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 003..004 symbol="a" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 004..005 symbol="i" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 005..006 symbol="t" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 006..007 symbol="i" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 007..008 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 008..009 symbol="g" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 009..010 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 010..011 symbol="f" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 011..012 symbol="o" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 012..013 symbol="r" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 013..014 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 014..015 symbol="a" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 015..016 symbol="g" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 016..017 symbol="e" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 017..018 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 018..019 symbol="t" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 019..020 symbol="s" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 020..021 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 021..022 symbol="—" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 022..023 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 023..024 symbol="s" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 024..025 symbol="t" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 025..026 symbol="a" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 026..027 symbol="r" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 027..028 symbol="t" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 028..029 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 029..030 symbol="o" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 030..031 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 031..032 symbol="e" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 032..033 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 033..034 symbol="i" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 034..035 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 035..036 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 036..037 symbol="h" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 037..038 symbol="e" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 038..039 symbol="r" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 039..040 symbol="d" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 040..041 symbol="r" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 041..056 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 056..058 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 01 058..059 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 01 059..060 symbol="8" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 060..061 symbol="6" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 061..062 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 062..063 symbol="B" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 063..064 symbol="O" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 064..065 symbol="A" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 065..066 symbol="R" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 066..067 symbol="D" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 067..077 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 01 077..078 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 01 078..080 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 02 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀Cook ended 7T▀▀▀▀▀▀▀▀"
+CELL 02 000..058 symbol="▀" fg=Rgb(73, 67, 59) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 02 058..059 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 02 059..060 symbol="C" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 060..062 symbol="o" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 062..063 symbol="k" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 063..064 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 064..065 symbol="e" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 065..066 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 066..067 symbol="d" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 067..068 symbol="e" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 068..069 symbol="d" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 069..070 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 070..071 symbol="7" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 071..072 symbol="T" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 072..077 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 02 077..078 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 02 078..080 symbol="▀" fg=Rgb(73, 67, 59) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 03 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 03 000..058 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 03 058..059 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 03 059..077 symbol="▀" fg=Rgb(36, 53, 41) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 03 077..078 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 03 078..080 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 04 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 04 000..058 symbol="▀" fg=Rgb(73, 67, 59) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 04 058..059 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 04 059..077 symbol="▀" fg=Rgb(36, 53, 41) bg=Rgb(36, 53, 41) mod=NONE skip=false
+CELL 04 077..078 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 04 078..080 symbol="▀" fg=Rgb(73, 67, 59) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 05 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 05 000..058 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 05 058..059 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 05 059..077 symbol="▀" fg=Rgb(36, 53, 41) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 05 077..078 symbol="▀" fg=Rgb(197, 150, 69) bg=Rgb(197, 150, 69) mod=NONE skip=false
+CELL 05 078..080 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 06 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 06 000..080 symbol="▀" fg=Rgb(73, 67, 59) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 07 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 07 000..002 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 07 002..078 symbol="▀" fg=Rgb(112, 120, 120) bg=Rgb(112, 120, 120) mod=NONE skip=false
+CELL 07 078..080 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 08 "▀▀▀PASS — ORDERS UP▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 08 000..002 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 08 002..003 symbol="▀" fg=Rgb(61, 69, 70) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 003..004 symbol="P" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 004..005 symbol="A" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 005..007 symbol="S" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 007..008 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 008..009 symbol="—" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 009..010 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 010..011 symbol="O" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 011..012 symbol="R" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 012..013 symbol="D" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 013..014 symbol="E" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 014..015 symbol="R" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 015..016 symbol="S" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 016..017 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 017..018 symbol="U" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 018..019 symbol="P" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 019..077 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 077..078 symbol="▀" fg=Rgb(61, 69, 70) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 08 078..080 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 09 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 09 000..002 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+CELL 09 002..078 symbol="▀" fg=Rgb(61, 69, 70) bg=Rgb(61, 69, 70) mod=NONE skip=false
+CELL 09 078..080 symbol="▀" fg=Rgb(55, 50, 45) bg=Rgb(55, 50, 45) mod=NONE skip=false
+TEXT 10 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 10 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 10 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 10 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 11 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 11 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 11 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 11 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 12 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 12 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 12 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 12 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 13 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 13 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 13 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 13 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 14 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 14 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 14 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 14 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 15 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 15 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 15 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 15 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 16 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 16 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 16 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 16 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 17 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 17 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 17 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 17 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 18 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 18 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 18 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 18 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 19 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 19 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 19 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 19 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 20 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 20 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 20 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 20 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 21 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 21 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 21 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 21 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 22 "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 22 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 001..008 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 008..009 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 009..016 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 016..017 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 017..024 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 024..025 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 025..032 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 032..033 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 033..040 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 040..041 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 041..048 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 048..049 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 049..056 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 056..057 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 057..064 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 064..065 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 065..072 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 22 072..073 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 22 073..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false
+TEXT 23 "▀bind warning · q / Esc quit · tick 9▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+CELL 23 000..001 symbol="▀" fg=Rgb(43, 48, 49) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 001..002 symbol="b" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 002..003 symbol="i" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 003..004 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 004..005 symbol="d" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 005..006 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 006..007 symbol="w" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 007..008 symbol="a" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 008..009 symbol="r" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 009..010 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 010..011 symbol="i" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 011..012 symbol="n" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 012..013 symbol="g" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 013..014 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 014..015 symbol="·" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 015..016 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 016..017 symbol="q" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 017..018 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 018..019 symbol="/" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 019..020 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 020..021 symbol="E" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 021..022 symbol="s" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 022..023 symbol="c" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 023..024 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 024..025 symbol="q" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 025..026 symbol="u" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 026..027 symbol="i" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 027..028 symbol="t" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 028..029 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 029..030 symbol="·" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 030..031 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 031..032 symbol="t" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 032..033 symbol="i" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 033..034 symbol="c" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 034..035 symbol="k" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 035..036 symbol=" " fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 036..037 symbol="9" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 037..040 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 040..041 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 041..048 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 048..049 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 049..056 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 056..057 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 057..064 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 064..065 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 065..072 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 072..073 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(43, 48, 49) mod=NONE skip=false
+CELL 23 073..079 symbol="▀" fg=Rgb(233, 228, 208) bg=Rgb(29, 32, 34) mod=NONE skip=false
+CELL 23 079..080 symbol="▀" fg=Rgb(29, 32, 34) bg=Rgb(29, 32, 34) mod=NONE skip=false

@@ -18,6 +18,17 @@ pub const ACCENTS: [Color; 12] = [
 ];
 pub const CHALK: Color = Color::Rgb(0xe9, 0xe4, 0xd0);
 pub const CHALKBOARD: Color = Color::Rgb(0x24, 0x35, 0x29);
+pub const WALL: Color = Color::Rgb(0x37, 0x32, 0x2d);
+pub const TILE: Color = Color::Rgb(0x49, 0x43, 0x3b);
+pub const FLOOR: Color = Color::Rgb(0x1d, 0x20, 0x22);
+pub const FLOOR_SEAM: Color = Color::Rgb(0x2b, 0x30, 0x31);
+pub const STEEL: Color = Color::Rgb(0x70, 0x78, 0x78);
+pub const STEEL_DARK: Color = Color::Rgb(0x3d, 0x45, 0x46);
+pub const BRASS: Color = Color::Rgb(0xc5, 0x96, 0x45);
+pub const COAT: Color = Color::Rgb(0xe4, 0xdf, 0xd2);
+pub const SKIN: Color = Color::Rgb(0xc7, 0x91, 0x68);
+pub const INK: Color = Color::Rgb(0x18, 0x1b, 0x1c);
+pub const STEAM: [Color; 2] = [Color::Rgb(0xd6, 0xdd, 0xda), Color::Rgb(0x8d, 0x99, 0x96)];
 
 pub fn accent(index: u8) -> Color {
     ACCENTS[usize::from(index) % ACCENTS.len()]
