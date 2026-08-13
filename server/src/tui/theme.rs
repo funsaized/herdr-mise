@@ -1,0 +1,79 @@
+use ratatui::style::Color;
+
+use crate::protocol::AgentState;
+
+pub const ACCENTS: [Color; 12] = [
+    Color::Rgb(0x5b, 0x8a, 0x8f),
+    Color::Rgb(0x8a, 0x6a, 0x92),
+    Color::Rgb(0x66, 0x7a, 0x9e),
+    Color::Rgb(0x8a, 0x8a, 0x4f),
+    Color::Rgb(0xb0, 0x7a, 0x7a),
+    Color::Rgb(0xa9, 0x8a, 0x5b),
+    Color::Rgb(0x6f, 0x9a, 0x8d),
+    Color::Rgb(0x99, 0x7f, 0x5e),
+    Color::Rgb(0x7a, 0x7f, 0x9e),
+    Color::Rgb(0x8f, 0x9a, 0x6f),
+    Color::Rgb(0x9a, 0x6f, 0x7f),
+    Color::Rgb(0x6f, 0x8a, 0x9a),
+];
+
+pub fn accent(index: u8) -> Color {
+    ACCENTS[usize::from(index) % ACCENTS.len()]
+}
+
+pub fn state_color(state: &AgentState) -> Color {
+    match state {
+        AgentState::Idle | AgentState::Ended => Color::Rgb(0x8a, 0x82, 0x72),
+        AgentState::Working => Color::Rgb(0xf0, 0x88, 0x2a),
+        AgentState::Blocked => Color::Rgb(0xd8, 0x34, 0x2c),
+        AgentState::Done => Color::Rgb(0x4f, 0x9d, 0x5d),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accents_are_exact_client_tokens_and_wrap_safely() {
+        assert_eq!(
+            ACCENTS,
+            [
+                Color::Rgb(0x5b, 0x8a, 0x8f),
+                Color::Rgb(0x8a, 0x6a, 0x92),
+                Color::Rgb(0x66, 0x7a, 0x9e),
+                Color::Rgb(0x8a, 0x8a, 0x4f),
+                Color::Rgb(0xb0, 0x7a, 0x7a),
+                Color::Rgb(0xa9, 0x8a, 0x5b),
+                Color::Rgb(0x6f, 0x9a, 0x8d),
+                Color::Rgb(0x99, 0x7f, 0x5e),
+                Color::Rgb(0x7a, 0x7f, 0x9e),
+                Color::Rgb(0x8f, 0x9a, 0x6f),
+                Color::Rgb(0x9a, 0x6f, 0x7f),
+                Color::Rgb(0x6f, 0x8a, 0x9a),
+            ]
+        );
+        assert_eq!(accent(0), ACCENTS[0]);
+        assert_eq!(accent(11), ACCENTS[11]);
+        assert_eq!(accent(12), ACCENTS[0]);
+        assert_eq!(accent(u8::MAX), ACCENTS[3]);
+    }
+
+    #[test]
+    fn semantic_states_use_established_tokens() {
+        assert_eq!(state_color(&AgentState::Idle), Color::Rgb(0x8a, 0x82, 0x72));
+        assert_eq!(
+            state_color(&AgentState::Working),
+            Color::Rgb(0xf0, 0x88, 0x2a)
+        );
+        assert_eq!(
+            state_color(&AgentState::Blocked),
+            Color::Rgb(0xd8, 0x34, 0x2c)
+        );
+        assert_eq!(state_color(&AgentState::Done), Color::Rgb(0x4f, 0x9d, 0x5d));
+        assert_eq!(
+            state_color(&AgentState::Ended),
+            Color::Rgb(0x8a, 0x82, 0x72)
+        );
+    }
+}
