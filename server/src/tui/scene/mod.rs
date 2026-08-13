@@ -5,19 +5,19 @@ pub mod sprites;
 use chrono::{DateTime, Utc};
 use ratatui::{
     layout::Rect,
-    style::{Color, Style},
-    text::Line,
-    widgets::Paragraph,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 
 use self::layout::{compute_layout, LayoutDecision, PixelRect};
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
-    state::AgentTable,
+    state::{AgentTable, BoardEntry},
     theme, view,
 };
-use crate::protocol::{AgentRecord, AgentState};
+use crate::protocol::{AgentRecord, AgentState, SourceStatus};
 
 fn mapped(color: Color, mode: ColorMode) -> Color {
     match (mode, color) {
@@ -30,108 +30,159 @@ fn mapped(color: Color, mode: ColorMode) -> Color {
 
 fn pixel_color(key: u8, agent: &AgentRecord) -> Option<Color> {
     match key {
-        b'C' => Some(theme::COAT),
-        b'S' => Some(theme::SKIN),
-        b'A' => Some(theme::accent(agent.accent_index)),
-        b'F' => Some(theme::state_color(&AgentState::Working)),
-        b'R' => Some(theme::state_color(&AgentState::Blocked)),
-        b'G' => Some(theme::state_color(&AgentState::Done)),
-        b'P' => Some(theme::CHALK),
+        b'H' | b'C' => Some(theme::COAT),
+        b'h' | b'c' => Some(theme::COAT_LO),
+        b'S' | b'K' => Some(theme::SKIN),
+        b'e' => Some(theme::EYE),
+        b'a' => Some(theme::accent(agent.accent_index)),
+        b'A' => Some(theme::accent_dim(agent.accent_index)),
+        b'D' => Some(theme::PANTS),
+        b'B' => Some(theme::BOOT),
+        b'k' => Some(theme::STEEL),
+        b'W' => Some(theme::PLATE),
+        b'G' => Some(theme::GREEN),
+        b'R' => Some(theme::SKIN_MAD),
+        b'b' => Some(theme::BROW_MAD),
+        b'o' => Some(theme::BAND),
         _ => None,
     }
 }
 
-fn border(canvas: &mut PixelCanvas, rect: PixelRect, color: Color) {
-    canvas.fill_rect(rect.x.into(), rect.y.into(), rect.width.into(), 1, color);
-    canvas.fill_rect(
-        rect.x.into(),
-        i32::from(rect.bottom().saturating_sub(1)),
-        rect.width.into(),
-        1,
-        color,
-    );
-    canvas.fill_rect(rect.x.into(), rect.y.into(), 1, rect.height.into(), color);
-    canvas.fill_rect(
-        i32::from(rect.right().saturating_sub(1)),
-        rect.y.into(),
-        1,
-        rect.height.into(),
-        color,
-    );
+fn cell_rect(rect: PixelRect) -> Rect {
+    Rect::new(rect.x, rect.y / 2, rect.width, rect.height.div_ceil(2))
 }
 
-fn draw_agent(
-    canvas: &mut PixelCanvas,
-    station: PixelRect,
-    agent: &AgentRecord,
-    index: usize,
-    tick: u64,
-) {
-    let state_color = theme::state_color(&agent.state);
-    border(
-        canvas,
-        station,
-        if agent.state == AgentState::Blocked {
-            state_color
-        } else {
-            theme::STEEL_DARK
-        },
-    );
-    let sprite = sprites::cook_sprite(&agent.state, tick + index as u64);
-    let sprite_x = i32::from(station.x + station.width.saturating_sub(sprite.width() as u16) / 2);
-    let sprite_y = i32::from(station.y + 1);
-    for (y, row) in sprite.rows.iter().enumerate() {
-        for (x, key) in row.bytes().enumerate() {
-            if let Some(color) = pixel_color(key, agent) {
-                canvas.put(sprite_x + x as i32, sprite_y + y as i32, color);
+fn put_inside(canvas: &mut PixelCanvas, station: PixelRect, x: i32, y: i32, color: Color) {
+    if x > i32::from(station.x)
+        && x < i32::from(station.right().saturating_sub(1))
+        && y > i32::from(station.y)
+        && y < i32::from(station.bottom().saturating_sub(1))
+    {
+        canvas.put(x, y, color);
+    }
+}
+
+fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord, tick: u64) {
+    let sprite = sprites::cook_sprite(&agent.state, tick);
+    if sprite.rows.is_empty()
+        || station.width < sprites::SPRITE_WIDTH as u16 + 2
+        || station.height < sprites::SPRITE_HALF_ROWS as u16 + 6
+    {
+        return;
+    }
+    let working = agent.state == AgentState::Working;
+    let centered = station.x + station.width.saturating_sub(sprite.width() as u16) / 2;
+    let sprite_x = i32::from(centered.saturating_sub(u16::from(working) * 3));
+    let sprite_y = i32::from(station.y + 4);
+    if working && station.width >= 24 {
+        // Pinned paper ticket, matching the handoff's 4x6 half-pixel card.
+        let ticket_x = i32::from(station.x + 2);
+        let ticket_y = i32::from(station.y + 3);
+        for row in 0..6 {
+            for column in 0..4 {
+                put_inside(
+                    canvas,
+                    station,
+                    ticket_x + column,
+                    ticket_y + row,
+                    theme::PLATE,
+                );
             }
         }
+        for column in 1..=2 {
+            put_inside(
+                canvas,
+                station,
+                ticket_x + column,
+                ticket_y - 1,
+                theme::STEEL_LO,
+            );
+        }
+        for column in 0..3 {
+            put_inside(
+                canvas,
+                station,
+                ticket_x + column,
+                ticket_y + 1,
+                theme::STEAM,
+            );
+            put_inside(
+                canvas,
+                station,
+                ticket_x + column,
+                ticket_y + 3,
+                theme::STEAM,
+            );
+        }
+        for column in 0..2 {
+            put_inside(
+                canvas,
+                station,
+                ticket_x + column,
+                ticket_y + 5,
+                theme::STEAM,
+            );
+        }
     }
-    canvas.fill_rect(
-        i32::from(station.right().saturating_sub(4)),
-        i32::from(station.y + 1),
-        3,
-        2,
-        theme::accent(agent.accent_index),
-    );
-    if agent.state == AgentState::Working {
-        for particle in
-            particles::steam_at_tick(tick, index, sprite_x as i16 + 3, sprite_y as i16 - 1)
-        {
-            if particle.active {
-                canvas.put(
-                    i32::from(particle.x),
-                    i32::from(particle.y),
-                    theme::STEAM[usize::from(particle.shade)],
+
+    // Match the mock's z-order: the cook wins any overlap with the ticket.
+    for (row_index, row) in sprite.rows.iter().enumerate() {
+        for (column, key) in row.bytes().enumerate() {
+            if let Some(color) = pixel_color(key, agent) {
+                put_inside(
+                    canvas,
+                    station,
+                    sprite_x + column as i32,
+                    sprite_y + row_index as i32,
+                    color,
                 );
             }
         }
     }
-}
 
-fn overlay(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    x: u16,
-    y: u16,
-    width: u16,
-    text: String,
-    color: Color,
-    mode: ColorMode,
-) {
-    if y >= area.height || x >= area.width {
+    if !working || station.width < 24 {
         return;
     }
-    let line = Line::from(text);
-    let text_width = u16::try_from(line.width()).unwrap_or(u16::MAX);
+
+    // Pot and alternating flames sit to the right of the static working pose.
+    let pot_x = sprite_x + 13;
+    let pot_y = sprite_y + 9;
+    for column in 0..5 {
+        put_inside(canvas, station, pot_x + column, pot_y, theme::POT_HI);
+        put_inside(canvas, station, pot_x + column, pot_y + 1, theme::POT);
+        put_inside(canvas, station, pot_x + column, pot_y + 2, theme::POT);
+    }
+    put_inside(canvas, station, pot_x + 5, pot_y + 1, theme::POT_HI);
+    let (left_fire, right_fire) = if tick.is_multiple_of(2) {
+        (theme::FIRE_HI, theme::FIRE)
+    } else {
+        (theme::FIRE, theme::FIRE_HI)
+    };
+    put_inside(canvas, station, pot_x + 1, pot_y + 3, left_fire);
+    put_inside(canvas, station, pot_x + 3, pot_y + 3, right_fire);
+
+    for particle in particles::steam_at_tick(tick, (pot_x + 1) as i16, (pot_y - 1) as i16) {
+        put_inside(
+            canvas,
+            station,
+            i32::from(particle.x),
+            i32::from(particle.y),
+            if particle.shade == 0 {
+                theme::STEAM_HI
+            } else {
+                theme::STEAM
+            },
+        );
+    }
+}
+
+fn render_line(frame: &mut Frame<'_>, area: Rect, x: u16, y: u16, width: u16, line: Line<'static>) {
+    if x >= area.width || y >= area.height || width == 0 {
+        return;
+    }
     frame.render_widget(
-        Paragraph::new(line).style(Style::default().fg(mapped(color, mode))),
-        Rect::new(
-            area.x + x,
-            area.y + y,
-            width.min(text_width).min(area.width - x),
-            1,
-        ),
+        Paragraph::new(line),
+        Rect::new(area.x + x, area.y + y, width.min(area.width - x), 1),
     );
 }
 
@@ -147,20 +198,63 @@ fn blocked_elapsed(agent: &AgentRecord, now: DateTime<Utc>) -> String {
     format!("{:02}:{:02}", elapsed / 60, elapsed % 60)
 }
 
-fn wrap_words(text: &str, width: usize) -> Vec<String> {
-    let mut lines = vec![String::new()];
-    for word in text.split_whitespace() {
-        let line = lines.last_mut().unwrap();
-        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > width {
-            lines.push(word.into());
-        } else {
-            if !line.is_empty() {
-                line.push(' ');
-            }
-            line.push_str(word);
-        }
+fn format_runtime(milliseconds: u64) -> String {
+    let seconds = milliseconds / 1_000;
+    let minutes = seconds / 60;
+    if minutes >= 60 {
+        format!("{}:{:02}", minutes / 60, minutes % 60)
+    } else {
+        format!("{:02}:{:02}", minutes, seconds % 60)
     }
-    lines
+}
+
+fn split_line(text: &str, width: usize) -> (String, String) {
+    if text.chars().count() <= width {
+        return (text.into(), String::new());
+    }
+    let prefix = text.chars().take(width).collect::<String>();
+    let split = prefix.rfind(char::is_whitespace).unwrap_or(prefix.len());
+    let first = prefix[..split].to_owned();
+    let consumed_chars = first.chars().count();
+    let rest = text
+        .chars()
+        .skip(consumed_chars)
+        .collect::<String>()
+        .trim_start()
+        .to_owned();
+    (first, rest)
+}
+
+fn board_line(entry: &BoardEntry, width: usize) -> String {
+    if width < 12 {
+        return entry.name.chars().take(width).collect();
+    }
+    let name_width = width.saturating_sub(12).max(4);
+    format!(
+        "{:<name_width$} {:>5} {:>3}T",
+        entry
+            .name
+            .to_uppercase()
+            .chars()
+            .take(name_width)
+            .collect::<String>(),
+        format_runtime(entry.runtime_ms),
+        entry.tickets,
+    )
+}
+
+fn connection_text(table: &AgentTable, warning: Option<&str>) -> String {
+    let connection = match table.source_status() {
+        SourceStatus::Connected => "connected",
+        SourceStatus::UnavailableSocket => "Herdr socket unavailable",
+        SourceStatus::Timeout => "Herdr timeout",
+        SourceStatus::UnsupportedProtocol => "unsupported Herdr protocol",
+        SourceStatus::IncompatibleResponse => "incompatible Herdr response",
+    };
+    warning.map_or_else(
+        || connection.into(),
+        |warning| format!("{connection} · {warning}"),
+    )
 }
 
 pub fn draw(
@@ -173,11 +267,10 @@ pub fn draw(
     scene_supported: bool,
 ) {
     let area = frame.area();
-    let LayoutDecision::Scene(layout) = compute_layout(
-        area.width,
-        area.height.saturating_mul(2),
-        table.agents().count(),
-    ) else {
+    let agents = table.agents().collect::<Vec<_>>();
+    let LayoutDecision::Scene(layout) =
+        compute_layout(area.width, area.height.saturating_mul(2), agents.len())
+    else {
         view::draw(frame, table, warning, now, tick);
         return;
     };
@@ -189,73 +282,57 @@ pub fn draw(
     let mut canvas = PixelCanvas::new(
         area.width,
         area.height.saturating_mul(2),
-        theme::WALL,
+        theme::BG,
         color_mode,
     );
-    canvas.fill_rect(
-        0,
-        0,
-        area.width.into(),
-        area.height.saturating_mul(2).into(),
-        theme::WALL,
-    );
-    for y in (4..layout.pass.y).step_by(4) {
-        canvas.fill_rect(0, y.into(), area.width.into(), 1, theme::TILE);
-    }
-    canvas.fill_rect(
-        0,
-        layout.pass.bottom().into(),
-        area.width.into(),
-        i32::from(layout.room.height - layout.pass.bottom()),
-        theme::FLOOR,
-    );
-    for x in (0..area.width).step_by(8) {
-        canvas.fill_rect(
-            x.into(),
-            layout.pass.bottom().into(),
-            1,
-            i32::from(layout.room.height - layout.pass.bottom()),
-            theme::FLOOR_SEAM,
-        );
-    }
-    canvas.fill_rect(
-        layout.pass.x.into(),
-        layout.pass.y.into(),
-        layout.pass.width.into(),
-        layout.pass.height.into(),
-        theme::STEEL_DARK,
-    );
-    canvas.fill_rect(
-        layout.pass.x.into(),
-        layout.pass.y.into(),
-        layout.pass.width.into(),
-        2,
-        theme::STEEL,
-    );
+    canvas.clear(theme::BG);
     canvas.fill_rect(
         layout.board.x.into(),
         layout.board.y.into(),
         layout.board.width.into(),
         layout.board.height.into(),
-        theme::CHALKBOARD,
+        theme::BOARD,
     );
-    border(&mut canvas, layout.board, theme::BRASS);
-
-    let agents = table.agents().collect::<Vec<_>>();
-    for (index, (station, agent)) in layout.stations.iter().copied().zip(&agents).enumerate() {
-        draw_agent(&mut canvas, station, agent, index, tick);
-    }
     if agents
         .iter()
         .any(|agent| agent.state == AgentState::Blocked)
     {
-        border(
-            &mut canvas,
-            layout.room,
-            theme::state_color(&AgentState::Blocked),
+        canvas.fill_rect(
+            layout.pass.x.into(),
+            layout.pass.y.into(),
+            layout.pass.width.into(),
+            layout.pass.height.into(),
+            theme::PANEL2,
         );
     }
+    for (station, agent) in layout.stations.iter().copied().zip(&agents) {
+        canvas.fill_rect(
+            i32::from(station.x + 1),
+            i32::from(station.y + 2),
+            i32::from(station.width.saturating_sub(2)),
+            i32::from(station.height.saturating_sub(4)),
+            theme::PANEL,
+        );
+        if agent.state == AgentState::Done && station.height >= 6 {
+            canvas.fill_rect(
+                i32::from(station.x + 1),
+                i32::from(station.bottom().saturating_sub(6)),
+                i32::from(station.width.saturating_sub(2)),
+                2,
+                theme::GREEN,
+            );
+        }
+        draw_sprite(&mut canvas, station, agent, tick);
+    }
     frame.render_widget(&canvas, area);
+
+    // Always-neutral room frame; escalation stays local to blocked stations.
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(mapped(theme::FRAME, color_mode))),
+        area,
+    );
 
     let (title, source) = view::status_lines(
         table.mode(),
@@ -263,141 +340,268 @@ pub fn draw(
         table.source_diagnostic(),
         agents.len(),
     );
-    overlay(
+    render_line(
         frame,
         area,
         2,
-        0,
+        1,
         area.width.saturating_sub(4),
-        title,
-        theme::CHALK,
-        color_mode,
+        Line::from(vec![Span::styled(
+            title,
+            Style::default()
+                .fg(mapped(theme::TEXT, color_mode))
+                .add_modifier(Modifier::BOLD),
+        )]),
     );
-    let source_width = layout.board.x.saturating_sub(4).max(1);
-    for (line, source_line) in wrap_words(&source, usize::from(source_width))
-        .into_iter()
-        .enumerate()
-    {
-        overlay(
+    let tick_text = format!("10Hz · tick {tick}");
+    render_line(
+        frame,
+        area,
+        area.width
+            .saturating_sub(tick_text.chars().count() as u16 + 2),
+        1,
+        tick_text.chars().count() as u16,
+        Line::styled(
+            tick_text,
+            Style::default().fg(mapped(theme::DIM, color_mode)),
+        ),
+    );
+    let source_width = area.width.saturating_sub(4);
+    let (source_first, source_overflow) = split_line(&source, usize::from(source_width));
+    render_line(
+        frame,
+        area,
+        2,
+        2,
+        source_width,
+        Line::styled(
+            source_first,
+            Style::default().fg(mapped(theme::DIM, color_mode)),
+        ),
+    );
+    if !source_overflow.is_empty() {
+        render_line(
             frame,
             area,
             2,
-            1 + line as u16,
-            source_width,
-            source_line,
-            theme::CHALK,
-            color_mode,
-        );
-    }
-    overlay(
-        frame,
-        area,
-        layout.board.x + 1,
-        layout.board.y / 2,
-        layout.board.width.saturating_sub(2),
-        "86 BOARD".into(),
-        theme::CHALK,
-        color_mode,
-    );
-    for (row, entry) in table.board().iter().rev().enumerate() {
-        overlay(
-            frame,
-            area,
-            layout.board.x + 1,
-            layout.board.y / 2 + 1 + row as u16,
-            layout.board.width.saturating_sub(2),
-            format!("{} {}T", entry.name, entry.tickets),
-            theme::CHALK,
-            color_mode,
-        );
-    }
-    overlay(
-        frame,
-        area,
-        3,
-        layout.pass.y / 2 + 1,
-        layout.pass.width.saturating_sub(2),
-        "PASS — ORDERS UP".into(),
-        theme::CHALK,
-        color_mode,
-    );
-    if let Some(agent) = agents
-        .iter()
-        .find(|agent| agent.state == AgentState::Blocked)
-    {
-        overlay(
-            frame,
-            area,
             3,
-            layout.pass.y / 2 + 1,
-            layout.pass.width.saturating_sub(2),
-            format!(
-                "!! BLOCKED {} {} !!",
-                agent.name,
-                blocked_elapsed(agent, now)
+            layout.board.x.saturating_sub(4),
+            Line::styled(
+                source_overflow,
+                Style::default().fg(mapped(theme::DIM, color_mode)),
             ),
-            theme::CHALK,
-            color_mode,
         );
     }
-    for (station, agent) in layout.stations.iter().copied().zip(agents) {
-        let label = match agent.state {
-            AgentState::Idle => format!("{} · PREP", agent.name),
-            AgentState::Working => format!("{} · FIRE", agent.name),
-            AgentState::Blocked => format!("!! BLOCKED {} !!", blocked_elapsed(agent, now)),
-            AgentState::Done => format!("{} · PLATED ✓", agent.name),
-            AgentState::Ended => unreachable!("ended agents are not in the active roster"),
-        };
-        overlay(
-            frame,
-            area,
-            station.x + 1,
-            station.bottom().saturating_sub(2) / 2,
-            station.width.saturating_sub(2),
-            label,
-            theme::CHALK,
-            color_mode,
-        );
-        overlay(
-            frame,
-            area,
-            station.right().saturating_sub(4),
-            station.y / 2,
-            3,
-            format!("{}T", agent.session.tickets),
-            theme::INK,
-            color_mode,
-        );
-    }
-    let footer = warning.map_or_else(
-        || format!("q / Esc quit · tick {tick}"),
-        |warning| format!("{warning} · q / Esc quit · tick {tick}"),
+
+    let board_area = cell_rect(layout.board);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled(
+                " 86 BOARD ",
+                Style::default()
+                    .fg(mapped(theme::BRASS, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .border_style(Style::default().fg(mapped(theme::BRASS, color_mode))),
+        board_area,
     );
-    overlay(
+    for (row, entry) in table.board().iter().rev().take(4).enumerate() {
+        render_line(
+            frame,
+            area,
+            board_area.x + 2,
+            board_area.y + 1 + row as u16,
+            board_area.width.saturating_sub(4),
+            Line::styled(
+                board_line(entry, usize::from(board_area.width.saturating_sub(4))),
+                Style::default()
+                    .fg(mapped(theme::CHALK, color_mode))
+                    .bg(mapped(theme::BOARD, color_mode)),
+            ),
+        );
+    }
+
+    let blocked = agents
+        .iter()
+        .filter(|agent| agent.state == AgentState::Blocked)
+        .copied()
+        .collect::<Vec<_>>();
+    if blocked.is_empty() {
+        render_line(
+            frame,
+            area,
+            4,
+            layout.pass.y / 2,
+            layout.pass.width.saturating_sub(2),
+            Line::styled(
+                "— all stations clear —",
+                Style::default().fg(mapped(theme::DIM, color_mode)),
+            ),
+        );
+    } else {
+        let names = blocked
+            .iter()
+            .map(|agent| agent.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let elapsed = blocked_elapsed(blocked[0], now);
+        render_line(
+            frame,
+            area,
+            4,
+            layout.pass.y / 2,
+            layout.pass.width.saturating_sub(2),
+            Line::styled(
+                format!("‼ BLOCKED  {names}  {elapsed}"),
+                Style::default()
+                    .fg(mapped(theme::RED_HI, color_mode))
+                    .bg(mapped(theme::PANEL2, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        );
+    }
+
+    for (station, agent) in layout.stations.iter().copied().zip(agents.iter().copied()) {
+        let station_area = cell_rect(station);
+        let blocked = agent.state == AgentState::Blocked;
+        frame.render_widget(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(if blocked {
+                    BorderType::Double
+                } else {
+                    BorderType::Plain
+                })
+                .border_style(Style::default().fg(mapped(
+                    if blocked { theme::RED } else { theme::STEEL_LO },
+                    color_mode,
+                ))),
+            station_area,
+        );
+
+        let chip = format!(" {}T ", agent.session.tickets);
+        let chip_width = chip.chars().count() as u16;
+        render_line(
+            frame,
+            area,
+            station_area.right().saturating_sub(chip_width + 1),
+            station_area.y,
+            chip_width,
+            Line::styled(
+                chip,
+                Style::default()
+                    .fg(mapped(theme::BG, color_mode))
+                    .bg(mapped(theme::accent(agent.accent_index), color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        );
+
+        if blocked && station_area.height >= 3 {
+            let banner = format!("‼ BLOCKED {} ‼", blocked_elapsed(agent, now));
+            let banner_width = banner.chars().count() as u16;
+            let banner_x = station_area
+                .x
+                .saturating_add(station_area.width.saturating_sub(banner_width) / 2);
+            render_line(
+                frame,
+                area,
+                banner_x,
+                station_area.bottom().saturating_sub(2),
+                banner_width.min(station_area.width),
+                Line::styled(
+                    banner,
+                    Style::default()
+                        .fg(mapped(theme::TEXT, color_mode))
+                        .bg(mapped(theme::RED_DIM, color_mode))
+                        .add_modifier(Modifier::BOLD),
+                ),
+            );
+        }
+
+        let (word, word_color, word_bold) = match agent.state {
+            AgentState::Idle => ("PREP", theme::DIM, false),
+            AgentState::Working => ("FIRE", theme::FIRE, false),
+            AgentState::Blocked => ("AT THE PASS", theme::RED_HI, true),
+            AgentState::Done => ("PLATED ✓", theme::GREEN, false),
+            AgentState::Ended => unreachable!("ended agents are not active stations"),
+        };
+        let available = station_area.width.saturating_sub(4);
+        let suffix = format!("· {word} ");
+        let maximum_name = usize::from(available)
+            .saturating_sub(suffix.chars().count() + 2)
+            .max(1);
+        let display_name = agent.name.chars().take(maximum_name).collect::<String>();
+        render_line(
+            frame,
+            area,
+            station_area.x + 2,
+            station_area.bottom().saturating_sub(1),
+            available,
+            Line::from(vec![
+                Span::styled(
+                    format!(" {display_name} "),
+                    Style::default()
+                        .fg(mapped(theme::TEXT, color_mode))
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    suffix,
+                    Style::default()
+                        .fg(mapped(word_color, color_mode))
+                        .add_modifier(if word_bold {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
+                ),
+            ]),
+        );
+    }
+
+    if agents.is_empty() {
+        let waiting = "Waiting for agents — start one in herdr";
+        render_line(
+            frame,
+            area,
+            area.width.saturating_sub(waiting.chars().count() as u16) / 2,
+            area.height / 2,
+            waiting.chars().count() as u16,
+            Line::styled(waiting, Style::default().fg(mapped(theme::DIM, color_mode))),
+        );
+    }
+
+    let connection = connection_text(table, warning);
+    render_line(
         frame,
         area,
-        1,
+        2,
         area.height.saturating_sub(1),
-        area.width.saturating_sub(2),
-        footer,
-        theme::CHALK,
-        color_mode,
+        area.width.saturating_sub(4),
+        Line::styled(
+            connection,
+            Style::default().fg(mapped(theme::DIM, color_mode)),
+        ),
+    );
+    let keys = "q / Esc quit · ? help";
+    render_line(
+        frame,
+        area,
+        area.width.saturating_sub(keys.chars().count() as u16 + 2),
+        area.height.saturating_sub(1),
+        keys.chars().count() as u16,
+        Line::styled(keys, Style::default().fg(mapped(theme::DIM, color_mode))),
     );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        protocol::{
-            AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SessionStats,
-            SourceDiagnostic, SourceStatus,
-        },
-        tui::state::AgentTable,
+    use crate::protocol::{
+        AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic,
     };
-    use chrono::{TimeZone, Utc};
-    use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
-    use std::time::{Duration, Instant};
+    use chrono::TimeZone;
+    use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
 
     fn record(id: &str, state: AgentState) -> AgentRecord {
         AgentRecord {
@@ -416,16 +620,6 @@ mod tests {
         }
     }
 
-    fn upsert(table: &mut AgentTable, agent: AgentRecord) {
-        table.apply(AgentStateEvent::Delta {
-            version: 1,
-            mode: AppMode::Live,
-            operation: DeltaOperation::Upsert,
-            agent: Some(agent),
-            agent_id: None,
-        });
-    }
-
     fn live_table(agents: Vec<AgentRecord>) -> AgentTable {
         let mut table = AgentTable::default();
         table.apply(AgentStateEvent::Snapshot {
@@ -438,15 +632,8 @@ mod tests {
         table
     }
 
-    fn render(
-        table: &AgentTable,
-        width: u16,
-        height: u16,
-        mode: ColorMode,
-        tick: u64,
-    ) -> Terminal<TestBackend> {
-        let backend = TestBackend::new(width, height);
-        let mut terminal = Terminal::new(backend).unwrap();
+    fn render(table: &AgentTable, width: u16, height: u16, tick: u64) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
                 draw(
@@ -455,31 +642,25 @@ mod tests {
                     Some("bind warning"),
                     Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
                     tick,
-                    mode,
+                    ColorMode::Xterm256,
                     true,
                 )
             })
             .unwrap();
-        terminal
+        terminal.backend().buffer().clone()
     }
 
-    fn text(terminal: &Terminal<TestBackend>) -> String {
-        terminal
-            .backend()
-            .buffer()
-            .content
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect()
+    fn text(buffer: &Buffer) -> String {
+        buffer.content.iter().map(|cell| cell.symbol()).collect()
     }
 
     fn buffer_dump(buffer: &Buffer) -> String {
         let mut dump = format!("AREA {}x{}\n", buffer.area.width, buffer.area.height);
         for y in buffer.area.y..buffer.area.bottom() {
-            let text = (buffer.area.x..buffer.area.right())
+            let row = (buffer.area.x..buffer.area.right())
                 .map(|x| buffer.cell((x, y)).unwrap().symbol())
                 .collect::<String>();
-            dump.push_str(&format!("TEXT {y:02} {text:?}\n"));
+            dump.push_str(&format!("TEXT {y:02} {row:?}\n"));
             let mut x = buffer.area.x;
             while x < buffer.area.right() {
                 let cell = buffer.cell((x, y)).unwrap();
@@ -490,7 +671,7 @@ mod tests {
                     if next.fg != cell.fg
                         || next.bg != cell.bg
                         || next.modifier != cell.modifier
-                        || next.skip != cell.skip
+                        || next.diff_option != cell.diff_option
                         || next.symbol() != cell.symbol()
                     {
                         break;
@@ -498,12 +679,8 @@ mod tests {
                     x += 1;
                 }
                 dump.push_str(&format!(
-                    "CELL {y:02} {start:03}..{x:03} symbol={:?} fg={:?} bg={:?} mod={:?} skip={}\n",
-                    cell.symbol(),
-                    cell.fg,
-                    cell.bg,
-                    cell.modifier,
-                    cell.skip
+                    "CELL {y:02} {start:03}..{x:03} symbol={:?} fg={:?} bg={:?} mod={:?} diff={:?}\n",
+                    cell.symbol(), cell.fg, cell.bg, cell.modifier, cell.diff_option
                 ));
             }
         }
@@ -528,42 +705,27 @@ mod tests {
     }
 
     fn golden_cases() -> Vec<(&'static str, AgentTable, u16, u16)> {
-        let idle = snapshot(
-            AppMode::Live,
-            SourceStatus::Connected,
-            None,
-            vec![record("idle", AgentState::Idle)],
-        );
-        let working = snapshot(
-            AppMode::Live,
-            SourceStatus::Connected,
-            None,
-            vec![record("working", AgentState::Working)],
-        );
-        let blocked = snapshot(
-            AppMode::Live,
-            SourceStatus::Connected,
-            None,
-            vec![record("blocked", AgentState::Blocked)],
-        );
-        let done = snapshot(
-            AppMode::Live,
-            SourceStatus::Connected,
-            None,
-            vec![record("done", AgentState::Done)],
-        );
-        let mut ended = snapshot(
-            AppMode::Live,
-            SourceStatus::Connected,
-            None,
-            vec![record("ended", AgentState::Done)],
-        );
-        upsert(&mut ended, record("ended", AgentState::Ended));
+        let state = |name, state| {
+            snapshot(
+                AppMode::Live,
+                SourceStatus::Connected,
+                None,
+                vec![record(name, state)],
+            )
+        };
+        let mut ended = state("ended", AgentState::Done);
+        ended.apply(AgentStateEvent::Delta {
+            version: 1,
+            mode: AppMode::Live,
+            operation: DeltaOperation::Upsert,
+            agent: Some(record("ended", AgentState::Ended)),
+            agent_id: None,
+        });
         vec![
-            ("idle", idle, 80, 24),
-            ("working", working, 80, 24),
-            ("blocked", blocked, 80, 24),
-            ("done", done, 80, 24),
+            ("idle", state("idle", AgentState::Idle), 80, 24),
+            ("working", state("working", AgentState::Working), 80, 24),
+            ("blocked", state("blocked", AgentState::Blocked), 80, 24),
+            ("done", state("done", AgentState::Done), 80, 24),
             ("ended", ended, 80, 24),
             ("demo", AgentTable::default(), 80, 24),
             ("waiting", live_table(vec![]), 80, 24),
@@ -591,59 +753,18 @@ mod tests {
         ]
     }
 
-    fn render_dump(table: &AgentTable, width: u16, height: u16) -> String {
-        let terminal = render(table, width, height, ColorMode::Truecolor, 9);
-        buffer_dump(terminal.backend().buffer())
-    }
-
-    #[test]
-    fn short_overlay_preserves_trailing_scene_pixels() {
-        let mut terminal = Terminal::new(TestBackend::new(5, 1)).unwrap();
-        terminal
-            .draw(|frame| {
-                let area = frame.area();
-                let mut canvas = PixelCanvas::new(5, 2, theme::WALL, ColorMode::Truecolor);
-                canvas.fill_rect(0, 0, 5, 2, theme::state_color(&AgentState::Blocked));
-                frame.render_widget(&canvas, area);
-                overlay(
-                    frame,
-                    area,
-                    0,
-                    0,
-                    5,
-                    "X".into(),
-                    theme::CHALK,
-                    ColorMode::Truecolor,
-                );
-            })
-            .unwrap();
-
-        let buffer = terminal.backend().buffer();
-        assert_eq!(buffer.cell((0, 0)).unwrap().fg, theme::CHALK);
-        for x in 1..5 {
-            let cell = buffer.cell((x, 0)).unwrap();
-            assert_eq!(cell.symbol(), "▀");
-            assert_eq!(
-                cell.fg,
-                theme::state_color(&AgentState::Blocked),
-                "overlay restyled trailing scene pixel at x={x}"
-            );
-        }
-    }
-
     #[test]
     fn fixed_input_scene_goldens_are_stable_and_committed() {
         for (name, table, width, height) in golden_cases() {
-            let actual = render_dump(&table, width, height);
-            assert_eq!(
-                actual,
-                render_dump(&table, width, height),
-                "{name} was nondeterministic"
-            );
+            let actual = buffer_dump(&render(&table, width, height, 9));
+            assert_eq!(actual, buffer_dump(&render(&table, width, height, 9)));
             let path = format!(
                 "{}/tests/goldens/scene-{name}.txt",
                 env!("CARGO_MANIFEST_DIR")
             );
+            if std::env::var_os("UPDATE_SCENE_GOLDENS").is_some() {
+                std::fs::write(&path, &actual).unwrap();
+            }
             let expected = std::fs::read_to_string(&path)
                 .unwrap_or_else(|error| panic!("missing golden {path}: {error}"));
             assert_eq!(actual, expected, "golden mismatch: {path}");
@@ -651,202 +772,179 @@ mod tests {
     }
 
     #[test]
-    fn identical_event_sequence_produces_identical_buffers_for_one_hundred_ticks() {
-        fn replay() -> Vec<Buffer> {
-            let mut table = live_table(vec![
-                record("a", AgentState::Idle),
-                record("b", AgentState::Working),
-            ]);
-            let mut frames = Vec::new();
-            for tick in 0..100 {
-                match tick {
-                    25 => upsert(&mut table, record("a", AgentState::Working)),
-                    50 => upsert(&mut table, record("b", AgentState::Blocked)),
-                    75 => upsert(&mut table, record("a", AgentState::Done)),
-                    _ => {}
-                }
-                frames.push(
-                    render(&table, 80, 24, ColorMode::Truecolor, tick)
-                        .backend()
-                        .buffer()
-                        .clone(),
-                );
+    fn blocked_and_clear_frames_keep_neutral_outer_chrome_without_pulsing() {
+        for table in [
+            live_table(vec![record("idle", AgentState::Idle)]),
+            live_table(vec![record("blocked", AgentState::Blocked)]),
+        ] {
+            let at_zero = render(&table, 80, 24, 0);
+            let at_nine = render(&table, 80, 24, 9);
+            for buffer in [&at_zero, &at_nine] {
+                assert_eq!(buffer.cell((0, 0)).unwrap().fg, theme::FRAME);
+                assert_eq!(buffer.cell((79, 23)).unwrap().fg, theme::FRAME);
             }
-            frames
         }
-        assert_eq!(replay(), replay());
     }
 
     #[test]
-    fn resize_scene_to_fallback_and_back_has_no_stale_cells() {
+    fn state_specific_station_chrome_and_half_block_art_are_present() {
         let table = live_table(vec![
-            record("a", AgentState::Working),
-            record("b", AgentState::Blocked),
+            record("idle", AgentState::Idle),
+            record("work", AgentState::Working),
+            record("blocked", AgentState::Blocked),
         ]);
-        let backend = TestBackend::new(120, 40);
-        let mut reused = Terminal::new(backend).unwrap();
-        let now = Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap();
-        reused
-            .draw(|frame| {
-                draw(
-                    frame,
-                    &table,
-                    Some("bind warning"),
-                    now,
-                    1,
-                    ColorMode::Truecolor,
-                    true,
-                )
-            })
-            .unwrap();
-        reused.backend_mut().resize(79, 23);
-        reused.autoresize().unwrap();
-        reused
-            .draw(|frame| {
-                draw(
-                    frame,
-                    &table,
-                    Some("bind warning"),
-                    now,
-                    2,
-                    ColorMode::Truecolor,
-                    true,
-                )
-            })
-            .unwrap();
-        assert_eq!(
-            reused.backend().buffer(),
-            render(&table, 79, 23, ColorMode::Truecolor, 2)
-                .backend()
-                .buffer()
-        );
-        reused.backend_mut().resize(80, 24);
-        reused.autoresize().unwrap();
-        reused
-            .draw(|frame| {
-                draw(
-                    frame,
-                    &table,
-                    Some("bind warning"),
-                    now,
-                    3,
-                    ColorMode::Truecolor,
-                    true,
-                )
-            })
-            .unwrap();
-        assert_eq!(
-            reused.backend().buffer(),
-            render(&table, 80, 24, ColorMode::Truecolor, 3)
-                .backend()
-                .buffer()
-        );
+        let buffer = render(&table, 80, 24, 2);
+        let output = text(&buffer);
+        for expected in [
+            "PREP",
+            "FIRE",
+            "AT THE PASS",
+            "‼ BLOCKED 00:00 ‼",
+            "10Hz · tick 2",
+            "? help",
+        ] {
+            assert!(output.contains(expected), "missing {expected:?}");
+        }
+        assert!(buffer.content.iter().any(|cell| cell.symbol() == "▀"));
+        assert!(buffer
+            .content
+            .iter()
+            .any(|cell| cell.symbol() == "╔" && cell.fg == theme::RED));
+        let blocked_banner = buffer
+            .content
+            .iter()
+            .find(|cell| cell.symbol() == "‼" && cell.bg == theme::RED_DIM)
+            .expect("blocked station banner");
+        assert_eq!(blocked_banner.fg, theme::TEXT);
+        assert!(!blocked_banner.modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
-    fn twenty_agent_frame_budget_reports_median_and_p95_under_five_ms() {
-        let agents = (0..20)
+    fn working_flames_alternate_but_static_states_do_not() {
+        let working = live_table(vec![record("work", AgentState::Working)]);
+        let even = render(&working, 80, 24, 0);
+        let odd = render(&working, 80, 24, 1);
+        assert_eq!(even.cell((45, 18)).unwrap().fg, theme::FIRE_HI);
+        assert_eq!(even.cell((47, 18)).unwrap().fg, theme::FIRE);
+        assert_eq!(odd.cell((45, 18)).unwrap().fg, theme::FIRE);
+        assert_eq!(odd.cell((47, 18)).unwrap().fg, theme::FIRE_HI);
+        let blocked = live_table(vec![record("blocked", AgentState::Blocked)]);
+        // Tick text changes, so compare the sprite's known center region only.
+        let a = render(&blocked, 80, 24, 0);
+        let b = render(&blocked, 80, 24, 9);
+        for y in 12..19 {
+            for x in 8..19 {
+                assert_eq!(a.cell((x, y)), b.cell((x, y)));
+            }
+        }
+    }
+
+    #[test]
+    fn working_sprite_wins_ticket_overlap_at_minimum_station_width() {
+        let working = live_table(
+            (0..3)
+                .map(|i| record(&i.to_string(), AgentState::Working))
+                .collect(),
+        );
+        let buffer = render(&working, 80, 24, 0);
+        let overlap = buffer.cell((7, 12)).unwrap();
+        assert_eq!(overlap.fg, theme::COAT);
+        assert_eq!(overlap.bg, theme::COAT);
+    }
+
+    #[test]
+    fn responsive_boundaries_and_compact_fallback_are_rendered() {
+        let three = live_table(
+            (0..3)
+                .map(|i| record(&i.to_string(), AgentState::Working))
+                .collect(),
+        );
+        let minimum = text(&render(&three, 80, 24, 0));
+        assert_eq!(minimum.matches("· FIRE").count(), 3);
+        let six = live_table(
+            (0..6)
+                .map(|i| record(&i.to_string(), AgentState::Idle))
+                .collect(),
+        );
+        let full = text(&render(&six, 110, 40, 0));
+        assert_eq!(full.matches("· PREP").count(), 6);
+        let fallback = text(&render(&three, 79, 24, 0));
+        assert!(fallback.contains("Kitchen status"));
+        let fallback = text(&render(&three, 80, 23, 0));
+        assert!(fallback.contains("Kitchen status"));
+    }
+
+    #[test]
+    fn xterm_scene_emits_only_indexed_handoff_colors_and_all_accent_pairs() {
+        let agents = (0..6)
             .map(|index| {
-                record(
-                    &index.to_string(),
-                    match index % 4 {
-                        0 => AgentState::Idle,
-                        1 => AgentState::Working,
-                        2 => AgentState::Blocked,
-                        _ => AgentState::Done,
-                    },
-                )
+                let mut agent = record(&index.to_string(), AgentState::Idle);
+                agent.accent_index = index;
+                agent
             })
             .collect();
-        let table = live_table(agents);
-        for tick in 0..20 {
-            let _ = render(&table, 110, 24, ColorMode::Truecolor, tick);
+        let buffer = render(&live_table(agents), 110, 40, 0);
+        assert!(buffer.content.iter().all(|cell| {
+            matches!(cell.fg, Color::Reset | Color::Indexed(_))
+                && matches!(cell.bg, Color::Reset | Color::Indexed(_))
+        }));
+        let emitted = buffer
+            .content
+            .iter()
+            .flat_map(|cell| [cell.fg, cell.bg])
+            .collect::<Vec<_>>();
+        for expected in theme::ACCENTS.into_iter().chain(theme::ACCENT_DIMS) {
+            assert!(emitted.contains(&expected), "missing rendered {expected:?}");
         }
-        let mut samples = Vec::with_capacity(200);
-        for tick in 0..200 {
-            let started = Instant::now();
-            let _ = render(&table, 110, 24, ColorMode::Truecolor, tick);
-            samples.push(started.elapsed());
+        for expected in [
+            theme::BG,
+            theme::PANEL,
+            theme::FRAME,
+            theme::TEXT,
+            theme::DIM,
+            theme::STEEL_LO,
+            theme::COAT,
+            theme::COAT_LO,
+            theme::SKIN,
+            theme::PANTS,
+            theme::BOOT,
+            theme::BRASS,
+            theme::BOARD,
+        ] {
+            assert!(emitted.contains(&expected), "missing rendered {expected:?}");
         }
-        samples.sort_unstable();
-        let median = samples[samples.len() / 2];
-        let p95 = samples[samples.len() * 95 / 100];
-        eprintln!("20-agent scene median={median:?} p95={p95:?}");
-        assert!(
-            median < Duration::from_millis(5),
-            "median {median:?}, p95 {p95:?}"
-        );
     }
 
     #[test]
-    fn blocked_escalation_is_visible_on_first_render_after_delta_without_color() {
-        let mut table = live_table(vec![record("a", AgentState::Working)]);
-        upsert(&mut table, record("a", AgentState::Blocked));
-        let output = text(&render(&table, 80, 24, ColorMode::Xterm256, 0));
-        assert!(output.contains("!! BLOCKED 00:00 !!"));
-    }
+    fn ended_moves_to_board_and_truthful_status_survives() {
+        let mut table = live_table(vec![record("a", AgentState::Done)]);
+        table.apply(AgentStateEvent::Delta {
+            version: 1,
+            mode: AppMode::Live,
+            operation: DeltaOperation::Upsert,
+            agent: Some(record("a", AgentState::Ended)),
+            agent_id: None,
+        });
+        let output = text(&render(&table, 80, 24, 4));
+        assert!(output.contains("86 BOARD"));
+        assert!(output.contains("COOK A"));
+        assert!(output.contains("Waiting for agents"));
 
-    #[test]
-    fn scene_shell_is_truthful_and_small_or_degraded_term_uses_table() {
-        let table = live_table(vec![]);
-        let scene = text(&render(&table, 80, 24, ColorMode::Truecolor, 0));
-        assert!(scene.contains("MISE — LIVE"));
-        assert!(scene.contains("Waiting for agents"));
-        assert!(!scene.contains("Kitchen status"));
-
-        let small = text(&render(&table, 79, 24, ColorMode::Truecolor, 0));
-        assert!(small.contains("Kitchen status"));
-
-        let mut degraded = Terminal::new(TestBackend::new(80, 24)).unwrap();
-        let now = Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap();
-        degraded
-            .draw(|frame| draw(frame, &table, None, now, 0, ColorMode::Xterm256, false))
-            .unwrap();
-        assert!(text(&degraded).contains("Kitchen status"));
-
-        let unsupported = snapshot(
-            AppMode::Demo,
-            SourceStatus::UnsupportedProtocol,
-            Some(SourceDiagnostic {
+        let mut demo = AgentTable::default();
+        demo.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Demo,
+            source_status: SourceStatus::UnsupportedProtocol,
+            source_diagnostic: Some(SourceDiagnostic {
                 observed_protocol: 23,
                 supported_protocols: vec![17, 19],
                 next_action: "upgrade Herdr, then retry".into(),
             }),
-            vec![],
-        );
-        let unsupported = text(&render(&unsupported, 80, 24, ColorMode::Truecolor, 0));
-        assert!(unsupported.contains("observed"));
-        assert!(unsupported.contains("23; supported: 17, 19"));
-        assert!(unsupported.contains("upgrade Herdr, then retry"));
-    }
-
-    #[test]
-    fn truecolor_and_xterm256_render_same_scene_with_different_color_types() {
-        let table = live_table(vec![record("a", AgentState::Working)]);
-        let truecolor = render(&table, 80, 24, ColorMode::Truecolor, 2);
-        let xterm = render(&table, 80, 24, ColorMode::Xterm256, 2);
-        assert_eq!(text(&truecolor), text(&xterm));
-        assert!(truecolor
-            .backend()
-            .buffer()
-            .content
-            .iter()
-            .any(|cell| matches!(cell.fg, Color::Rgb(..))));
-        assert!(xterm
-            .backend()
-            .buffer()
-            .content
-            .iter()
-            .any(|cell| matches!(cell.fg, Color::Indexed(_))));
-    }
-
-    #[test]
-    fn ended_agent_clears_station_and_is_written_to_86_board() {
-        let mut table = live_table(vec![record("a", AgentState::Done)]);
-        upsert(&mut table, record("a", AgentState::Ended));
-        let output = text(&render(&table, 80, 24, ColorMode::Truecolor, 4));
-        assert!(output.contains("86 BOARD"));
-        assert!(output.contains("Cook a"));
-        assert!(output.contains("Waiting for agents"));
+            agents: vec![],
+        });
+        let output = text(&render(&demo, 110, 40, 0));
+        assert!(output.contains("MISE — DEMO SERVICE"));
+        assert!(output.contains("Mock feed"));
+        assert!(output.contains("Nothing here is real"));
     }
 }

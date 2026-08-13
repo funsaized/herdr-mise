@@ -13,9 +13,9 @@
 # cleanup traps; the tape does no cleanup itself.
 #
 # Why these settings:
-#   - Width 1100 / Height 560: captures approximately 110 columns by 28
+#   - Width 1100 / Height 800: captures approximately 110 columns by 40
 #     rows. The committed scene goldens use an 80x24-cell harness; this
-#     larger capture keeps the status header + 86 board + station grid +
+#     larger capture keeps the status header + 86 board + both station rows +
 #     footer visible at the same time, matching the 30-minute pane review.
 #   - FontSize 14, monospace: the only theme where every glyph
 #     (`▀`, `·`, `!!`, `✓`, accent symbols) renders legibly at the
@@ -25,7 +25,7 @@
 #     makes the README side-by-side comparison visually consistent.
 #   - Padding 24, MarginFill #0b141a: capture chrome outside the terminal
 #     pane. The margin never bleeds into the pane area, so it does not
-#     represent the scene's `theme::WALL` color.
+#     represent the scene's `theme::BG` color.
 
 Output docs/assets/herdr-mise-tui-demo.gif
 
@@ -37,7 +37,7 @@ Set Shell bash
 Set FontSize 14
 Set FontFamily "DejaVu Sans Mono, monospace"
 Set Width 1100
-Set Height 560
+Set Height 800
 Set Padding 24
 Set MarginFill "#0b141a"
 Set Margin 0

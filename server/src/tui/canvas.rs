@@ -290,6 +290,58 @@ mod tests {
     }
 
     #[test]
+    fn every_refined_theme_token_round_trips_to_its_exact_xterm_index() {
+        use crate::tui::theme;
+
+        let tokens = [
+            (theme::BG, 233),
+            (theme::PANEL, 234),
+            (theme::PANEL2, 235),
+            (theme::FRAME, 242),
+            (theme::FRAME_HI, 248),
+            (theme::TEXT, 230),
+            (theme::DIM, 246),
+            (theme::STEEL, 245),
+            (theme::STEEL_LO, 240),
+            (theme::COAT_LO, 187),
+            (theme::SKIN, 180),
+            (theme::PANTS, 59),
+            (theme::BOOT, 94),
+            (theme::PLATE, 255),
+            (theme::SKIN_MAD, 167),
+            (theme::BROW_MAD, 52),
+            (theme::FIRE, 208),
+            (theme::FIRE_HI, 220),
+            (theme::RED, 160),
+            (theme::RED_HI, 203),
+            (theme::RED_DIM, 88),
+            (theme::GREEN, 71),
+            (theme::GREEN_HI, 114),
+            (theme::BOARD, 22),
+            (theme::BRASS, 136),
+            (theme::POT, 238),
+            (theme::STEAM, 247),
+            (theme::STEAM_HI, 253),
+        ]
+        .into_iter()
+        .chain(theme::ACCENTS.into_iter().zip([66, 96, 67, 101, 131, 137]))
+        .chain(theme::ACCENT_DIMS.into_iter().zip([23, 53, 24, 58, 95, 94]))
+        .collect::<Vec<_>>();
+        let mut canvas = PixelCanvas::new(tokens.len() as u16, 2, theme::BG, ColorMode::Xterm256);
+        for (x, (color, _)) in tokens.iter().enumerate() {
+            canvas.put(x as i32, 0, *color);
+        }
+        let mut buffer = Buffer::empty(Rect::new(0, 0, tokens.len() as u16, 1));
+        canvas.render(buffer.area, &mut buffer);
+        for (x, (_, expected)) in tokens.iter().enumerate() {
+            assert_eq!(
+                buffer.cell((x as u16, 0)).unwrap().fg,
+                Color::Indexed(*expected)
+            );
+        }
+    }
+
+    #[test]
     fn render_clips_to_area_and_is_idempotent() {
         let mut canvas = PixelCanvas::new(3, 4, Color::Rgb(1, 1, 1), ColorMode::Truecolor);
         canvas.put(0, 0, Color::Rgb(2, 2, 2));

@@ -116,11 +116,12 @@ TUI does not touch it. No audit changes needed in either phase.
 
 ```toml
 # server/Cargo.toml
-ratatui = "0.29"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_28"] }
 crossterm = { version = "0.28", features = ["event-stream"] }
 ```
 
-Same pair, same versions as herdr-flock. Both pass `cargo audit` today; the
+Ratatui 0.30 removes the advisory-bearing `lru 0.12` and `paste` dependency
+paths present in 0.29 while retaining Crossterm 0.28 compatibility. The
 existing `rust-advisories` CI job gates regressions.
 
 ---

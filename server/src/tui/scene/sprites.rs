@@ -1,5 +1,8 @@
 use crate::protocol::AgentState;
 
+pub const SPRITE_WIDTH: usize = 11;
+pub const SPRITE_HALF_ROWS: usize = 14;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Sprite {
     pub rows: &'static [&'static str],
@@ -15,32 +18,95 @@ impl Sprite {
     }
 }
 
-// Original seven-column cell art. '.' is transparent; palette keys are interpreted
-// by the scene compositor so the same silhouette works in both color modes.
-const IDLE_A: &[&str] = &[
-    "..CCC..", ".CSSSC.", "..CAC..", ".CCACC.", "..A.A..", ".AA.AA.",
+pub const PREP_A: &[&str] = &[
+    "..HHHHHHH..",
+    "..HhHhHhH..",
+    "...ooooo...",
+    "..oSSSSSo..",
+    "...SeSeS...",
+    "...SSSSS...",
+    "..CaaaaaC..",
+    ".CCCCCCCCC.",
+    ".KCAAAAACC.",
+    "...AAAAACK.",
+    "...AAAAA.kk",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
 ];
-const IDLE_B: &[&str] = &[
-    "..CCC..", ".CSSSC.", "..CAC..", "CCA.CC.", "..A.A..", ".AA.AA.",
+pub const PREP_B: &[&str] = &[
+    "..HHHHHHH..",
+    "..HhHhHhH..",
+    "...ooooo...",
+    "..oSSSSS.K.",
+    "...SeSeS.kk",
+    "...SSSSS.C.",
+    "..CaaaaaCC.",
+    ".CCCCCCCC..",
+    ".KCAAAAAC..",
+    "...AAAAA...",
+    "...AAAAA...",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
 ];
-const WORKING: &[&str] = &[
-    "..CCC..", ".CSSSC.", ".ACACA.", "..AAA..", ".AA.AA.", "..FFF..",
+pub const WORK: &[&str] = &[
+    "..HHHHHHH..",
+    "..HhHhHhH..",
+    "...ooooo...",
+    "..oSSSSSo..",
+    "...SeSeS...",
+    "...SSSSS...",
+    "..CaaaaaC..",
+    ".CCCCCCCCC.",
+    ".CCAAAAACC.",
+    ".KCAAAAACK.",
+    "...AAAAA...",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
 ];
-const BLOCKED: &[&str] = &[
-    ".RRRRR.", "R.CCC.R", "R.CSS.R", "R.AAA.R", "R.A.A.R", ".RRRRR.",
+pub const PLATED: &[&str] = &[
+    ".....WWGWWW",
+    "..HHHHH.K..",
+    "..HhHhH.C..",
+    "...ooo..C..",
+    "..SSSSS.C..",
+    "..SeSeS.C..",
+    "..SSSSS.C..",
+    ".CaaaaaCC..",
+    "CCCCCCCC...",
+    "KCAAAAAC...",
+    "..AAAAA....",
+    "..D...D....",
+    "..D...D....",
+    ".BB...BB...",
 ];
-const DONE: &[&str] = &[
-    "..CCC..", ".CSSSC.", "..AAA..", ".A...A.", "..PPP..", ".GGGGG.",
+pub const BLOCKED: &[&str] = &[
+    "...HHHHH...",
+    ".K.HhHhH.K.",
+    ".K..ooo..K.",
+    ".C.RRRRR.C.",
+    ".C.RbRbR.C.",
+    ".C.ReReR.C.",
+    ".CCRRRRRCC.",
+    "..CaaaaaC..",
+    "..CCCCCCC..",
+    "..CAAAAAC..",
+    "...AAAAA...",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
 ];
 const ENDED: &[&str] = &[];
 
 pub fn cook_sprite(state: &AgentState, tick: u64) -> Sprite {
     let rows = match state {
-        AgentState::Idle if tick % 2 == 0 => IDLE_A,
-        AgentState::Idle => IDLE_B,
-        AgentState::Working => WORKING,
+        AgentState::Idle if (tick / 4).is_multiple_of(2) => PREP_B,
+        AgentState::Idle => PREP_A,
+        AgentState::Working => WORK,
         AgentState::Blocked => BLOCKED,
-        AgentState::Done => DONE,
+        AgentState::Done => PLATED,
         AgentState::Ended => ENDED,
     };
     Sprite { rows }
@@ -51,22 +117,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn active_state_art_is_original_distinct_and_four_to_six_pixels_high() {
-        let idle = cook_sprite(&AgentState::Idle, 0);
-        let working = cook_sprite(&AgentState::Working, 0);
-        let blocked = cook_sprite(&AgentState::Blocked, 0);
-        let done = cook_sprite(&AgentState::Done, 0);
-        for sprite in [idle, working, blocked, done] {
-            assert!((4..=6).contains(&sprite.height()));
-            assert_eq!(sprite.width(), 7);
+    fn active_grids_are_exact_handoff_dimensions_with_shared_baseline() {
+        for rows in [PREP_A, PREP_B, WORK, BLOCKED, PLATED] {
+            assert_eq!(rows.len(), SPRITE_HALF_ROWS);
+            assert!(rows.iter().all(|row| row.len() == SPRITE_WIDTH));
+            assert!(rows[12].contains('D'));
+            assert!(rows[13].contains('B'));
         }
-        assert_ne!(idle.rows, working.rows);
-        assert_ne!(working.rows, blocked.rows);
-        assert_ne!(blocked.rows, done.rows);
-        assert_ne!(
-            cook_sprite(&AgentState::Idle, 0).rows,
-            cook_sprite(&AgentState::Idle, 1).rows
-        );
+        assert_eq!(BLOCKED[4], ".C.RbRbR.C.");
+        assert_eq!(BLOCKED[5], ".C.ReReR.C.");
+        assert_eq!(PLATED[0], ".....WWGWWW");
+        assert_ne!(PLATED, WORK);
+    }
+
+    #[test]
+    fn idle_swaps_only_at_four_tick_boundaries_and_other_poses_are_static() {
+        assert_eq!(cook_sprite(&AgentState::Idle, 0).rows, PREP_B);
+        assert_eq!(cook_sprite(&AgentState::Idle, 3).rows, PREP_B);
+        assert_eq!(cook_sprite(&AgentState::Idle, 4).rows, PREP_A);
+        assert_eq!(cook_sprite(&AgentState::Idle, 7).rows, PREP_A);
+        assert_eq!(cook_sprite(&AgentState::Idle, 8).rows, PREP_B);
+        for state in [AgentState::Working, AgentState::Blocked, AgentState::Done] {
+            assert_eq!(cook_sprite(&state, 0), cook_sprite(&state, 999));
+        }
     }
 
     #[test]

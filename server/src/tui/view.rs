@@ -10,6 +10,9 @@ use ratatui::{
 use super::{state::AgentTable, theme};
 use crate::protocol::{AgentState, AppMode, SourceDiagnostic, SourceStatus};
 
+#[cfg(test)]
+use ratatui::buffer::CellDiffOption;
+
 fn workspace_display_name(workspace: &str) -> &str {
     let value = workspace.trim();
     let bytes = value.as_bytes();
@@ -22,8 +25,7 @@ fn workspace_display_name(workspace: &str) -> &str {
     }
     value
         .split(['/', '\\'])
-        .filter(|part| !part.is_empty())
-        .next_back()
+        .rfind(|part| !part.is_empty())
         .unwrap_or("Unavailable")
 }
 
@@ -183,9 +185,9 @@ pub fn draw(
         };
         Row::new(vec![
             Cell::from(agent.name.clone())
-                .style(Style::default().fg(theme::accent(agent.accent_index))),
+                .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
             Cell::from(state_label(&agent.state))
-                .style(Style::default().fg(theme::state_color(&agent.state))),
+                .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
             Cell::from(agent.model.clone()),
             Cell::from(workspace_display_name(&agent.workspace)),
@@ -238,7 +240,11 @@ pub fn draw(
     });
     frame.render_widget(
         Table::new(board_rows, [Constraint::Min(1)])
-            .style(Style::default().fg(theme::CHALK).bg(theme::CHALKBOARD))
+            .style(
+                Style::default()
+                    .fg(theme::COMPACT_CHALK)
+                    .bg(theme::COMPACT_BOARD),
+            )
             .block(Block::default().borders(Borders::ALL).title("86 BOARD")),
         areas[2],
     );
@@ -316,7 +322,7 @@ mod tests {
                 let styled = cell.fg != Color::Reset
                     || cell.bg != Color::Reset
                     || !cell.modifier.is_empty()
-                    || cell.skip;
+                    || cell.diff_option != CellDiffOption::None;
                 if !styled {
                     x += 1;
                     continue;
@@ -328,7 +334,7 @@ mod tests {
                     if next.fg != cell.fg
                         || next.bg != cell.bg
                         || next.modifier != cell.modifier
-                        || next.skip != cell.skip
+                        || next.diff_option != cell.diff_option
                     {
                         break;
                     }
@@ -336,7 +342,10 @@ mod tests {
                 }
                 dump.push_str(&format!(
                     "STYLE {y:02} {start:03}..{x:03} fg={:?} bg={:?} mod={:?} skip={}\n",
-                    cell.fg, cell.bg, cell.modifier, cell.skip
+                    cell.fg,
+                    cell.bg,
+                    cell.modifier,
+                    cell.diff_option == CellDiffOption::Skip
                 ));
             }
         }

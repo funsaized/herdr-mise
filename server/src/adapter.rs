@@ -202,7 +202,7 @@ impl Normalizer {
                 .into_iter()
                 .flatten()
                 .find(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| format!("agent-{}", &agent.pane_id));
+                .unwrap_or_else(|| format!("agent-{}", agent.pane_id));
             let workspace = workspaces
                 .get(&agent.workspace_id)
                 .filter(|s| !s.is_empty())

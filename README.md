@@ -116,19 +116,36 @@ With no Herdr session available, the binary renders the truthful
 
 The same pane remains readable across the states that matter during service:
 
-| Live kitchen                                                                                                                | Blocked at the pass                                                                                                                                        | Compact fallback                                                                                                                            |
-| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| ![A live Herdr-connected kitchen with plated and working agents in the cell-art scene](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude at the pass with a red room border, pass banner, and station banner](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the table and 86-board fallback below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
+| Live kitchen                                                                                           | Blocked at the pass                                                                                                                                         | Compact fallback                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
 
-The live capture proves the linked Herdr feed; the blocked capture shows the
-non-color pass text, station banner, and border escalation; and the compact
+The live capture proves the linked Herdr feed using verifier workspace labels;
+the blocked capture shows the
+pass text, station banner, red double-line station border, and neutral outer
+frame; and the compact
 capture shows the deterministic table fallback used below the scene's `80×24`
 cell minimum. The blocked and compact examples retain the persistent
 `MISE — DEMO SERVICE` treatment, so deterministic mock data is never presented
 as live agent state.
 
-Regenerate the GIF with `scripts/capture-tui-demo.sh` from the repo root;
-the wrapper refuses to substitute another tool if `vhs` is missing.
+Regenerate the GIF with `scripts/capture-tui-demo.sh` and the three static
+screens with `scripts/capture-tui-states.sh` from the repo root. Pass
+`--connect-herdr` only against a session containing intentionally public
+verifier labels when refreshing the live example. Both wrappers fail closed
+when their real-terminal capture tools are missing.
+The GIF wrapper requires `vhs`; the static wrapper requires `vhs`, `ffmpeg`,
+ImageMagick's `identify`, `tesseract`, and macOS `sips`.
+
+The TUI is an agentically tiled, xterm-256-safe view. At `110×40`, up to three
+agent stations sit across each row; `80×24` keeps the same three-across layout.
+Each active cook uses an exact `11×14` half-pixel sprite rendered with `▀`:
+idle alternates two prep poses every four 10 Hz ticks, working adds a pinned
+ticket, alternating flames, and deterministic four-slot steam, blocked raises
+an angry red face beneath a double-line red station border and two text
+banners, and done raises a garnished plate above a green service strip. The
+outer frame stays neutral in every state. Below `80×24`, the renderer preserves
+the compact `Kitchen status` table rather than squeezing or overlapping tiles.
 The browser/TUI parity audit, including every Done/Deferred row and
 the rationale for each deferral, is in
 [docs/tui-scene-parity.md](docs/tui-scene-parity.md).
