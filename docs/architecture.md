@@ -36,6 +36,87 @@ client files via `rust-embed`, while the client executes separately in the
 browser. The same `axum::Router` serves those static assets and owns the
 WebSocket (`server/src/service.rs`, `server/Cargo.toml`).
 
+### Phase 1 — concurrent browser and TUI renderers
+
+Phase 1 adds a second `Feed` subscriber inside the same Rust binary: a
+ratatui-based TUI that Herdr runs inside a managed pty as a split
+pane. Both renderers read from the same `Feed` broadcast; the
+adapter, the Feed itself, and the protocol types are unchanged from
+the browser-only path (`server/src/main.rs`, `server/src/runtime.rs`,
+`server/src/feed.rs`).
+
+```
+                +--------------------------+
+                |  Herdr ecosystem         |
+                |  (herdr daemon / sessions|
+                |   on the user's machine) |
+                +-----------+--------------+
+                            |
+                            |  Unix socket
+                            |  (newline-delimited JSON,
+                            |   Herdr protocol 17 or 19)
+                            v
+                  +---------+----------+
+                  |  adapter::         |
+                  |  Normalizer        |
+                  |  (unchanged)       |
+                  +---------+----------+
+                            |
+                            v
+                  +---------+----------+
+                  |  Feed              |
+                  |  broadcast<       |
+                  |  AgentStateEvent>  |
+                  +---------+----------+
+                            |
+              +-------------+-------------+
+              |                           |
+              v                           v
+     +--------+---------+        +--------+---------+
+     |  axum HTTP + WS  |        |  ratatui TUI     |
+     |  browser         |        |  pane            |
+     |  127.0.0.1:8686  |        |  in herdr pty    |
+     +------------------+        +------------------+
+              |                           |
+              v                           v
+   Browser @ 127.0.0.1:8686      Herdr split pane
+
+   shared CancellationToken:
+   - main.rs / runtime.rs create one token before either task starts.
+   - server::serve_http uses shutdown.cancelled_owned() to stop axum.
+   - tui::run selects on shutdown.cancelled() and exits on q / Esc.
+   - either path cancelling the token also reaps the other branch.
+```
+
+Process modes (parsed in `server/src/runtime.rs`; no CLI crate):
+
+| Invocation         | Behavior                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| `herdr-mise`       | HTTP server only. Default; unchanged.                                              |
+| `herdr-mise --tui` | TUI on the controlling terminal **and** HTTP server concurrently. What Herdr runs. |
+
+`--tui` rules:
+
+- HTTP bind failure (another herdr-mise already on `127.0.0.1:8686`) is
+  downgraded to a single status-bar line; the TUI keeps rendering.
+  The two panes render in parallel; the port winner is arbitrary.
+- `q` / `Esc` cancel the shared `CancellationToken`, which also
+  shuts down axum — pane close means process exit, matching Herdr's
+  pane lifecycle.
+- A panic hook installed before entering raw mode restores the
+  terminal (raw mode off, alternate screen left) so a crashing pane
+  never garbles the enclosing Herdr session.
+- Rendering is `view::draw(frame, &AgentTable, now: DateTime<Utc>, tick: u64)`
+  — pure of explicit inputs. No `Utc::now()` or RNG inside `view.rs`
+  or `theme.rs`; the loop samples the clock once per tick. This is
+  what makes the four committed `TestBackend` goldens deterministic.
+
+When Herdr links the repo as a plugin (`herdr-plugin.toml` at the repo
+root, contract-pinned by the `plugin_manifest_contract` test), it
+spawns `./target/release/herdr-mise --tui` in a split pane and the
+TUI shown there is the same process whose browser app is reachable at
+`http://127.0.0.1:8686`.
+
 ## Concrete components
 
 ```
