@@ -106,6 +106,20 @@ playground's deterministic feed. Regenerate them with `npm run capture:readme`
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
 
+The same binary also runs as a Herdr pane. The pane below is the
+real release binary launched with `--tui` and captured in a real
+terminal, not a mock, browser substitute, or reconstructed animation.
+With no Herdr session available, the binary renders the truthful
+`MISE — DEMO SERVICE` shell:
+
+![The release binary running as a Herdr pane under the truthful DEMO SERVICE fallback](docs/assets/herdr-mise-tui-demo.gif)
+
+Regenerate it with `scripts/capture-tui-demo.sh` from the repo root;
+the wrapper refuses to substitute another tool if `vhs` is missing.
+The browser/TUI parity audit, including every Done/Deferred row and
+the rationale for each deferral, is in
+[docs/tui-scene-parity.md](docs/tui-scene-parity.md).
+
 ## What it is and what it intentionally doesn't show
 
 - **Is:** a single static binary, `herdr-mise`, that serves a Vite-built

@@ -1,0 +1,12 @@
+{
+  "binary": "target/release/herdr-mise",
+  "binary_sha256": "bdcdfff3c4598898261aa0f98da9bc2338f40b7fd92ce6d1e41e35123eeba281",
+  "bytes": 485676,
+  "command": "vhs scripts/tui-demo.tape",
+  "frames": 205,
+  "height": 560,
+  "output": "docs/assets/herdr-mise-tui-demo.gif",
+  "schema": "tui-demo-capture-v1",
+  "vhs_version": "vhs version 0.11.0",
+  "width": 1100
+}
