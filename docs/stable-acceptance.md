@@ -7,6 +7,14 @@ binds the future stable `v0.1.0` tag/version to the exact accepted `main` commit
 No evidence row claims to test unpublished stable assets. An automated check
 cannot replace a manual observation or elapsed soak.
 
+The accepted RC is the TUI-inclusive replacement published from commit
+`ea74ac5f95afb1052eb41d87c14c4f28d03d932b`. On 2026-08-14, before stable
+acceptance began, the project explicitly replaced the earlier non-TUI RC1 tag
+and all six assets. The previous RC1 commit and checksums are invalid acceptance
+inputs. Anyone who downloaded RC1 before that date must download it again and
+verify the current sidecar. This one-time replacement is recorded here because
+silently treating the old and new bytes as the same candidate would be false.
+
 ## Evidence and exact validation
 
 Start from `docs/stable-acceptance.template.json`; it explicitly names public RC
@@ -20,9 +28,9 @@ live logs record only mode, agent count, source status, and recovery state.
 The template binds all three supported public RC archives and their published
 sidecar checksums:
 
-- `aarch64-apple-darwin`: `260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f`
-- `x86_64-apple-darwin`: `885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347`
-- `x86_64-unknown-linux-gnu`: `c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20`
+- `aarch64-apple-darwin`: `aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c`
+- `x86_64-apple-darwin`: `4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8`
+- `x86_64-unknown-linux-gnu`: `057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf`
 
 Verify each sidecar and archive anonymously before changing `public-artifact`
 from `NOT_RUN`. A platform-specific row may reference one or more of this exact
@@ -69,6 +77,12 @@ and connected live mode with zero agents. Evidence summaries must contain only
 browser suite runs `npm run test:visual` and explicitly covers 1, 6, and 12 stations
 in light and dinner themes. This is visual-product coverage, not live-agent proof.
 
+The first-release product also includes the native terminal UI. Run
+`cargo test --locked tui --lib` at the accepted RC commit and record it under
+`tui-test-suite`. This covers responsive layout selection, state semantics,
+render goldens, bounded particles, and terminal cleanup. It does not replace the
+public-artifact terminal journey below.
+
 ## Exact manual matrix
 
 Every row begins `NOT_RUN`. The tester replaces the sentinel timestamp only after
@@ -78,6 +92,7 @@ row and records a sanitized external evidence reference. The row's
 
 | Gate                              | Exact action and PASS condition                                                                                                                                                                                                                                                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TUI responsive terminal           | Launch the installed accepted public RC with `--tui`; exercise `111×48 → 56×48 → 111×48`, then quit with `q`. PASS only if tiled, compact, and restored tiled layouts render without stale cells, the UI remains responsive, and terminal state is restored cleanly without disturbing another Herdr service. |
 | Keyboard                          | With VoiceOver off, use Tab/Shift-Tab through visible controls, arrow keys through all stations, Enter/Space to open details, and Escape to close details/settings. PASS only if focus is always visible, order is logical, every station is reachable, and focus returns to its trigger.                     |
 | VoiceOver speech/focus            | On macOS VoiceOver, traverse status, controls, each station, details, settings, disconnect, and empty states. PASS only after listening confirms name/role/state/value are correct, announcements are neither missing nor duplicated, and spoken focus matches visual focus.                                  |
 | Runtime reduced motion            | Start with Reduce Motion off while a blocked scene is active; enable it in System Settings without reloading, then disable it. PASS only if continuous/particle/sweep motion stops promptly, state indicators remain legible, and motion resumes without stale or duplicate state.                            |

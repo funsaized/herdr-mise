@@ -3,26 +3,26 @@
   "accepted_rc": {
     "tag": "v0.1.0-rc.1",
     "version": "0.1.0-rc.1",
-    "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+    "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
     "artifacts": [
       {
         "target": "aarch64-apple-darwin",
         "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-        "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f",
+        "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c",
         "archive_url": "https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
         "checksum_url": "https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz.sha256"
       },
       {
         "target": "x86_64-apple-darwin",
         "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-        "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347",
+        "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8",
         "archive_url": "https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
         "checksum_url": "https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz.sha256"
       },
       {
         "target": "x86_64-unknown-linux-gnu",
         "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-        "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20",
+        "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf",
         "archive_url": "https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
         "checksum_url": "https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz.sha256"
       }
@@ -43,22 +43,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -76,22 +76,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -109,22 +109,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -142,22 +142,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -175,22 +175,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -208,22 +208,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -241,22 +241,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -274,22 +274,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -307,22 +307,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -340,22 +340,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -373,22 +373,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -406,22 +406,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -439,26 +439,82 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
       "command_or_action": "npm run test:visual -- --grep visual-product mixed x 12 x dinner",
+      "result": "NOT_RUN",
+      "timestamp": "1970-01-01T00:00:00Z",
+      "evidence_ref": "external://NOT_RUN"
+    },
+    {
+      "gate_id": "tui-test-suite",
+      "category": "automated",
+      "scope": "full-product",
+      "tester": "release-automation",
+      "platform": "REPLACE_WITH_OS_AND_ARCH",
+      "executed_against": {
+        "tag": "v0.1.0-rc.1",
+        "version": "0.1.0-rc.1",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
+        "artifacts": [
+          {
+            "target": "aarch64-apple-darwin",
+            "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
+          },
+          {
+            "target": "x86_64-apple-darwin",
+            "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
+          },
+          {
+            "target": "x86_64-unknown-linux-gnu",
+            "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
+          }
+        ]
+      },
+      "command_or_action": "cargo test --locked tui --lib",
+      "result": "NOT_RUN",
+      "timestamp": "1970-01-01T00:00:00Z",
+      "evidence_ref": "external://NOT_RUN"
+    },
+    {
+      "gate_id": "tui-responsive-terminal",
+      "category": "manual",
+      "scope": "full-product",
+      "tester": "REPLACE_WITH_TESTER",
+      "platform": "REPLACE_WITH_OS_AND_ARCH",
+      "executed_against": {
+        "tag": "v0.1.0-rc.1",
+        "version": "0.1.0-rc.1",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
+        "artifacts": [
+          {
+            "target": "aarch64-apple-darwin",
+            "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
+          }
+        ]
+      },
+      "command_or_action": "Run the accepted public RC in TUI mode and complete the responsive terminal matrix in docs/stable-acceptance.md",
       "result": "NOT_RUN",
       "timestamp": "1970-01-01T00:00:00Z",
       "evidence_ref": "external://NOT_RUN"
@@ -472,22 +528,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -505,22 +561,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -538,22 +594,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -571,22 +627,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -604,22 +660,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -637,22 +693,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },
@@ -670,22 +726,22 @@
       "executed_against": {
         "tag": "v0.1.0-rc.1",
         "version": "0.1.0-rc.1",
-        "commit": "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
         "artifacts": [
           {
             "target": "aarch64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f"
+            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
           },
           {
             "target": "x86_64-apple-darwin",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347"
+            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
           },
           {
             "target": "x86_64-unknown-linux-gnu",
             "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           }
         ]
       },

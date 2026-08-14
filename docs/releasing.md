@@ -19,6 +19,14 @@ candidate commit, notes, and acceptance record are complete. Published tags
 are immutable: never move, force-update, delete-and-reuse, or otherwise reuse a
 release tag.
 
+Historical exception: on 2026-08-14, under explicit owner authorization and
+before stable acceptance began, `v0.1.0-rc.1` was replaced to incorporate the
+TUI into the first-release contract. The public tag now resolves to
+`ea74ac5f95afb1052eb41d87c14c4f28d03d932b`; all six assets and three archive
+checksums were replaced. The old non-TUI commit and assets are invalidated.
+This disclosure documents an exceptional migration, not a reusable release
+procedure. RC1 is frozen from this point forward.
+
 Both release classes retain the same three platform archives and three SHA-256
 sidecars, signing/notarization checks, exact-six-asset checks, rerun validation,
 and anonymous public download verification. RCs are marked prerelease and are
@@ -117,7 +125,7 @@ inputs. Any source, notes-template, promotion-commit, or acceptance correction
 requires fix-forward with a new version and new tag.
 
 If a rerun finds an existing matching release, it validates the release class,
-tag, title, and absence of unexpected assets before replacing the expected six
+tag, display name, and absence of unexpected assets before replacing the expected six
 assets. A class mismatch or unexpected asset blocks the rerun for operator
 review. Do not delete evidence of the failure merely to make the run proceed.
 
