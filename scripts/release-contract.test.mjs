@@ -411,6 +411,12 @@ test("standalone CLI verification uses notarization and code-signature evidence"
 test("existing expected asset subsets are rerunnable but unexpected assets fail closed", () => {
   assert.match(
     workflow,
+    /--json body,isPrerelease,name,tagName >release\.json/,
+  );
+  assert.match(workflow, /\.name == \$tag/);
+  assert.doesNotMatch(workflow, /--json [^\n]*title/);
+  assert.match(
+    workflow,
     /comm -23 existing-assets\.txt expected-assets\.txt >unexpected-assets\.txt/,
   );
   assert.match(workflow, /test ! -s unexpected-assets\.txt/);
