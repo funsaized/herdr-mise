@@ -18,6 +18,18 @@ import {
 
 const manifestPath = "compatibility/herdr.json";
 
+test("README documents the Herdr 0.8 action invocation with the positional action first", () => {
+  const readme = readFileSync("README.md", "utf8");
+  assert.match(
+    readme,
+    /herdr plugin action invoke open --plugin mise\.kitchen/,
+  );
+  assert.doesNotMatch(
+    readme,
+    /herdr plugin action invoke --plugin mise\.kitchen open/,
+  );
+});
+
 test("compatibility manifest is the complete supported release authority", () => {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   assert.equal(manifest.schemaVersion, 1);
