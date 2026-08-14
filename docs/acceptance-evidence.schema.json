@@ -54,8 +54,7 @@
           "const": "0.1.0-rc.1"
         },
         "commit": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
+          "const": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b"
         },
         "artifacts": {
           "type": "array",
@@ -135,8 +134,7 @@
           "const": "0.1.0-rc.1"
         },
         "commit": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
+          "const": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b"
         },
         "artifacts": {
           "type": "array",

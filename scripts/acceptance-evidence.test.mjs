@@ -317,6 +317,14 @@ test("schema gate enum and template stay aligned with validator policy", () => {
   );
   assert.equal(template.accepted_rc.tag, "v0.1.0-rc.1");
   assert.equal(template.accepted_rc.version, "0.1.0-rc.1");
+  assert.equal(
+    schema.$defs.acceptedRc.properties.commit.const,
+    acceptedRc.commit,
+  );
+  assert.equal(
+    schema.$defs.executedAgainst.properties.commit.const,
+    acceptedRc.commit,
+  );
   assert.deepEqual(
     template.accepted_rc.artifacts.map((artifact) => artifact.target).sort(),
     rcArtifacts.map((artifact) => artifact.target).sort(),
