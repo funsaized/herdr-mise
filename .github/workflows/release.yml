@@ -221,9 +221,9 @@ jobs:
             fi
           done
           printf '%s\n' "${files[@]##*/}" | sort >expected-assets.txt
-          if gh release view "$GITHUB_REF_NAME" --json body,isPrerelease,tagName,title >release.json 2>/dev/null; then
+          if gh release view "$GITHUB_REF_NAME" --json body,isPrerelease,name,tagName >release.json 2>/dev/null; then
             jq -e --arg tag "$GITHUB_REF_NAME" --argjson expected "$expected_prerelease" \
-              '.isPrerelease == $expected and .tagName == $tag and .title == $tag' release.json
+              '.isPrerelease == $expected and .tagName == $tag and .name == $tag' release.json
             if test "$RELEASE_CLASS" = stable; then
               jq -r '.body' release.json | \
                 perl -0777 -pe 's/\r\n?/\n/g; s/\n*\z/\n/' >existing-notes.md
