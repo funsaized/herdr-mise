@@ -1,0 +1,37 @@
+{
+  "binary": "target/release/herdr-mise",
+  "binary_sha256": "8166db13e64cdf80abaf86e0b06c115dc1842ea02dd2bc6a5a347b7385343bfa",
+  "items": [
+    {
+      "bytes": 108375,
+      "dimensions": "1100x800",
+      "env_width_height": "1100x560",
+      "label": "live",
+      "mode": "connected",
+      "output": "docs/assets/herdr-mise-tui-live.png",
+      "sleep_seconds": 10
+    },
+    {
+      "bytes": 131717,
+      "dimensions": "1100x800",
+      "env_width_height": "1100x560",
+      "label": "blocked",
+      "mode": "demo",
+      "output": "docs/assets/herdr-mise-tui-blocked.png",
+      "sleep_seconds": 8
+    },
+    {
+      "bytes": 110412,
+      "dimensions": "660x352",
+      "env_width_height": "660x352",
+      "label": "compact",
+      "mode": "demo",
+      "output": "docs/assets/herdr-mise-tui-compact.png",
+      "sleep_seconds": 4
+    }
+  ],
+  "live_herdr_socket": "connected",
+  "live_mode": "connected",
+  "schema": "tui-states-capture-v1",
+  "vhs_version": "vhs version 0.11.0"
+}

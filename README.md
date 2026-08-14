@@ -12,6 +12,8 @@ not aggregate remote servers. It is a window, not an office.
 
 Install Herdr, then download, verify, and run herdr-mise
 `v0.1.0-rc.1`. Reach a truthful live kitchen in under five minutes.
+This prerelease is currently the only public herdr-mise release; no stable
+herdr-mise release exists yet.
 Detailed platform commands live in
 [Operations — local run](docs/operations.md#local-run).
 
@@ -104,6 +106,50 @@ playground's deterministic feed. Regenerate them with `npm run capture:readme`
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
 
+The same binary also runs as a Herdr pane. The pane below is the
+real release binary launched with `--tui` and captured in a real
+terminal, not a mock, browser substitute, or reconstructed animation.
+With no Herdr session available, the binary renders the truthful
+`MISE — DEMO SERVICE` shell:
+
+![The release binary running as a Herdr pane under the truthful DEMO SERVICE fallback](docs/assets/herdr-mise-tui-demo.gif)
+
+The same pane remains readable across the states that matter during service:
+
+| Live kitchen                                                                                           | Blocked at the pass                                                                                                                                         | Compact fallback                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
+
+The live capture proves the linked Herdr feed using verifier workspace labels;
+the blocked capture shows the
+pass text, station banner, red double-line station border, and neutral outer
+frame; and the compact
+capture shows the deterministic table fallback used below the scene's `80×24`
+cell minimum. The blocked and compact examples retain the persistent
+`MISE — DEMO SERVICE` treatment, so deterministic mock data is never presented
+as live agent state.
+
+Regenerate the GIF with `scripts/capture-tui-demo.sh` and the three static
+screens with `scripts/capture-tui-states.sh` from the repo root. Pass
+`--connect-herdr` only against a session containing intentionally public
+verifier labels when refreshing the live example. Both wrappers fail closed
+when their real-terminal capture tools are missing.
+The GIF wrapper requires `vhs`; the static wrapper requires `vhs`, `ffmpeg`,
+ImageMagick's `identify`, `tesseract`, and macOS `sips`.
+
+The TUI is an agentically tiled, xterm-256-safe view. At `110×40`, up to three
+agent stations sit across each row; `80×24` keeps the same three-across layout.
+Each active cook uses an exact `11×14` half-pixel sprite rendered with `▀`:
+idle alternates two prep poses every four 10 Hz ticks, working adds a pinned
+ticket, alternating flames, and deterministic four-slot steam, blocked raises
+an angry red face beneath a double-line red station border and two text
+banners, and done raises a garnished plate above a green service strip. The
+outer frame stays neutral in every state. Below `80×24`, the renderer preserves
+the compact `Kitchen status` table rather than squeezing or overlapping tiles.
+The browser/TUI parity audit, including every Done/Deferred row and
+the rationale for each deferral, is in
+[docs/tui-scene-parity.md](docs/tui-scene-parity.md).
+
 ## What it is and what it intentionally doesn't show
 
 - **Is:** a single static binary, `herdr-mise`, that serves a Vite-built
@@ -192,6 +238,9 @@ chrome surfaces honestly:
 No system-level install, no Homebrew formula, no launchd unit. The
 binary binds to `127.0.0.1:8686` only and is not registered to start
 on login.
+
+Release-candidate and future stable release policy, evidence gates, recovery,
+and retirement order are documented in [Release operations](docs/releasing.md).
 
 ## Local development
 
@@ -334,6 +383,131 @@ the steps above, see
 [troubleshooting — Herdr socket unavailable](docs/operations.md#herdr-socket-unavailable)
 and
 [troubleshooting — Herdr protocol not supported](docs/operations.md#herdr-protocol-not-supported).
+
+## As a Herdr plugin
+
+In addition to running the binary directly, herdr-mise is also a
+[Herdr](https://github.com/herdrdev/herdr) workflow plugin. Herdr links
+the repo, runs the binary inside a managed pty as a split pane, and
+the pane **is** the herdr-mise TUI — one Feed, two concurrent
+renderers. The browser app at `http://127.0.0.1:8686` keeps working
+at the same time as long as the loopback port is free.
+
+Requirements:
+
+- Herdr `0.7.0` or later (`min_herdr_version = "0.7.0"` in the manifest,
+  verified by the `plugin_manifest_contract` test).
+- macOS or Linux.
+- A Unicode and 256-color capable terminal.
+
+### Source-checkout install and link
+
+From a clone of this repository:
+
+```sh
+# build the release binary the manifest expects
+cargo build --release
+
+# link this directory as a Herdr plugin
+herdr plugin link .
+```
+
+The linked manifest's `[[build]]` command is
+`cargo build --release` and the `[[panes]].command` is
+`./target/release/herdr-mise --tui`
+(`herdr-plugin.toml`, pinned by the `plugin_manifest_contract` test).
+The manifest hardcodes the binary path; the contract test reads the
+first `[[bin]].name` from `server/Cargo.toml` and asserts equality,
+so renaming the binary in `Cargo.toml` without updating the
+manifest's `[[panes]].command` will fail that test.
+
+Open the pane through the declared plugin action. The action's command
+is the verified Herdr 0.8 invocation; Herdr substitutes
+`$HERDR_BIN_PATH` at run time:
+
+```sh
+$HERDR_BIN_PATH plugin pane open \
+  --plugin mise.kitchen \
+  --entrypoint kitchen \
+  --placement split \
+  --direction right \
+  --focus
+```
+
+The equivalent CLI is `herdr plugin action invoke open --plugin mise.kitchen`
+(verified against `herdr plugin action invoke --help` on Herdr 0.8.0;
+older `run` wording in some third-party docs is not the current
+subcommand). When the manifest is linked in a Herdr session, the
+action surfaces as **Open Mise Kitchen** with
+`contexts = ["workspace"]`.
+
+### Build trade-off: manifest build vs. full bundle
+
+The manifest `cargo build --release` step is the Rust build only.
+That is enough for the pane — the TUI does not depend on the Vite
+client — and the release binary embeds the Rust fallback assets.
+The result is a working pane, but the browser app served alongside
+shows the degraded fallback page. From a source checkout, run
+`npm run build` (or `npm run bundle`, which combines both) before
+`cargo build --release` when the full browser bundle is desired:
+
+```sh
+npm ci
+npm ci --prefix client
+npm run bundle             # npm run build && cargo build --release --bin herdr-mise
+herdr plugin link .
+```
+
+Phase 1 ships the manifest-only build as the default. Reconsidering
+the `[[build]]` command so it defaults to the Vite bundle is a
+marketplace-publication concern, separate from the Phase 2 kitchen
+scene work.
+
+### Standalone `--tui` demo (no Herdr required)
+
+The pane binary is also the demo entry point. With no Herdr session
+running, the same binary renders a truthful TUI on a compatible
+controlling terminal or TTY:
+
+```sh
+./target/release/herdr-mise --tui
+```
+
+Behavior:
+
+- **No-socket fallback.** With no Herdr Unix socket available the
+  status header shows `MISE — DEMO SERVICE` and
+  `Mock feed — <condition>. Nothing here is real.`
+  (`server/src/tui/view.rs` `status_lines`, `server/src/demo.rs`).
+  The demo placard is persistent; the user is never told a missing
+  socket is a live kitchen.
+- **Concurrent loopback browser.** When `127.0.0.1:8686` is free, the
+  same `--tui` process also serves the browser app on that address.
+  Opening `http://127.0.0.1:8686` while the TUI is running shows the
+  same Feed snapshot, side by side.
+- **Second-pane port conflict.** A second `--tui` instance finds the
+  port already taken. The TUI does **not** exit; it logs a single line
+  to the status bar (`HTTP unavailable at 127.0.0.1:8686: <error>`,
+  emitted by `server/src/runtime.rs` `downgrade_tui_bind` and surfaced
+  via `server/src/tui/view.rs`) and keeps rendering. Both panes
+  render their own TUI from the same feed source.
+- **Clean exit.** Press `q` or `Esc` to cancel the shared
+  `CancellationToken`; axum and the TUI both shut down on that
+  signal (`server/src/tui/mod.rs` `handle_key`,
+  `server/src/runtime.rs` `serve_http`).
+- **Panic-safe terminal.** A panic hook installed before entering raw
+  mode restores the terminal (raw mode off, alternate screen left) so
+  a crashing pane never leaves the enclosing Herdr session garbled
+  (`server/src/tui/mod.rs` `install_panic_restore_hook`).
+- **Blocked salience.** Blocked rows render with the literal state
+  text `BLOCKED / AT THE PASS` and the entire row uses bold and
+  reversed-video styling, so a blocked agent is unmistakable even
+  without color (`server/src/tui/view.rs` `state_label` and the
+  `AgentState::Blocked` row style).
+
+The `--tui` flag is parsed by `runtime::parse_mode`
+(`server/src/runtime.rs`); anything other than `--tui` returns a
+usage error.
 
 ## URL and security model
 

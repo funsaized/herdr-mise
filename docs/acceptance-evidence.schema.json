@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/funsaized/herdr-mise/blob/main/docs/acceptance-evidence.schema.json",
+  "title": "Herdr Mise stable promotion acceptance evidence v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "accepted_rc", "promotion", "gates"],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "accepted_rc": {
+      "$ref": "#/$defs/acceptedRc"
+    },
+    "promotion": {
+      "$ref": "#/$defs/promotion"
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    }
+  },
+  "$defs": {
+    "promotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "version", "commit"],
+      "properties": {
+        "tag": {
+          "type": "string",
+          "pattern": "^v(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "acceptedRc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "version", "commit", "artifacts"],
+      "properties": {
+        "tag": {
+          "const": "v0.1.0-rc.1"
+        },
+        "version": {
+          "const": "0.1.0-rc.1"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/publicArtifact"
+          }
+        }
+      }
+    },
+    "publicArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "archive",
+        "sha256",
+        "archive_url",
+        "checksum_url"
+      ],
+      "properties": {
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "archive": {
+          "type": "string",
+          "pattern": "^herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+        },
+        "sha256": {
+          "type": "string",
+          "enum": [
+            "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f",
+            "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347",
+            "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+          ]
+        },
+        "archive_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.1\\.0-rc\\.1/herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+        },
+        "checksum_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.1\\.0-rc\\.1/herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz\\.sha256$"
+        }
+      }
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "archive", "sha256"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "archive": {
+          "type": "string",
+          "pattern": "^herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "executedAgainst": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "version", "commit", "artifacts"],
+      "properties": {
+        "tag": {
+          "const": "v0.1.0-rc.1"
+        },
+        "version": {
+          "const": "0.1.0-rc.1"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/artifactReference"
+          }
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "category",
+        "scope",
+        "tester",
+        "platform",
+        "executed_against",
+        "command_or_action",
+        "result",
+        "timestamp",
+        "evidence_ref"
+      ],
+      "properties": {
+        "gate_id": {
+          "enum": [
+            "validate-release",
+            "perf",
+            "public-artifact",
+            "live-supported-herdr",
+            "startup-recovery",
+            "source-loss-reconnect",
+            "connected-no-agent",
+            "visual-1-light",
+            "visual-1-dinner",
+            "visual-6-light",
+            "visual-6-dinner",
+            "visual-12-light",
+            "visual-12-dinner",
+            "keyboard",
+            "voiceover-speech-focus",
+            "runtime-reduced-motion",
+            "blocked-recognition-two-meters",
+            "upgrade",
+            "uninstall",
+            "multi-day-soak"
+          ]
+        },
+        "category": {
+          "enum": ["automated", "manual", "soak"]
+        },
+        "scope": {
+          "enum": ["full-product", "scoped-subsystem"]
+        },
+        "tester": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executed_against": {
+          "$ref": "#/$defs/executedAgainst"
+        },
+        "command_or_action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "enum": ["PASS", "FAIL", "NOT_RUN"]
+        },
+        "timestamp": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
+        },
+        "evidence_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

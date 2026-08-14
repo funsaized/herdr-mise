@@ -207,7 +207,9 @@ export function auditWorkflowContract(
   const release = candidateWorkflows["release.yml"] ?? "";
   if (
     !release.includes("push:\n    tags: ['v*']") ||
-    !release.includes("publish:\n    if: startsWith(github.ref, 'refs/tags/')")
+    !/publish:\n    if: >-[\s\S]{0,300}startsWith\(github\.ref, 'refs\/tags\/'\)/.test(
+      release,
+    )
   ) {
     errors.push("release.yml: publication must remain tag-only");
   }
@@ -442,10 +444,7 @@ test("contract rejects advisory, lockfile, CodeQL, and dependency-policy weakeni
 
 test("contract rejects release publication, cancellation, and signing-gate weakening", () => {
   const publication = mutateWorkflow("release.yml", (source) =>
-    source.replace(
-      "if: startsWith(github.ref, 'refs/tags/')\n    needs: build",
-      "needs: build",
-    ),
+    source.replace("startsWith(github.ref, 'refs/tags/') &&\n", "true &&\n"),
   );
   const cancellation = mutateWorkflow("release.yml", (source) =>
     source.replace("cancel-in-progress: false", "cancel-in-progress: true"),

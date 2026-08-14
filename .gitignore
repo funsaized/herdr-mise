@@ -8,5 +8,6 @@
 /e2e/artifacts/
 /.hermes/
 /.claude/
+/.stable-acceptance-evidence.json
 /target-linux-x64/
 .DS_Store
