@@ -15,15 +15,15 @@ const promotion = {
 const rcArtifacts = [
   [
     "aarch64-apple-darwin",
-    "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f",
+    "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c",
   ],
   [
     "x86_64-apple-darwin",
-    "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347",
+    "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8",
   ],
   [
     "x86_64-unknown-linux-gnu",
-    "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20",
+    "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf",
   ],
 ].map(([target, sha256]) => {
   const archive = `herdr-mise-v0.1.0-rc.1-${target}.tar.gz`;
@@ -39,7 +39,7 @@ const rcArtifacts = [
 const acceptedRc = {
   tag: "v0.1.0-rc.1",
   version: "0.1.0-rc.1",
-  commit: "d17c3b754eab230c9dd3933cbb614c1cd75dec97",
+  commit: "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
   artifacts: rcArtifacts,
 };
 const categories = {
@@ -56,6 +56,8 @@ const categories = {
   "visual-6-dinner": "automated",
   "visual-12-light": "automated",
   "visual-12-dinner": "automated",
+  "tui-test-suite": "automated",
+  "tui-responsive-terminal": "manual",
   keyboard: "manual",
   "voiceover-speech-focus": "manual",
   "runtime-reduced-motion": "manual",

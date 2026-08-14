@@ -89,9 +89,9 @@
         "sha256": {
           "type": "string",
           "enum": [
-            "260e9a2d851969e31e07559a3ea05123192b9f1415c4ef60f7e5d7133d083e5f",
-            "885cccad2335b3d44d3139a9a99d8fbb1944a6045fbf1fc4e05feeefc6fa6347",
-            "c264cb1df9602cf582b1d87c40b6ceb86870240483ed8f66ff22d21675ec6b20"
+            "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c",
+            "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8",
+            "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
           ]
         },
         "archive_url": {
@@ -178,6 +178,8 @@
             "visual-6-dinner",
             "visual-12-light",
             "visual-12-dinner",
+            "tui-test-suite",
+            "tui-responsive-terminal",
             "keyboard",
             "voiceover-speech-focus",
             "runtime-reduced-motion",

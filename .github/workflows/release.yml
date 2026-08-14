@@ -242,7 +242,14 @@ jobs:
           diff -u expected-assets.txt published-assets.txt
 
   verify-public-release:
-    if: startsWith(github.ref, 'refs/tags/')
+    # stable_acceptance is intentionally skipped for prereleases. Use an
+    # explicit status guard so that skipped transitive dependency does not
+    # suppress public verification after a successful prerelease publish.
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/') &&
+      needs.publish.result == 'success' &&
+      needs.classify_release.result == 'success'
     needs: [publish, classify_release]
     strategy:
       matrix:

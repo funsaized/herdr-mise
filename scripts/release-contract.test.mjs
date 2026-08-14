@@ -423,3 +423,10 @@ test("existing expected asset subsets are rerunnable but unexpected assets fail 
   assert.match(workflow, /gh release upload .* --clobber/);
   assert.match(workflow, /diff -u expected-assets\.txt published-assets\.txt/);
 });
+
+test("public verification survives the intentionally skipped prerelease stable gate", () => {
+  assert.match(workflow, /verify-public-release:/);
+  assert.match(workflow, /always\(\) &&/);
+  assert.match(workflow, /needs\.publish\.result == 'success' &&/);
+  assert.match(workflow, /needs\.classify_release\.result == 'success'/);
+});
