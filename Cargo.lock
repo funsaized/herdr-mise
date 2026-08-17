@@ -384,7 +384,6 @@ checksum = "829d955a0bb380ef178a640b91779e3987da38c9aea133b20614cfed8cdea9c6"
 dependencies = [
  "bitflags",
  "crossterm_winapi",
- "futures-core",
  "mio",
  "parking_lot",
  "rustix 0.38.44",
@@ -403,6 +402,7 @@ dependencies = [
  "crossterm_winapi",
  "derive_more",
  "document-features",
+ "futures-core",
  "mio",
  "parking_lot",
  "rustix 1.1.4",
@@ -769,7 +769,7 @@ version = "0.1.0-rc.1"
 dependencies = [
  "axum",
  "chrono",
- "crossterm 0.28.1",
+ "crossterm 0.29.0",
  "futures-util",
  "jsonschema",
  "ratatui",
