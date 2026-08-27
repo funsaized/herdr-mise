@@ -9,6 +9,7 @@
 /.hermes/
 /.claude/
 /.stable-acceptance-evidence.json
+/.verification-evidence/
 /target-linux-x64/
 .DS_Store
 

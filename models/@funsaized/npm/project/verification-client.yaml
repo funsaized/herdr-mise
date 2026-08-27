@@ -1,0 +1,16 @@
+type: '@funsaized/npm/project'
+typeVersion: 2026.08.26.3
+id: eda1e433-a753-43a3-b17e-8ad4840e39d3
+name: verification-client
+version: 1
+tags: {}
+globalArguments:
+  projectDir: client
+  strictToolchain: false
+  configPolicy: project
+  lifecycleScripts: allow
+  allowedScripts: []
+  environment: {}
+  defaultTimeoutMs: 900000
+  requireCleanGit: true
+methods: {}

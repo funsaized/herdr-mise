@@ -1,0 +1,264 @@
+id: 5cc04b4f-87b6-4168-ad49-ff184b6f65e1
+name: local-verification
+tags: {}
+inputs:
+  properties:
+    commit:
+      type: string
+      pattern: '^[0-9a-f]{40}$'
+      description: Exact clean Git commit to verify
+  required:
+    - commit
+jobs:
+  - name: verify
+    description: Run the deterministic controls that previously ran first in CI.
+    steps:
+      - name: dependencies-root
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: ci
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn: []
+      - name: dependencies-client
+        task:
+          type: model_method
+          modelIdOrName: verification-client
+          methodName: ci
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: dependencies-root
+            condition:
+              type: succeeded
+      - name: browser-install
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: verify:browser:install
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: dependencies-client
+            condition:
+              type: succeeded
+      - name: fallback-assets-tests
+        task:
+          type: model_method
+          modelIdOrName: verification-rust
+          methodName: fallbackAssets
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: browser-install
+            condition:
+              type: succeeded
+      - name: format
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: format:check
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: fallback-assets-tests
+            condition:
+              type: succeeded
+      - name: build
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: build
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: format
+            condition:
+              type: succeeded
+      - name: rust-verification
+        task:
+          type: model_method
+          modelIdOrName: verification-rust
+          methodName: verify
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: build
+            condition:
+              type: succeeded
+      - name: typecheck
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: typecheck
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: rust-verification
+            condition:
+              type: succeeded
+      - name: lint
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: lint
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: typecheck
+            condition:
+              type: succeeded
+      - name: unit-tests
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: test
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: lint
+            condition:
+              type: succeeded
+      - name: compatibility
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: check:herdr-compatibility
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: unit-tests
+            condition:
+              type: succeeded
+      - name: browser-tests
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: test:visual
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: compatibility
+            condition:
+              type: succeeded
+      - name: token-audit
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: audit:tokens
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: browser-tests
+            condition:
+              type: succeeded
+      - name: accessibility-audit
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: audit:accessibility
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: token-audit
+            condition:
+              type: succeeded
+      - name: bundle-budget
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: check:bundle
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: accessibility-audit
+            condition:
+              type: succeeded
+      - name: bundle
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: bundle
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: bundle-budget
+            condition:
+              type: succeeded
+      - name: release-validation
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run
+          inputs:
+            script: validate:release
+            expectedGitHead: ${{ inputs.commit }}
+        dependsOn:
+          - step: bundle
+            condition:
+              type: succeeded
+      - name: sync-evidence-branch
+        task:
+          type: model_method
+          modelIdOrName: verification-evidence-git
+          methodName: pull
+          inputs:
+            branch: ops/evidence
+            ffOnly: true
+        dependsOn:
+          - step: release-validation
+            condition:
+              type: succeeded
+      - name: collect-evidence
+        task:
+          type: model_method
+          modelIdOrName: verification-evidence
+          methodName: collect
+          inputs:
+            commit: ${{ inputs.commit }}
+            runId: ${{ run.id }}
+        dependsOn:
+          - step: sync-evidence-branch
+            condition:
+              type: succeeded
+      - name: commit-evidence
+        task:
+          type: model_method
+          modelIdOrName: verification-evidence-git
+          methodName: commit
+          inputs:
+            message: "chore(evidence): ${{ inputs.commit }} ${{ run.id }}"
+            paths:
+              - evidence/v1
+        dependsOn:
+          - step: collect-evidence
+            condition:
+              type: succeeded
+      - name: push-evidence
+        task:
+          type: model_method
+          modelIdOrName: verification-evidence-git
+          methodName: push
+          inputs:
+            branch: ops/evidence
+            force: false
+            forceWithLease: false
+        dependsOn:
+          - step: commit-evidence
+            condition:
+              type: succeeded
+    dependsOn: []
+version: 1

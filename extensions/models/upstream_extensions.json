@@ -1,0 +1,36 @@
+{
+  "@funsaized/npm": {
+    "version": "2026.08.26.3",
+    "pulledAt": "2026-08-27T20:27:50.135Z",
+    "files": [
+      ".swamp/bundles/4f9f5904/project.js",
+      ".swamp/pulled-extensions/@funsaized/npm/files/LICENSE",
+      ".swamp/pulled-extensions/@funsaized/npm/files/README.md",
+      ".swamp/pulled-extensions/@funsaized/npm/manifest.yaml",
+      ".swamp/pulled-extensions/@funsaized/npm/models/project.ts"
+    ],
+    "checksum": "d2f146cc246c5651f368c7ff2868c39aebbc1d3d4e389ad7ff722c30a41b7a30",
+    "filesChecksum": "573fbac04c7878f8470086bfd72e1829839570c08f4bd16554fd59167a8ff67c",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@swamp/git": {
+    "version": "2026.08.25.1",
+    "pulledAt": "2026-08-27T21:52:34.233Z",
+    "files": [
+      ".swamp/bundles/2b63a75e/git.js",
+      ".swamp/pulled-extensions/@swamp/git/files/LICENSE.txt",
+      ".swamp/pulled-extensions/@swamp/git/files/README.md",
+      ".swamp/pulled-extensions/@swamp/git/manifest.yaml",
+      ".swamp/pulled-extensions/@swamp/git/models/_lib/checks.ts",
+      ".swamp/pulled-extensions/@swamp/git/models/_lib/operations.ts",
+      ".swamp/pulled-extensions/@swamp/git/models/_lib/runner.ts",
+      ".swamp/pulled-extensions/@swamp/git/models/_lib/schemas.ts",
+      ".swamp/pulled-extensions/@swamp/git/models/_lib/tracing.ts",
+      ".swamp/pulled-extensions/@swamp/git/models/_lib/types.ts",
+      ".swamp/pulled-extensions/@swamp/git/models/git.ts"
+    ],
+    "checksum": "78174c10498cef22fd70f93f93b5914e7fcbd141faa006a45ed3946356b4d135",
+    "filesChecksum": "1e59ff0450a15da68626ae20b8abd6518f0e854a9010f34082f149b7b6746a7c",
+    "serverUrl": "https://swamp-club.com"
+  }
+}
