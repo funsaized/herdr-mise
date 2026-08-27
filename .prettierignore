@@ -1,6 +1,7 @@
 node_modules/
 client/node_modules/
 /docs/backlog.md
+AGENTS.md
 
 dist/
 client/dist/

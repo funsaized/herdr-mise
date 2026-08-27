@@ -1,0 +1,30 @@
+type: '@funsaized/npm/project'
+typeVersion: 2026.08.26.3
+id: e40b7444-cebe-4008-90a0-730a9e1137c0
+name: verification-root
+version: 1
+tags: {}
+globalArguments:
+  projectDir: .
+  strictToolchain: false
+  configPolicy: project
+  lifecycleScripts: allow
+  allowedScripts:
+    - format:check
+    - build
+    - typecheck
+    - lint
+    - test
+    - check:herdr-compatibility
+    - test:visual
+    - audit:tokens
+    - audit:accessibility
+    - check:bundle
+    - bundle
+    - validate:release
+    - verify:browser:install
+  environment:
+    HOME: ${{ env.HOME }}
+  defaultTimeoutMs: 2700000
+  requireCleanGit: true
+methods: {}

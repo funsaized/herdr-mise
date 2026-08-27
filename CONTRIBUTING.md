@@ -36,15 +36,19 @@ npm run dev:visual    # isolated playground on http://localhost:8686
 
 ## Before you open a PR
 
-Run the same gates CI runs:
+Commit your change, then run the local verification workflow for that exact
+commit:
 
 ```sh
-npm run format:check
-cargo fmt --all --check && cargo test --workspace --locked
-npm run typecheck && npm run lint && npm test
-npm run test:visual   # Playwright browser matrix (Chromium required)
-npm run audit:tokens && npm run audit:accessibility && npm run check:bundle
+swamp workflow validate local-verification
+swamp workflow run local-verification --input commit=$(git rev-parse HEAD)
 ```
+
+The workflow publishes its run evidence to the append-only `ops/evidence`
+branch before a pull request opens. Re-run it after every commit change.
+
+See [Local verification and the remote CI gate](docs/local-verification.md) for
+the controls, trust boundary, and shadow-CI migration policy.
 
 Run `npm run format` to apply the repository's deterministic formatting before
 checking it with `npm run format:check`.

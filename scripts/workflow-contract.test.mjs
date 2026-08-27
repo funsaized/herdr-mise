@@ -129,6 +129,38 @@ export function auditWorkflowContract(
   }
 
   const ci = candidateWorkflows["ci.yml"] ?? "";
+  const ciJobs = jobBlocks(ci);
+  const evidence = ciJobs.evidence ?? "";
+  if (
+    !/^      - run: node scripts\/verification-evidence\.mjs$/m.test(
+      evidence,
+    ) ||
+    !/^          ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m.test(
+      evidence,
+    ) ||
+    !/^          ref: ops\/evidence$/m.test(evidence) ||
+    !/^          path: \.verification-evidence$/m.test(evidence) ||
+    (evidence.match(/^          persist-credentials: false$/gm) ?? []).length <
+      2 ||
+    !/^          VERIFICATION_SOURCE_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m.test(
+      evidence,
+    )
+  ) {
+    errors.push("ci.yml: exact local verification evidence gate is missing");
+  }
+  if (/^ {4,}(?:if|continue-on-error):/m.test(evidence)) {
+    errors.push("ci.yml: evidence gate must be unconditional and blocking");
+  }
+  if (!/^  push:\n    branches-ignore:\n      - ops\/evidence$/m.test(ci)) {
+    errors.push("ci.yml: evidence branch push exclusion is missing");
+  }
+  const shadow = ciJobs["verify-shadow"] ?? "";
+  if (!shadow) errors.push("ci.yml: shadow full verification job is missing");
+  if (/^ {4,}(?:if|continue-on-error):/m.test(shadow)) {
+    errors.push(
+      "ci.yml: shadow verification must run unconditionally and block during migration",
+    );
+  }
   if (!ci.includes("cargo install cargo-audit --version 0.22.2 --locked"))
     errors.push("ci.yml: pinned cargo-audit install is missing");
   if (!ci.includes("cargo audit --file Cargo.lock --deny warnings"))
@@ -315,6 +347,15 @@ test("contract rejects missing non-release controls and weakened scanner configu
   const config = mutateWorkflow("gitleaks.yml", (source) =>
     source.replace("/.gitleaks.toml", "/gitleaks.toml"),
   );
+  const noEvidence = mutateWorkflow("ci.yml", (source) =>
+    source.replace("node scripts/verification-evidence.mjs", "true"),
+  );
+  const nonBlockingShadow = mutateWorkflow("ci.yml", (source) =>
+    source.replace(
+      "  verify-shadow:\n",
+      "  verify-shadow:\n    continue-on-error: true\n",
+    ),
+  );
   assert.ok(
     auditWorkflowContract(timeout, dependabot, gitleaks).some((error) =>
       error.includes("timeout-minutes"),
@@ -330,6 +371,46 @@ test("contract rejects missing non-release controls and weakened scanner configu
       error.includes("repository config"),
     ),
   );
+  assert.ok(
+    auditWorkflowContract(noEvidence, dependabot, gitleaks).some((error) =>
+      error.includes("evidence gate"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(nonBlockingShadow, dependabot, gitleaks).some(
+      (error) => error.includes("shadow verification"),
+    ),
+  );
+});
+
+test("contract rejects conditional evidence and shadow jobs", () => {
+  const conditionalEvidence = mutateWorkflow("ci.yml", (source) =>
+    source.replace("  evidence:\n", "  evidence:\n    if: false\n"),
+  );
+  const conditionalShadow = mutateWorkflow("ci.yml", (source) =>
+    source.replace(
+      "  verify-shadow:\n",
+      "  verify-shadow:\n    if: ${{ false }}\n",
+    ),
+  );
+  const toleratedEvidenceFailure = mutateWorkflow("ci.yml", (source) =>
+    source.replace(
+      "      - run: node scripts/verification-evidence.mjs\n",
+      "      - run: node scripts/verification-evidence.mjs\n        continue-on-error: yes\n",
+    ),
+  );
+
+  for (const candidate of [
+    conditionalEvidence,
+    conditionalShadow,
+    toleratedEvidenceFailure,
+  ]) {
+    assert.ok(
+      auditWorkflowContract(candidate, dependabot, gitleaks).some((error) =>
+        /unconditional|must run/.test(error),
+      ),
+    );
+  }
 });
 
 test("contract requires the exact fork-safe Gitleaks job contract", () => {

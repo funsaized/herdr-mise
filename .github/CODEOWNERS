@@ -1,0 +1,10 @@
+# Require human review for files that define or validate verification policy.
+/AGENTS.md @funsaized
+/.github/CODEOWNERS @funsaized
+/.github/workflows/ @funsaized
+/extensions/models/ @funsaized
+/models/ @funsaized
+/scripts/verification-evidence.mjs @funsaized
+/scripts/workflow-contract.test.mjs @funsaized
+/verification/policy.json @funsaized
+/workflows/ @funsaized
