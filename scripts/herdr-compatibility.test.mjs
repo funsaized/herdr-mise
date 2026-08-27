@@ -38,6 +38,7 @@ test("compatibility manifest is the complete supported release authority", () =>
     [
       { release: "0.7.5", protocol: 17 },
       { release: "0.8.0", protocol: 19 },
+      { release: "0.8.2", protocol: 20 },
     ],
   );
   assert.equal(
@@ -180,6 +181,7 @@ test("upstream checker reads Cargo version, wire protocol, and SessionSnapshot s
   const entries = [
     { release: "0.7.5", protocol: 17 },
     { release: "0.8.0", protocol: 19 },
+    { release: "0.8.2", protocol: 20 },
   ];
   try {
     const args = entries.map((entry) => {

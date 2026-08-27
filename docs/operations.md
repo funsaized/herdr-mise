@@ -39,9 +39,8 @@ embedded into the binary by `rust-embed` at compile time
 
 ### Run the release archive
 
-The current public distribution is the GitHub **prerelease** `v0.1.0-rc.1`;
-there is no stable herdr-mise release yet. Future matching `v*` tags are
-classified as prerelease or stable under the fail-closed process in
+The current public distribution is the GitHub release `v0.1.0`. Matching `v*`
+tags are classified as prerelease or stable under the fail-closed process in
 [Release operations](releasing.md). Each asset pair is:
 
 ```text
@@ -60,7 +59,7 @@ Targets:
 Download, verify, extract, and run from the upstream release:
 
 ```sh
-TAG=v0.1.0-rc.1
+TAG=v0.1.0
 TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
@@ -247,6 +246,10 @@ wording is **not accurate** for this repository and has been
 removed.
 
 ## Reduced motion and VoiceOver acceptance
+
+Manual VoiceOver listening was explicitly deferred from the v0.1.0 release
+gate by the owner on 2026-08-27. The checklist remains `NOT RUN` until someone
+actually performs it; this section does not claim a pass.
 
 ### Behavior contract
 
@@ -530,10 +533,10 @@ From the directory that holds both files:
 
 ```sh
 # macOS
-shasum -a 256 -c herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz.sha256
+shasum -a 256 -c herdr-mise-v0.1.0-aarch64-apple-darwin.tar.gz.sha256
 
 # Linux
-sha256sum -c herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz.sha256
+sha256sum -c herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
 The sidecar is written next to the archive and names the archive basename
@@ -541,15 +544,16 @@ only. The release workflow verifies checksums before upload and again after
 public download. End-to-end local verification of a packaged archive:
 
 ```sh
-sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz
+sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.1.0-aarch64-apple-darwin.tar.gz
 # optional on a signed macOS binary after extract:
 # VERIFY_CODESIGN=1 sh scripts/verify-release-artifact.sh path/to/archive.tar.gz
 ```
 
-### Publishing a signed prerelease
+### Publishing a signed release
 
-Publication is **tag-triggered and prerelease-only**. Pushing a matching `v*`
-tag is the only path that signs, notarizes, and publishes. Pull requests and
+Publication is **tag-triggered**. Pushing a matching `v*` tag is the only path
+that signs, notarizes, and publishes. The workflow classifies SemVer
+prereleases and stable tags before publication. Pull requests and
 `workflow_dispatch` builds validate without secrets or publication.
 
 #### Preconditions
@@ -557,8 +561,8 @@ tag is the only path that signs, notarizes, and publishes. Pull requests and
 1. Working tree matches the intended release commit on `main` (or the branch
    you intentionally tag). No dirty release-critical paths.
 2. `server/Cargo.toml` `version` is the single source of truth (currently
-   `0.1.0-rc.1`). The tag **must** be that value with a `v` prefix
-   (`v0.1.0-rc.1`). The workflow fails if `GITHUB_REF_NAME != v$version`.
+   `0.1.0`). The tag **must** be that value with a `v` prefix (`v0.1.0`). The
+   workflow fails if `GITHUB_REF_NAME != v$version`.
 3. Local gates you care about have passed on that commit
    (`npm test`, `npm run build`, `cargo test --workspace --locked`,
    `npm run validate:release`, etc.).
@@ -626,24 +630,24 @@ On the release commit:
 ```sh
 # confirm authoritative version
 sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml
-# -> 0.1.0-rc.1  implies tag v0.1.0-rc.1
+# -> 0.1.0  implies tag v0.1.0
 
 git status   # clean
-git tag -a v0.1.0-rc.1 -m "v0.1.0-rc.1"
-git push origin v0.1.0-rc.1
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
 ```
 
 Then:
 
 1. Open the Actions **Release** workflow for that tag and wait for
    `build` → `publish` → `verify-public-release`.
-2. Confirm the GitHub release for the tag is marked **prerelease**, titled
-   with the tag name, and lists exactly six assets:
-   - `herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz` + `.sha256`
-   - `herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz` + `.sha256`
-   - `herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz` + `.sha256`
+2. Confirm the GitHub release for the tag is not marked prerelease, is Latest,
+   is titled with the tag name, and lists exactly six assets:
+   - `herdr-mise-v0.1.0-aarch64-apple-darwin.tar.gz` + `.sha256`
+   - `herdr-mise-v0.1.0-x86_64-apple-darwin.tar.gz` + `.sha256`
+   - `herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz` + `.sha256`
 3. Spot-check a public browser download URL of the form
-   `https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/...`
+   `https://github.com/funsaized/herdr-mise/releases/download/v0.1.0/...`
    and re-run the checksum + extract steps from the install section.
 
 #### What the tagged workflow does
@@ -657,8 +661,8 @@ Then:
   Credential files and the keychain are deleted in an `always()` cleanup.
 - Packaging writes `herdr-mise-v<VERSION>-<TARGET>.tar.gz` plus a SHA-256
   sidecar; `scripts/verify-release-artifact.sh` runs before upload.
-- `publish` creates or validates a **prerelease** for the tag, uploads all
-  six files with `--clobber`, and asserts the final asset name set is exact.
+- `publish` creates or validates the release class for the tag, uploads all six
+  files with `--clobber`, and asserts the final asset name set is exact.
 - `verify-public-release` downloads via the unauthenticated public API /
   browser URLs and re-runs the full verifier (`VERIFY_CODESIGN=1` on macOS).
 
@@ -693,9 +697,9 @@ Intel artifact when a label is retired.
 
 **Missing or mis-scoped Apple secrets.** Tagged macOS jobs assert every
 secret is non-empty and fail before packaging. Fix the secret with
-`gh secret set …` (same six names), then re-run the failed jobs from the
-Actions UI, or delete the bad tag and push a corrected one only if you
-intentionally retag. PR / manual runs never need these secrets.
+`gh secret set …` (same six names), then re-run a purely transient failure with
+the same complete inputs. Any source or acceptance correction requires a new
+version and tag. PR / manual runs never need these secrets.
 
 **Notarization rejection.** Open the failed **Notarize signed CLI binary**
 step log for the `notarytool` submission id. On a machine with the API key
@@ -713,18 +717,18 @@ missing hardened runtime / timestamp, or an API key without notarization
 permission. Fix the signing inputs, update secrets if needed, and re-run the
 tag workflow.
 
-**Partial GitHub asset upload.** `publish` allows an existing prerelease for
+**Partial GitHub asset upload.** `publish` allows an existing matching release for
 the same tag/title to retain any **subset** of the six expected names, rejects
 unexpected names, then re-uploads all six with `--clobber` and diffs the final
 set. Re-run the failed `publish` (or the whole tag workflow). Do not hand-edit
 release assets into a different naming scheme.
 
 **Code-signature verification failure on a public macOS download.** Confirm
-you extracted the public prerelease asset (not a local unsigned build), then
+you extracted the public release asset (not a local unsigned build), then
 inspect and verify it explicitly:
 
 ```sh
-tar -xzf herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz
+tar -xzf herdr-mise-v0.1.0-aarch64-apple-darwin.tar.gz
 codesign --verify --deep --strict --verbose=2 ./herdr-mise
 codesign -dv --verbose=4 ./herdr-mise
 ```
@@ -929,6 +933,7 @@ tested matrix is:
 |---|---|
 | `0.7.5` | `17` |
 | `0.8.0` | `19` |
+| `0.8.2` | `20` |
 <!-- herdr-compatibility:end -->
 <!-- prettier-ignore-end -->
 

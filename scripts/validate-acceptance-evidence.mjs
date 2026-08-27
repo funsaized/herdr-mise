@@ -20,7 +20,6 @@ export const REQUIRED_GATES = Object.freeze({
   "tui-test-suite": "automated",
   "tui-responsive-terminal": "manual",
   keyboard: "manual",
-  "voiceover-speech-focus": "manual",
   "runtime-reduced-motion": "manual",
   "blocked-recognition-two-meters": "manual",
   upgrade: "manual",

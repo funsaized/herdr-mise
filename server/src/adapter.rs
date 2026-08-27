@@ -328,7 +328,7 @@ pub async fn subscribe_events(path: &Path, bound: Duration) -> Result<EventStrea
             "workspace.created", "workspace.updated", "workspace.renamed", "workspace.closed",
             "tab.created", "tab.closed", "tab.renamed", "pane.created", "pane.closed",
             "pane.updated", "pane.moved", "pane.exited", "pane.agent_detected",
-            "pane.agent_status_changed", "layout.updated",
+            "layout.updated",
         ].into_iter().map(|kind| json!({"type":kind})).collect::<Vec<_>>();
         let request = json!({"id":"herdr-mise-events","method":"events.subscribe","params":{"subscriptions":subscriptions}}).to_string();
         stream.write_all(request.as_bytes()).await?;
@@ -413,7 +413,7 @@ mod tests {
         let unsupported = AdapterError::Protocol(23);
         let diagnostic = unsupported.source_diagnostic().expect("diagnostic");
         assert_eq!(diagnostic.observed_protocol, 23);
-        assert_eq!(diagnostic.supported_protocols, vec![17, 19]);
+        assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20]);
         assert!(diagnostic
             .next_action
             .contains("upgrade or downgrade Herdr"));
@@ -440,7 +440,7 @@ mod tests {
 
     #[test]
     fn compatibility_manifest_drives_runtime_protocols_and_fixture_mapping() {
-        assert_eq!(supported_protocols(), vec![17, 19]);
+        assert_eq!(supported_protocols(), vec![17, 19, 20]);
 
         let cases = [
             (
@@ -454,6 +454,12 @@ mod tests {
                 "fictional-session-19",
                 AgentState::Blocked,
                 "Example Pantry",
+            ),
+            (
+                include_str!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json"),
+                "fictional-session-20",
+                AgentState::Working,
+                "Example Kitchen",
             ),
         ];
         for (fixture, id, state, workspace) in cases {
@@ -618,7 +624,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn subscription_requests_only_state_and_structure() {
+    async fn subscription_requests_only_unfiltered_structural_events() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("events.sock");
         let listener = match UnixListener::bind(&path) {
@@ -636,19 +642,21 @@ mod tests {
             let encoded = request.to_string();
             assert!(!encoded.contains("output_matched"));
             assert!(!encoded.contains("scroll_changed"));
+            assert!(!encoded.contains("agent_status_changed"));
             stream.get_mut().write_all(b"{\"id\":\"herdr-mise-events\",\"result\":{\"type\":\"subscription_started\"}}\n").await.unwrap();
-            stream.get_mut().write_all(b"{\"event\":\"pane.agent_status_changed\",\"data\":{\"pane_id\":\"p-1\",\"agent_status\":\"blocked\"}}\n").await.unwrap();
+            stream
+                .get_mut()
+                .write_all(b"{\"event\":\"pane.updated\",\"data\":{\"pane_id\":\"p-1\"}}\n")
+                .await
+                .unwrap();
         });
         let mut events = subscribe_events(&path, Duration::from_secs(1))
             .await
             .unwrap();
-        assert!(matches!(
+        assert_eq!(
             decode_event(events.next(Duration::from_secs(1)).await.unwrap()).unwrap(),
-            AdapterEvent::Status {
-                state: Some(AgentState::Blocked),
-                ..
-            }
-        ));
+            AdapterEvent::Structural
+        );
         server.await.unwrap();
     }
 }

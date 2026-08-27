@@ -191,8 +191,8 @@ TUI shown there is the same process whose browser app is reachable at
   +----------------------------------------------------------------+
   |  Herdr daemon (out of process, on the user's machine)           |
   |  - session.snapshot                                             |
-  |  - events.subscribe (pane.agent_status_changed, pane.exited,    |
-  |                       structural pane/tab/workspace events)      |
+  |  - events.subscribe (unfiltered structural pane/tab/workspace    |
+  |                       events; status comes from snapshots)       |
   |  - newline-delimited JSON over the discovered Unix socket       |
   +----------------------------------------------------------------+
 ```

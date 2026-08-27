@@ -12,6 +12,12 @@
       "protocol": 19,
       "fixture": "server/tests/fixtures/snapshot-herdr-0.8.0-p19.json",
       "upstreamCommit": "346411fa21afd297f5ed3b3fa56f9e3fbf7654b7"
+    },
+    {
+      "release": "0.8.2",
+      "protocol": 20,
+      "fixture": "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+      "upstreamCommit": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c"
     }
   ]
 }

@@ -11,9 +11,7 @@ not aggregate remote servers. It is a window, not an office.
 ## Quick start
 
 Install Herdr, then download, verify, and run herdr-mise
-`v0.1.0-rc.1`. Reach a truthful live kitchen in under five minutes.
-This prerelease is currently the only public herdr-mise release; no stable
-herdr-mise release exists yet.
+`v0.1.0`. Reach a truthful live kitchen in under five minutes.
 Detailed platform commands live in
 [Operations — local run](docs/operations.md#local-run).
 
@@ -23,7 +21,7 @@ Pick any official install path from <https://herdr.dev> (see the
 [Herdr install docs](https://herdr.dev/docs/install)) and run
 `herdr` in its own terminal — leave it running. Source or release
 at <https://github.com/herdrdev/herdr>; latest stable is
-[Herdr `v0.8.0`](https://github.com/herdrdev/herdr/releases).
+[Herdr `v0.8.2`](https://github.com/herdrdev/herdr/releases).
 
 ```sh
 curl -fsSL https://herdr.dev/install.sh | sh   # or: brew install herdr / mise use -g herdr
@@ -38,7 +36,7 @@ per-platform detail and codesign checks:
 [Operations — run the release archive](docs/operations.md#run-the-release-archive).
 
 ```sh
-TAG=v0.1.0-rc.1
+TAG=v0.1.0
 TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
@@ -82,6 +80,7 @@ but are not part of the verified release matrix.
 |---|---|
 | `0.7.5` | `17` |
 | `0.8.0` | `19` |
+| `0.8.2` | `20` |
 <!-- herdr-compatibility:end -->
 <!-- prettier-ignore-end -->
 
@@ -230,7 +229,7 @@ chrome surfaces honestly:
 - Rust stable toolchain, `rustfmt`, the `aarch64-apple-darwin` target
   on Apple Silicon.
 - Node.js 22, npm.
-- The Herdr ecosystem at protocol version 17 or 19. The adapter is the
+- The Herdr ecosystem at protocol version 17, 19, or 20. The adapter is the
   only module with herdr-schema knowledge; it accepts any product patch
   version when the socket reports a supported protocol (see
   `server/src/adapter.rs`).
@@ -333,17 +332,17 @@ limitations](docs/operations.md#client-development).
 
 ## Install a release binary
 
-v0.1.0-rc.1 ships as three archives on the matching GitHub **prerelease**.
+v0.1.0 ships as three archives on the matching GitHub release.
 There is no installer, Homebrew formula, launchd unit, or auto-update. Each
 archive contains the `herdr-mise` executable, the project `LICENSE`, and a
 generated `THIRD_PARTY_NOTICES.txt` covering locked Rust and JavaScript
 dependencies plus the bundled fonts.
 
-| Platform            | Target triple              | Archive                                                  |
-| ------------------- | -------------------------- | -------------------------------------------------------- |
-| macOS Apple Silicon | `aarch64-apple-darwin`     | `herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz`     |
-| macOS Intel         | `x86_64-apple-darwin`      | `herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz`      |
-| Linux x86_64        | `x86_64-unknown-linux-gnu` | `herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz` |
+| Platform            | Target triple              | Archive                                             |
+| ------------------- | -------------------------- | --------------------------------------------------- |
+| macOS Apple Silicon | `aarch64-apple-darwin`     | `herdr-mise-v0.1.0-aarch64-apple-darwin.tar.gz`     |
+| macOS Intel         | `x86_64-apple-darwin`      | `herdr-mise-v0.1.0-x86_64-apple-darwin.tar.gz`      |
+| Linux x86_64        | `x86_64-unknown-linux-gnu` | `herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz` |
 
 Always download the archive **and** its `.sha256` sidecar, verify the checksum
 before extraction, and allow any failed step to prevent execution. The sole
@@ -376,7 +375,7 @@ and the `mise-bell-hint` key in the browser origin you used. Nothing else
 is installed on the host.
 
 Operator signing, tag publication, and failure recovery live in
-[Operations — publishing a signed prerelease](docs/operations.md#publishing-a-signed-prerelease).
+[Operations — publishing a signed release](docs/operations.md#publishing-a-signed-release).
 
 If the chrome still shows the `DEMO SERVICE` placard after following
 the steps above, see
@@ -435,7 +434,7 @@ $HERDR_BIN_PATH plugin pane open \
 ```
 
 The equivalent CLI is `herdr plugin action invoke open --plugin mise.kitchen`
-(verified against `herdr plugin action invoke --help` on Herdr 0.8.0;
+(verified against `herdr plugin action invoke --help` on Herdr 0.8.2;
 older `run` wording in some third-party docs is not the current
 subcommand). When the manifest is linked in a Herdr session, the
 action surfaces as **Open Mise Kitchen** with
@@ -595,8 +594,8 @@ The signal uses text and shape as well as color or motion.
 
 For the executable human acceptance record, use the [reduced-motion and
 VoiceOver checklist](docs/operations.md#reduced-motion-and-voiceover-acceptance).
-The checklist starts as `NOT RUN`; it is not evidence of a completed VoiceOver
-session.
+The checklist starts as `NOT RUN`. Manual VoiceOver listening was explicitly
+deferred from the v0.1.0 release gate and remains post-release work.
 
 ## Verification commands
 
@@ -655,10 +654,10 @@ These are release bounds, not optimization targets:
   non-localhost hardening. Do not bind the binary to a
   public interface; do not put it behind a reverse proxy without
   reviewing the loopback-only security model above.
-- **Distribution is the GitHub prerelease only.** herdr-mise is not on
+- **Distribution is the GitHub release only.** herdr-mise is not on
   crates.io, npm, Homebrew, or any launchd-distributed package. A
   matching `v*` tag publishes six public assets (three archives + three
-  `.sha256` sidecars) on a GitHub **prerelease**; PR and manual workflow
+  `.sha256` sidecars) on GitHub; PR and manual workflow
   runs only build and validate.
 
 ## Where to read more

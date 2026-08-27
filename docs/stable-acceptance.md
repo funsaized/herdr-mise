@@ -7,7 +7,9 @@ binds the future stable `v0.1.0` tag/version to the exact accepted `main` commit
 No evidence row claims to test unpublished stable assets. An automated check
 cannot replace a manual observation or elapsed soak.
 
-The accepted RC is the TUI-inclusive replacement published from commit
+The repository has no valid prior public version: the earlier non-TUI RC1 was
+overwritten and explicitly invalidated. The accepted RC is the TUI-inclusive
+replacement published from commit
 `ea74ac5f95afb1052eb41d87c14c4f28d03d932b`. On 2026-08-14, before stable
 acceptance began, the project explicitly replaced the earlier non-TUI RC1 tag
 and all six assets. The previous RC1 commit and checksums are invalid acceptance
@@ -53,12 +55,71 @@ node scripts/validate-acceptance-evidence.mjs --evidence /absolute/external/evid
 The artifact command downloads anonymously (curl configuration and netrc are
 disabled), verifies checksum and
 exact three-file archive shape, runs the packaged smoke verifier, and installs to
-a new version directory. With no install root it uses a new temporary root. To
-stage an upgrade, pass the same explicit user-owned root for old and new versions;
-the `current` link selects the new version and the old version remains for rollback.
+a new version directory. With no install root it uses a new temporary root. For
+the first-release `upgrade` gate, install a verifier-owned prior fixture into an
+isolated install root, then use the production public-artifact verifier to stage
+the exact accepted public RC in that same root using the procedure below. PASS
+requires `current` to transition to the accepted RC, the exact RC checksum and
+path, the fixture to remain available for rollback, no temporary selector at
+`INSTALL_ROOT/herdr-mise/current.next`, and a successful launch from `current`.
+This checks first-release installer transition and rollback mechanics; it does
+not prove an upgrade from a prior public release.
 To test clean uninstall, first select a different current version, then run
 `sh scripts/uninstall-acceptance-artifact.sh INSTALL_ROOT VERSION`. The command
 refuses to remove the selected version or anything lacking verifier metadata.
+
+### First-release fixture-to-RC procedure
+
+Run this macOS arm64 procedure from the repository root. It creates a disposable
+three-member fixture, installs it through the verifier's test-only `file://`
+escape hatch, then invokes the production verifier over HTTPS for the exact
+accepted RC in the same isolated root. The escape-hatch variables apply only to
+the fixture command.
+
+```sh
+set -e
+fixture_work=$(mktemp -d "${TMPDIR:-/tmp}/herdr-mise-first-release.XXXXXX")
+fixture_stage="$fixture_work/stage"
+INSTALL_ROOT="$fixture_work/install"
+mkdir -p "$fixture_stage"
+printf '%s\n' '#!/bin/sh' 'echo verifier-owned-fixture' >"$fixture_stage/herdr-mise"
+chmod 755 "$fixture_stage/herdr-mise"
+printf '%s\n' 'fixture license' >"$fixture_stage/LICENSE"
+printf '%s\n' 'fixture notices' >"$fixture_stage/THIRD_PARTY_NOTICES.txt"
+fixture_archive="$fixture_work/herdr-mise-v0.0.0-fixture.1-test.tar.gz"
+tar -C "$fixture_stage" -czf "$fixture_archive" \
+  herdr-mise LICENSE THIRD_PARTY_NOTICES.txt
+if command -v sha256sum >/dev/null 2>&1; then
+  fixture_sha=$(sha256sum "$fixture_archive" | awk '{print $1}')
+else
+  fixture_sha=$(shasum -a 256 "$fixture_archive" | awk '{print $1}')
+fi
+printf '%s  %s\n' "$fixture_sha" "${fixture_archive##*/}" \
+  >"$fixture_archive.sha256"
+ACCEPTANCE_ALLOW_FILE_URLS=1 ACCEPTANCE_SKIP_SMOKE=1 \
+  sh scripts/verify-public-artifact.sh \
+  "file://$fixture_archive" "file://$fixture_archive.sha256" \
+  0.0.0-fixture.1 "$INSTALL_ROOT"
+sh scripts/verify-public-artifact.sh \
+  https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz \
+  https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz.sha256 \
+  0.1.0-rc.1 "$INSTALL_ROOT"
+test "$(readlink "$INSTALL_ROOT/herdr-mise/current")" = 0.1.0-rc.1
+test "$(cat "$INSTALL_ROOT/herdr-mise/0.1.0-rc.1/artifact-sha256")" = \
+  aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c
+test -x "$INSTALL_ROOT/herdr-mise/0.0.0-fixture.1/bin/herdr-mise"
+test ! -e "$INSTALL_ROOT/herdr-mise/current.next"
+test ! -L "$INSTALL_ROOT/herdr-mise/current.next"
+"$INSTALL_ROOT/herdr-mise/current/bin/herdr-mise" --tui
+```
+
+The final command is the bounded manual launch check: confirm the first render,
+then press `q`. Do not launch the default server for this gate; it could hang the
+procedure or collide with the retained dogfood listener.
+
+Retain `INSTALL_ROOT` and the two verifier outputs with the sanitized external
+gate evidence so the fixture remains available for rollback and the accepted
+RC checksum and installed path can be compared with the checked-in identity.
 
 ## Automated product journeys
 
@@ -90,15 +151,18 @@ performing the action against the exact accepted RC artifact referenced by that
 row and records a sanitized external evidence reference. The row's
 `executed_against` block must copy the top-level accepted RC identity and artifact.
 
-| Gate                              | Exact action and PASS condition                                                                                                                                                                                                                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TUI responsive terminal           | Launch the installed accepted public RC with `--tui`; exercise `111×48 → 56×48 → 111×48`, then quit with `q`. PASS only if tiled, compact, and restored tiled layouts render without stale cells, the UI remains responsive, and terminal state is restored cleanly without disturbing another Herdr service. |
-| Keyboard                          | With VoiceOver off, use Tab/Shift-Tab through visible controls, arrow keys through all stations, Enter/Space to open details, and Escape to close details/settings. PASS only if focus is always visible, order is logical, every station is reachable, and focus returns to its trigger.                     |
-| VoiceOver speech/focus            | On macOS VoiceOver, traverse status, controls, each station, details, settings, disconnect, and empty states. PASS only after listening confirms name/role/state/value are correct, announcements are neither missing nor duplicated, and spoken focus matches visual focus.                                  |
-| Runtime reduced motion            | Start with Reduce Motion off while a blocked scene is active; enable it in System Settings without reloading, then disable it. PASS only if continuous/particle/sweep motion stops promptly, state indicators remain legible, and motion resumes without stale or duplicate state.                            |
-| Blocked recognition at two meters | At a measured distance of at least two meters on the supported display, compare a blocked station with working and idle stations in both light and dinner themes. PASS only if the blocked station and blocked count are correctly identified without relying on animation or sound.                          |
-| Upgrade                           | Install the prior public version, start it, then use the verifier with the same install root to stage the accepted RC and select `current`; restart from `current`. PASS only if the accepted RC launches, settings remain valid, the old version remains rollback-capable, and checksum/path match evidence. |
-| Uninstall                         | Stop the accepted RC, select a different current version if needed, run the exact uninstall command, and inspect the versioned path plus running processes. PASS only if that RC version is absent, no RC process remains, and unrelated versions/data remain.                                                |
+VoiceOver speech/focus listening is deferred from the v0.1.0 release gate by the
+owner's 2026-08-27 decision. It is not recorded as `PASS`; the checklist remains
+in `docs/operations.md` for post-release completion.
+
+| Gate                              | Exact action and PASS condition                                                                                                                                                                                                                                                                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TUI responsive terminal           | Launch the installed accepted public RC with `--tui`; exercise `111×48 → 56×48 → 111×48`, then quit with `q`. PASS only if tiled, compact, and restored tiled layouts render without stale cells, the UI remains responsive, and terminal state is restored cleanly without disturbing another Herdr service.                                      |
+| Keyboard                          | With VoiceOver off, use Tab/Shift-Tab through visible controls, arrow keys through all stations, Enter/Space to open details, and Escape to close details/settings. PASS only if focus is always visible, order is logical, every station is reachable, and focus returns to its trigger.                                                          |
+| Runtime reduced motion            | Start with Reduce Motion off while a blocked scene is active; enable it in System Settings without reloading, then disable it. PASS only if continuous/particle/sweep motion stops promptly, state indicators remain legible, and motion resumes without stale or duplicate state.                                                                 |
+| Blocked recognition at two meters | At a measured distance of at least two meters on the supported display, compare a blocked station with working and idle stations in both light and dinner themes. PASS only if the blocked station and blocked count are correctly identified without relying on animation or sound.                                                               |
+| Upgrade                           | Run the exact first-release fixture-to-RC procedure above. PASS only if `current` transitions to the accepted RC, its exact checksum and path match, the fixture remains available for rollback, `INSTALL_ROOT/herdr-mise/current.next` is absent, and launch succeeds from `current`. This does not prove an upgrade from a prior public release. |
+| Uninstall                         | Stop the accepted RC, select a different current version if needed, run the exact uninstall command, and inspect the versioned path plus running processes. PASS only if that RC version is absent, no RC process remains, and unrelated versions/data remain.                                                                                     |
 
 ## Multi-day public-RC soak
 

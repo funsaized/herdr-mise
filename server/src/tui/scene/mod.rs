@@ -736,7 +736,7 @@ mod tests {
                     SourceStatus::UnsupportedProtocol,
                     Some(SourceDiagnostic {
                         observed_protocol: 23,
-                        supported_protocols: vec![17, 19],
+                        supported_protocols: vec![17, 19, 20],
                         next_action: "upgrade Herdr, then retry".into(),
                     }),
                     vec![],
@@ -937,7 +937,7 @@ mod tests {
             source_status: SourceStatus::UnsupportedProtocol,
             source_diagnostic: Some(SourceDiagnostic {
                 observed_protocol: 23,
-                supported_protocols: vec![17, 19],
+                supported_protocols: vec![17, 19, 20],
                 next_action: "upgrade Herdr, then retry".into(),
             }),
             agents: vec![],

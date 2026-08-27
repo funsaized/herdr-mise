@@ -553,39 +553,6 @@
       "evidence_ref": "external://NOT_RUN"
     },
     {
-      "gate_id": "voiceover-speech-focus",
-      "category": "manual",
-      "scope": "full-product",
-      "tester": "REPLACE_WITH_TESTER",
-      "platform": "REPLACE_WITH_OS_AND_ARCH",
-      "executed_against": {
-        "tag": "v0.1.0-rc.1",
-        "version": "0.1.0-rc.1",
-        "commit": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
-        "artifacts": [
-          {
-            "target": "aarch64-apple-darwin",
-            "archive": "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            "sha256": "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c"
-          },
-          {
-            "target": "x86_64-apple-darwin",
-            "archive": "herdr-mise-v0.1.0-rc.1-x86_64-apple-darwin.tar.gz",
-            "sha256": "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8"
-          },
-          {
-            "target": "x86_64-unknown-linux-gnu",
-            "archive": "herdr-mise-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
-            "sha256": "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
-          }
-        ]
-      },
-      "command_or_action": "Perform and listen to the VoiceOver speech and focus matrix in docs/stable-acceptance.md",
-      "result": "NOT_RUN",
-      "timestamp": "1970-01-01T00:00:00Z",
-      "evidence_ref": "external://NOT_RUN"
-    },
-    {
       "gate_id": "runtime-reduced-motion",
       "category": "manual",
       "scope": "full-product",
@@ -679,7 +646,7 @@
           }
         ]
       },
-      "command_or_action": "Install the prior public version then stage and launch the accepted RC from current",
+      "command_or_action": "Run the documented first-release fixture-to-RC procedure, which installs a verifier-owned prior fixture in an isolated install root and stages the exact accepted public RC with the production public-artifact verifier. PASS only if current transitions to the accepted RC, the exact RC checksum and path match, the fixture remains available for rollback, INSTALL_ROOT/herdr-mise/current.next is absent, and launch succeeds from current. This does not prove an upgrade from a prior public release",
       "result": "NOT_RUN",
       "timestamp": "1970-01-01T00:00:00Z",
       "evidence_ref": "external://NOT_RUN"

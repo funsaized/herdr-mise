@@ -1,8 +1,8 @@
 AREA 110x24
 TEXT 00 "MISE — DEMO SERVICE                                                                                           "
 STYLE 00 000..019 fg=Reset bg=Reset mod=BOLD skip=false
-TEXT 01 "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19; upgrade or downgrade Herdr to a   "
-TEXT 02 "tested release, then retry. Nothing here is real.                                                             "
+TEXT 01 "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19, 20; upgrade or downgrade Herdr to "
+TEXT 02 "a tested release, then retry. Nothing here is real.                                                           "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 04 "┌Kitchen status──────────────────────────────────────────────────────────────────────────────────────────────┐"
 TEXT 05 "│AGENT            STATE                  ELAPSED   MODEL          WORKSPACE        TICKETS RUNTIME           │"

@@ -1,0 +1,15 @@
+{
+  "version": "0.8.2",
+  "protocol": 20,
+  "workspaces": [{"workspace_id": "fictional-kitchen", "label": "Example Kitchen"}],
+  "tabs": [],
+  "panes": [],
+  "layouts": [],
+  "agents": [{
+    "pane_id": "fictional-pane-20",
+    "workspace_id": "fictional-kitchen",
+    "display_agent": "example-cook",
+    "agent_status": "working",
+    "agent_session": {"value": "fictional-session-20"}
+  }]
+}
