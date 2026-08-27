@@ -15,6 +15,7 @@ import { evaluateStableReleaseGate } from "./stable-release-gate.mjs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const cargo = readFileSync("server/Cargo.toml", "utf8");
+const cargoVersion = cargo.match(/^version = "([^"]+)"$/m)?.[1];
 const packager = readFileSync("scripts/package-release.sh", "utf8");
 const artifactVerifier = readFileSync(
   "scripts/verify-release-artifact.sh",
@@ -23,6 +24,95 @@ const artifactVerifier = readFileSync(
 const browserSmoke = readFileSync("scripts/smoke-browser.mjs", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const operations = readFileSync("docs/operations.md", "utf8");
+const backlog = readFileSync("docs/backlog.md", "utf8");
+const stableAcceptance = readFileSync("docs/stable-acceptance.md", "utf8");
+const stableAcceptanceTemplate = JSON.parse(
+  readFileSync("docs/stable-acceptance.template.json", "utf8"),
+);
+
+test("first stable release contract handles BL-005 and upgrade truthfully", () => {
+  assert.match(
+    backlog,
+    /BL-005 is the rollout and retirement issue and remains open through\s+stable\s+publication and RC retirement\./,
+  );
+  assert.match(backlog, /every v0\.1\.0 milestone P0 other than BL-005 itself/);
+  assert.match(
+    backlog,
+    /narrow self-reference exception, not a general waiver/,
+  );
+  assert.match(
+    backlog,
+    /stable verification, RC release\s+deletion, RC remote-tag deletion, and final enumeration/,
+  );
+  assert.match(
+    backlog,
+    /11\. Use a verifier-owned prior fixture[\s\S]*production public-artifact verifier[\s\S]*Keep uninstall\s+isolated/,
+  );
+
+  assert.match(stableAcceptance, /no valid prior public version/);
+  assert.match(stableAcceptance, /verifier-owned prior fixture/);
+  assert.match(stableAcceptance, /isolated install root/);
+  assert.match(stableAcceptance, /production public-artifact verifier/);
+  assert.match(
+    stableAcceptance,
+    /does not prove an upgrade from a prior public release/,
+  );
+  assert.match(stableAcceptance, /no temporary selector/);
+  assert.match(
+    stableAcceptance,
+    /ACCEPTANCE_ALLOW_FILE_URLS=1 ACCEPTANCE_SKIP_SMOKE=1/,
+  );
+  assert.match(stableAcceptance, /tar -C "\$fixture_stage" -czf/);
+  assert.match(stableAcceptance, /```sh\nset -e\n/);
+  assert.match(
+    stableAcceptance,
+    /https:\/\/github\.com\/funsaized\/herdr-mise\/releases\/download\/v0\.1\.0-rc\.1/,
+  );
+  assert.match(stableAcceptance, /INSTALL_ROOT\/herdr-mise\/current\.next/);
+  assert.match(
+    stableAcceptance,
+    /aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c/,
+  );
+  assert.match(stableAcceptance, /current\/bin\/herdr-mise" --tui/);
+  assert.match(stableAcceptance, /confirm the first render,\s+then press `q`/i);
+  assert.doesNotMatch(stableAcceptance, /current\/bin\/herdr-mise" --version/);
+  assert.match(
+    stableAcceptance,
+    /VoiceOver speech\/focus listening is deferred[\s\S]*not recorded as `PASS`/,
+  );
+  assert.equal(
+    stableAcceptanceTemplate.gates.some(
+      ({ gate_id }) => gate_id === "voiceover-speech-focus",
+    ),
+    false,
+    "deferred VoiceOver listening must not become a required PASS row",
+  );
+
+  const upgrade = stableAcceptanceTemplate.gates.find(
+    ({ gate_id }) => gate_id === "upgrade",
+  );
+  assert.ok(upgrade, "the schema-compatible upgrade gate ID must be retained");
+  assert.match(upgrade.command_or_action, /verifier-owned prior fixture/);
+  assert.match(upgrade.command_or_action, /isolated install root/);
+  assert.match(
+    upgrade.command_or_action,
+    /production public-artifact verifier/,
+  );
+  assert.match(upgrade.command_or_action, /exact RC checksum and path/);
+  assert.match(
+    upgrade.command_or_action,
+    /fixture remains available for rollback/,
+  );
+  assert.match(
+    upgrade.command_or_action,
+    /INSTALL_ROOT\/herdr-mise\/current\.next/,
+  );
+  assert.match(upgrade.command_or_action, /launch succeeds from current/);
+  assert.doesNotMatch(upgrade.command_or_action, /;/);
+
+  assert.match(workflow, /environment: stable-release/);
+  assert.match(workflow, /STABLE_ACCEPTANCE_EVIDENCE_BASE64/);
+});
 
 test("strict release tags distinguish prereleases from stable releases", () => {
   assert.deepEqual(classifyReleaseTag("v0.1.0-rc.1"), {
@@ -258,12 +348,11 @@ test("release workflow keeps publication tag-only and covers every target", () =
   );
 });
 
-test("release version has one authoritative prerelease value", () => {
-  const version = cargo.match(/^version = "([^"]+)"$/m)?.[1];
-  assert.ok(version, "Cargo package version");
-  assert.match(version, /^\d+\.\d+\.\d+-[0-9A-Za-z.-]+$/);
+test("release version has one authoritative SemVer value", () => {
+  assert.ok(cargoVersion, "Cargo package version");
+  assert.match(cargoVersion, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   assert.ok(
-    !workflow.includes(version),
+    !workflow.includes(cargoVersion),
     "workflow must derive, not duplicate, the Cargo version",
   );
   assert.ok(packager.includes("server/Cargo.toml"));
@@ -311,10 +400,10 @@ test("packaging fails when tar fails instead of emitting an empty gzip", () => {
     assert.equal(result.status, 42, result.stderr || result.stdout);
   } finally {
     rmSync(temp, { recursive: true, force: true });
-    rmSync("dist/herdr-mise-v0.1.0-rc.1-tar-failure-test.tar.gz", {
+    rmSync(`dist/herdr-mise-v${cargoVersion}-tar-failure-test.tar.gz`, {
       force: true,
     });
-    rmSync("dist/herdr-mise-v0.1.0-rc.1-tar-failure-test.tar.gz.sha256", {
+    rmSync(`dist/herdr-mise-v${cargoVersion}-tar-failure-test.tar.gz.sha256`, {
       force: true,
     });
   }
@@ -326,7 +415,7 @@ test("release archives include the executable and required license notices", () 
   writeFileSync(fakeBinary, "#!/bin/sh\nexit 0\n");
   chmodSync(fakeBinary, 0o755);
 
-  const archive = "dist/herdr-mise-v0.1.0-rc.1-notice-test.tar.gz";
+  const archive = `dist/herdr-mise-v${cargoVersion}-notice-test.tar.gz`;
   const checksum = `${archive}.sha256`;
   try {
     const packaged = spawnSync(

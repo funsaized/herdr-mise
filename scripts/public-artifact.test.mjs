@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -113,10 +114,9 @@ test("second install switches current without leaving current.next litter", () =
   installArtifact(root, installRoot, "0.1.0-rc.2");
   const base = join(installRoot, "herdr-mise");
   assert.equal(readlinkSync(join(base, "current")), "0.1.0-rc.2");
-  assert.equal(
-    spawnSync("test", ["-e", join(base, "0.1.0-rc.1", "current.next")]).status,
-    1,
-  );
+  assert.throws(() => lstatSync(join(base, "current.next")), {
+    code: "ENOENT",
+  });
 });
 
 test("uninstall refuses current and removes only an unselected verified version", () => {

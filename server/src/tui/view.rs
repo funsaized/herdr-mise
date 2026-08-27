@@ -438,7 +438,7 @@ mod tests {
         );
         let diagnostic = SourceDiagnostic {
             observed_protocol: 23,
-            supported_protocols: vec![17, 19],
+            supported_protocols: vec![17, 19, 20],
             next_action: "upgrade Herdr, then retry".into(),
         };
         assert_eq!(
@@ -450,7 +450,7 @@ mod tests {
             ),
             (
                 "MISE — DEMO SERVICE".into(),
-                "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19; upgrade Herdr, then retry. Nothing here is real.".into()
+                "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19, 20; upgrade Herdr, then retry. Nothing here is real.".into()
             )
         );
     }
@@ -613,7 +613,7 @@ mod tests {
                 "Mock feed",
                 "unsupported",
                 "observed 23",
-                "supported: 17, 19",
+                "supported: 17, 19, 20",
                 "upgrade or downgrade Herdr to a tested release, then retry",
                 "Nothing here is real",
                 "q / Esc quit",

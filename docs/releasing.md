@@ -1,9 +1,8 @@
 # Release operations
 
 This is the decision trail and operator runbook for release candidates and
-future stable releases. It does not authorize a tag or publication. The only
-public release at present is prerelease `v0.1.0-rc.1`; stable `v0.1.0` does not
-exist.
+stable releases. It does not authorize a tag or publication; the GitHub
+releases page is authoritative for what has been published.
 
 ## Release decision trail
 
@@ -142,6 +141,13 @@ RC retirement is a separate, destructive operation and is never part of this
 workflow. Keep every RC intact until the stable release has passed anonymous
 public verification for release class, Latest status, all six assets,
 checksums, extraction, and applicable signatures.
+
+BL-005 is the rollout and retirement issue. It remains open through stable
+publication and RC retirement. Before publication, the unresolved-P0 check
+applies to every v0.1.0 milestone P0 except BL-005 itself; this is only a narrow
+self-reference exception, not a general waiver. Close BL-005 only after stable
+verification, RC release deletion, RC remote-tag deletion, and a final
+enumeration confirms the intended stable release, assets, and tags remain.
 
 Only then, under explicit authorization, retire RCs in this order:
 

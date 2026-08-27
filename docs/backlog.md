@@ -362,11 +362,20 @@ issues and changes repository metadata.
 **Outcome:** A stable SemVer tag produces a non-prerelease GitHub release only
 after stable gates pass.
 
+BL-005 is the rollout and retirement issue and remains open through stable
+publication and RC retirement. Before stable publication, the unresolved-P0
+check covers every v0.1.0 milestone P0 other than BL-005 itself. This is a
+narrow self-reference exception, not a general waiver: every other milestone
+P0 must be resolved. BL-005 closes only after stable verification, RC release
+deletion, RC remote-tag deletion, and final enumeration of the remaining
+releases and tags.
+
 ### Evidence
 
-The current release workflow passes `--prerelease` unconditionally. A
-`v0.1.0` tag would therefore still produce a prerelease. The current support
-policy refers to the latest release, while GitHub has no latest stable release.
+The release workflow now classifies canonical SemVer tags, keeps RCs as
+prereleases, and requires stable acceptance evidence before a stable tag can
+publish a non-prerelease or become GitHub Latest. Public stable publication and
+post-verification RC retirement remain outstanding rollout steps.
 
 ### Likely files
 
@@ -436,18 +445,25 @@ Before stable promotion, record all of the following against the public RC:
 5. Verify no-agent snapshots with non-agent panes.
 6. Verify 1, 6, and 12 agents in light and dinner themes.
 7. Verify blocked-state recognition from at least two meters.
-8. Verify keyboard and VoiceOver behavior.
+8. Verify keyboard behavior. VoiceOver listening is explicitly deferred from
+   v0.1.0 by the owner's 2026-08-27 decision and must not be recorded as PASS.
 9. Verify reduced-motion behavior.
 10. Complete a multi-day all-day resource soak.
-11. Test upgrade and uninstall instructions.
-12. Confirm no unresolved P0 issues in the stable milestone.
+11. Use a verifier-owned prior fixture in an isolated install root, then stage
+    the exact accepted public RC with the production public-artifact verifier.
+    Require selection of the exact RC checksum and path, retained fixture
+    rollback, absence of `INSTALL_ROOT/herdr-mise/current.next`, and launch from
+    `current`; do not claim a prior-public-release upgrade. Keep uninstall
+    isolated and test it separately.
+12. Confirm no unresolved v0.1.0 milestone P0 issues other than BL-005 itself;
+    this narrow self-reference exception is not a general waiver.
 
 ### Acceptance criteria
 
 - Automated gates have exact commands and captured output.
 - Manual gates identify tester, platform, artifact checksum, and result.
 - A scoped subsystem pass cannot override a failed full-product gate.
-- Stable publication remains blocked until all required evidence passes.
+- Stable publication is fail-closed unless all required evidence passes.
 - Exceptions require an explicit documented owner decision and cannot weaken
   localhost, read-only, truthfulness, or blocked-state invariants.
 
@@ -501,7 +517,8 @@ found. Settings and detail panels require manual VoiceOver/focus validation.
 - Blocked agents remain unmistakable without pulse or travel animation.
 - No information is encoded solely through color or motion.
 - All controls remain keyboard operable.
-- Settings/detail focus behavior has recorded VoiceOver acceptance evidence.
+- Settings/detail focus behavior retains automated semantic coverage; manual
+  VoiceOver listening is explicitly deferred from v0.1.0.
 - Existing contrast, visual matrix, and performance gates pass.
 
 ### Validation

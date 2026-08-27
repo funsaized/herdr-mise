@@ -104,7 +104,7 @@ describe("chrome interactions", () => {
         sourceStatus="unsupportedProtocol"
         sourceDiagnostic={{
           observedProtocol: 23,
-          supportedProtocols: [17, 19],
+          supportedProtocols: [17, 19, 20],
           nextAction:
             "upgrade or downgrade Herdr to a tested release, then retry",
         }}
@@ -113,7 +113,7 @@ describe("chrome interactions", () => {
     );
     const unsupported = screen.getByRole("status").textContent ?? "";
     expect(unsupported).toContain("observed 23");
-    expect(unsupported).toContain("supported: 17, 19");
+    expect(unsupported).toContain("supported: 17, 19, 20");
     expect(unsupported).toContain("upgrade or downgrade Herdr");
     rerender(
       <ModeTreatment

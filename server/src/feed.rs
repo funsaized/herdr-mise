@@ -494,7 +494,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(diagnostic.observed_protocol, 23);
-                assert_eq!(diagnostic.supported_protocols, vec![17, 19]);
+                assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20]);
                 assert!(diagnostic.next_action.contains("retry"));
             }
             event => panic!("missing unsupported diagnostic: {event:?}"),
