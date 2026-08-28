@@ -14,21 +14,6 @@ const workflows = Object.fromEntries(
 );
 const dependabot = readFileSync(".github/dependabot.yml", "utf8");
 const gitleaks = readFileSync(".gitleaks.toml", "utf8");
-const localVerification = readFileSync(
-  "workflows/workflow-local-verification.yaml",
-  "utf8",
-);
-const sourceGitModel = readFileSync(
-  "models/@swamp/git/verification-source-git.yaml",
-  "utf8",
-);
-const gitAncestryExtension = readFileSync(
-  "extensions/models/git_ancestry.ts",
-  "utf8",
-);
-const verificationPolicy = JSON.parse(
-  readFileSync("verification/policy.json", "utf8"),
-);
 const managedVerification = readFileSync(
   "workflows/workflow-verification.yaml",
   "utf8",
@@ -40,17 +25,6 @@ const managedEvidenceCollector = readFileSync(
 const managedPolicy = JSON.parse(
   readFileSync("verification/managed-policy.json", "utf8"),
 );
-
-function localStepBlock(name) {
-  const marker = `      - name: ${name}\n`;
-  const start = localVerification.indexOf(marker);
-  if (start < 0) return "";
-  const end = localVerification.indexOf(
-    "\n      - name:",
-    start + marker.length,
-  );
-  return localVerification.slice(start, end < 0 ? undefined : end);
-}
 
 function permissionMap(block, indent) {
   if (new RegExp(`^ {${indent}}permissions: \\{\\}$`, "m").test(block))
@@ -192,60 +166,16 @@ export function auditWorkflowContract(
 
   const ci = candidateWorkflows["ci.yml"] ?? "";
   const ciJobs = jobBlocks(ci);
-  const evidence = ciJobs.evidence ?? "";
-  if (
-    !/^      - run: node scripts\/verification-evidence\.mjs$/m.test(
-      evidence,
-    ) ||
-    !/^          ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m.test(
-      evidence,
-    ) ||
-    !/^          ref: ops\/evidence$/m.test(evidence) ||
-    !/^          path: \.verification-evidence$/m.test(evidence) ||
-    (evidence.match(/^          persist-credentials: false$/gm) ?? []).length <
-      2 ||
-    !/^          VERIFICATION_SOURCE_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m.test(
-      evidence,
-    )
-  ) {
-    errors.push("ci.yml: exact local verification evidence gate is missing");
-  }
-  const evidenceConditions = evidence.match(/^    if: .+$/gm) ?? [];
-  if (
-    JSON.stringify(evidenceConditions) !==
-    JSON.stringify([
-      "    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'",
-    ])
-  ) {
-    errors.push(
-      "ci.yml: evidence gate must run on pull requests and non-main pushes only",
-    );
-  }
-  if (/^ {4,}continue-on-error:/m.test(evidence)) {
-    errors.push("ci.yml: evidence gate must remain blocking");
+  if (ciJobs.evidence || ciJobs["verify-shadow"]) {
+    errors.push("ci.yml: retired evidence or shadow verification job returned");
   }
   if (!/^  push:\n    branches-ignore:\n      - ops\/evidence$/m.test(ci)) {
-    errors.push("ci.yml: evidence branch push exclusion is missing");
-  }
-  const shadow = ciJobs["verify-shadow"] ?? "";
-  if (!shadow) errors.push("ci.yml: shadow full verification job is missing");
-  if (/^ {4,}(?:if|continue-on-error):/m.test(shadow)) {
-    errors.push(
-      "ci.yml: shadow verification must run unconditionally and block during migration",
-    );
+    errors.push("ci.yml: historical evidence branch push exclusion is missing");
   }
   if (!ci.includes("cargo install cargo-audit --version 0.22.2 --locked"))
     errors.push("ci.yml: pinned cargo-audit install is missing");
   if (!ci.includes("cargo audit --file Cargo.lock --deny warnings"))
     errors.push("ci.yml: fail-closed Cargo.lock audit is missing");
-  if (!ci.includes("npm ci") || !ci.includes("npm ci --prefix client"))
-    errors.push("ci.yml: npm lockfile installs are missing");
-  for (const line of ci
-    .split("\n")
-    .filter((line) => /cargo (test|check|build)\b/.test(line))) {
-    if (!line.includes("--locked"))
-      errors.push("ci.yml: Cargo build/check/test must use --locked");
-  }
 
   const codeql = candidateWorkflows["codeql.yml"] ?? "";
   for (const matrixEntry of [
@@ -454,31 +384,6 @@ test("repository workflows satisfy the supply-chain contract", () => {
   assert.deepEqual(auditWorkflowContract(workflows, dependabot, gitleaks), []);
 });
 
-test("local verification requires the current remote main ancestor", () => {
-  assert.match(localStepBlock("fetch-source"), /methodName: fetch/);
-  assert.match(localStepBlock("lookup-remote-main"), /methodName: remote_ref/);
-  assert.match(localStepBlock("lookup-remote-main"), /step: fetch-source/);
-  assert.match(localStepBlock("lookup-remote-main"), /ref: refs\/heads\/main/);
-  assert.match(
-    localStepBlock("require-main-ancestor"),
-    /methodName: require_ancestor/,
-  );
-  assert.match(
-    localStepBlock("require-main-ancestor"),
-    /data\.latest\("verification-source-git", "remote-ref-refs-heads-main"\)\.attributes\.sha/,
-  );
-  assert.match(
-    localStepBlock("dependencies-root"),
-    /step: require-main-ancestor/,
-  );
-  assert.deepEqual(
-    verificationPolicy.steps.slice(0, 3).map((step) => step.name),
-    ["fetch-source", "lookup-remote-main", "require-main-ancestor"],
-  );
-  assert.match(sourceGitModel, /repoPath: \./);
-  assert.match(gitAncestryExtension, /type: "@swamp\/git"/);
-});
-
 test("shared verification is subject-bounded and never publishes evidence", () => {
   assert.match(managedVerification, /name: subject-preflight/);
   assert.match(managedVerification, /methodName: ci_subject/);
@@ -522,8 +427,7 @@ test("shared verification is subject-bounded and never publishes evidence", () =
     "extensions/models/**",
     "extensions/tests/**",
     "models/**",
-    "scripts/verification-evidence.mjs",
-    "scripts/verification-evidence.test.mjs",
+    "scripts/managed-verification-evidence.test.mjs",
     "scripts/install-swamp-managed.sh",
     "scripts/managed-verification-evidence.mjs",
     "scripts/workflow-contract.test.mjs",
@@ -617,13 +521,9 @@ test("contract rejects missing non-release controls and weakened scanner configu
   const config = mutateWorkflow("gitleaks.yml", (source) =>
     source.replace("/.gitleaks.toml", "/gitleaks.toml"),
   );
-  const noEvidence = mutateWorkflow("ci.yml", (source) =>
-    source.replace("node scripts/verification-evidence.mjs", "true"),
-  );
-  const nonBlockingShadow = mutateWorkflow("ci.yml", (source) =>
-    source.replace(
-      "  verify-shadow:\n",
-      "  verify-shadow:\n    continue-on-error: true\n",
+  const retiredJobs = ["evidence", "verify-shadow"].map((job) =>
+    mutateWorkflow("ci.yml", (source) =>
+      source.replace("jobs:\n", `jobs:\n  ${job}:\n    timeout-minutes: 1\n`),
     ),
   );
   assert.ok(
@@ -641,43 +541,10 @@ test("contract rejects missing non-release controls and weakened scanner configu
       error.includes("repository config"),
     ),
   );
-  assert.ok(
-    auditWorkflowContract(noEvidence, dependabot, gitleaks).some((error) =>
-      error.includes("evidence gate"),
-    ),
-  );
-  assert.ok(
-    auditWorkflowContract(nonBlockingShadow, dependabot, gitleaks).some(
-      (error) => error.includes("shadow verification"),
-    ),
-  );
-});
-
-test("contract rejects incorrect evidence and shadow job conditions", () => {
-  const conditionalEvidence = mutateWorkflow("ci.yml", (source) =>
-    source.replace("  evidence:\n", "  evidence:\n    if: false\n"),
-  );
-  const conditionalShadow = mutateWorkflow("ci.yml", (source) =>
-    source.replace(
-      "  verify-shadow:\n",
-      "  verify-shadow:\n    if: ${{ false }}\n",
-    ),
-  );
-  const toleratedEvidenceFailure = mutateWorkflow("ci.yml", (source) =>
-    source.replace(
-      "      - run: node scripts/verification-evidence.mjs\n",
-      "      - run: node scripts/verification-evidence.mjs\n        continue-on-error: yes\n",
-    ),
-  );
-
-  for (const candidate of [
-    conditionalEvidence,
-    conditionalShadow,
-    toleratedEvidenceFailure,
-  ]) {
+  for (const candidate of retiredJobs) {
     assert.ok(
       auditWorkflowContract(candidate, dependabot, gitleaks).some((error) =>
-        /unconditional|must run|remain blocking/.test(error),
+        error.includes("retired evidence or shadow"),
       ),
     );
   }
@@ -755,15 +622,9 @@ test("contract requires the exact fork-safe Gitleaks job contract", () => {
   );
 });
 
-test("contract rejects advisory, lockfile, CodeQL, and dependency-policy weakening", () => {
+test("contract rejects advisory, CodeQL, and dependency-policy weakening", () => {
   const audit = mutateWorkflow("ci.yml", (source) =>
     source.replace("--version 0.22.2 --locked", "--version 0.22.3"),
-  );
-  const cargoLock = mutateWorkflow("ci.yml", (source) =>
-    source.replace(
-      "cargo check --workspace --locked",
-      "cargo check --workspace",
-    ),
   );
   const codeql = mutateWorkflow("codeql.yml", (source) =>
     source.replace("language: rust", "language: go"),
@@ -774,11 +635,6 @@ test("contract rejects advisory, lockfile, CodeQL, and dependency-policy weakeni
   assert.ok(
     auditWorkflowContract(audit, dependabot, gitleaks).some((error) =>
       error.includes("pinned cargo-audit"),
-    ),
-  );
-  assert.ok(
-    auditWorkflowContract(cargoLock, dependabot, gitleaks).some((error) =>
-      error.includes("must use --locked"),
     ),
   );
   assert.ok(

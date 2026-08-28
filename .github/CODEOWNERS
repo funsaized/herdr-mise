@@ -8,8 +8,7 @@
 /extensions/models/ @funsaized
 /extensions/tests/ @funsaized
 /models/ @funsaized
-/scripts/verification-evidence.mjs @funsaized
-/scripts/verification-evidence.test.mjs @funsaized
+/scripts/managed-verification-evidence.test.mjs @funsaized
 /scripts/install-swamp-managed.sh @funsaized
 /scripts/managed-verification-evidence.mjs @funsaized
 /scripts/workflow-contract.test.mjs @funsaized

@@ -46,9 +46,11 @@ the full tree, and `swamp help model method run` scopes to a subtree.
 ## Verification Scheduling
 
 - During parallel development, run only the narrow checks relevant to the change.
-- Run `local-verification` only when a branch is next to merge, after its final
-  commit includes current `origin/main`.
-- Do not change the source commit after verification; any new commit requires a
-  new run.
+- Use `verification` locally only for advisory feedback on a clean, committed
+  tree based on current `upstream/main`.
+- A maintainer must dispatch `Swamp managed verification` for the current pull
+  request head before merge. Any new commit requires a new managed run.
+- Trust-boundary changes must be dispatched by `@funsaized`; proposed controls
+  are verified by the trusted versions on `main`.
 - Never overlap Swamp workflow runs in the same checkout because models, build
-  outputs, and evidence runtime state are shared.
+  outputs, and runtime state are shared.

@@ -27,7 +27,6 @@
     "test:acceptance": "node --test scripts/acceptance-evidence.test.mjs scripts/public-artifact.test.mjs",
     "validate:acceptance-evidence": "node scripts/validate-acceptance-evidence.mjs",
     "verify:browser:install": "playwright install chromium",
-    "validate:verification-evidence": "node scripts/verification-evidence.mjs",
     "validate:managed-verification-evidence": "node scripts/managed-verification-evidence.mjs"
   },
   "devDependencies": {

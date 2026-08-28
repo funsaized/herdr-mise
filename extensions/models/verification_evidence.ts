@@ -1,27 +1,12 @@
-/** Collects one completed verification run into durable Git evidence. */
+/** Shared schema and helpers for managed verification evidence. */
 import { z } from "npm:zod@4.4.3";
-import {
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-} from "jsr:@std/path@1.1.2";
-
-const maxManifestBytes = 2 * 1024 * 1024;
+import { isAbsolute, join, relative, resolve } from "jsr:@std/path@1.1.2";
 
 const GlobalArguments = z.object({
-  evidenceRepoPath: z.string().default(".swamp/ops-evidence"),
-  policyPath: z.string().default("verification/policy.json"),
   managedPolicyPath: z.string().default("verification/managed-policy.json"),
   managedOutputPath: z
     .string()
     .default(".swamp/verification-output/manifest.json"),
-});
-
-const CollectArguments = z.object({
-  commit: z.string().regex(/^[0-9a-f]{40}$/),
-  runId: z.string().uuid(),
 });
 
 const Summary = z.object({
@@ -49,49 +34,6 @@ export type StoredData = {
     contentType?: string;
     tags?: Record<string, string>;
   };
-};
-
-type Context = {
-  repoDir: string;
-  globalArgs: z.infer<typeof GlobalArguments>;
-  signal?: AbortSignal;
-  dataRepository: {
-    findAllForModel: (type: string, modelId: string) => Promise<StoredData[]>;
-    getContent: (
-      type: string,
-      modelId: string,
-      name: string,
-      version?: number,
-    ) => Promise<Uint8Array | null>;
-  };
-  writeResource: (
-    specName: string,
-    name: string,
-    data: Record<string, unknown>,
-  ) => Promise<{ name: string }>;
-};
-
-type PolicyStep = {
-  name: string;
-  modelName: string;
-  modelId: string;
-  modelType: string;
-  method: string;
-  remote?: string;
-  ref?: string;
-  projectDir?: string;
-  argv?: string[];
-  checks?: string[];
-  outputs: string[];
-};
-
-type Policy = {
-  schemaVersion: number;
-  workflow: { id: string; name: string };
-  evidenceBranch: string;
-  configurationFiles: string[];
-  artifacts: string[];
-  steps: PolicyStep[];
 };
 
 export function canonical(value: unknown): string {
@@ -123,27 +65,6 @@ export function base64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
   }
   return btoa(binary);
-}
-
-async function command(
-  executable: string,
-  args: string[],
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const output = await new Deno.Command(executable, {
-    args,
-    cwd,
-    stdout: "piped",
-    stderr: "piped",
-    signal,
-  }).output();
-  if (!output.success) {
-    throw new Error(
-      new TextDecoder().decode(output.stderr).trim() || `${executable} failed`,
-    );
-  }
-  return new TextDecoder().decode(output.stdout).trim();
 }
 
 export function inside(root: string, path: string): string {
@@ -216,338 +137,17 @@ export function tags(data: StoredData): Record<string, string> {
   return data.metadata?.tags ?? data.tags ?? {};
 }
 
-async function assertResult(
-  step: PolicyStep,
-  records: Array<{ specName: string; bytes: Uint8Array }>,
-  commit: string,
-  root: string,
-  remoteMain?: string,
-): Promise<string | undefined> {
-  const gitResultSpecs: Record<string, string> = {
-    fetch: "fetchResult",
-    remote_ref: "remoteRefResult",
-    require_ancestor: "ancestryResult",
-  };
-  const resultSpec = step.modelType.includes("npm")
-    ? "invocation"
-    : step.modelType === "@swamp/git"
-      ? gitResultSpecs[step.method]
-      : "result";
-  if (!resultSpec) throw new Error(`${step.name}: unsupported Git method`);
-  const result = records.find((record) => record.specName === resultSpec);
-  if (!result) throw new Error(`${step.name}: structured result is missing`);
-  const value = JSON.parse(new TextDecoder().decode(result.bytes));
-  if (step.modelType.includes("npm")) {
-    if (
-      value.operation !== step.method ||
-      value.projectDir !== step.projectDir ||
-      JSON.stringify(value.argv) !== JSON.stringify(step.argv)
-    ) {
-      throw new Error(`${step.name}: npm command does not match policy`);
-    }
-    if (value.executionStatus !== "succeeded" || value.exitCode !== 0) {
-      throw new Error(`${step.name}: npm invocation did not succeed`);
-    }
-    if (
-      value.expectedGitHead !== commit ||
-      value.gitHeadBefore !== commit ||
-      value.gitHeadAfter !== commit
-    ) {
-      throw new Error(`${step.name}: invocation is not bound to ${commit}`);
-    }
-    if (
-      value.cleanWorktreeBefore !== true ||
-      value.cleanWorktreeAfter !== true
-    ) {
-      throw new Error(`${step.name}: invocation used a dirty worktree`);
-    }
-    if (
-      value.packageJsonSha256Before !== value.packageJsonSha256After ||
-      value.lockfileSha256Before !== value.lockfileSha256After
-    ) {
-      throw new Error(
-        `${step.name}: package metadata changed during execution`,
-      );
-    }
-    if (value.lockfilePath !== "package-lock.json") {
-      throw new Error(`${step.name}: unexpected npm lockfile path`);
-    }
-    const projectDir = step.projectDir ?? ".";
-    if (
-      value.packageJsonSha256Before !==
-        (await sha256(
-          await readRegularFile(root, join(projectDir, "package.json")),
-        )) ||
-      value.lockfileSha256Before !==
-        (await sha256(
-          await readRegularFile(root, join(projectDir, value.lockfilePath)),
-        ))
-    ) {
-      throw new Error(
-        `${step.name}: package metadata does not match the source commit`,
-      );
-    }
-  } else if (step.modelType === "@swamp/git") {
-    if (step.method === "fetch") {
-      if (
-        value.remote !== step.remote ||
-        value.tags !== false ||
-        value.pruned !== false
-      ) {
-        throw new Error(`${step.name}: Git fetch does not match policy`);
-      }
-    } else if (step.method === "remote_ref") {
-      if (
-        value.remote !== step.remote ||
-        value.ref !== step.ref ||
-        !/^[0-9a-f]{40}$/.test(value.sha)
-      ) {
-        throw new Error(
-          `${step.name}: remote main lookup does not match policy`,
-        );
-      }
-      return value.sha;
-    } else if (
-      value.isAncestor !== true ||
-      value.descendant !== commit ||
-      value.ancestor !== remoteMain
-    ) {
-      throw new Error(`${step.name}: ancestry is not bound to remote main`);
-    }
-  } else {
-    const checkNames = Array.isArray(value.checks)
-      ? value.checks.map((check: { name: string }) => check.name)
-      : [];
-    if (
-      value.status !== "passed" ||
-      value.gitHead !== commit ||
-      !Array.isArray(value.checks) ||
-      !value.checks.length ||
-      value.checks.some(
-        (check: { status: string }) => check.status !== "passed",
-      ) ||
-      JSON.stringify(checkNames) !== JSON.stringify(step.checks) ||
-      value.cargoLockSha256 !==
-        (await sha256(await readRegularFile(root, "Cargo.lock")))
-    ) {
-      throw new Error(`${step.name}: Rust verification did not pass`);
-    }
-  }
-  return undefined;
-}
-
-async function collect(
-  args: z.infer<typeof CollectArguments>,
-  context: Context,
-) {
-  const policyPath = inside(context.repoDir, context.globalArgs.policyPath);
-  const policy = JSON.parse(await Deno.readTextFile(policyPath)) as Policy;
-  if (policy.schemaVersion !== 1)
-    throw new Error("unsupported verification policy");
-
-  const head = await command(
-    "git",
-    ["rev-parse", "HEAD"],
-    context.repoDir,
-    context.signal,
-  );
-  if (head !== args.commit)
-    throw new Error(`expected HEAD ${args.commit}, found ${head}`);
-  if (
-    await command(
-      "git",
-      ["status", "--porcelain"],
-      context.repoDir,
-      context.signal,
-    )
-  ) {
-    throw new Error("verification evidence requires a clean worktree");
-  }
-  const tree = await command(
-    "git",
-    ["rev-parse", "HEAD^{tree}"],
-    context.repoDir,
-    context.signal,
-  );
-  const evidenceRepo = inside(
-    context.repoDir,
-    context.globalArgs.evidenceRepoPath,
-  );
-  const evidenceBranch = await command(
-    "git",
-    ["branch", "--show-current"],
-    evidenceRepo,
-    context.signal,
-  );
-  if (evidenceBranch !== policy.evidenceBranch) {
-    throw new Error(
-      `evidence repository is on ${evidenceBranch || "detached HEAD"}, expected ${policy.evidenceBranch}`,
-    );
-  }
-  if (
-    await command(
-      "git",
-      ["status", "--porcelain"],
-      evidenceRepo,
-      context.signal,
-    )
-  ) {
-    throw new Error("evidence repository has uncommitted changes");
-  }
-
-  const configuration: Record<string, string> = {};
-  for (const path of policy.configurationFiles) {
-    configuration[path] = await sha256(
-      await readRegularFile(context.repoDir, path),
-    );
-  }
-
-  let recordCount = 0;
-  let remoteMain: string | undefined;
-  const steps = [];
-  for (const step of policy.steps) {
-    const all = await context.dataRepository.findAllForModel(
-      step.modelType,
-      step.modelId,
-    );
-    const matching = all.filter((data) => {
-      const dataTags = tags(data);
-      return (
-        (data.workflowRunId ?? dataTags.workflowRunId) === args.runId &&
-        (data.stepName ?? dataTags.step) === step.name
-      );
-    });
-    const actualSpecs = matching
-      .map((data) => tags(data).specName ?? data.specName)
-      .sort();
-    if (
-      JSON.stringify(actualSpecs) !== JSON.stringify([...step.outputs].sort())
-    ) {
-      throw new Error(
-        `${step.name}: expected ${step.outputs.join(", ")}, found ${actualSpecs.join(", ")}`,
-      );
-    }
-
-    const rawRecords = [];
-    const records = [];
-    for (const data of matching.sort((left, right) =>
-      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
-    )) {
-      const bytes = await context.dataRepository.getContent(
-        step.modelType,
-        step.modelId,
-        data.name,
-        data.version,
-      );
-      if (!bytes)
-        throw new Error(
-          `${step.name}: cannot read ${data.name}@${data.version}`,
-        );
-      const specName = tags(data).specName ?? data.specName ?? "";
-      rawRecords.push({ specName, bytes });
-      records.push({
-        id: data.dataId ?? data.id ?? "",
-        name: data.name,
-        version: data.version,
-        specName,
-        contentType:
-          data.metadata?.contentType ??
-          data.contentType ??
-          "application/octet-stream",
-        size: bytes.length,
-        sha256: await sha256(bytes),
-        contentBase64: base64(bytes),
-      });
-      recordCount += 1;
-    }
-    remoteMain =
-      (await assertResult(
-        step,
-        rawRecords,
-        args.commit,
-        context.repoDir,
-        remoteMain,
-      )) ?? remoteMain;
-    steps.push({
-      name: step.name,
-      modelName: step.modelName,
-      modelType: step.modelType,
-      method: step.method,
-      status: "succeeded",
-      records,
-    });
-  }
-
-  const artifacts = [];
-  for (const path of policy.artifacts)
-    artifacts.push(await artifactFiles(context.repoDir, path));
-
-  const unsigned = {
-    schemaVersion: 1,
-    source: { commit: args.commit, tree },
-    workflow: { ...policy.workflow, runId: args.runId },
-    configuration: { algorithm: "sha256", files: configuration },
-    steps,
-    artifacts,
-    verdict: "pass",
-    createdAt: new Date().toISOString(),
-  };
-  const evidenceRootSha256 = await sha256(canonical(unsigned));
-  const manifest = { ...unsigned, evidenceRootSha256 };
-  const relativePath = `evidence/v1/${args.commit}/${args.runId}/manifest.json`;
-  const destination = inside(evidenceRepo, relativePath);
-  try {
-    await Deno.lstat(destination);
-    throw new Error(`evidence already exists: ${relativePath}`);
-  } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
-  }
-  await Deno.mkdir(dirname(destination), { recursive: true });
-  const temporary = `${destination}.tmp`;
-  const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
-  if (new TextEncoder().encode(manifestText).length > maxManifestBytes) {
-    throw new Error(`evidence manifest exceeds ${maxManifestBytes} bytes`);
-  }
-  await Deno.writeTextFile(temporary, manifestText);
-  await Deno.rename(temporary, destination);
-
-  const handle = await context.writeResource(
-    "evidence",
-    `evidence-${args.runId}`,
-    {
-      commit: args.commit,
-      runId: args.runId,
-      evidenceRootSha256,
-      relativePath,
-      steps: steps.length,
-      records: recordCount,
-      artifacts: artifacts.reduce(
-        (count, artifact) => count + artifact.files.length,
-        0,
-      ),
-    },
-  );
-  return { dataHandles: [handle] };
-}
-
 export const model = {
   type: "@funsaized/verification-evidence",
-  version: "2026.08.28.2",
+  version: "2026.08.28.3",
   globalArguments: GlobalArguments,
   resources: {
     evidence: {
-      description: "Published verification evidence summary",
+      description: "Managed verification evidence summary",
       schema: Summary,
       lifetime: "infinite" as const,
       garbageCollection: 100,
     },
   },
-  methods: {
-    collect: {
-      description:
-        "Collect and hash exact outputs for one verification workflow run",
-      arguments: CollectArguments,
-      execute: collect,
-    },
-  },
+  methods: {},
 };

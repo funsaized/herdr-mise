@@ -1,103 +1,73 @@
-# Local verification and the remote CI gate
+# Managed verification
 
-This page describes the current `ops/evidence` procedure. The migration to
-maintainer-authorized managed Swamp execution is specified in
-[`managed-verification-migration.md`](managed-verification-migration.md); use
-this page until that plan's cutover is complete.
+Pull-request verification runs through a maintainer-dispatched GitHub workflow.
+Local Swamp runs are optional advisory feedback and cannot satisfy branch
+protection.
 
-The `local-verification` swamp workflow runs deterministic build and test
-controls before a pull request opens. It publishes the exact run outputs to the
-append-only `ops/evidence` branch. GitHub CI validates that evidence in seconds
-instead of re-running the controls to discover failures.
+## Contributor flow
 
-## Run before opening or updating a pull request
+1. Use narrow checks while developing.
+2. Commit a clean branch based on current canonical `main`.
+3. Push the branch and open or update the pull request.
+4. Ask a maintainer to dispatch managed verification for the current PR number.
+5. Do not push another commit while expecting the old status to remain valid.
 
-Use narrow checks during parallel development. When the branch is next to merge,
-sync it with current `origin/main`, commit the final tree, then run:
+To run the same deterministic controls locally, configure `upstream` as the
+canonical repository and run:
 
 ```sh
-swamp workflow validate local-verification
-swamp workflow run local-verification --input commit=$(git rev-parse HEAD)
+swamp workflow validate verification
+swamp workflow run verification \
+  --input commit=$(git rev-parse HEAD) \
+  --input baseCommit=$(git rev-parse upstream/main) \
+  --input subjectRoot=.
 ```
 
-The workflow fetches from `origin`, looks up current remote `main`, then fails before
-dependency installation unless that commit is an ancestor of the supplied
-commit. It does not merge or rebase the source branch. It also requires a clean
-worktree and binds every npm and Rust invocation to the supplied commit. It
-installs locked dependencies, installs Playwright Chromium, checks fallback and
-production Rust assets, and runs formatting, build, type, lint, unit,
-compatibility, browser, audit, bundle, and release controls. The final steps
-collect and publish evidence without changing the source branch.
+The local result is advisory. It writes a schema-v2 manifest under ignored
+Swamp runtime state but does not publish evidence or set a GitHub status.
 
-Only the branch next to merge should run the full workflow. Other parallel
-branches should continue using narrow checks until they reach that point. If
-`main` advances before merge, sync again and produce evidence for the resulting
-new commit.
+## Maintainer flow
 
-## Evidence branch
+1. Review the exact current pull-request head.
+2. Open **Actions**, select **Swamp managed verification**, and choose **Run
+   workflow** from `main`.
+3. Enter the open pull request number as `prNumber`.
+4. Wait for the `Swamp managed verification` status on the current head.
+5. Investigate failures before rerunning. Dispatch again after any new commit or
+   `main` movement.
 
-`ops/evidence` is an orphan branch containing only append-only verification
-records:
+The resolver classifies changes to workflows, models, extensions, policy, and
+other configured trust-boundary paths. Only `@funsaized` may dispatch those
+changes. The executor uses the trusted controls from `main`, checks out the
+proposed source separately, and has no repository permissions or secrets.
 
-```text
-evidence/v1/<source-commit>/<workflow-run-id>/manifest.json
+## Gate behavior
+
+The managed executor runs the shared `verification` Swamp workflow against the
+exact PR SHA. It retains request metadata and the schema-v2 attestation as
+GitHub Actions artifacts for 30 days.
+
+A separate trusted gate checks the workflow identity, dispatcher, current PR
+head and base, source and control SHAs, policy and workflow digests, step
+results, timing, lockfiles, artifacts, freshness, and canonical evidence root.
+It sets the required status only when all checks agree. A moved head, moved
+base, failed run, local attestation, malformed record, or unauthorized
+trust-boundary dispatch fails closed.
+
+Security, dependency, release, signing, publication, and public-artifact checks
+remain separate remote controls.
+
+## Failure handling
+
+Inspect the managed workflow logs first. When Swamp itself fails, inspect its
+generated workflow summary before changing definitions or retrying:
+
+```sh
+swamp report get @swamp/workflow-summary --workflow verification --json
 ```
 
-Each manifest contains:
+Fix source failures in a new commit and dispatch a new run. Do not try to reuse
+the status or attestation from an older head.
 
-- the source commit and Git tree SHA;
-- the workflow identity and run ID;
-- SHA-256 checksums of verification policy and configuration files;
-- every required step's model, method, status, and exact swamp output bytes;
-- hashes and sizes for each embedded swamp data record;
-- file manifests for `client/dist` and the release binary;
-- a canonical SHA-256 root over the complete evidence document.
-
-Large binaries, dependency directories, and Cargo build directories are not
-committed. Their file manifests are retained; trusted release infrastructure
-still produces and verifies shipped artifacts.
-
-The branch rejects force pushes and deletion. New workflow runs create new
-directories rather than replacing prior evidence.
-
-## What GitHub validates
-
-The `Local verification evidence` job checks out the pull request head commit
-and `ops/evidence`, then independently checks:
-
-- source commit and Git tree identity;
-- current-run fetch, remote-main lookup, and matching ancestry result;
-- workflow identity, required step order, and 24-hour freshness;
-- verification configuration checksums;
-- exact model, method, output set, status, and clean Git state for every step;
-- SHA-256 and size of every embedded swamp output;
-- Rust and npm structured success results;
-- artifact manifest completeness and the canonical evidence root.
-
-CI fails closed when evidence is absent, stale, duplicated, malformed, or does
-not match the checked-out source commit.
-
-The evidence job runs for pull requests and non-`main` branch pushes. It skips
-post-merge pushes to `main` because GitHub creates a new merge commit only after
-the pull request gate passes, so exact-commit evidence cannot exist for that SHA
-before merge. The shadow and security jobs still run against the resulting
-`main` commit.
-
-## Trust boundary and migration
-
-The evidence is a claim made by the local verification environment. Git makes
-the record durable and tamper-evident, while CI independently validates its
-commit, configuration, completeness, and internal hashes. It does not prove an
-untrusted machine honestly executed the commands.
-
-Keep these controls on trusted remote infrastructure:
-
-- CodeQL, dependency review, Gitleaks, and Rust advisory scanning;
-- release matrix builds, Apple signing/notarization, publication, and public
-  artifact acceptance tests;
-- any future control requiring an ephemeral managed runner.
-
-The old full verification job remains `Shadow full verification (blocking
-migration)`. Record every shadow failure after a local pass as a CI escape.
-Only remove duplicated remote execution after a useful sample has zero
-unexplained escapes; restore it immediately if the escape rate rises.
+The protected `ops/evidence` branch is retained as historical schema-v1 evidence.
+No active workflow writes to or validates against it.
