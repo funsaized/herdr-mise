@@ -328,6 +328,7 @@ async function collectManaged(
   );
   const swampVersion = await new Deno.Command("swamp", {
     args: ["--version"],
+    env: { NO_COLOR: "1" },
     stdout: "piped",
     stderr: "piped",
     signal: context.signal,
