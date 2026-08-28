@@ -189,13 +189,14 @@ async function execute(
   }
   const temp = await Deno.makeTempDir({ prefix: "swamp-npm-subject-" });
   await Deno.writeTextFile(`${temp}/npmrc`, "");
+  await Deno.writeTextFile(`${temp}/global-npmrc`, "");
   const inherited = Deno.env.toObject();
   const env = {
     PATH: inherited.PATH ?? "",
     ...context.globalArgs.environment,
     HOME: temp,
     NPM_CONFIG_USERCONFIG: `${temp}/npmrc`,
-    NPM_CONFIG_GLOBALCONFIG: `${temp}/npmrc`,
+    NPM_CONFIG_GLOBALCONFIG: `${temp}/global-npmrc`,
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
   };
