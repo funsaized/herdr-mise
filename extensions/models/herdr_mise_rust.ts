@@ -1,9 +1,11 @@
 /** Runs the repository's deterministic Rust verification controls. */
 import { z } from "npm:zod@4.4.3";
+import { subjectPath, subjectRoot } from "./subject_root.ts";
 
 const GlobalArguments = z.object({});
 const VerifyArguments = z.object({
   expectedGitHead: z.string().regex(/^[0-9a-f]{40}$/),
+  subjectRoot: z.string().min(1).default("."),
 });
 
 type Context = {
@@ -16,6 +18,30 @@ type Context = {
     data: Record<string, unknown>,
   ) => Promise<{ name: string }>;
 };
+
+function environment() {
+  const inherited = Deno.env.toObject();
+  return {
+    ...Object.fromEntries(
+      [
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "SystemRoot",
+        "WINDIR",
+      ]
+        .filter((key) => inherited[key] !== undefined)
+        .map((key) => [key, inherited[key]]),
+    ),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+  };
+}
 
 const Check = z.object({
   name: z.string(),
@@ -32,13 +58,31 @@ const Result = z.object({
   cargoVersion: z.string(),
   rustcVersion: z.string(),
   platform: z.string(),
+  startedAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),
+  durationMs: z.number().int().nonnegative(),
 });
 
-async function output(command: string, args: string[], context: Context) {
+async function output(
+  command: string,
+  args: string[],
+  cwd: string,
+  context: Context,
+) {
   const result = await new Deno.Command(command, {
-    args,
-    cwd: context.repoDir,
+    args:
+      command === "git"
+        ? [
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "core.fsmonitor=false",
+            ...args,
+          ]
+        : args,
+    cwd,
+    env: environment(),
+    clearEnv: true,
     stdout: "piped",
     stderr: "piped",
     signal: context.signal,
@@ -61,22 +105,25 @@ async function runChecks(
   resourceName: string,
   commands: Array<{ name: string; args: string[] }>,
   expectedGitHead: string,
+  root: string,
   context: Context,
 ) {
+  const started = Date.now();
   const checks: z.infer<typeof Check>[] = [];
-  const gitHead = await output("git", ["rev-parse", "HEAD"], context);
+  const gitHead = await output("git", ["rev-parse", "HEAD"], root, context);
   if (gitHead !== expectedGitHead) {
     throw new Error(`expected HEAD ${expectedGitHead}, found ${gitHead}`);
   }
-  if (await output("git", ["status", "--porcelain"], context)) {
+  if (await output("git", ["status", "--porcelain"], root, context)) {
     throw new Error("Rust verification requires a clean worktree");
   }
   const evidence = {
     gitHead,
-    cargoLockSha256: await sha256(`${context.repoDir}/Cargo.lock`),
-    cargoVersion: await output("cargo", ["--version"], context),
-    rustcVersion: await output("rustc", ["--version"], context),
+    cargoLockSha256: await sha256(`${root}/Cargo.lock`),
+    cargoVersion: await output("cargo", ["--version"], root, context),
+    rustcVersion: await output("rustc", ["--version"], root, context),
     platform: `${Deno.build.os}-${Deno.build.arch}`,
+    startedAt: new Date(started).toISOString(),
   };
 
   for (const command of commands) {
@@ -86,7 +133,9 @@ async function runChecks(
       const timeout = AbortSignal.timeout(45 * 60 * 1000);
       output = await new Deno.Command("cargo", {
         args: command.args,
-        cwd: context.repoDir,
+        cwd: root,
+        env: environment(),
+        clearEnv: true,
         stdout: "piped",
         stderr: "piped",
         signal: context.signal
@@ -106,6 +155,7 @@ async function runChecks(
         error: detail,
         ...evidence,
         completedAt: new Date().toISOString(),
+        durationMs: Date.now() - started,
       });
       throw new Error(`${command.name} failed: ${detail}`);
     }
@@ -132,15 +182,16 @@ async function runChecks(
         error: detail || undefined,
         ...evidence,
         completedAt: new Date().toISOString(),
+        durationMs: Date.now() - started,
       });
       throw new Error(`${command.name} failed${detail ? `: ${detail}` : ""}`);
     }
   }
 
-  const finalHead = await output("git", ["rev-parse", "HEAD"], context);
+  const finalHead = await output("git", ["rev-parse", "HEAD"], root, context);
   if (
     finalHead !== expectedGitHead ||
-    (await output("git", ["status", "--porcelain"], context))
+    (await output("git", ["status", "--porcelain"], root, context))
   ) {
     throw new Error("repository changed during Rust verification");
   }
@@ -149,6 +200,7 @@ async function runChecks(
     checks,
     ...evidence,
     completedAt: new Date().toISOString(),
+    durationMs: Date.now() - started,
   });
   return { dataHandles: [handle] };
 }
@@ -156,7 +208,7 @@ async function runChecks(
 /** Project-specific Rust verification model. */
 export const model = {
   type: "@funsaized/herdr-mise-rust",
-  version: "2026.08.27.1",
+  version: "2026.08.28.1",
   globalArguments: GlobalArguments,
   resources: {
     result: {
@@ -175,10 +227,13 @@ export const model = {
         args: z.infer<typeof VerifyArguments>,
         context: Context,
       ) => {
+        const root = await subjectRoot(context.repoDir, args.subjectRoot);
+        const dist = await subjectPath(root, "client/dist");
         try {
-          await Deno.remove(`${context.repoDir}/client/dist`, {
-            recursive: true,
-          });
+          const info = await Deno.lstat(dist);
+          if (info.isSymlink)
+            throw new Error("client/dist must not be a symlink");
+          await Deno.remove(dist, { recursive: true });
         } catch (error) {
           if (!(error instanceof Deno.errors.NotFound)) throw error;
         }
@@ -191,6 +246,7 @@ export const model = {
             },
           ],
           args.expectedGitHead,
+          root,
           context,
         );
       },
@@ -201,8 +257,9 @@ export const model = {
       execute: async (
         args: z.infer<typeof VerifyArguments>,
         context: Context,
-      ) =>
-        await runChecks(
+      ) => {
+        const root = await subjectRoot(context.repoDir, args.subjectRoot);
+        return await runChecks(
           "verification-result",
           [
             { name: "format", args: ["fmt", "--all", "--check"] },
@@ -210,8 +267,10 @@ export const model = {
             { name: "test", args: ["test", "--workspace", "--locked"] },
           ],
           args.expectedGitHead,
+          root,
           context,
-        ),
+        );
+      },
     },
   },
 };

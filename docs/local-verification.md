@@ -1,5 +1,10 @@
 # Local verification and the remote CI gate
 
+This page describes the current `ops/evidence` procedure. The migration to
+maintainer-authorized managed Swamp execution is specified in
+[`managed-verification-migration.md`](managed-verification-migration.md); use
+this page until that plan's cutover is complete.
+
 The `local-verification` swamp workflow runs deterministic build and test
 controls before a pull request opens. It publishes the exact run outputs to the
 append-only `ops/evidence` branch. GitHub CI validates that evidence in seconds

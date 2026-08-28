@@ -13,6 +13,10 @@ const maxManifestBytes = 2 * 1024 * 1024;
 const GlobalArguments = z.object({
   evidenceRepoPath: z.string().default(".swamp/ops-evidence"),
   policyPath: z.string().default("verification/policy.json"),
+  managedPolicyPath: z.string().default("verification/managed-policy.json"),
+  managedOutputPath: z
+    .string()
+    .default(".swamp/verification-output/manifest.json"),
 });
 
 const CollectArguments = z.object({
@@ -30,7 +34,7 @@ const Summary = z.object({
   artifacts: z.number().int().positive(),
 });
 
-type StoredData = {
+export type StoredData = {
   id?: string;
   dataId?: string;
   name: string;
@@ -90,7 +94,7 @@ type Policy = {
   steps: PolicyStep[];
 };
 
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") {
     return `{${Object.entries(value)
@@ -101,7 +105,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-async function sha256(bytes: Uint8Array | string): Promise<string> {
+export async function sha256(bytes: Uint8Array | string): Promise<string> {
   const content =
     typeof bytes === "string" ? new TextEncoder().encode(bytes) : bytes;
   return Array.from(
@@ -113,7 +117,7 @@ async function sha256(bytes: Uint8Array | string): Promise<string> {
     .join("");
 }
 
-function base64(bytes: Uint8Array): string {
+export function base64(bytes: Uint8Array): string {
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
@@ -142,7 +146,7 @@ async function command(
   return new TextDecoder().decode(output.stdout).trim();
 }
 
-function inside(root: string, path: string): string {
+export function inside(root: string, path: string): string {
   const absolute = resolve(root, path);
   const child = relative(root, absolute);
   if (
@@ -156,7 +160,7 @@ function inside(root: string, path: string): string {
   return absolute;
 }
 
-async function readRegularFile(
+export async function readRegularFile(
   root: string,
   path: string,
 ): Promise<Uint8Array> {
@@ -170,7 +174,7 @@ async function readRegularFile(
   return await Deno.readFile(realPath);
 }
 
-async function artifactFiles(root: string, path: string) {
+export async function artifactFiles(root: string, path: string) {
   const absolute = inside(root, path);
   const stat = await Deno.lstat(absolute);
   const paths: string[] = [];
@@ -208,7 +212,7 @@ async function artifactFiles(root: string, path: string) {
   return { path, files };
 }
 
-function tags(data: StoredData): Record<string, string> {
+export function tags(data: StoredData): Record<string, string> {
   return data.metadata?.tags ?? data.tags ?? {};
 }
 
@@ -528,7 +532,7 @@ async function collect(
 
 export const model = {
   type: "@funsaized/verification-evidence",
-  version: "2026.08.28.1",
+  version: "2026.08.28.2",
   globalArguments: GlobalArguments,
   resources: {
     evidence: {

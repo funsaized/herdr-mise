@@ -1,5 +1,5 @@
 type: '@funsaized/verification-evidence'
-typeVersion: 2026.08.28.1
+typeVersion: 2026.08.28.2
 id: 6150c7df-b316-4550-bfe9-b01e26f78220
 name: verification-evidence
 version: 1
@@ -7,4 +7,6 @@ tags: {}
 globalArguments:
   evidenceRepoPath: .swamp/ops-evidence
   policyPath: verification/policy.json
+  managedPolicyPath: verification/managed-policy.json
+  managedOutputPath: .swamp/verification-output/manifest.json
 methods: {}

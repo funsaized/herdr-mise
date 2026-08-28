@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { validateEvidenceManifest } from "./verification-evidence.mjs";
+import { validateManagedEvidenceManifest } from "./managed-verification-evidence.mjs";
 
 const commit = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
@@ -350,4 +351,299 @@ test("rejects tampered records, bad roots, stale evidence, and path escapes", ()
     () => validateEvidenceManifest(seal(escaped), policy, commit),
     /path escapes repository/,
   );
+});
+
+const managedPolicy = {
+  schemaVersion: 2,
+  workflow: {
+    id: "3c4c0907-55c3-41a2-b89f-84a8fae531c4",
+    name: "verification",
+    path: "package.json",
+  },
+  producer: {
+    repository: "funsaized/herdr-mise",
+    workflowPath: ".github/workflows/swamp-managed-verification.yml",
+    workflowRef:
+      "funsaized/herdr-mise/.github/workflows/swamp-managed-verification.yml@refs/heads/main",
+    codeOwners: ["funsaized"],
+  },
+  maxAgeHours: 24,
+  configurationFiles: ["package.json"],
+  artifacts: ["client/dist", "target/release/herdr-mise"],
+  steps: [
+    {
+      name: "subject-preflight",
+      modelName: "verification-source-git",
+      modelType: "@swamp/git",
+      method: "subject_preflight",
+      outputs: ["subjectResult"],
+    },
+    {
+      name: "npm-check",
+      modelName: "verification-root",
+      modelType: "@funsaized/npm/project",
+      method: "run_subject",
+      operation: "run",
+      projectDir: ".",
+      argv: ["npm", "run", "test"],
+      outputs: ["invocation", "log"],
+    },
+    {
+      name: "rust-check",
+      modelName: "verification-rust",
+      modelType: "@funsaized/herdr-mise-rust",
+      method: "verify",
+      checks: ["test"],
+      outputs: ["result"],
+    },
+  ],
+};
+const managedPolicyBytes = Buffer.from(JSON.stringify(managedPolicy));
+const managedRequest = {
+  schemaVersion: 1,
+  repository: "funsaized/herdr-mise",
+  prNumber: 1,
+  head: { repository: "funsaized/herdr-mise", repositoryId: "1", sha: commit },
+  base: { repository: "funsaized/herdr-mise", branch: "main", sha: commit },
+  actor: "funsaized",
+  controlSha: commit,
+  trustBoundary: false,
+  workflow: {
+    id: "123",
+    path: managedPolicy.producer.workflowPath,
+    ref: managedPolicy.producer.workflowRef,
+    runId: "456",
+    runAttempt: "1",
+    actor: "funsaized",
+  },
+};
+const managedGate = {
+  schemaVersion: 1,
+  repository: "funsaized/herdr-mise",
+  currentMainSha: commit,
+  workflow: {
+    ...managedRequest.workflow,
+    event: "workflow_dispatch",
+    headBranch: "main",
+    headSha: commit,
+    conclusion: "success",
+  },
+  pr: {
+    number: 1,
+    state: "open",
+    head: managedRequest.head,
+    base: managedRequest.base,
+  },
+};
+
+function managedTiming() {
+  const startedAt = new Date(Date.now() - 1000).toISOString();
+  const completedAt = new Date(Date.parse(startedAt) + 1000).toISOString();
+  return { startedAt, completedAt, durationMs: 1000 };
+}
+
+function managedFixture() {
+  const timing = managedTiming();
+  const step = (identity, records) => ({
+    ...identity,
+    status: "succeeded",
+    ...timing,
+    records,
+  });
+  return seal({
+    schemaVersion: 2,
+    source: {
+      repository: managedRequest.head.repository,
+      repositoryId: managedRequest.head.repositoryId,
+      commit,
+      tree,
+    },
+    base: {
+      repository: managedRequest.base.repository,
+      branch: managedRequest.base.branch,
+      commit: managedRequest.base.sha,
+    },
+    control: {
+      repository: managedRequest.repository,
+      commit,
+      policySha256: sha256(managedPolicyBytes),
+      workflowSha256: sha256(readFileSync("package.json")),
+      swampVersion: "20260827.184833.0-sha.test",
+    },
+    producer: {
+      kind: "github-actions",
+      githubRepository: managedRequest.repository,
+      workflowPath: managedRequest.workflow.path,
+      workflowRef: managedRequest.workflow.ref,
+      workflowId: managedRequest.workflow.id,
+      runId: managedRequest.workflow.runId,
+      runAttempt: managedRequest.workflow.runAttempt,
+      dispatchActor: managedRequest.actor,
+    },
+    workflow: { ...managedPolicy.workflow, runId: crypto.randomUUID() },
+    configuration: {
+      algorithm: "sha256",
+      files: { "package.json": sha256(readFileSync("package.json")) },
+    },
+    steps: [
+      step(
+        {
+          name: "subject-preflight",
+          modelName: "verification-source-git",
+          modelType: "@swamp/git",
+          method: "subject_preflight",
+        },
+        [
+          record("subjectResult", {
+            commit,
+            tree,
+            baseCommit: commit,
+            clean: true,
+            ...timing,
+          }),
+        ],
+      ),
+      step(
+        {
+          name: "npm-check",
+          modelName: "verification-root",
+          modelType: "@funsaized/npm/project",
+          method: "run_subject",
+        },
+        [
+          record("invocation", {
+            operation: "run",
+            argv: ["npm", "run", "test"],
+            projectDir: ".",
+            executionStatus: "succeeded",
+            exitCode: 0,
+            expectedGitHead: commit,
+            gitHeadBefore: commit,
+            gitHeadAfter: commit,
+            cleanWorktreeBefore: true,
+            cleanWorktreeAfter: true,
+            packageJsonSha256Before: sha256(readFileSync("package.json")),
+            packageJsonSha256After: sha256(readFileSync("package.json")),
+            lockfilePath: "package-lock.json",
+            lockfileSha256Before: sha256(readFileSync("package-lock.json")),
+            lockfileSha256After: sha256(readFileSync("package-lock.json")),
+            ...timing,
+          }),
+          record("log", "npm output"),
+        ],
+      ),
+      step(
+        {
+          name: "rust-check",
+          modelName: "verification-rust",
+          modelType: "@funsaized/herdr-mise-rust",
+          method: "verify",
+        },
+        [
+          record("result", {
+            status: "passed",
+            gitHead: commit,
+            cargoLockSha256: sha256(readFileSync("Cargo.lock")),
+            checks: [{ name: "test", status: "passed" }],
+            ...timing,
+          }),
+        ],
+      ),
+    ],
+    artifacts: fixture().artifacts,
+    verdict: "pass",
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function validateManaged(
+  manifest,
+  request = managedRequest,
+  gate = managedGate,
+) {
+  return validateManagedEvidenceManifest(
+    manifest,
+    managedPolicy,
+    request,
+    gate,
+    { policyRoot: ".", subjectRoot: "." },
+    managedPolicyBytes,
+  );
+}
+
+test("accepts a complete managed audit record", () => {
+  assert.equal(validateManaged(managedFixture()).verdict, "pass");
+});
+
+test("rejects local, stale-run, and malformed-timing managed evidence", () => {
+  const local = managedFixture();
+  local.producer = { kind: "local" };
+  assert.throws(() => validateManaged(seal(local)), /local evidence/);
+
+  const wrongRun = managedFixture();
+  wrongRun.producer.runId = "999";
+  assert.throws(() => validateManaged(seal(wrongRun)), /producer identity/);
+
+  const badTiming = managedFixture();
+  badTiming.steps[0].durationMs = -1;
+  assert.throws(() => validateManaged(seal(badTiming)), /invalid duration/);
+});
+
+test("rejects failed workflows, moved heads, and non-owner trust changes", () => {
+  const failed = structuredClone(managedGate);
+  failed.workflow.conclusion = "failure";
+  assert.throws(
+    () => validateManaged(managedFixture(), managedRequest, failed),
+    /did not succeed/,
+  );
+
+  const moved = structuredClone(managedGate);
+  moved.pr.head.sha = "0".repeat(40);
+  assert.throws(
+    () => validateManaged(managedFixture(), managedRequest, moved),
+    /head moved/,
+  );
+
+  const request = structuredClone(managedRequest);
+  const gate = structuredClone(managedGate);
+  request.trustBoundary = true;
+  request.actor = "third-party";
+  request.workflow.actor = "third-party";
+  gate.workflow.actor = "third-party";
+  assert.throws(
+    () => validateManaged(managedFixture(), request, gate),
+    /not allowlisted/,
+  );
+});
+
+test("managed evidence rejects source, step, configuration, record, and root tampering", () => {
+  const source = managedFixture();
+  source.source.repository = "attacker/fork";
+  assert.throws(() => validateManaged(seal(source)), /source identity/);
+
+  const reordered = managedFixture();
+  reordered.steps.reverse();
+  assert.throws(() => validateManaged(seal(reordered)), /steps do not match/);
+
+  const configuration = managedFixture();
+  configuration.configuration.files["package.json"] = "0".repeat(64);
+  assert.throws(
+    () => validateManaged(seal(configuration)),
+    /configuration does not match/,
+  );
+
+  const recordSize = managedFixture();
+  recordSize.steps[0].records[0].size += 1;
+  assert.throws(
+    () => validateManaged(seal(recordSize)),
+    /record size mismatch/,
+  );
+
+  const future = managedFixture();
+  future.createdAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  assert.throws(() => validateManaged(seal(future)), /future/);
+
+  const root = managedFixture();
+  root.evidenceRootSha256 = "0".repeat(64);
+  assert.throws(() => validateManaged(root), /root checksum/);
 });
