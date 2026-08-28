@@ -561,7 +561,6 @@ test("contract rejects managed executor privilege and gate artifact drift", () =
     ),
   );
 });
-
 test("contract rejects mutable refs and missing readable pin comments", () => {
   const mutable = mutateWorkflow("ci.yml", (source) =>
     source.replace(/actions\/checkout@[0-9a-f]{40}/, "actions/checkout@v7"),
