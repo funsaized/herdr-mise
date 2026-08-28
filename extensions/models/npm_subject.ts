@@ -195,6 +195,8 @@ async function execute(
     PATH: inherited.PATH ?? "",
     ...context.globalArgs.environment,
     HOME: temp,
+    CARGO_HOME: inherited.CARGO_HOME ?? `${inherited.HOME}/.cargo`,
+    RUSTUP_HOME: inherited.RUSTUP_HOME ?? `${inherited.HOME}/.rustup`,
     NPM_CONFIG_USERCONFIG: `${temp}/npmrc`,
     NPM_CONFIG_GLOBALCONFIG: `${temp}/global-npmrc`,
     GIT_CONFIG_GLOBAL: "/dev/null",
