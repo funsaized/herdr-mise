@@ -15,6 +15,7 @@ concurrency:
 jobs:
   evidence:
     name: Local verification evidence
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
