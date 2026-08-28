@@ -21,7 +21,7 @@ try {
   }
   const loadedFonts = await page.evaluate(async () => [
     (await document.fonts.load('16px "Instrument Sans"')).length,
-    // prettier-ignore
+    // oxfmt-ignore
     (await document.fonts.load('16px Silkscreen')).length,
   ]);
   if (loadedFonts.some((count) => count === 0)) {

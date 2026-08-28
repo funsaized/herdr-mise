@@ -74,10 +74,18 @@ function decodeRecord(step, record) {
   return content;
 }
 
-function validateResult(policyStep, records, expectedCommit) {
+function validateResult(policyStep, records, expectedCommit, remoteMain) {
+  const gitResultSpecs = {
+    fetch: "fetchResult",
+    remote_ref: "remoteRefResult",
+    require_ancestor: "ancestryResult",
+  };
   const resultSpec = policyStep.modelType.includes("npm")
     ? "invocation"
-    : "result";
+    : policyStep.modelType === "@swamp/git"
+      ? gitResultSpecs[policyStep.method]
+      : "result";
+  assert(resultSpec, `${policyStep.name}: unsupported Git method`);
   const result = records.find((record) => record.specName === resultSpec);
   assert(result, `${policyStep.name}: structured result is missing`);
   const value = JSON.parse(decodeRecord(policyStep.name, result));
@@ -119,6 +127,30 @@ function validateResult(policyStep, records, expectedCommit) {
           sha256(readConfiguration(join(projectDir, value.lockfilePath))),
       `${policyStep.name}: package metadata does not match the source commit`,
     );
+  } else if (policyStep.modelType === "@swamp/git") {
+    if (policyStep.method === "fetch") {
+      assert(
+        value.remote === policyStep.remote &&
+          value.tags === false &&
+          value.pruned === false,
+        `${policyStep.name}: Git fetch does not match policy`,
+      );
+    } else if (policyStep.method === "remote_ref") {
+      assert(
+        value.remote === policyStep.remote &&
+          value.ref === policyStep.ref &&
+          /^[0-9a-f]{40}$/.test(value.sha),
+        `${policyStep.name}: remote main lookup does not match policy`,
+      );
+      return value.sha;
+    } else {
+      assert(
+        value.isAncestor === true &&
+          value.descendant === expectedCommit &&
+          value.ancestor === remoteMain,
+        `${policyStep.name}: ancestry is not bound to remote main`,
+      );
+    }
   } else {
     assert(
       value.status === "passed",
@@ -144,6 +176,7 @@ function validateResult(policyStep, records, expectedCommit) {
       `${policyStep.name}: Rust lockfile does not match the source commit`,
     );
   }
+  return undefined;
 }
 
 function validateArtifacts(manifest, policy) {
@@ -250,6 +283,7 @@ export function validateEvidenceManifest(
       JSON.stringify(policy.steps.map((step) => step.name)),
     "verification steps do not match policy",
   );
+  let remoteMain;
   for (let index = 0; index < policy.steps.length; index += 1) {
     const expected = policy.steps[index];
     const step = manifest.steps[index];
@@ -270,7 +304,9 @@ export function validateEvidenceManifest(
       `${expected.name}: output set does not match`,
     );
     for (const record of step.records) decodeRecord(expected.name, record);
-    validateResult(expected, step.records, expectedCommit);
+    remoteMain =
+      validateResult(expected, step.records, expectedCommit, remoteMain) ??
+      remoteMain;
   }
   validateArtifacts(manifest, policy);
 

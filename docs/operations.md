@@ -927,15 +927,15 @@ versions that ship a protocol in the manifest are accepted by the
 adapter but are not part of the verified matrix above. The exact
 tested matrix is:
 
-<!-- prettier-ignore-start -->
 <!-- herdr-compatibility:start -->
+
 | Herdr release | Snapshot protocol |
-|---|---|
-| `0.7.5` | `17` |
-| `0.8.0` | `19` |
-| `0.8.2` | `20` |
+| ------------- | ----------------- |
+| `0.7.5`       | `17`              |
+| `0.8.0`       | `19`              |
+| `0.8.2`       | `20`              |
+
 <!-- herdr-compatibility:end -->
-<!-- prettier-ignore-end -->
 
 If you are on a Herdr version that reports a different protocol,
 either upgrade Herdr to a tested release or stay on the demo
