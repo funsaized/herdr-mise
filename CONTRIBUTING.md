@@ -36,22 +36,26 @@ npm run dev:visual    # isolated playground on http://localhost:8686
 
 ## Before you open a PR
 
-Use narrow checks while developing. When the branch is next to merge, sync it
-with current `origin/main`, commit the final tree, then run the local verification
-workflow for that exact commit:
+Use narrow checks while developing and open the pull request from a clean,
+committed branch based on current upstream `main`. The full local Swamp workflow
+is optional advisory feedback:
 
 ```sh
-swamp workflow validate local-verification
-swamp workflow run local-verification --input commit=$(git rev-parse HEAD)
+swamp workflow validate verification
+swamp workflow run verification \
+  --input commit=$(git rev-parse HEAD) \
+  --input baseCommit=$(git rev-parse upstream/main) \
+  --input subjectRoot=.
 ```
 
-The workflow fetches `origin/main` and fails before dependency installation when
-that remote commit is not an ancestor of the supplied commit. It never merges or
-rebases the source branch. After a successful run, do not change the source
-commit before pushing; any new commit requires new evidence.
+Before merge, a maintainer reviews the current head and dispatches the
+`Swamp managed verification` GitHub workflow with the pull request number. The
+required status applies only to that exact head; every new commit requires a new
+dispatch. Trust-boundary changes require dispatch by `@funsaized` and run using
+the trusted controls from `main`.
 
-See [Local verification and the remote CI gate](docs/local-verification.md) for
-the controls, trust boundary, and shadow-CI migration policy.
+See [Managed verification](docs/local-verification.md) for the contributor and
+maintainer runbook.
 
 Run `npm run format` to apply the repository's deterministic Oxfmt formatting
 before checking it with `npm run format:check`.

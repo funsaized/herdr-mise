@@ -36,7 +36,7 @@
     "models/@swamp/git/verification-source-git.yaml",
     "scripts/install-swamp-managed.sh",
     "scripts/managed-verification-evidence.mjs",
-    "scripts/verification-evidence.test.mjs",
+    "scripts/managed-verification-evidence.test.mjs",
     "scripts/workflow-contract.test.mjs",
     "verification/managed-policy.json",
     "workflows/workflow-verification.yaml"
@@ -51,8 +51,7 @@
     "extensions/models/**",
     "extensions/tests/**",
     "models/**",
-    "scripts/verification-evidence.mjs",
-    "scripts/verification-evidence.test.mjs",
+    "scripts/managed-verification-evidence.test.mjs",
     "scripts/install-swamp-managed.sh",
     "scripts/managed-verification-evidence.mjs",
     "scripts/workflow-contract.test.mjs",
