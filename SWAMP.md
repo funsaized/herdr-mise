@@ -7,6 +7,9 @@ recovery procedures used by `herdr-mise`.
 
 For the short contributor runbook, see
 [`docs/local-verification.md`](docs/local-verification.md).
+For the approved target architecture and implementation handoff, see
+[`docs/managed-verification-migration.md`](docs/managed-verification-migration.md).
+That plan is not the live operating procedure until its cutover is complete.
 
 ## Scope
 

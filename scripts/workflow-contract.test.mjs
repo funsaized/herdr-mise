@@ -29,6 +29,13 @@ const gitAncestryExtension = readFileSync(
 const verificationPolicy = JSON.parse(
   readFileSync("verification/policy.json", "utf8"),
 );
+const managedVerification = readFileSync(
+  "workflows/workflow-verification.yaml",
+  "utf8",
+);
+const managedPolicy = JSON.parse(
+  readFileSync("verification/managed-policy.json", "utf8"),
+);
 
 function localStepBlock(name) {
   const marker = `      - name: ${name}\n`;
@@ -42,6 +49,8 @@ function localStepBlock(name) {
 }
 
 function permissionMap(block, indent) {
+  if (new RegExp(`^ {${indent}}permissions: \\{\\}$`, "m").test(block))
+    return {};
   const marker = `${" ".repeat(indent)}permissions:\n`;
   const start = block.indexOf(marker);
   if (start < 0) return null;
@@ -103,10 +112,21 @@ export function auditWorkflowContract(
     if (/^\s*pull_request_target:/m.test(source))
       errors.push(`${name}: pull_request_target is forbidden`);
 
+    const expectedTopPermissions =
+      name === "swamp-managed-verification.yml"
+        ? {}
+        : name === "swamp-managed-gate.yml"
+          ? {
+              actions: "read",
+              contents: "read",
+              "pull-requests": "read",
+              statuses: "write",
+            }
+          : { contents: "read" };
     const topPermissions = permissionMap(source, 0);
-    if (!samePermissions(topPermissions, { contents: "read" })) {
+    if (!samePermissions(topPermissions, expectedTopPermissions)) {
       errors.push(
-        `${name}: top-level permissions must be exactly contents: read`,
+        `${name}: top-level permissions exceed the workflow contract`,
       );
     }
 
@@ -127,7 +147,17 @@ export function auditWorkflowContract(
             ? { actions: "read", contents: "read", "security-events": "write" }
             : name === "gitleaks.yml" && jobName === "scan"
               ? { contents: "read", "pull-requests": "read" }
-              : null;
+              : name === "swamp-managed-verification.yml" &&
+                  jobName === "resolve"
+                ? {
+                    actions: "read",
+                    contents: "read",
+                    "pull-requests": "read",
+                  }
+                : name === "swamp-managed-verification.yml" &&
+                    jobName === "execute"
+                  ? {}
+                  : null;
       if (!allowed || !samePermissions(permissions, allowed)) {
         errors.push(`${name}/${jobName}: job permissions exceed the contract`);
       }
@@ -149,6 +179,8 @@ export function auditWorkflowContract(
     "gitleaks.yml",
     "herdr-compatibility-drift.yml",
     "release.yml",
+    "swamp-managed-gate.yml",
+    "swamp-managed-verification.yml",
   ]) {
     if (!names.includes(required))
       errors.push(`${required}: required workflow is missing`);
@@ -306,6 +338,91 @@ export function auditWorkflowContract(
     }
   }
 
+  const managed = candidateWorkflows["swamp-managed-verification.yml"] ?? "";
+  const managedJobs = jobBlocks(managed);
+  if (
+    !/^  workflow_dispatch:$/m.test(managed) ||
+    /^  (?:push|pull_request|pull_request_target|workflow_run):/m.test(
+      managed,
+    ) ||
+    !/group: swamp-managed-verification-\$\{\{ inputs\.prNumber \}\}/.test(
+      managed,
+    )
+  )
+    errors.push(
+      "managed executor: exact workflow_dispatch contract is missing",
+    );
+  if (
+    !samePermissions(permissionMap(managedJobs.resolve ?? "", 4), {
+      actions: "read",
+      contents: "read",
+      "pull-requests": "read",
+    }) ||
+    !samePermissions(permissionMap(managedJobs.execute ?? "", 4), {})
+  )
+    errors.push("managed executor: resolver or executor permissions changed");
+  if (
+    /\$\{\{\s*inputs\.prNumber\s*\}\}/.test(
+      (managedJobs.resolve ?? "").replace(/^\s*PR_NUMBER:.*$/gm, ""),
+    )
+  )
+    errors.push(
+      "managed executor: prNumber must enter trusted code through env only",
+    );
+  for (const artifact of [
+    "swamp-managed-request",
+    "swamp-managed-attestation",
+    "swamp-managed-diagnostics",
+  ]) {
+    if (!managed.includes(`name: ${artifact}`))
+      errors.push(`managed executor: ${artifact} is missing`);
+  }
+  if ((managed.match(/^          overwrite: false$/gm) ?? []).length !== 3)
+    errors.push("managed executor: artifacts must disable overwrite");
+  if (
+    !managed.includes("runs-on: ubuntu-24.04") ||
+    !/^    timeout-minutes: 60$/m.test(managedJobs.execute ?? "") ||
+    managed.includes("persist-credentials: true") ||
+    /^    environment:/m.test(managedJobs.execute ?? "") ||
+    /secrets\./.test(managedJobs.execute ?? "")
+  )
+    errors.push(
+      "managed executor: hosted credential-free execution contract changed",
+    );
+  if (
+    !managed.includes("swamp workflow run verification") ||
+    /\b(?:npm (?:ci|run)|cargo (?:build|check|test|fmt))\b/.test(
+      managedJobs.execute ?? "",
+    )
+  )
+    errors.push("managed executor: verification commands must remain in Swamp");
+
+  const gate = candidateWorkflows["swamp-managed-gate.yml"] ?? "";
+  if (
+    !/^  workflow_run:$/m.test(gate) ||
+    !/workflows: \[Swamp managed verification\]/.test(gate) ||
+    /^  (?:push|pull_request|pull_request_target|workflow_dispatch):/m.test(
+      gate,
+    )
+  )
+    errors.push("managed gate: exact workflow_run trigger is missing");
+  if (
+    (gate.match(/run-id: \$\{\{ github\.event\.workflow_run\.id \}\}/g) ?? [])
+      .length !== 2
+  )
+    errors.push("managed gate: artifacts must come from the triggering run");
+  if (
+    !gate.includes("context: 'Swamp managed verification'") ||
+    !gate.includes("workflow.path !== expectedPath") ||
+    !gate.includes(
+      'node "$RUNNER_TEMP/control/scripts/managed-verification-evidence.mjs"',
+    ) ||
+    /node "\$RUNNER_TEMP\/subject\//.test(gate)
+  )
+    errors.push(
+      "managed gate: trusted identity, validator, or status contract changed",
+    );
+
   if (
     !/package-ecosystem: github-actions\n    directory: \/\n    schedule:\n      interval: weekly/.test(
       candidateDependabot,
@@ -358,6 +475,92 @@ test("local verification requires the current remote main ancestor", () => {
   assert.match(gitAncestryExtension, /type: "@swamp\/git"/);
 });
 
+test("shared verification is subject-bounded and never publishes evidence", () => {
+  assert.match(managedVerification, /name: subject-preflight/);
+  assert.match(managedVerification, /methodName: ci_subject/);
+  assert.match(managedVerification, /methodName: run_subject/);
+  assert.match(managedVerification, /methodName: collectManaged/);
+  assert.doesNotMatch(
+    managedVerification,
+    /methodName: (?:push|commit|remote_ref)/,
+  );
+  assert.deepEqual(
+    managedPolicy.steps.map((step) => step.name),
+    [
+      "subject-preflight",
+      "dependencies-root",
+      "dependencies-client",
+      "browser-install",
+      "fallback-assets-tests",
+      "format",
+      "build",
+      "rust-verification",
+      "typecheck",
+      "lint",
+      "unit-tests",
+      "compatibility",
+      "browser-tests",
+      "token-audit",
+      "accessibility-audit",
+      "bundle-budget",
+      "bundle",
+      "release-validation",
+    ],
+  );
+  assert.deepEqual(managedPolicy.trustBoundaryPaths, [
+    ".github/CODEOWNERS",
+    ".github/workflows/**",
+    ".gitignore",
+    ".oxfmtrc.json",
+    ".swamp.yaml",
+    "AGENTS.md",
+    "extensions/models/**",
+    "extensions/tests/**",
+    "models/**",
+    "scripts/verification-evidence.mjs",
+    "scripts/verification-evidence.test.mjs",
+    "scripts/install-swamp-managed.sh",
+    "scripts/managed-verification-evidence.mjs",
+    "scripts/workflow-contract.test.mjs",
+    "verification/**",
+    "workflows/**",
+  ]);
+  assert.match(
+    workflows["swamp-managed-verification.yml"],
+    /path: 'verification\/managed-policy\.json'/,
+  );
+  assert.match(
+    workflows["swamp-managed-verification.yml"],
+    /previous_filename \? \[filename, previous_filename\]/,
+  );
+});
+
+test("contract rejects managed executor privilege and gate artifact drift", () => {
+  const privileged = mutateWorkflow(
+    "swamp-managed-verification.yml",
+    (source) =>
+      source.replace(
+        "    permissions: {}",
+        "    permissions:\n      contents: write",
+      ),
+  );
+  const wrongRun = mutateWorkflow("swamp-managed-gate.yml", (source) =>
+    source.replaceAll(
+      "run-id: ${{ github.event.workflow_run.id }}",
+      "run-id: ${{ github.run_id }}",
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(privileged, dependabot, gitleaks).some((error) =>
+      error.includes("executor permissions"),
+    ),
+  );
+  assert.ok(
+    auditWorkflowContract(wrongRun, dependabot, gitleaks).some((error) =>
+      error.includes("triggering run"),
+    ),
+  );
+});
 test("contract rejects mutable refs and missing readable pin comments", () => {
   const mutable = mutateWorkflow("ci.yml", (source) =>
     source.replace(/actions\/checkout@[0-9a-f]{40}/, "actions/checkout@v7"),

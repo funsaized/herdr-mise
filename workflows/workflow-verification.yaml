@@ -1,0 +1,297 @@
+id: 3c4c0907-55c3-41a2-b89f-84a8fae531c4
+name: verification
+tags: {}
+inputs:
+  properties:
+    commit:
+      type: string
+      pattern: '^[0-9a-f]{40}$'
+    baseCommit:
+      type: string
+      pattern: '^[0-9a-f]{40}$'
+    subjectRoot:
+      type: string
+      minLength: 1
+    producerKind:
+      type: string
+      enum: [local, github-actions]
+      default: local
+    sourceRepository:
+      type: string
+      default: funsaized/herdr-mise
+    sourceRepositoryId:
+      type: string
+      default: ''
+    baseRepository:
+      type: string
+      default: funsaized/herdr-mise
+    controlRepository:
+      type: string
+      default: funsaized/herdr-mise
+    controlCommit:
+      type: string
+      default: ''
+    producerRepository:
+      type: string
+      default: ''
+    producerWorkflowPath:
+      type: string
+      default: ''
+    producerWorkflowRef:
+      type: string
+      default: ''
+    producerWorkflowId:
+      type: string
+      default: ''
+    producerRunId:
+      type: string
+      default: ''
+    producerRunAttempt:
+      type: string
+      default: ''
+    dispatchActor:
+      type: string
+      default: ''
+  required: [commit, baseCommit, subjectRoot]
+jobs:
+  - name: verify
+    description: Run deterministic controls against an explicit verification subject.
+    steps:
+      - name: subject-preflight
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: subject_preflight
+          inputs:
+            ancestor: ${{ inputs.baseCommit }}
+            descendant: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn: []
+      - name: dependencies-root
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: ci_subject
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: subject-preflight
+            condition: { type: succeeded }
+      - name: dependencies-client
+        task:
+          type: model_method
+          modelIdOrName: verification-client
+          methodName: ci_subject
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: dependencies-root
+            condition: { type: succeeded }
+      - name: browser-install
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: verify:browser:install
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: dependencies-client
+            condition: { type: succeeded }
+      - name: fallback-assets-tests
+        task:
+          type: model_method
+          modelIdOrName: verification-rust
+          methodName: fallbackAssets
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: browser-install
+            condition: { type: succeeded }
+      - name: format
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: format:check
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: fallback-assets-tests
+            condition: { type: succeeded }
+      - name: build
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: build
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: format
+            condition: { type: succeeded }
+      - name: rust-verification
+        task:
+          type: model_method
+          modelIdOrName: verification-rust
+          methodName: verify
+          inputs:
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: build
+            condition: { type: succeeded }
+      - name: typecheck
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: typecheck
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: rust-verification
+            condition: { type: succeeded }
+      - name: lint
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: lint
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: typecheck
+            condition: { type: succeeded }
+      - name: unit-tests
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: test
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: lint
+            condition: { type: succeeded }
+      - name: compatibility
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: check:herdr-compatibility
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: unit-tests
+            condition: { type: succeeded }
+      - name: browser-tests
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: test:visual
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: compatibility
+            condition: { type: succeeded }
+      - name: token-audit
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: audit:tokens
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: browser-tests
+            condition: { type: succeeded }
+      - name: accessibility-audit
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: audit:accessibility
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: token-audit
+            condition: { type: succeeded }
+      - name: bundle-budget
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: check:bundle
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: accessibility-audit
+            condition: { type: succeeded }
+      - name: bundle
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: bundle
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: bundle-budget
+            condition: { type: succeeded }
+      - name: release-validation
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: validate:release
+            expectedGitHead: ${{ inputs.commit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - step: bundle
+            condition: { type: succeeded }
+      - name: collect-managed-evidence
+        task:
+          type: model_method
+          modelIdOrName: verification-evidence
+          methodName: collectManaged
+          inputs:
+            commit: ${{ inputs.commit }}
+            baseCommit: ${{ inputs.baseCommit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+            runId: ${{ run.id }}
+            producerKind: ${{ inputs.producerKind }}
+            sourceRepository: ${{ inputs.sourceRepository }}
+            sourceRepositoryId: ${{ inputs.sourceRepositoryId }}
+            baseRepository: ${{ inputs.baseRepository }}
+            controlRepository: ${{ inputs.controlRepository }}
+            controlCommit: ${{ inputs.controlCommit }}
+            producerRepository: ${{ inputs.producerRepository }}
+            producerWorkflowPath: ${{ inputs.producerWorkflowPath }}
+            producerWorkflowRef: ${{ inputs.producerWorkflowRef }}
+            producerWorkflowId: ${{ inputs.producerWorkflowId }}
+            producerRunId: ${{ inputs.producerRunId }}
+            producerRunAttempt: ${{ inputs.producerRunAttempt }}
+            dispatchActor: ${{ inputs.dispatchActor }}
+        dependsOn:
+          - step: release-validation
+            condition: { type: succeeded }
+    dependsOn: []
+version: 1

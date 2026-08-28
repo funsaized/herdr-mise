@@ -1,0 +1,291 @@
+name: Swamp managed verification
+on:
+  workflow_dispatch:
+    inputs:
+      prNumber:
+        description: Open pull request number
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: swamp-managed-verification-${{ inputs.prNumber }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      actor: ${{ steps.resolve.outputs.actor }}
+      base_sha: ${{ steps.resolve.outputs.base_sha }}
+      control_sha: ${{ steps.resolve.outputs.control_sha }}
+      head_repository: ${{ steps.resolve.outputs.head_repository }}
+      head_repository_id: ${{ steps.resolve.outputs.head_repository_id }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      workflow_id: ${{ steps.resolve.outputs.workflow_id }}
+    steps:
+      - name: Resolve current pull request and workflow identity
+        id: resolve
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          PR_NUMBER: ${{ inputs.prNumber }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const expectedRepository = 'funsaized/herdr-mise';
+            const expectedPath = '.github/workflows/swamp-managed-verification.yml';
+            if (context.eventName !== 'workflow_dispatch' || context.ref !== 'refs/heads/main') {
+              throw new Error('managed verification must be dispatched from main');
+            }
+            if (!/^[1-9][0-9]*$/.test(process.env.PR_NUMBER)) {
+              throw new Error('prNumber must be a positive decimal integer');
+            }
+            const run = (await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            })).data;
+            const workflow = (await github.rest.actions.getWorkflow({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: run.workflow_id,
+            })).data;
+            if (workflow.path !== expectedPath || run.event !== 'workflow_dispatch' || run.head_branch !== 'main') {
+              throw new Error('managed workflow identity does not match the allowlist');
+            }
+            const pr = (await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number(process.env.PR_NUMBER),
+            })).data;
+            if (
+              pr.state !== 'open' || pr.base.repo.full_name !== expectedRepository ||
+              pr.base.ref !== 'main' || pr.head.repo.private
+            ) {
+              throw new Error('pull request must be open against funsaized/herdr-mise:main');
+            }
+            const main = (await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+            })).data.commit.sha;
+            if (main !== pr.base.sha || main !== run.head_sha) {
+              throw new Error('pull request base or trusted control moved');
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const policyFile = (await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: 'verification/managed-policy.json',
+              ref: run.head_sha,
+            })).data;
+            if (Array.isArray(policyFile) || policyFile.type !== 'file' || policyFile.size > 128 * 1024) {
+              throw new Error('trusted managed policy is missing or oversized');
+            }
+            const policy = JSON.parse(Buffer.from(policyFile.content, 'base64'));
+            if (
+              policy.schemaVersion !== 2 || !Array.isArray(policy.trustBoundaryPaths) ||
+              policy.trustBoundaryPaths.length < 1 || policy.trustBoundaryPaths.length > 100 ||
+              policy.trustBoundaryPaths.some((path) => typeof path !== 'string' || path.startsWith('/') || path.includes('..'))
+            ) throw new Error('trusted trust-boundary policy is malformed');
+            const actor = run.triggering_actor?.login ?? run.actor.login;
+            const request = {
+              schemaVersion: 1,
+              repository: expectedRepository,
+              prNumber: pr.number,
+              head: {
+                repository: pr.head.repo.full_name,
+                repositoryId: String(pr.head.repo.id),
+                sha: pr.head.sha,
+              },
+              base: { repository: expectedRepository, branch: 'main', sha: main },
+              actor,
+              controlSha: run.head_sha,
+              workflow: {
+                id: String(run.workflow_id),
+                path: workflow.path,
+                ref: process.env.WORKFLOW_REF,
+                runId: String(run.id),
+                runAttempt: String(run.run_attempt),
+                actor,
+              },
+              apiFiles: files.map(({ filename }) => filename).sort(),
+              classificationFiles: [...new Set(files.flatMap(({ filename, previous_filename }) =>
+                previous_filename ? [filename, previous_filename] : [filename]
+              ))].sort(),
+              trustBoundaryPaths: policy.trustBoundaryPaths,
+            };
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/resolved.json`, JSON.stringify(request));
+            core.setOutput('actor', actor);
+            core.setOutput('base_sha', main);
+            core.setOutput('control_sha', run.head_sha);
+            core.setOutput('head_repository', pr.head.repo.full_name);
+            core.setOutput('head_repository_id', String(pr.head.repo.id));
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('workflow_id', String(run.workflow_id));
+      - name: Confirm exact diff and authorize trust-boundary changes
+        env:
+          ACTOR: ${{ steps.resolve.outputs.actor }}
+          BASE_SHA: ${{ steps.resolve.outputs.base_sha }}
+          HEAD_REPOSITORY: ${{ steps.resolve.outputs.head_repository }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+        run: |
+          set -eu
+          repository="$RUNNER_TEMP/pull-request.git"
+          git init --bare "$repository"
+          git -c protocol.version=2 --git-dir="$repository" fetch --no-tags \
+            https://github.com/funsaized/herdr-mise.git "$BASE_SHA"
+          git -c protocol.version=2 --git-dir="$repository" fetch --no-tags \
+            "https://github.com/$HEAD_REPOSITORY.git" "$HEAD_SHA"
+          git --git-dir="$repository" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+          git --git-dir="$repository" diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/diff-files"
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const requestPath = `${process.env.RUNNER_TEMP}/resolved.json`;
+          const request = JSON.parse(fs.readFileSync(requestPath));
+          const exactFiles = fs.readFileSync(`${process.env.RUNNER_TEMP}/diff-files`)
+            .toString().split('\0').filter(Boolean).sort();
+          if (JSON.stringify(exactFiles) !== JSON.stringify(request.apiFiles)) {
+            throw new Error('GitHub file list does not match the exact Git diff');
+          }
+          const matches = (path, pattern) => pattern.endsWith('/**')
+            ? path.startsWith(pattern.slice(0, -2))
+            : path === pattern;
+          request.trustBoundary = request.classificationFiles.some((path) =>
+            request.trustBoundaryPaths.some((pattern) => matches(path, pattern))
+          );
+          if (request.trustBoundary && request.actor !== 'funsaized') {
+            throw new Error('trust-boundary changes require dispatch by funsaized');
+          }
+          request.filesSha256 = crypto.createHash('sha256').update(exactFiles.join('\n')).digest('hex');
+          delete request.apiFiles;
+          delete request.classificationFiles;
+          delete request.trustBoundaryPaths;
+          fs.writeFileSync(requestPath, `${JSON.stringify(request, null, 2)}\n`);
+          NODE
+      - name: Retain immutable request metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: swamp-managed-request
+          path: ${{ runner.temp }}/resolved.json
+          overwrite: false
+          retention-days: 30
+
+  execute:
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions: {}
+    steps:
+      - name: Read trusted request metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: swamp-managed-request
+          path: ${{ runner.temp }}/request
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-12
+        with:
+          components: rustfmt
+      - name: Check out exact trusted control and subject commits
+        env:
+          BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
+          CONTROL_SHA: ${{ needs.resolve.outputs.control_sha }}
+          HEAD_REPOSITORY: ${{ needs.resolve.outputs.head_repository }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        run: |
+          set -eu
+          control="$RUNNER_TEMP/control"
+          subject="$RUNNER_TEMP/subject"
+          git init "$control"
+          git -C "$control" config core.hooksPath /dev/null
+          git -C "$control" remote add origin https://github.com/funsaized/herdr-mise.git
+          git -C "$control" fetch --no-tags origin "$CONTROL_SHA"
+          git -C "$control" checkout --detach "$CONTROL_SHA"
+          git init "$subject"
+          git -C "$subject" config core.hooksPath /dev/null
+          git -C "$subject" remote add subject "https://github.com/$HEAD_REPOSITORY.git"
+          git -C "$subject" remote add upstream https://github.com/funsaized/herdr-mise.git
+          git -C "$subject" fetch --no-tags subject "$HEAD_SHA"
+          git -C "$subject" fetch --no-tags upstream "$BASE_SHA"
+          git -C "$subject" checkout --detach "$HEAD_SHA"
+          test "$(git -C "$control" rev-parse HEAD)" = "$CONTROL_SHA"
+          test "$(git -C "$subject" rev-parse HEAD)" = "$HEAD_SHA"
+          git -C "$subject" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+      - name: Install pinned Swamp
+        working-directory: ${{ runner.temp }}/control
+        run: sh scripts/install-swamp-managed.sh
+      - name: Restore trusted Swamp extensions
+        env:
+          CONTROL_ROOT: ${{ runner.temp }}/control
+        run: swamp extension install --repo-dir "$CONTROL_ROOT"
+      - name: Run shared Swamp verification
+        env:
+          ACTOR: ${{ needs.resolve.outputs.actor }}
+          BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
+          CONTROL_ROOT: ${{ runner.temp }}/control
+          CONTROL_SHA: ${{ needs.resolve.outputs.control_sha }}
+          HEAD_REPOSITORY: ${{ needs.resolve.outputs.head_repository }}
+          HEAD_REPOSITORY_ID: ${{ needs.resolve.outputs.head_repository_id }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          SUBJECT_ROOT: ${{ runner.temp }}/subject
+          WORKFLOW_ID: ${{ needs.resolve.outputs.workflow_id }}
+        run: |
+          set -eu
+          swamp workflow validate verification --repo-dir "$CONTROL_ROOT"
+          swamp workflow run verification --repo-dir "$CONTROL_ROOT" \
+            --input commit="$HEAD_SHA" \
+            --input baseCommit="$BASE_SHA" \
+            --input subjectRoot="$SUBJECT_ROOT" \
+            --input producerKind=github-actions \
+            --input sourceRepository="$HEAD_REPOSITORY" \
+            --input sourceRepositoryId="$HEAD_REPOSITORY_ID" \
+            --input baseRepository=funsaized/herdr-mise \
+            --input controlRepository=funsaized/herdr-mise \
+            --input controlCommit="$CONTROL_SHA" \
+            --input producerRepository=funsaized/herdr-mise \
+            --input producerWorkflowPath=.github/workflows/swamp-managed-verification.yml \
+            --input producerWorkflowRef="$GITHUB_WORKFLOW_REF" \
+            --input producerWorkflowId="$WORKFLOW_ID" \
+            --input producerRunId="$GITHUB_RUN_ID" \
+            --input producerRunAttempt="$GITHUB_RUN_ATTEMPT" \
+            --input dispatchActor="$ACTOR"
+      - name: Retain managed attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: swamp-managed-attestation
+          path: ${{ runner.temp }}/control/.swamp/verification-output/manifest.json
+          overwrite: false
+          retention-days: 30
+      - name: Collect sanitized diagnostics
+        if: failure()
+        env:
+          CONTROL_ROOT: ${{ runner.temp }}/control
+        run: |
+          mkdir -p "$RUNNER_TEMP/diagnostics"
+          swamp report get @swamp/workflow-summary --workflow verification --json \
+            --repo-dir "$CONTROL_ROOT" > "$RUNNER_TEMP/diagnostics/workflow-summary.json" 2>&1 || true
+          node -e "const fs=require('node:fs');const p=process.argv[1];fs.writeFileSync(p,fs.readFileSync(p,'utf8').replaceAll(process.env.RUNNER_TEMP,'\u003crunner-temp\u003e'))" \
+            "$RUNNER_TEMP/diagnostics/workflow-summary.json"
+      - name: Retain managed diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: swamp-managed-diagnostics
+          path: ${{ runner.temp }}/diagnostics
+          overwrite: false
+          retention-days: 7
