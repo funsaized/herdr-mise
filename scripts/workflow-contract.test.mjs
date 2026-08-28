@@ -33,6 +33,10 @@ const managedVerification = readFileSync(
   "workflows/workflow-verification.yaml",
   "utf8",
 );
+const managedEvidenceCollector = readFileSync(
+  "extensions/models/verification_evidence_managed.ts",
+  "utf8",
+);
 const managedPolicy = JSON.parse(
   readFileSync("verification/managed-policy.json", "utf8"),
 );
@@ -480,6 +484,7 @@ test("shared verification is subject-bounded and never publishes evidence", () =
   assert.match(managedVerification, /methodName: ci_subject/);
   assert.match(managedVerification, /methodName: run_subject/);
   assert.match(managedVerification, /methodName: collectManaged/);
+  assert.match(managedEvidenceCollector, /env: \{ NO_COLOR: "1" \}/);
   assert.doesNotMatch(
     managedVerification,
     /methodName: (?:push|commit|remote_ref)/,
