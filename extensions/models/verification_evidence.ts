@@ -73,6 +73,8 @@ type PolicyStep = {
   modelId: string;
   modelType: string;
   method: string;
+  remote?: string;
+  ref?: string;
   projectDir?: string;
   argv?: string[];
   checks?: string[];
@@ -215,12 +217,20 @@ async function assertResult(
   records: Array<{ specName: string; bytes: Uint8Array }>,
   commit: string,
   root: string,
-): Promise<void> {
-  const result = records.find(
-    (record) =>
-      record.specName ===
-      (step.modelType.includes("npm") ? "invocation" : "result"),
-  );
+  remoteMain?: string,
+): Promise<string | undefined> {
+  const gitResultSpecs: Record<string, string> = {
+    fetch: "fetchResult",
+    remote_ref: "remoteRefResult",
+    require_ancestor: "ancestryResult",
+  };
+  const resultSpec = step.modelType.includes("npm")
+    ? "invocation"
+    : step.modelType === "@swamp/git"
+      ? gitResultSpecs[step.method]
+      : "result";
+  if (!resultSpec) throw new Error(`${step.name}: unsupported Git method`);
+  const result = records.find((record) => record.specName === resultSpec);
   if (!result) throw new Error(`${step.name}: structured result is missing`);
   const value = JSON.parse(new TextDecoder().decode(result.bytes));
   if (step.modelType.includes("npm")) {
@@ -273,6 +283,33 @@ async function assertResult(
         `${step.name}: package metadata does not match the source commit`,
       );
     }
+  } else if (step.modelType === "@swamp/git") {
+    if (step.method === "fetch") {
+      if (
+        value.remote !== step.remote ||
+        value.tags !== false ||
+        value.pruned !== false
+      ) {
+        throw new Error(`${step.name}: Git fetch does not match policy`);
+      }
+    } else if (step.method === "remote_ref") {
+      if (
+        value.remote !== step.remote ||
+        value.ref !== step.ref ||
+        !/^[0-9a-f]{40}$/.test(value.sha)
+      ) {
+        throw new Error(
+          `${step.name}: remote main lookup does not match policy`,
+        );
+      }
+      return value.sha;
+    } else if (
+      value.isAncestor !== true ||
+      value.descendant !== commit ||
+      value.ancestor !== remoteMain
+    ) {
+      throw new Error(`${step.name}: ancestry is not bound to remote main`);
+    }
   } else {
     const checkNames = Array.isArray(value.checks)
       ? value.checks.map((check: { name: string }) => check.name)
@@ -292,6 +329,7 @@ async function assertResult(
       throw new Error(`${step.name}: Rust verification did not pass`);
     }
   }
+  return undefined;
 }
 
 async function collect(
@@ -361,6 +399,7 @@ async function collect(
   }
 
   let recordCount = 0;
+  let remoteMain: string | undefined;
   const steps = [];
   for (const step of policy.steps) {
     const all = await context.dataRepository.findAllForModel(
@@ -417,7 +456,14 @@ async function collect(
       });
       recordCount += 1;
     }
-    await assertResult(step, rawRecords, args.commit, context.repoDir);
+    remoteMain =
+      (await assertResult(
+        step,
+        rawRecords,
+        args.commit,
+        context.repoDir,
+        remoteMain,
+      )) ?? remoteMain;
     steps.push({
       name: step.name,
       modelName: step.modelName,
@@ -482,7 +528,7 @@ async function collect(
 
 export const model = {
   type: "@funsaized/verification-evidence",
-  version: "2026.08.27.1",
+  version: "2026.08.28.1",
   globalArguments: GlobalArguments,
   resources: {
     evidence: {

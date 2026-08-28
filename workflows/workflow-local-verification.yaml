@@ -13,6 +13,37 @@ jobs:
   - name: verify
     description: Run the deterministic controls that previously ran first in CI.
     steps:
+      - name: fetch-source
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: fetch
+          inputs:
+            remote: origin
+        dependsOn: []
+      - name: lookup-remote-main
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: remote_ref
+          inputs:
+            ref: refs/heads/main
+        dependsOn:
+          - step: fetch-source
+            condition:
+              type: succeeded
+      - name: require-main-ancestor
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: require_ancestor
+          inputs:
+            ancestor: ${{ data.latest("verification-source-git", "remote-ref-refs-heads-main").attributes.sha }}
+            descendant: ${{ inputs.commit }}
+        dependsOn:
+          - step: lookup-remote-main
+            condition:
+              type: succeeded
       - name: dependencies-root
         task:
           type: model_method
@@ -20,7 +51,10 @@ jobs:
           methodName: ci
           inputs:
             expectedGitHead: ${{ inputs.commit }}
-        dependsOn: []
+        dependsOn:
+          - step: require-main-ancestor
+            condition:
+              type: succeeded
       - name: dependencies-client
         task:
           type: model_method

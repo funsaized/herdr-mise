@@ -12,6 +12,7 @@ const commit = execFileSync("git", ["rev-parse", "HEAD"], {
 const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], {
   encoding: "utf8",
 }).trim();
+const remoteMain = "b".repeat(40);
 
 function sha256(content) {
   return createHash("sha256").update(content).digest("hex");
@@ -69,6 +70,30 @@ const policy = {
       method: "verify",
       checks: ["test"],
       outputs: ["log", "result"],
+    },
+    {
+      name: "fetch-source",
+      modelName: "verification-source-git",
+      modelType: "@swamp/git",
+      method: "fetch",
+      remote: "origin",
+      outputs: ["fetchResult"],
+    },
+    {
+      name: "lookup-remote-main",
+      modelName: "verification-source-git",
+      modelType: "@swamp/git",
+      method: "remote_ref",
+      remote: "origin",
+      ref: "refs/heads/main",
+      outputs: ["remoteRefResult"],
+    },
+    {
+      name: "require-main-ancestor",
+      modelName: "verification-source-git",
+      modelType: "@swamp/git",
+      method: "require_ancestor",
+      outputs: ["ancestryResult"],
     },
   ],
 };
@@ -128,6 +153,49 @@ function fixture() {
             gitHead: commit,
             cargoLockSha256: sha256(readFileSync("Cargo.lock")),
             checks: [{ name: "test", status: "passed" }],
+          }),
+        ],
+      },
+      {
+        name: "fetch-source",
+        modelName: "verification-source-git",
+        modelType: "@swamp/git",
+        method: "fetch",
+        status: "succeeded",
+        records: [
+          record("fetchResult", {
+            remote: "origin",
+            tags: false,
+            pruned: false,
+            raw: "",
+          }),
+        ],
+      },
+      {
+        name: "lookup-remote-main",
+        modelName: "verification-source-git",
+        modelType: "@swamp/git",
+        method: "remote_ref",
+        status: "succeeded",
+        records: [
+          record("remoteRefResult", {
+            remote: "origin",
+            ref: "refs/heads/main",
+            sha: remoteMain,
+          }),
+        ],
+      },
+      {
+        name: "require-main-ancestor",
+        modelName: "verification-source-git",
+        modelType: "@swamp/git",
+        method: "require_ancestor",
+        status: "succeeded",
+        records: [
+          record("ancestryResult", {
+            ancestor: remoteMain,
+            descendant: commit,
+            isAncestor: true,
           }),
         ],
       },
@@ -234,6 +302,22 @@ test("rejects commands and check sets that differ from policy", () => {
   assert.throws(
     () => validateEvidenceManifest(seal(wrongRustChecks), policy, commit),
     /checks do not match policy/,
+  );
+});
+
+test("rejects ancestry that is not bound to the looked-up remote main", () => {
+  const wrongAncestry = fixture();
+  const ancestry = JSON.parse(
+    Buffer.from(
+      wrongAncestry.steps[4].records[0].contentBase64,
+      "base64",
+    ).toString(),
+  );
+  ancestry.ancestor = "c".repeat(40);
+  wrongAncestry.steps[4].records[0] = record("ancestryResult", ancestry);
+  assert.throws(
+    () => validateEvidenceManifest(seal(wrongAncestry), policy, commit),
+    /ancestry is not bound to remote main/,
   );
 });
 

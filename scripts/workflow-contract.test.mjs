@@ -14,6 +14,32 @@ const workflows = Object.fromEntries(
 );
 const dependabot = readFileSync(".github/dependabot.yml", "utf8");
 const gitleaks = readFileSync(".gitleaks.toml", "utf8");
+const localVerification = readFileSync(
+  "workflows/workflow-local-verification.yaml",
+  "utf8",
+);
+const sourceGitModel = readFileSync(
+  "models/@swamp/git/verification-source-git.yaml",
+  "utf8",
+);
+const gitAncestryExtension = readFileSync(
+  "extensions/models/git_ancestry.ts",
+  "utf8",
+);
+const verificationPolicy = JSON.parse(
+  readFileSync("verification/policy.json", "utf8"),
+);
+
+function localStepBlock(name) {
+  const marker = `      - name: ${name}\n`;
+  const start = localVerification.indexOf(marker);
+  if (start < 0) return "";
+  const end = localVerification.indexOf(
+    "\n      - name:",
+    start + marker.length,
+  );
+  return localVerification.slice(start, end < 0 ? undefined : end);
+}
 
 function permissionMap(block, indent) {
   const marker = `${" ".repeat(indent)}permissions:\n`;
@@ -305,6 +331,31 @@ function mutateWorkflow(name, transform) {
 
 test("repository workflows satisfy the supply-chain contract", () => {
   assert.deepEqual(auditWorkflowContract(workflows, dependabot, gitleaks), []);
+});
+
+test("local verification requires the current remote main ancestor", () => {
+  assert.match(localStepBlock("fetch-source"), /methodName: fetch/);
+  assert.match(localStepBlock("lookup-remote-main"), /methodName: remote_ref/);
+  assert.match(localStepBlock("lookup-remote-main"), /step: fetch-source/);
+  assert.match(localStepBlock("lookup-remote-main"), /ref: refs\/heads\/main/);
+  assert.match(
+    localStepBlock("require-main-ancestor"),
+    /methodName: require_ancestor/,
+  );
+  assert.match(
+    localStepBlock("require-main-ancestor"),
+    /data\.latest\("verification-source-git", "remote-ref-refs-heads-main"\)\.attributes\.sha/,
+  );
+  assert.match(
+    localStepBlock("dependencies-root"),
+    /step: require-main-ancestor/,
+  );
+  assert.deepEqual(
+    verificationPolicy.steps.slice(0, 3).map((step) => step.name),
+    ["fetch-source", "lookup-remote-main", "require-main-ancestor"],
+  );
+  assert.match(sourceGitModel, /repoPath: \./);
+  assert.match(gitAncestryExtension, /type: "@swamp\/git"/);
 });
 
 test("contract rejects mutable refs and missing readable pin comments", () => {

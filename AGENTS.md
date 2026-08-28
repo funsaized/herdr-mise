@@ -42,3 +42,13 @@ schema of the CLI (commands, options, arguments) intended for agent
 consumption, run `swamp help [<command>...]` — e.g. `swamp help` returns
 the full tree, and `swamp help model method run` scopes to a subtree.
 <!-- END swamp managed section -->
+
+## Verification Scheduling
+
+- During parallel development, run only the narrow checks relevant to the change.
+- Run `local-verification` only when a branch is next to merge, after its final
+  commit includes current `origin/main`.
+- Do not change the source commit after verification; any new commit requires a
+  new run.
+- Never overlap Swamp workflow runs in the same checkout because models, build
+  outputs, and evidence runtime state are shared.

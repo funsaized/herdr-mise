@@ -7,19 +7,27 @@ instead of re-running the controls to discover failures.
 
 ## Run before opening or updating a pull request
 
-Commit the source first, then run:
+Use narrow checks during parallel development. When the branch is next to merge,
+sync it with current `origin/main`, commit the final tree, then run:
 
 ```sh
 swamp workflow validate local-verification
 swamp workflow run local-verification --input commit=$(git rev-parse HEAD)
 ```
 
-The workflow requires a clean worktree and binds every npm and Rust invocation
-to the supplied commit. It installs locked dependencies, installs Playwright
-Chromium, checks fallback and production Rust assets, and runs formatting,
-build, type, lint, unit, compatibility, browser, audit, bundle, and release
-controls. The final steps collect and publish evidence without changing the
-source branch.
+The workflow fetches from `origin`, looks up current remote `main`, then fails before
+dependency installation unless that commit is an ancestor of the supplied
+commit. It does not merge or rebase the source branch. It also requires a clean
+worktree and binds every npm and Rust invocation to the supplied commit. It
+installs locked dependencies, installs Playwright Chromium, checks fallback and
+production Rust assets, and runs formatting, build, type, lint, unit,
+compatibility, browser, audit, bundle, and release controls. The final steps
+collect and publish evidence without changing the source branch.
+
+Only the branch next to merge should run the full workflow. Other parallel
+branches should continue using narrow checks until they reach that point. If
+`main` advances before merge, sync again and produce evidence for the resulting
+new commit.
 
 ## Evidence branch
 
@@ -53,6 +61,7 @@ The `Local verification evidence` job checks out the pull request head commit
 and `ops/evidence`, then independently checks:
 
 - source commit and Git tree identity;
+- current-run fetch, remote-main lookup, and matching ancestry result;
 - workflow identity, required step order, and 24-hour freshness;
 - verification configuration checksums;
 - exact model, method, output set, status, and clean Git state for every step;

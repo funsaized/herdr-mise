@@ -14,6 +14,7 @@ import {
   auditFixture,
   auditWorkflow,
   checkCompatibility,
+  tableFor,
 } from "./check-herdr-compatibility.mjs";
 
 const manifestPath = "compatibility/herdr.json";
@@ -63,20 +64,24 @@ test("compatibility manifest is the complete supported release authority", () =>
 
 test("public compatibility tables are generated exactly from the manifest", () => {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const expected = manifest.supported
-    .map((entry) => `| \`${entry.release}\` | \`${entry.protocol}\` |`)
-    .join("\n");
+  const expected = tableFor(manifest.supported);
   for (const path of ["README.md", "docs/operations.md"]) {
     const document = readFileSync(path, "utf8");
-    const table = document.match(
-      /<!-- herdr-compatibility:start -->[\s\S]*?\n([\s\S]*?)\n<!-- herdr-compatibility:end -->/,
-    )?.[1];
+    const table = document
+      .match(
+        /<!-- herdr-compatibility:start -->[\s\S]*?\n([\s\S]*?)\n<!-- herdr-compatibility:end -->/,
+      )?.[1]
+      ?.trim();
     assert.ok(table, `${path} compatibility markers`);
-    assert.equal(
-      table,
-      `| Herdr release | Snapshot protocol |\n|---|---|\n${expected}`,
-    );
+    assert.equal(table, expected);
   }
+});
+
+test("compatibility table uses canonical formatter widths", () => {
+  assert.equal(
+    tableFor([{ release: "0.8.2", protocol: 20 }]),
+    "| Herdr release | Snapshot protocol |\n| ------------- | ----------------- |\n| `0.8.2`       | `20`              |",
+  );
 });
 
 test("adapter mapping audit rejects every manifest fixture absent from Rust cases", () => {

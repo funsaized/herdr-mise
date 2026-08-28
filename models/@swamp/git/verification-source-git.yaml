@@ -1,0 +1,10 @@
+type: '@swamp/git'
+typeVersion: 2026.08.25.1
+id: dc3f1035-7891-4879-8fc3-961645514d08
+name: verification-source-git
+version: 1
+tags: {}
+globalArguments:
+  repoPath: .
+  remote: origin
+methods: {}

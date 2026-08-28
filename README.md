@@ -115,15 +115,15 @@ matrix below; only snapshots outside that manifest-derived set trigger
 `unsupportedProtocol`. Other product versions on those protocols are accepted
 but are not part of the verified release matrix.
 
-<!-- prettier-ignore-start -->
 <!-- herdr-compatibility:start -->
+
 | Herdr release | Snapshot protocol |
-|---|---|
-| `0.7.5` | `17` |
-| `0.8.0` | `19` |
-| `0.8.2` | `20` |
+| ------------- | ----------------- |
+| `0.7.5`       | `17`              |
+| `0.8.0`       | `19`              |
+| `0.8.2`       | `20`              |
+
 <!-- herdr-compatibility:end -->
-<!-- prettier-ignore-end -->
 
 The authoritative evidence is `compatibility/herdr.json`; each row names its
 immutable upstream commit and manually sanitized fixture. Run

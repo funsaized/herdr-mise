@@ -26,8 +26,8 @@ settings, sign releases, publish artifacts, or replace remote security scans.
 
 The system separates local execution from remote enforcement:
 
-- The developer commits the source and manually runs `local-verification` for
-  that exact commit.
+- When a branch is next to merge, the developer syncs current `main`, commits
+  the final source, and manually runs `local-verification` for that exact commit.
 - Swamp runs the controls, stores structured method data, builds a manifest,
   and appends it to `ops/evidence`.
 - GitHub's `Local verification evidence` job checks the pull-request head and
@@ -40,7 +40,7 @@ The system separates local execution from remote enforcement:
 
 ```mermaid
 flowchart TD
-    A["Commit a clean source tree"] --> B["Run local-verification for exact SHA"]
+    A["Sync main and commit a clean source tree"] --> B["Run local-verification for exact SHA"]
 
     subgraph SWAMP["Local Swamp"]
         B --> C["npm, Rust, browser, audit, bundle, release checks"]
@@ -98,6 +98,7 @@ methods; it does not invoke ad hoc shell integration wrappers.
 | `verification-root`         | `@funsaized/npm/project`           | Install root dependencies and run allowlisted npm verification scripts | `models/@funsaized/npm/project/verification-root.yaml`               |
 | `verification-client`       | `@funsaized/npm/project`           | Install locked client dependencies                                     | `models/@funsaized/npm/project/verification-client.yaml`             |
 | `verification-rust`         | `@funsaized/herdr-mise-rust`       | Run commit-bound fallback and production Rust checks                   | `models/@funsaized/herdr-mise-rust/verification-rust.yaml`           |
+| `verification-source-git`   | `@swamp/git`                       | Fetch and require current remote `main` ancestry                       | `models/@swamp/git/verification-source-git.yaml`                     |
 | `verification-evidence`     | `@funsaized/verification-evidence` | Collect current-run data and create the canonical evidence manifest    | `models/@funsaized/verification-evidence/verification-evidence.yaml` |
 | `verification-evidence-git` | `@swamp/git`                       | Operate the dedicated evidence checkout                                | `models/@swamp/git/verification-evidence-git.yaml`                   |
 
@@ -114,9 +115,9 @@ swamp model validate verification-root --json
 | Extension                          | Version        | Source                                       | Used capability                                     |
 | ---------------------------------- | -------------- | -------------------------------------------- | --------------------------------------------------- |
 | `@funsaized/npm`                   | `2026.08.26.3` | Swamp registry                               | Commit-bound npm `ci` and allowlisted `run` methods |
-| `@swamp/git`                       | `2026.08.25.1` | Swamp registry                               | Structured pull, commit, and push operations        |
+| `@swamp/git`                       | `2026.08.25.1` | Swamp registry plus `git_ancestry.ts`        | Structured Git operations and ancestry assertion    |
 | `@funsaized/herdr-mise-rust`       | `2026.08.27.1` | `extensions/models/herdr_mise_rust.ts`       | Project-specific Rust verification                  |
-| `@funsaized/verification-evidence` | `2026.08.27.1` | `extensions/models/verification_evidence.ts` | Evidence collection and hashing                     |
+| `@funsaized/verification-evidence` | `2026.08.28.1` | `extensions/models/verification_evidence.ts` | Evidence collection and hashing                     |
 
 Registry extension versions and integrity checksums are recorded in
 `extensions/models/upstream_extensions.json`. Pulled sources and bundles live
@@ -185,29 +186,33 @@ swamp workflow run local-verification \
   --json
 ```
 
-The source worktree must remain clean throughout the run. A wrong SHA or a
-tracked change stops the workflow before evidence publication.
+The workflow first fetches from `origin`, looks up current remote `main`, then requires it
+to be an ancestor of the supplied commit. The source worktree must remain clean
+throughout the run. A stale branch, wrong SHA, or tracked change stops the
+workflow before evidence publication; the workflow never merges or rebases the
+source branch.
 
 ### Workflow DAG
 
-The workflow is a fail-fast linear chain. It contains 17 verification controls
-followed by four publication steps:
+The workflow is a fail-fast linear chain. It contains three source preflight
+steps, 17 verification controls, and four publication steps:
 
 ```mermaid
 flowchart LR
-    A["root npm ci"] --> B["client npm ci"]
-    B --> C["install Chromium"]
-    C --> D["fallback Rust tests"]
-    D --> E["format and build"]
-    E --> F["Rust fmt, check, test"]
-    F --> G["typecheck, lint, unit tests"]
-    G --> H["compatibility and visual tests"]
-    H --> I["token, accessibility, bundle-budget checks"]
-    I --> J["bundle and release validation"]
-    J --> K["fast-forward evidence checkout"]
-    K --> L["collect manifest"]
-    L --> M["commit evidence"]
-    M --> N["non-force push ops/evidence"]
+    A["fetch origin and look up remote main"] --> B["require main ancestry"]
+    B --> C["root npm ci"]
+    C --> D["client npm ci and install Chromium"]
+    D --> E["fallback Rust tests"]
+    E --> F["format and build"]
+    F --> G["Rust fmt, check, test"]
+    G --> H["typecheck, lint, unit tests"]
+    H --> I["compatibility and visual tests"]
+    I --> J["token, accessibility, bundle-budget checks"]
+    J --> K["bundle and release validation"]
+    K --> L["fast-forward evidence checkout"]
+    L --> M["collect manifest"]
+    M --> N["commit evidence"]
+    N --> O["non-force push ops/evidence"]
 ```
 
 The exact step names, model IDs, methods, arguments, expected outputs, artifact
@@ -390,12 +395,14 @@ durable subset published for CI and audit.
 
 Use this order for every source update:
 
-1. Commit all source changes and confirm the worktree is clean.
-2. Validate the workflow definition.
-3. Run `local-verification` for `git rev-parse HEAD`.
-4. Confirm the workflow report shows 21 succeeded, 0 failed, and 0 skipped.
-5. Optionally run the validator against the local evidence checkout.
-6. Push the source branch and wait for GitHub checks.
+1. Use narrow checks while developing in parallel.
+2. When the branch is next to merge, sync current `origin/main`.
+3. Commit all source changes and confirm the worktree is clean.
+4. Validate the workflow definition.
+5. Run `local-verification` for `git rev-parse HEAD`.
+6. Confirm the workflow report shows 24 succeeded, 0 failed, and 0 skipped.
+7. Optionally run the validator against the local evidence checkout.
+8. Push the unchanged source commit and wait for GitHub checks.
 
 ```bash
 test -z "$(git status --porcelain)"
@@ -415,12 +422,12 @@ the source branch and requires a new workflow run before pushing that commit.
 
 ## Failure recovery
 
-### Wrong SHA or dirty source tree
+### Stale main, wrong SHA, or dirty source tree
 
-The first model method fails before useful verification and later steps skip.
-Commit or remove the tracked changes, use the exact `git rev-parse HEAD` value,
-inspect the workflow report, and start a new run. Do not publish evidence for a
-different SHA.
+The preflight or first verification method fails before useful verification and
+later steps skip. Sync current `origin/main` when needed, commit or remove
+tracked changes, use the exact `git rev-parse HEAD` value, inspect the workflow
+report, and start a new run. Do not publish evidence for a different SHA.
 
 ### Evidence missing in a pull-request check
 
@@ -480,6 +487,7 @@ swamp doctor extensions --json
 swamp model validate verification-root --json
 swamp model validate verification-client --json
 swamp model validate verification-rust --json
+swamp model validate verification-source-git --json
 swamp model validate verification-evidence --json
 swamp model validate verification-evidence-git --json
 swamp workflow validate local-verification --json
@@ -507,11 +515,14 @@ npm run lint
 Local extension checks:
 
 ```bash
-~/.swamp/deno/deno fmt --check extensions/models/*.ts
-
-~/.swamp/deno/deno check \
+~/.swamp/deno/deno check --no-lock --node-modules-dir=auto \
+  extensions/models/git_ancestry.ts \
   extensions/models/herdr_mise_rust.ts \
   extensions/models/verification_evidence.ts
+
+~/.swamp/deno/deno test --no-lock --node-modules-dir=auto \
+  --allow-run=git --allow-read --allow-write \
+  extensions/tests/git_ancestry.test.ts
 ```
 
 Swamp checks:

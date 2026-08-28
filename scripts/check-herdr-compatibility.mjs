@@ -87,11 +87,21 @@ export function auditWorkflow(workflow) {
   return errors;
 }
 
-function tableFor(entries) {
-  const rows = entries
-    .map((entry) => `| \`${entry.release}\` | \`${entry.protocol}\` |`)
-    .join("\n");
-  return `| Herdr release | Snapshot protocol |\n|---|---|\n${rows}`;
+export function tableFor(entries) {
+  const rows = entries.map((entry) => [
+    `\`${entry.release}\``,
+    `\`${entry.protocol}\``,
+  ]);
+  const widths = ["Herdr release", "Snapshot protocol"].map((header, index) =>
+    Math.max(header.length, ...rows.map((row) => row[index].length)),
+  );
+  const row = (values) =>
+    `| ${values.map((value, index) => value.padEnd(widths[index])).join(" | ")} |`;
+  return [
+    row(["Herdr release", "Snapshot protocol"]),
+    row(widths.map((width) => "-".repeat(width))),
+    ...rows.map(row),
+  ].join("\n");
 }
 
 function checkUpstream(entry, directory, errors) {
@@ -177,9 +187,11 @@ export function checkCompatibility(args = []) {
   const expectedTable = tableFor(manifest.supported);
   for (const path of ["README.md", "docs/operations.md"]) {
     const document = read(path);
-    const actual = document.match(
-      /<!-- herdr-compatibility:start -->[\s\S]*?\n([\s\S]*?)\n<!-- herdr-compatibility:end -->/,
-    )?.[1];
+    const actual = document
+      .match(
+        /<!-- herdr-compatibility:start -->[\s\S]*?\n([\s\S]*?)\n<!-- herdr-compatibility:end -->/,
+      )?.[1]
+      ?.trim();
     if (actual !== expectedTable)
       errors.push(`${path}: compatibility table drift`);
   }
