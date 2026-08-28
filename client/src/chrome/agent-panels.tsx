@@ -40,7 +40,7 @@ function stateColor(agent: AgentMachine) {
 }
 
 function useClock(active: boolean) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (!active) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);

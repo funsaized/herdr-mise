@@ -121,7 +121,6 @@ export function App() {
   }, []);
   useEffect(() => {
     if (coarse.mode !== "disconnected") return;
-    setLastUpdateSeconds(clientStore.lastUpdateSeconds());
     const timer = window.setInterval(
       () => setLastUpdateSeconds(clientStore.lastUpdateSeconds()),
       1_000,
