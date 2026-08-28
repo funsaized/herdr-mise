@@ -63,6 +63,12 @@ and `ops/evidence`, then independently checks:
 CI fails closed when evidence is absent, stale, duplicated, malformed, or does
 not match the checked-out source commit.
 
+The evidence job runs for pull requests and non-`main` branch pushes. It skips
+post-merge pushes to `main` because GitHub creates a new merge commit only after
+the pull request gate passes, so exact-commit evidence cannot exist for that SHA
+before merge. The shadow and security jobs still run against the resulting
+`main` commit.
+
 ## Trust boundary and migration
 
 The evidence is a claim made by the local verification environment. Git makes

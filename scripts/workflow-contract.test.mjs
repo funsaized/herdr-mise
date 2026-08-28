@@ -148,8 +148,19 @@ export function auditWorkflowContract(
   ) {
     errors.push("ci.yml: exact local verification evidence gate is missing");
   }
-  if (/^ {4,}(?:if|continue-on-error):/m.test(evidence)) {
-    errors.push("ci.yml: evidence gate must be unconditional and blocking");
+  const evidenceConditions = evidence.match(/^    if: .+$/gm) ?? [];
+  if (
+    JSON.stringify(evidenceConditions) !==
+    JSON.stringify([
+      "    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'",
+    ])
+  ) {
+    errors.push(
+      "ci.yml: evidence gate must run on pull requests and non-main pushes only",
+    );
+  }
+  if (/^ {4,}continue-on-error:/m.test(evidence)) {
+    errors.push("ci.yml: evidence gate must remain blocking");
   }
   if (!/^  push:\n    branches-ignore:\n      - ops\/evidence$/m.test(ci)) {
     errors.push("ci.yml: evidence branch push exclusion is missing");
@@ -383,7 +394,7 @@ test("contract rejects missing non-release controls and weakened scanner configu
   );
 });
 
-test("contract rejects conditional evidence and shadow jobs", () => {
+test("contract rejects incorrect evidence and shadow job conditions", () => {
   const conditionalEvidence = mutateWorkflow("ci.yml", (source) =>
     source.replace("  evidence:\n", "  evidence:\n    if: false\n"),
   );
@@ -407,7 +418,7 @@ test("contract rejects conditional evidence and shadow jobs", () => {
   ]) {
     assert.ok(
       auditWorkflowContract(candidate, dependabot, gitleaks).some((error) =>
-        /unconditional|must run/.test(error),
+        /unconditional|must run|remain blocking/.test(error),
       ),
     );
   }
