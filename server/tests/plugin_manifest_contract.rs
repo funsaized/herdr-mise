@@ -10,9 +10,9 @@ fn repository_root() -> PathBuf {
 }
 
 fn read_toml(path: PathBuf) -> Value {
-    fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
-        .parse()
+    let source = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    toml::from_str(&source)
         .unwrap_or_else(|error| panic!("failed to parse {}: {error}", path.display()))
 }
 

@@ -113,7 +113,7 @@ mod tests {
                 .expect("read schema"),
         )
         .expect("parse schema");
-        let schema = jsonschema::JSONSchema::compile(&schema_value).expect("compile schema");
+        let schema = jsonschema::validator_for(&schema_value).expect("compile schema");
 
         for name in [
             "snapshot.v1.json",

@@ -20,7 +20,7 @@ function include(item) {
 }
 include(entry[1]);
 const webgl = entries.find(([key, item]) =>
-  /WebGLRenderer/i.test(`${key} ${item.name ?? ""} ${item.file}`),
+  /WebGLRenderer|browserAll/i.test(`${key} ${item.name ?? ""} ${item.file}`),
 );
 if (!webgl)
   throw new Error("WebGL renderer chunk missing from the production graph.");
