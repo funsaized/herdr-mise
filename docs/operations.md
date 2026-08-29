@@ -14,8 +14,9 @@ UI state. Its 86 board, observed history, settings, selection, and done timers a
 not Herdr records and do not survive site-data loss.
 
 The architecture and ownership boundaries are documented in
-[architecture.md](architecture.md); current product behavior and release gates
-are documented in the root [README](../README.md).
+[architecture.md](architecture.md), product behavior in the root
+[README](../README.md), contributor gates in [CONTRIBUTING.md](../CONTRIBUTING.md),
+and release policy in [releasing.md](releasing.md).
 
 ## Local run
 
@@ -221,8 +222,9 @@ invalid-query fallback, storage isolation, native non-`/ws` delegation
 (Vite HMR connects), and liveness beyond the client stale timeout.
 
 This is a client-development harness check, not full-product release
-acceptance. Use the root README's verification commands for the integrated
-Rust server, source-loss recovery, accessibility, packaging, and release gates.
+acceptance. Use [CONTRIBUTING.md](../CONTRIBUTING.md#verification-commands) for
+the integrated Rust server, source-loss recovery, accessibility, packaging,
+and release gates.
 
 ### Plain Vite limitations
 
@@ -551,196 +553,9 @@ sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.1.0-aarch64-apple-darwi
 
 ### Publishing a signed release
 
-Publication is **tag-triggered**. Pushing a matching `v*` tag is the only path
-that signs, notarizes, and publishes. The workflow classifies SemVer
-prereleases and stable tags before publication. Pull requests and
-`workflow_dispatch` builds validate without secrets or publication.
-
-#### Preconditions
-
-1. Working tree matches the intended release commit on `main` (or the branch
-   you intentionally tag). No dirty release-critical paths.
-2. `server/Cargo.toml` `version` is the single source of truth (currently
-   `0.1.0`). The tag **must** be that value with a `v` prefix (`v0.1.0`). The
-   workflow fails if `GITHUB_REF_NAME != v$version`.
-3. Local gates you care about have passed on that commit
-   (`npm test`, `npm run build`, `cargo test --workspace --locked`,
-   `npm run validate:release`, etc.).
-4. The six Apple secrets below are already set on the GitHub repository
-   (required only for the tagged macOS jobs).
-
-#### One-time Apple trust setup
-
-Use a **Developer ID Application** certificate (not Mac App Distribution).
-Account Holder access is required; Apple limits an organization to five
-Developer ID Application certificates
-([Apple certificate docs](https://developer.apple.com/help/account/certificates/create-developer-id-certificates)).
-
-1. In Certificates, Identifiers & Profiles, create a **Developer ID
-   Application** certificate, install it (with its private key) in Keychain
-   Access, and export that identity as a password-protected `.p12`.
-2. Record the full signing identity string shown by Keychain / `security`
-   (form: `Developer ID Application: … (TEAMID)`).
-3. In App Store Connect → Users and Access → Integrations → App Store Connect
-   API, create a **Team Key** (not an Individual Key) with the App Manager role.
-   Individual keys cannot use `notarytool`. Download the `.p8` **once**, and
-   record the Key ID and Issuer ID
-   ([Apple notarization docs](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)).
-4. Keep the `.p12`, its password, and the `.p8` on disk only. Never paste
-   them into chat, tickets, or shell history.
-
-Encode file secrets locally without printing values:
-
-```sh
-openssl base64 -A -in DeveloperID.p12 -out certificate.p12.base64
-openssl base64 -A -in AuthKey_KEYID.p8 -out AuthKey.p8.base64
-```
-
-From a checkout with `gh` authenticated to the repository, set exactly these
-six secrets (interactive commands read a hidden value from stdin and do not
-echo it; file redirects never place the payload on the argv list):
-
-```sh
-gh secret set APPLE_CERTIFICATE_P12_BASE64 < certificate.p12.base64
-gh secret set APPLE_CERTIFICATE_PASSWORD
-gh secret set APPLE_SIGNING_IDENTITY
-gh secret set APPLE_API_KEY_ID
-gh secret set APPLE_API_ISSUER_ID
-gh secret set APPLE_API_PRIVATE_KEY_BASE64 < AuthKey.p8.base64
-```
-
-| Secret                         | Contents                                           |
-| ------------------------------ | -------------------------------------------------- |
-| `APPLE_CERTIFICATE_P12_BASE64` | base64 of the Developer ID Application `.p12`      |
-| `APPLE_CERTIFICATE_PASSWORD`   | password protecting that `.p12`                    |
-| `APPLE_SIGNING_IDENTITY`       | full `Developer ID Application: …` identity string |
-| `APPLE_API_KEY_ID`             | App Store Connect API key ID                       |
-| `APPLE_API_ISSUER_ID`          | App Store Connect issuer ID                        |
-| `APPLE_API_PRIVATE_KEY_BASE64` | base64 of the API key `.p8`                        |
-
-Delete the local `.base64` helpers after upload. Never commit source certs or
-encoded copies. GitHub's
-[temporary-keychain pattern](https://docs.github.com/en/actions/how-tos/use-cases-and-examples/deploying/installing-an-apple-certificate-on-macos-runners-for-xcode-development)
-is what the workflow uses on the runner.
-
-#### Tag and publish
-
-On the release commit:
-
-```sh
-# confirm authoritative version
-sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml
-# -> 0.1.0  implies tag v0.1.0
-
-git status   # clean
-git tag -a v0.1.0 -m "v0.1.0"
-git push origin v0.1.0
-```
-
-Then:
-
-1. Open the Actions **Release** workflow for that tag and wait for
-   `build` → `publish` → `verify-public-release`.
-2. Confirm the GitHub release for the tag is not marked prerelease, is Latest,
-   is titled with the tag name, and lists exactly six assets:
-   - `herdr-mise-v0.1.0-aarch64-apple-darwin.tar.gz` + `.sha256`
-   - `herdr-mise-v0.1.0-x86_64-apple-darwin.tar.gz` + `.sha256`
-   - `herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz` + `.sha256`
-3. Spot-check a public browser download URL of the form
-   `https://github.com/funsaized/herdr-mise/releases/download/v0.1.0/...`
-   and re-run the checksum + extract steps from the install section.
-
-#### What the tagged workflow does
-
-- Matrix: `macos-15` → `aarch64-apple-darwin`, `macos-15-intel` →
-  `x86_64-apple-darwin`, `ubuntu-24.04` → `x86_64-unknown-linux-gnu`.
-- macOS jobs import the P12 into an ephemeral keychain, sign with
-  `--options runtime --timestamp`, submit a ZIP via API-key
-  `notarytool --wait`, then re-verify the Developer ID signature. Missing
-  secrets fail closed.
-  Credential files and the keychain are deleted in an `always()` cleanup.
-- Packaging writes `herdr-mise-v<VERSION>-<TARGET>.tar.gz` plus a SHA-256
-  sidecar; `scripts/verify-release-artifact.sh` runs before upload.
-- `publish` creates or validates the release class for the tag, uploads all six
-  files with `--clobber`, and asserts the final asset name set is exact.
-- `verify-public-release` downloads via the unauthenticated public API /
-  browser URLs and re-runs the full verifier (`VERIFY_CODESIGN=1` on macOS).
-
-#### Standalone CLI notarization (no stapling)
-
-This product is a standalone Mach-O command-line executable, not an app
-bundle. There is **no stapling target**. Applicable evidence is:
-
-1. `notarytool` reports the submission accepted,
-2. the Developer ID signature remains on the binary, and
-3. the signature retains the hardened-runtime flag and secure timestamp.
-
-Do not claim or require `xcrun stapler` for this binary. Also do not use
-Apple's app-assessment tool as the acceptance gate for the extracted bare
-executable: it can reject a valid, accepted CLI because the code is not an
-app bundle. The notarization service result and Developer ID signature are
-the relevant evidence.
-
-#### Runner horizon
-
-The workflow pins the current explicit `macos-15-intel` x86_64 label for
-release reproducibility. GitHub currently documents support through **August
-2027** (migration path after the
-[macOS 13 retirement](https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/)
-and [runner-images #13045](https://github.com/actions/runner-images/issues/13045)).
-GitHub also publishes newer Intel images, so review the
-[current runner inventory](https://github.com/actions/runner-images#available-images)
-before each release and move the pin deliberately. Do not silently drop the
-Intel artifact when a label is retired.
-
-### Failure recovery
-
-**Missing or mis-scoped Apple secrets.** Tagged macOS jobs assert every
-secret is non-empty and fail before packaging. Fix the secret with
-`gh secret set …` (same six names), then re-run a purely transient failure with
-the same complete inputs. Any source or acceptance correction requires a new
-version and tag. PR / manual runs never need these secrets.
-
-**Notarization rejection.** Open the failed **Notarize signed CLI binary**
-step log for the `notarytool` submission id. On a machine with the API key
-material loaded into temporary files (not committed), fetch the Apple log:
-
-```sh
-xcrun notarytool log SUBMISSION_ID \
-  --key /path/to/AuthKey_KEYID.p8 \
-  --key-id KEYID \
-  --issuer ISSUER_ID
-```
-
-Common causes: wrong certificate type (must be Developer ID Application),
-missing hardened runtime / timestamp, or an API key without notarization
-permission. Fix the signing inputs, update secrets if needed, and re-run the
-tag workflow.
-
-**Partial GitHub asset upload.** `publish` allows an existing matching release for
-the same tag/title to retain any **subset** of the six expected names, rejects
-unexpected names, then re-uploads all six with `--clobber` and diffs the final
-set. Re-run the failed `publish` (or the whole tag workflow). Do not hand-edit
-release assets into a different naming scheme.
-
-**Code-signature verification failure on a public macOS download.** Confirm
-you extracted the public release asset (not a local unsigned build), then
-inspect and verify it explicitly:
-
-```sh
-tar -xzf herdr-mise-v0.1.0-aarch64-apple-darwin.tar.gz
-codesign --verify --deep --strict --verbose=2 ./herdr-mise
-codesign -dv --verbose=4 ./herdr-mise
-```
-
-Require a Developer ID Application authority, a TeamIdentifier, the runtime
-flag, and a secure timestamp. If CI's `verify-public-release` failed the same
-check, treat it as a signing defect and re-run after fixing the certificate or
-packaging path.
-
-**Intel runner / platform risk.** If `macos-15-intel` jobs queue forever or
-the label is removed before Aug 2027, stop and update the workflow labels —
-do not ship a release missing `x86_64-apple-darwin`.
+Signing, Apple trust setup, tag publication, public verification, and failure
+recovery are maintained in the sole operator runbook:
+[Release operations](releasing.md).
 
 ### Verifying the binary from a source tree
 

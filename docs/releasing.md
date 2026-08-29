@@ -1,8 +1,8 @@
 # Release operations
 
-This is the decision trail and operator runbook for release candidates and
-stable releases. It does not authorize a tag or publication; the GitHub
-releases page is authoritative for what has been published.
+This is the operator runbook for release candidates and stable releases. It
+does not authorize a tag or publication; the GitHub releases page is
+authoritative for what has been published.
 
 ## Release decision trail
 
@@ -18,13 +18,11 @@ candidate commit, notes, and acceptance record are complete. Published tags
 are immutable: never move, force-update, delete-and-reuse, or otherwise reuse a
 release tag.
 
-Historical exception: on 2026-08-14, under explicit owner authorization and
-before stable acceptance began, `v0.1.0-rc.1` was replaced to incorporate the
-TUI into the first-release contract. The public tag now resolves to
-`ea74ac5f95afb1052eb41d87c14c4f28d03d932b`; all six assets and three archive
-checksums were replaced. The old non-TUI commit and assets are invalidated.
-This disclosure documents an exceptional migration, not a reusable release
-procedure. RC1 is frozen from this point forward.
+The first stable release, `v0.1.0`, is complete. Its RC1 acceptance contract is
+retained as a historical, test-consumed record in `stable-acceptance.md`; it
+must not be reused for another stable release. A future stable release needs a
+new accepted RC, evidence contract, and validator inputs before its tag is
+created.
 
 Both release classes retain the same three platform archives and three SHA-256
 sidecars, signing/notarization checks, exact-six-asset checks, rerun validation,
@@ -33,6 +31,11 @@ verified not to be Latest. Stable releases are non-prereleases and must become
 the public Latest release.
 
 ## Stable acceptance gate
+
+The checked-in acceptance schema, template, and evidence describe v0.1.0 only.
+Before another stable tag is created, replace those inputs with a contract bound
+to the new accepted RC and promotion commit. Reusing the v0.1.0 RC1 evidence is
+not valid acceptance for a later release.
 
 Stable publication fails closed before release creation or upload. The
 `stable_acceptance` workflow job runs only for a stable tag and is a dependency
@@ -43,17 +46,17 @@ malformed, incomplete, failing, or context-mismatched evidence blocks the job.
 The validator must also emit its exact success marker; exit code zero alone is
 not accepted. RC release workflows do not read this secret.
 
-The checked-in acceptance validator owns the required BL-006 gate list and JSON
-Schema. Its evidence has two deliberately separate identities:
+The checked-in acceptance validator owns the historical v0.1.0 gate list and
+JSON Schema. Its evidence has two deliberately separate identities:
 
 - `accepted_rc` identifies public prerelease `v0.1.0-rc.1`, its immutable tag
   commit, and the public archive URLs and SHA-256 values actually exercised.
   Every required acceptance row repeats that RC identity and references one or
   more of those exact artifacts. Public-artifact, manual, and multi-day soak
   results therefore describe the public RC they really tested.
-- `promotion` identifies the future stable tag, stable Cargo version, and exact
-  accepted `main` commit. The stable workflow passes its tag/version/commit to
-  the validator and requires an exact match before publication.
+- `promotion` identifies the v0.1.0 stable tag, Cargo version, and exact
+  accepted `main` commit. The stable workflow passed its tag/version/commit to
+  the validator and required an exact match before publication.
 
 Stable workflow asset bytes and checksums are not acceptance inputs. In
 particular, the gate never asks an unpublished stable run to prove a public
@@ -67,23 +70,18 @@ agent names, workspace paths, private Herdr payloads, credentials, personal
 deployment identifiers, or unresolved placeholders. Never manufacture `PASS`
 for a manual or elapsed-time gate.
 
-### Supported RC-to-stable flow
+### Recorded v0.1.0 RC-to-stable flow
 
-1. Verify public `v0.1.0-rc.1` archives and sidecars and record their exact URLs,
-   targets, checksums, and immutable RC tag commit.
-   Once acceptance begins, freeze that RC release: do not rerun its tag workflow,
-   replace its assets, move its tag, or otherwise change the accepted bytes.
-2. Execute every BL-006 automated, manual, and elapsed multi-day soak gate
-   against those installed public RC artifacts. Rows remain `NOT_RUN` or `FAIL`
-   until the recorded action really passes.
-3. Select and review one exact `main` commit for promotion. It must contain the
-   stable Cargo version and stable release-notes template. Record that exact
-   commit, stable version, and prospective stable tag in `promotion`.
-4. Validate and sanitize the complete evidence record, then configure the
-   protected environment secret before creating the stable tag.
-5. Create the stable tag only at the accepted `main` commit. The first tag run
-   validates promotion identity and complete RC acceptance before creating or
-   uploading a release.
+1. Public `v0.1.0-rc.1` archives, sidecars, URLs, targets, checksums, and the
+   immutable RC tag commit were recorded and frozen.
+2. Every BL-006 automated, manual, and elapsed multi-day soak gate ran against
+   those installed public RC artifacts.
+3. One exact `main` commit containing the stable Cargo version and release-notes
+   template was selected and recorded in `promotion`.
+4. The complete evidence record was validated, sanitized, and configured in the
+   protected environment before tagging.
+5. The stable tag was created at the accepted commit, and the workflow validated
+   promotion identity and RC acceptance before publication.
 
 This process does not use a failed stable job to discover a digest, construct
 evidence, or unlock a rerun. A rerun may only retry a transient failure with the
@@ -108,6 +106,108 @@ endings/trailing newlines and appends `## Checksums` plus one
 sidecars. Existing stable notes are normalized before rerun comparison, avoiding
 CRLF or trailing-newline-only failures while still blocking content drift. RCs
 may continue to use generated notes and are always visibly marked prerelease.
+
+## Signing and publishing
+
+Publication is tag-triggered. Pull requests and manual workflow runs validate
+without publication credentials; only a matching `v*` tag can sign, notarize,
+and publish assets.
+
+### Preconditions
+
+Before tagging:
+
+1. Confirm the working tree is clean and the tag target is the intended commit.
+2. Confirm `server/Cargo.toml` contains the intended version and
+   `docs/releases/v<VERSION>.md` contains complete release notes.
+3. For a stable tag, install the new accepted-RC contract and complete its
+   protected-environment evidence before creating the tag.
+4. Run the relevant local gates from [CONTRIBUTING.md](../CONTRIBUTING.md).
+5. Confirm the Apple signing and notarization secrets are configured for tagged
+   macOS jobs.
+
+### Apple trust setup
+
+Use a **Developer ID Application** certificate, not a Mac Distribution
+certificate. Export the identity and private key as a password-protected `.p12`.
+Create an App Store Connect **Team Key** with the App Manager role; Individual
+Keys cannot use `notarytool`. Download its `.p8` once and retain its Key ID and
+Issuer ID.
+
+Encode file credentials locally without printing their values:
+
+```sh
+openssl base64 -A -in DeveloperID.p12 -out certificate.p12.base64
+openssl base64 -A -in AuthKey_KEYID.p8 -out AuthKey.p8.base64
+```
+
+Set these repository secrets from a trusted checkout:
+
+```sh
+gh secret set APPLE_CERTIFICATE_P12_BASE64 < certificate.p12.base64
+gh secret set APPLE_CERTIFICATE_PASSWORD
+gh secret set APPLE_SIGNING_IDENTITY
+gh secret set APPLE_API_KEY_ID
+gh secret set APPLE_API_ISSUER_ID
+gh secret set APPLE_API_PRIVATE_KEY_BASE64 < AuthKey.p8.base64
+```
+
+| Secret                         | Contents                                           |
+| ------------------------------ | -------------------------------------------------- |
+| `APPLE_CERTIFICATE_P12_BASE64` | base64 of the Developer ID Application `.p12`      |
+| `APPLE_CERTIFICATE_PASSWORD`   | password protecting that `.p12`                    |
+| `APPLE_SIGNING_IDENTITY`       | full `Developer ID Application: …` identity string |
+| `APPLE_API_KEY_ID`             | App Store Connect API key ID                       |
+| `APPLE_API_ISSUER_ID`          | App Store Connect issuer ID                        |
+| `APPLE_API_PRIVATE_KEY_BASE64` | base64 of the API key `.p8`                        |
+
+Delete the local encoded files after upload. Never commit certificates, keys,
+or encoded copies.
+
+### Tag and publish
+
+Derive the tag from the authoritative Cargo version, then create it only after
+reviewing the exact commit:
+
+```sh
+VERSION=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml)
+TAG=v$VERSION
+test -z "$(git status --porcelain)"
+git tag -a "$TAG" -m "$TAG"
+git push origin "$TAG"
+```
+
+Wait for the **Release** workflow's build, publish, and public-verification jobs.
+Confirm the release class and Latest status, then confirm exactly six assets:
+three platform archives and their three `.sha256` sidecars. Finally, download an
+asset anonymously and rerun its checksum and archive verifier.
+
+### Tagged workflow contract
+
+- `macos-15` builds `aarch64-apple-darwin`, `macos-15-intel` builds
+  `x86_64-apple-darwin`, and `ubuntu-24.04` builds
+  `x86_64-unknown-linux-gnu`.
+- macOS jobs import the P12 into an ephemeral keychain, sign with hardened
+  runtime and a secure timestamp, submit through `notarytool --wait`, verify the
+  Developer ID signature, and delete credentials in `always()` cleanup.
+- Packaging emits one archive and SHA-256 sidecar per target and runs
+  `scripts/verify-release-artifact.sh` before upload.
+- Publication rejects unexpected assets, uploads the exact expected set, and
+  verifies the public release through anonymous downloads.
+
+### Standalone CLI notarization
+
+The macOS artifact is a standalone Mach-O command-line executable, not an app
+bundle. There is no stapling target. Applicable evidence is an accepted
+`notarytool` submission plus a Developer ID signature retaining hardened runtime
+and a secure timestamp. Do not use app-bundle assessment as the acceptance gate
+for the extracted CLI.
+
+### Intel runner horizon
+
+The release workflow currently pins `macos-15-intel`. Review GitHub's current
+runner inventory before each release and move the pin deliberately when that
+label approaches retirement. Do not silently drop the Intel archive.
 
 ## Failure recovery
 
@@ -135,6 +235,26 @@ release clearly and remove its release record only through an explicit incident
 decision; never move or reuse its tag. Source rollback does not rewrite a
 published release.
 
+For an Apple notarization rejection, retrieve the diagnostic log with temporary
+local key material:
+
+```sh
+xcrun notarytool log SUBMISSION_ID \
+  --key /path/to/AuthKey_KEYID.p8 \
+  --key-id KEYID \
+  --issuer ISSUER_ID
+```
+
+Wrong certificate type, missing hardened runtime or timestamp, and insufficient
+Team Key permissions are common causes. Fix credentials or source as
+appropriate; credential-only transient failures may be rerun, while source or
+acceptance changes require a new version and tag.
+
+If public macOS signature verification fails, inspect the extracted public
+artifact with `codesign --verify --deep --strict --verbose=2 ./herdr-mise` and
+`codesign -dv --verbose=4 ./herdr-mise`. Require a Developer ID Application
+authority, TeamIdentifier, runtime flag, and secure timestamp.
+
 ## RC retirement after stable verification
 
 RC retirement is a separate, destructive operation and is never part of this
@@ -142,14 +262,15 @@ workflow. Keep every RC intact until the stable release has passed anonymous
 public verification for release class, Latest status, all six assets,
 checksums, extraction, and applicable signatures.
 
-BL-005 is the rollout and retirement issue. It remains open through stable
-publication and RC retirement. Before publication, the unresolved-P0 check
-applies to every v0.1.0 milestone P0 except BL-005 itself; this is only a narrow
-self-reference exception, not a general waiver. Close BL-005 only after stable
-verification, RC release deletion, RC remote-tag deletion, and a final
-enumeration confirms the intended stable release, assets, and tags remain.
+For v0.1.0, BL-005 remained open through stable publication and RC retirement.
+The unresolved-P0 check applied to every v0.1.0 milestone P0 except BL-005
+itself; this was a narrow self-reference exception, not a general waiver.
+BL-005 closed only after stable verification, RC release deletion, RC
+remote-tag deletion, and final enumeration of the remaining release, assets,
+and tags.
 
-Only then, under explicit authorization, retire RCs in this order:
+Future RC retirement follows the same rule: only after stable public
+verification and explicit authorization, retire RCs in this order:
 
 1. Delete the obsolete RC GitHub release records.
 2. Confirm the stable release and assets remain publicly correct.
