@@ -22,7 +22,7 @@ TypeScript client under `client/src/`, and the shared protocol under
                 +------------+-------------+
                              |
                              |  Unix socket (newline-delimited JSON)
-                             |  Herdr protocol 17 or 19
+                             |  Herdr protocol 17, 19, or 20
                              v
                 +--------------------------+
                 |  Herdr ecosystem         |
@@ -36,14 +36,12 @@ client files via `rust-embed`, while the client executes separately in the
 browser. The same `axum::Router` serves those static assets and owns the
 WebSocket (`server/src/service.rs`, `server/Cargo.toml`).
 
-### Phase 1 — concurrent browser and TUI renderers
+### Concurrent browser and TUI renderers
 
-Phase 1 adds a second `Feed` subscriber inside the same Rust binary: a
-ratatui-based TUI that Herdr runs inside a managed pty as a split
-pane. Both renderers read from the same `Feed` broadcast; the
-adapter, the Feed itself, and the protocol types are unchanged from
-the browser-only path (`server/src/main.rs`, `server/src/runtime.rs`,
-`server/src/feed.rs`).
+The Rust binary has two `Feed` subscribers: the axum browser service and a
+ratatui-based TUI that Herdr runs inside a managed pty as a split pane. Both
+renderers read from the same `Feed` broadcast (`server/src/main.rs`,
+`server/src/runtime.rs`, `server/src/feed.rs`).
 
 ```
                 +--------------------------+
@@ -54,12 +52,12 @@ the browser-only path (`server/src/main.rs`, `server/src/runtime.rs`,
                             |
                             |  Unix socket
                             |  (newline-delimited JSON,
-                            |   Herdr protocol 17 or 19)
+                            |   Herdr protocol 17, 19, or 20)
                             v
                   +---------+----------+
                   |  adapter::         |
                   |  Normalizer        |
-                  |  (unchanged)       |
+                  |                    |
                   +---------+----------+
                             |
                             v
@@ -109,7 +107,8 @@ Process modes (parsed in `server/src/runtime.rs`; no CLI crate):
 - Rendering is `view::draw(frame, &AgentTable, warning: Option<&str>, now: DateTime<Utc>, tick: u64)`
   — pure of explicit inputs. No `Utc::now()` or RNG inside `view.rs`
   or `theme.rs`; the loop samples the clock once per tick. This is
-  what makes the four committed `TestBackend` goldens deterministic.
+  what makes the four table-view `TestBackend` goldens deterministic. Nine
+  additional `scene-*` goldens exercise the tiled renderer.
 
 When Herdr links the repo as a plugin (`herdr-plugin.toml` at the repo
 root, contract-pinned by the `plugin_manifest_contract` test), it

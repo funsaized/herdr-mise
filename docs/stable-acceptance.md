@@ -1,11 +1,15 @@
 # Stable acceptance contract
 
-Stable publication is blocked until one evidence document passes the fail-closed
-validator. BL-006 is executed against the public `v0.1.0-rc.1` tag, its immutable
-commit, and its exact public artifact checksums. A separate `promotion` block
-binds the future stable `v0.1.0` tag/version to the exact accepted `main` commit.
-No evidence row claims to test unpublished stable assets. An automated check
-cannot replace a manual observation or elapsed soak.
+> Historical v0.1.0 record: this contract promoted the published `v0.1.0`
+> release. A future stable release requires a new accepted RC and contract; do
+> not reuse this RC1 evidence as current acceptance.
+
+Stable publication was blocked until one evidence document passed the
+fail-closed validator. BL-006 was executed against the public `v0.1.0-rc.1`
+tag, its immutable commit, and its exact public artifact checksums. A separate
+`promotion` block bound the stable `v0.1.0` tag/version to the exact accepted
+`main` commit. No evidence row claimed to test unpublished stable assets. An
+automated check could not replace a manual observation or elapsed soak.
 
 The repository has no valid prior public version: the earlier non-TUI RC1 was
 overwritten and explicitly invalidated. The accepted RC is the TUI-inclusive

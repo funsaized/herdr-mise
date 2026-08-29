@@ -11,14 +11,8 @@ opinions; the docs below will save you time.
 - `docs/architecture.md` — how the pieces fit (Rust server, TypeScript client,
   versioned protocol).
 - `docs/operations.md` — how to run, develop, and verify locally.
-- `docs/backlog.md` — the originating initial-RC audit backlog, retained for its
-  evidence, sequencing, acceptance criteria, and item-specific verification;
-  it is not a second live roadmap.
-- `README.md` — product behavior, deliberate boundaries, installation, and
-  current verification commands. Code plus passing tests wins when prose and
-  behavior disagree.
-- Do not treat the audit backlog, old branches, or commit history as the current
-  roadmap.
+- `README.md` — product behavior, deliberate boundaries, and installation.
+  Code plus passing tests wins when prose and behavior disagree.
 
 ## Setup
 
@@ -59,6 +53,30 @@ maintainer runbook.
 
 Run `npm run format` to apply the repository's deterministic Oxfmt formatting
 before checking it with `npm run format:check`.
+
+### Verification commands
+
+Run the narrow checks relevant to your change while developing. These are the
+complete locally runnable gates:
+
+| Gate                       | Command                           |
+| -------------------------- | --------------------------------- |
+| Rust format                | `cargo fmt --all --check`         |
+| Rust check                 | `cargo check --workspace`         |
+| Rust tests                 | `cargo test --workspace --locked` |
+| Repository format          | `npm run format:check`            |
+| Client typecheck           | `npm run typecheck`               |
+| JavaScript/TypeScript lint | `npm run lint`                    |
+| Unit and contract tests    | `npm test`                        |
+| Token audit                | `npm run audit:tokens`            |
+| Architecture audit         | `npm run audit:architecture`      |
+| Accessibility audit        | `npm run audit:accessibility`     |
+| Production build           | `npm run build`                   |
+| Bundle budget              | `npm run check:bundle`            |
+| Embedded-binary smoke      | `npm run smoke`                   |
+| Server resources           | `npm run measure:server`          |
+| Release pipeline           | `npm run validate:release`        |
+| Performance suite          | `npm run perf`                    |
 
 Ground rules that reviews will enforce:
 

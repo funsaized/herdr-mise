@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { expect, test, type CDPSession, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const agents = Array.from({ length: 12 }, (_, index) => ({
   id: `agent-${index}`,

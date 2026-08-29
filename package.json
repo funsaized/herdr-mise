@@ -14,7 +14,7 @@
     "validate:release": "sh scripts/validate-release.sh",
     "measure:server": "sh scripts/measure-server.sh target/release/herdr-mise",
     "typecheck": "npm --prefix client run typecheck",
-    "lint": "npm --prefix client run lint",
+    "lint": "oxlint --deny-warnings .",
     "test": "node --test scripts/*.test.mjs && npm --prefix client run test",
     "check:herdr-compatibility": "node scripts/check-herdr-compatibility.mjs",
     "audit:tokens": "node scripts/audit-tokens.mjs",
@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "oxfmt": "0.65.0"
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0"
   }
 }

@@ -24,30 +24,19 @@ const artifactVerifier = readFileSync(
 const browserSmoke = readFileSync("scripts/smoke-browser.mjs", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const operations = readFileSync("docs/operations.md", "utf8");
-const backlog = readFileSync("docs/backlog.md", "utf8");
+const releasing = readFileSync("docs/releasing.md", "utf8");
 const stableAcceptance = readFileSync("docs/stable-acceptance.md", "utf8");
 const stableAcceptanceTemplate = JSON.parse(
   readFileSync("docs/stable-acceptance.template.json", "utf8"),
 );
 
-test("first stable release contract handles BL-005 and upgrade truthfully", () => {
-  assert.match(
-    backlog,
-    /BL-005 is the rollout and retirement issue and remains open through\s+stable\s+publication and RC retirement\./,
-  );
-  assert.match(backlog, /every v0\.1\.0 milestone P0 other than BL-005 itself/);
-  assert.match(
-    backlog,
-    /narrow self-reference exception, not a general waiver/,
-  );
-  assert.match(
-    backlog,
-    /stable verification, RC release\s+deletion, RC remote-tag deletion, and final enumeration/,
-  );
-  assert.match(
-    backlog,
-    /11\. Use a verifier-owned prior fixture[\s\S]*production public-artifact verifier[\s\S]*Keep uninstall\s+isolated/,
-  );
+test("first stable release contract handles upgrade truthfully", () => {
+  assert.match(releasing, /must not be reused for another stable release/);
+  assert.match(releasing, /narrow self-reference exception/);
+  assert.match(releasing, /RC release deletion, RC\s+remote-tag deletion/);
+  assert.match(releasing, /APPLE_CERTIFICATE_P12_BASE64/);
+  assert.match(releasing, /git tag -a "\$TAG"/);
+  assert.match(releasing, /There is no stapling target/);
 
   assert.match(stableAcceptance, /no valid prior public version/);
   assert.match(stableAcceptance, /verifier-owned prior fixture/);
