@@ -2,7 +2,7 @@ type: '@swamp/software-factory'
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 1
+version: 2
 tags: {}
 globalArguments:
   stages:
@@ -41,8 +41,8 @@ globalArguments:
         - name: submit
           to: plan-review
           gates:
-            - type: workflow-succeeded
-              config: { workflow: nightshift-plan, requireStepOutputs: [artifact-plan] }
+            - type: evidence-recorded
+              config: { name: planning-run, requireField: { status: succeeded } }
             - type: artifact-exists
               config: { artifact: plan }
 
@@ -58,6 +58,7 @@ globalArguments:
             phase: plan
             artifactName: plan-review
             subject: '${{ data.latest(self.name, "artifact-plan").payload }}'
+            subjectRoot: .
         resultEvidence: plan-review-run
       artifacts:
         - name: plan-review
@@ -67,8 +68,8 @@ globalArguments:
         - name: approve
           to: building
           gates:
-            - type: workflow-succeeded
-              config: { workflow: nightshift-review, requireStepOutputs: [artifact-plan-review] }
+            - type: evidence-recorded
+              config: { name: plan-review-run, requireField: { status: succeeded } }
             - type: artifact-fresh
               config: { artifact: plan-review, recordedThisCycle: true }
             - type: findings-clear
@@ -103,6 +104,15 @@ globalArguments:
             reviewFeedback: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) }}'
         resultEvidence: build-run
       artifacts:
+        - name: workspace
+          schema:
+            type: object
+            required: [workItem, subjectRoot, branch, baseCommit]
+            properties:
+              workItem: { type: string, minLength: 1 }
+              subjectRoot: { type: string, pattern: '^/' }
+              branch: { type: string, minLength: 1 }
+              baseCommit: { type: string, pattern: '^[0-9a-f]{40}$' }
         - name: change-summary
           schema:
             type: object
@@ -123,8 +133,8 @@ globalArguments:
         - name: submit
           to: code-review
           gates:
-            - type: workflow-succeeded
-              config: { workflow: nightshift-build, requireStepOutputs: [artifact-change-summary] }
+            - type: evidence-recorded
+              config: { name: build-run, requireField: { status: succeeded } }
             - type: artifact-exists
               config: { artifact: change-summary }
 
@@ -140,6 +150,7 @@ globalArguments:
             phase: code
             artifactName: code-review
             subject: '${{ data.latest(self.name, "artifact-change-summary").payload }}'
+            subjectRoot: '${{ data.latest(self.name, "artifact-workspace").payload.subjectRoot }}'
         resultEvidence: code-review-run
       artifacts:
         - name: code-review
@@ -149,8 +160,8 @@ globalArguments:
         - name: approve
           to: ship-prep
           gates:
-            - type: workflow-succeeded
-              config: { workflow: nightshift-review, requireStepOutputs: [artifact-code-review] }
+            - type: evidence-recorded
+              config: { name: code-review-run, requireField: { status: succeeded } }
             - type: artifact-fresh
               config: { artifact: code-review, recordedThisCycle: true }
             - type: findings-clear
@@ -211,8 +222,8 @@ globalArguments:
         - name: complete
           to: await-merge
           gates:
-            - type: workflow-succeeded
-              config: { workflow: nightshift-ship }
+            - type: evidence-recorded
+              config: { name: shipping-run, requireField: { status: succeeded } }
         - name: rework
           to: building
           gates:

@@ -1,0 +1,38 @@
+id: b4d98b0d-84f2-43de-9385-7b21d786fa84
+name: nightshift-build-fanout
+description: Build independent ready work items with at most two concurrent builders.
+tags:
+  factory: nightshift
+  stage: build
+inputs:
+  properties:
+    workItems:
+      type: array
+      minItems: 1
+      maxItems: 100
+      uniqueItems: true
+      items:
+        type: string
+        pattern: '^[0-9]+$'
+        maxLength: 16
+  required: [workItems]
+jobs:
+  - name: build-ready-items
+    description: Each child workflow owns one work item and workspace.
+    steps:
+      - name: build-${{ self.workItem }}
+        forEach:
+          item: workItem
+          in: ${{ inputs.workItems }}
+        concurrency: 2
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-build
+          inputs:
+            workItem: ${{ self.workItem }}
+            issueNumber: ${{ int(self.workItem) }}
+            plan: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan").attributes.payload }}
+            reviewFeedback: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-code-review").?attributes.?payload.?findings.orValue([]) }}
+        dependsOn: []
+    dependsOn: []
+version: 1
