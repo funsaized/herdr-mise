@@ -2,12 +2,12 @@ type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 2
+version: 3
 tags: {}
 globalArguments:
     stages:
         - id: planning
-          description: Refresh the GitHub issue, qualify scope, and nrecord an implementation plan.
+          description: Refresh the GitHub issue, qualify scope, and record an implementation plan.
           initial: true
           maxCycles: 5
           work:
@@ -228,6 +228,7 @@ globalArguments:
               workflow:
                   name: nightshift-ship
                   inputs:
+                      workItem: "${{ self.workItem }}"
                       issueNumber: "${{ double(self.workItem) }}"
                       commit: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
                       baseCommit: '${{ data.latest(self.name, "artifact-release-candidate").payload.baseCommit }}'
@@ -254,6 +255,23 @@ globalArguments:
                               name: shipping-run,
                               requireField: { status: failed },
                           }
+                    - type: cel
+                      config:
+                          expr: 'evidence.shipping_run.outputs.failureKind == "candidate"'
+                          message: Only candidate failures return to building.
+              - name: retry
+                to: shipping
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: shipping-run,
+                              requireField: { status: failed },
+                          }
+                    - type: cel
+                      config:
+                          expr: 'evidence.shipping_run.outputs.failureKind in ["configuration", "infrastructure"]'
+                          message: Only configuration or infrastructure failures retry shipping.
 
         - id: await-merge
           description: Wait for an explicit human decision on the verified pull request.
@@ -271,17 +289,16 @@ globalArguments:
                       config: { id: merge-rework }
 
         - id: deployed-verification
-          description: Verify the deployed visual playground before closing the issue.
+          description: Run hosted smoke from the exact merged pull-request commit.
           maxCycles: 5
           work:
-              mode: method
-              method:
-                  modelIdOrName: verification-root
-                  methodName: run_subject
+              mode: workflow
+              workflow:
+                  name: nightshift-deployed-verification
                   inputs:
-                      subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
-                      expectedGitHead: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
-                      script: test:hosted
+                      workItem: "${{ self.workItem }}"
+                      candidateCommit: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
+                      prUrl: '${{ data.latest(self.name, "artifact-release-candidate").payload.prUrl }}'
               resultEvidence: hosted-smoke-run
           transitions:
               - name: complete
@@ -293,17 +310,44 @@ globalArguments:
                               name: hosted-smoke-run,
                               requireField: { status: succeeded },
                           }
+              - name: retry
+                to: deployed-verification
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: hosted-smoke-run,
+                              requireField: { status: failed },
+                          }
+                    - type: cel
+                      config:
+                          expr: 'evidence.hosted_smoke_run.outputs.failureKind in ["configuration", "infrastructure"]'
+                          message: Only configuration or infrastructure failures retry hosted smoke.
+              - name: rework
+                to: building
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: hosted-smoke-run,
+                              requireField: { status: failed },
+                          }
+                    - type: cel
+                      config:
+                          expr: 'evidence.hosted_smoke_run.outputs.failureKind == "candidate"'
+                          message: Only candidate failures return to building.
 
         - id: closing
           description: Record the confirmed merge and complete the issue lifecycle.
           maxCycles: 5
           work:
-              mode: method
-              method:
-                  modelIdOrName: nightshift-issues
-                  methodName: pr_merged
+              mode: workflow
+              workflow:
+                  name: nightshift-close
                   inputs:
-                      issue_number: "${{ double(self.workItem) }}"
+                      workItem: "${{ self.workItem }}"
+                      issueNumber: "${{ double(self.workItem) }}"
+                      subjectRoot: '${{ data.latest(self.name, "artifact-workspace").payload.subjectRoot }}'
               resultEvidence: close-run
           transitions:
               - name: complete
@@ -316,11 +360,34 @@ globalArguments:
                               requireField: { status: succeeded },
                           }
               - name: retry
-                to: await-merge
+                to: closing
                 gates:
                     - type: evidence-recorded
                       config:
                           { name: close-run, requireField: { status: failed } }
+
+        - id: abort-cleanup
+          description: Reclaim generated artifacts while preserving dirty source for audit.
+          maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-cleanup
+                  inputs:
+                      workItem: "${{ self.workItem }}"
+                      subjectRoot: '${{ data.latest(self.name, "artifact-workspace").?payload.?subjectRoot.orValue("") }}'
+                      evidenceName: abort-cleanup-run
+              resultEvidence: abort-cleanup-run
+          transitions:
+              - name: complete
+                to: aborted
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: abort-cleanup-run,
+                              requireField: { status: succeeded },
+                          }
 
         - id: done
           terminal: true
@@ -330,7 +397,7 @@ globalArguments:
 
     globalTransitions:
         - name: abort
-          to: aborted
+          to: abort-cleanup
           gates:
               - type: human-approval
                 config: { id: abort-confirmation }

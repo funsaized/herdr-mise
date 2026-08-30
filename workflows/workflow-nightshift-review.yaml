@@ -299,5 +299,18 @@ jobs:
           - { step: validate-security, condition: { type: succeeded } }
           - { step: validate-accessibility, condition: { type: succeeded } }
           - { step: validate-observability, condition: { type: succeeded } }
+      - name: record-review-run
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: ${{ inputs.artifactName + "-run" }}
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+        dependsOn:
+          - { step: record-review, condition: { type: succeeded } }
     dependsOn: []
-version: 2
+version: 3

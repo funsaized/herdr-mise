@@ -2,7 +2,12 @@ import { checkCorrelatedWorkflowRun } from "../models/software_factory_run_corre
 
 const encoder = new TextEncoder();
 
-function context(expectedRunId: string, summaryRunIds: string[]) {
+function context(
+  expectedRunId: string,
+  summaryRunIds: string[],
+  status: "succeeded" | "failed" = "succeeded",
+  summaryStatus: "succeeded" | "failed" = status,
+) {
   const records = new Map<string, unknown>([
     [
       "state-67",
@@ -17,7 +22,7 @@ function context(expectedRunId: string, summaryRunIds: string[]) {
       {
         stageId: "planning",
         cycle: 1,
-        payload: { status: "succeeded", runId: expectedRunId },
+        payload: { status, runId: expectedRunId },
       },
     ],
   ]);
@@ -39,7 +44,7 @@ function context(expectedRunId: string, summaryRunIds: string[]) {
                   type: "evidence-recorded",
                   config: {
                     name: "planning-run",
-                    requireField: { status: "succeeded" },
+                    requireField: { status },
                   },
                 },
                 { type: "artifact-exists", config: { artifact: "plan" } },
@@ -70,7 +75,7 @@ function context(expectedRunId: string, summaryRunIds: string[]) {
       }
       return summaryRunIds.map((workflowRunId) => ({
         content: {
-          status: "succeeded",
+          status: summaryStatus,
           workflowName: "nightshift-plan",
           workflowRunId,
         },
@@ -91,5 +96,19 @@ Deno.test("workflow evidence accepts only its exact successful run", async () =>
   );
   if (sibling.pass || !sibling.errors?.[0].includes("found 0")) {
     throw new Error("a sibling workflow run satisfied the gate");
+  }
+
+  const failed = await checkCorrelatedWorkflowRun(
+    context("failed-67", ["failed-67"], "failed"),
+  );
+  if (!failed.pass) throw new Error(failed.errors?.join("\n"));
+
+  const mismatchedStatus = await checkCorrelatedWorkflowRun(
+    context("failed-67", ["failed-67"], "failed", "succeeded"),
+  );
+  if (mismatchedStatus.pass) {
+    throw new Error(
+      "a workflow summary with the wrong status satisfied the gate",
+    );
   }
 });

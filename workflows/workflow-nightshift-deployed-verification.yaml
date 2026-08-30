@@ -1,0 +1,114 @@
+id: 44e41fd2-ca38-4e86-8354-70d6a5543f3f
+name: nightshift-deployed-verification
+description: Run hosted smoke from the exact merged pull-request commit.
+tags:
+  factory: nightshift
+  stage: deployed-verification
+inputs:
+  properties:
+    workItem:
+      type: string
+      minLength: 1
+    candidateCommit:
+      type: string
+      pattern: '^[0-9a-f]{40}$'
+    prUrl:
+      type: string
+      minLength: 1
+  required: [workItem, candidateCommit, prUrl]
+jobs:
+  - name: verify
+    description: Resolve the merge, prepare an isolated checkout, run smoke, and clean it.
+    steps:
+      - name: resolve-merged-pr
+        task:
+          type: model_method
+          modelIdOrName: nightshift-github
+          methodName: get_merged_pr
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            repo: funsaized/herdr-mise
+            prUrl: ${{ inputs.prUrl }}
+        dependsOn: []
+      - name: prepare-merged-workspace
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: prepare_workspace
+          inputs:
+            workItem: ${{ "verify-" + inputs.workItem }}
+            directoryName: ${{ "herdr-mise-verify-" + inputs.workItem }}
+            repositoryUrl: https://github.com/funsaized/herdr-mise.git
+            workspaceRoot: ..
+            baseRef: ${{ data.latest("nightshift-github", "merged-pr-" + inputs.workItem).attributes.mergeCommit }}
+            branch: ${{ "nightshift/verify-" + inputs.workItem }}
+        dependsOn:
+          - { step: resolve-merged-pr, condition: { type: succeeded } }
+      - name: install-dependencies
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: ci_subject
+          inputs:
+            expectedGitHead: ${{ data.latest("nightshift-github", "merged-pr-" + inputs.workItem).attributes.mergeCommit }}
+            subjectRoot: ${{ data.latest("verification-source-git", "workspace-verify-" + inputs.workItem).attributes.subjectRoot }}
+        dependsOn:
+          - { step: prepare-merged-workspace, condition: { type: succeeded } }
+      - name: install-browser
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: verify:browser:install
+            expectedGitHead: ${{ data.latest("nightshift-github", "merged-pr-" + inputs.workItem).attributes.mergeCommit }}
+            subjectRoot: ${{ data.latest("verification-source-git", "workspace-verify-" + inputs.workItem).attributes.subjectRoot }}
+        dependsOn:
+          - { step: install-dependencies, condition: { type: succeeded } }
+      - name: hosted-smoke
+        task:
+          type: model_method
+          modelIdOrName: verification-root
+          methodName: run_subject
+          inputs:
+            script: test:hosted
+            expectedGitHead: ${{ data.latest("nightshift-github", "merged-pr-" + inputs.workItem).attributes.mergeCommit }}
+            subjectRoot: ${{ data.latest("verification-source-git", "workspace-verify-" + inputs.workItem).attributes.subjectRoot }}
+        dependsOn:
+          - { step: install-browser, condition: { type: succeeded } }
+      - name: cleanup-workspace
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: cleanup_workspace
+          inputs:
+            workItem: ${{ "verify-" + inputs.workItem }}
+            subjectRoot: ${{ data.latest("verification-source-git", "workspace-verify-" + inputs.workItem).attributes.subjectRoot }}
+        dependsOn:
+          - step: hosted-smoke
+            condition:
+              type: or
+              conditions:
+                - { type: completed }
+                - { type: skipped }
+      - name: record-hosted-smoke-run
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: hosted-smoke-run
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+              outputs:
+                candidateCommit: ${{ inputs.candidateCommit }}
+                mergeCommit: ${{ data.latest("nightshift-github", "merged-pr-" + inputs.workItem).attributes.mergeCommit }}
+                mergedAt: ${{ data.latest("nightshift-github", "merged-pr-" + inputs.workItem).attributes.mergedAt }}
+                failureKind: none
+        dependsOn:
+          - { step: hosted-smoke, condition: { type: succeeded } }
+          - { step: cleanup-workspace, condition: { type: succeeded } }
+    dependsOn: []
+version: 1

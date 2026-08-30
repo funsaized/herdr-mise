@@ -1,0 +1,49 @@
+id: 55e20221-32e9-43b5-a7c4-7a19f5145189
+name: nightshift-record-failure
+description: Record one failed factory work run with an actionable classification.
+tags:
+  factory: nightshift
+  stage: failure-recording
+inputs:
+  properties:
+    workItem:
+      type: string
+      minLength: 1
+    evidenceName:
+      type: string
+      minLength: 1
+    runId:
+      type: string
+      minLength: 1
+    failureKind:
+      type: string
+      enum: [candidate, configuration, infrastructure]
+    failedStep:
+      type: string
+      minLength: 1
+    reason:
+      type: string
+      minLength: 1
+  required: [workItem, evidenceName, runId, failureKind, failedStep, reason]
+jobs:
+  - name: record
+    description: Persist the failed run using the factory outcome contract.
+    steps:
+      - name: record-failure
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: ${{ inputs.evidenceName }}
+            payload:
+              status: failed
+              runId: ${{ inputs.runId }}
+              outputs:
+                failureKind: ${{ inputs.failureKind }}
+                failedStep: ${{ inputs.failedStep }}
+                reason: ${{ inputs.reason }}
+        dependsOn: []
+    dependsOn: []
+version: 1

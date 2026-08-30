@@ -180,14 +180,20 @@ export async function checkCorrelatedWorkflowRun(
   const workflow = stage?.work?.workflow?.name;
   if (!transition || !resultEvidence || !workflow) return { pass: true };
 
-  const correlationGate = transition.gates.find(
-    (gate) =>
+  const correlationGate = transition.gates.find((gate) => {
+    const status = (
+      gate.config.requireField as Record<string, unknown> | undefined
+    )?.status;
+    return (
       gate.type === "evidence-recorded" &&
       gate.config.name === resultEvidence &&
-      (gate.config.requireField as Record<string, unknown> | undefined)
-        ?.status === "succeeded",
-  );
+      ["succeeded", "failed"].includes(String(status))
+    );
+  });
   if (!correlationGate) return { pass: true };
+  const expectedStatus = (
+    correlationGate.config.requireField as Record<string, unknown>
+  ).status;
 
   const evidence = Envelope.safeParse(
     await latestJson(context, `evidence-${slug}-${resultEvidence}`),
@@ -197,7 +203,7 @@ export async function checkCorrelatedWorkflowRun(
     !evidence.success ||
     evidence.data.stageId !== state.data.stageId ||
     evidence.data.cycle !== cycle ||
-    evidence.data.payload.status !== "succeeded"
+    evidence.data.payload.status !== expectedStatus
   ) {
     return fail(
       `workflow result evidence '${resultEvidence}' is missing for the current ${state.data.stageId} cycle`,
@@ -240,7 +246,7 @@ export async function checkCorrelatedWorkflowRun(
     );
   }
   const [{ record, summary }] = matches;
-  if (summary.status !== "succeeded") {
+  if (summary.status !== expectedStatus) {
     return fail(
       `workflow '${workflow}' runId '${runId}' has status '${summary.status}'`,
     );

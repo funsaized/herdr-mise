@@ -133,5 +133,23 @@ jobs:
               conditions:
                 - { type: succeeded }
                 - { type: skipped }
+      - name: record-planning-run
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: planning-run
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+        dependsOn:
+          - step: record-factory-plan
+            condition:
+              type: or
+              conditions:
+                - { type: succeeded }
+                - { type: skipped }
     dependsOn: []
-version: 1
+version: 2

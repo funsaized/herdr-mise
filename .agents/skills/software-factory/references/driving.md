@@ -299,7 +299,7 @@ queries together.
   findings and verify claimed resolutions rather than trusting them. Merge
   findings into one `record_artifact` call with stable ids (ARCH-1, A11Y-2…).
 - **workflow** — trigger the named swamp workflow with the resolved inputs
-  (`swamp workflow run <name> --input k=v`), wait for completion, then record
+  (`swamp workflow run <name> --input k=v --json`), wait for completion, then record
   the outcome: `record_evidence name=<resultEvidence>
 payload='{"status":"succeeded|failed","runId":"…"}'`. The outcome must
   satisfy the built-in contract (`status` + `runId` required) — an empty or
@@ -309,7 +309,16 @@ payload='{"status":"succeeded|failed","runId":"…"}'`. The outcome must
   which verifies against swamp's own run records — recording evidence does not
   bypass it.
 - **method** — same, for a single model method
-  (`swamp model method run <model> <method> --input …`).
+  (`swamp model method run <model> <method> --input … --json`). Use the
+  workflow result's `id` or the method result's `outputId` as `runId`; both are
+  the exact IDs in `swamp run history`. Never infer a run by selecting the
+  latest matching method because concurrent work can race that lookup.
+
+Nightshift workflows record successful result evidence themselves. After a
+failed Nightshift workflow, inspect `@swamp/workflow-summary`, then run
+`nightshift-record-failure` with the failed result's `id`, failed step, reason,
+and `failureKind=candidate|configuration|infrastructure`. This preserves the
+attempt and lets the factory distinguish code rework from an operational retry.
 
 ## Propulsion rules
 

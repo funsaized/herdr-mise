@@ -6,6 +6,9 @@ tags:
   stage: ship
 inputs:
   properties:
+    workItem:
+      type: string
+      minLength: 1
     issueNumber:
       type: integer
       minimum: 1
@@ -24,7 +27,7 @@ inputs:
     branch:
       type: string
       minLength: 1
-  required: [issueNumber, commit, baseCommit, subjectRoot, prUrl, branch]
+  required: [workItem, issueNumber, commit, baseCommit, subjectRoot, prUrl, branch]
 jobs:
   - name: ship
     description: Verify the exact commit before linking its pull request.
@@ -50,5 +53,21 @@ jobs:
         dependsOn:
           - step: verify-candidate
             condition: { type: succeeded }
+      - name: record-shipping-run
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: shipping-run
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+              outputs:
+                failureKind: none
+        dependsOn:
+          - step: link-pull-request
+            condition: { type: succeeded }
     dependsOn: []
-version: 1
+version: 2

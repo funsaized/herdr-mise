@@ -18,6 +18,7 @@ Deno.test("subject roots are canonical peers and paths cannot follow sibling sym
     await Deno.mkdir(control);
     await Deno.mkdir(subject);
     await Deno.mkdir(nested);
+    await Deno.mkdir(`${subject}/nested`);
     if ((await subjectRoot(control, ".")) !== (await Deno.realPath(control))) {
       throw new Error("local subject root was not preserved");
     }
@@ -28,6 +29,7 @@ Deno.test("subject roots are canonical peers and paths cannot follow sibling sym
       throw new Error("sibling subject root was not resolved");
     }
     await rejects(() => subjectRoot(control, "nested"));
+    await rejects(() => subjectRoot(control, "../subject/nested"));
     await Deno.symlink(subject, `${control}/linked-subject`);
     await rejects(() => subjectRoot(control, "linked-subject"));
     await rejects(() => subjectPath(control, "linked-subject/file"));
