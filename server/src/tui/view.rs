@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use super::{state::AgentTable, theme};
-use crate::protocol::{AgentState, AppMode, SourceDiagnostic, SourceStatus};
+use crate::protocol::{AgentRecord, AgentState, AppMode, SourceDiagnostic, SourceStatus};
 
 #[cfg(test)]
 use ratatui::buffer::CellDiffOption;
@@ -27,6 +27,26 @@ fn workspace_display_name(workspace: &str) -> &str {
         .split(['/', '\\'])
         .rfind(|part| !part.is_empty())
         .unwrap_or("Unavailable")
+}
+
+pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
+    let model = if agent.model.trim().is_empty() {
+        "Unavailable"
+    } else {
+        agent.model.trim()
+    };
+    let tickets = if agent.session.tickets == 0 {
+        "Unavailable".into()
+    } else {
+        agent.session.tickets.to_string()
+    };
+    [
+        format!("{} · {}", agent.name, state_label(&agent.state)),
+        format!(
+            "Workspace: {} · Model: {model} · Tickets: {tickets}",
+            workspace_display_name(&agent.workspace),
+        ),
+    ]
 }
 
 fn format_duration(milliseconds: u64) -> String {
@@ -128,6 +148,7 @@ pub fn draw(
     warning: Option<&str>,
     now: DateTime<Utc>,
     tick: u64,
+    selected_id: Option<&str>,
 ) {
     let compact = frame.area().height < 20;
     let agent_count = table.agents().count();
@@ -151,21 +172,25 @@ pub fn draw(
     if !compact {
         header = header.block(Block::default().borders(Borders::BOTTOM));
     }
-    let constraints = if compact {
-        [
+    let mut constraints = if compact {
+        vec![
             Constraint::Length(header_height),
             Constraint::Min(3),
             Constraint::Length(3),
             Constraint::Length(2),
         ]
     } else {
-        [
+        vec![
             Constraint::Length(header_height),
             Constraint::Min(8),
             Constraint::Length(6),
             Constraint::Length(2),
         ]
     };
+    let selected = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id));
+    if selected.is_some() {
+        constraints.insert(3, Constraint::Length(2));
+    }
     let areas = Layout::default()
         .direction(Direction::Vertical)
         .constraints(constraints)
@@ -180,6 +205,8 @@ pub fn draw(
             .unwrap_or(0);
         let style = if agent.state == AgentState::Blocked {
             Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
+        } else if selected_id == Some(agent.id.as_str()) {
+            Style::default().add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -248,20 +275,38 @@ pub fn draw(
             .block(Block::default().borders(Borders::ALL).title("86 BOARD")),
         areas[2],
     );
+    let status_area = if let Some(agent) = selected {
+        frame.render_widget(
+            Paragraph::new(inspect_facts(agent).map(Line::from).to_vec()),
+            areas[3],
+        );
+        areas[4]
+    } else {
+        areas[3]
+    };
+    let keys = if selected.is_some() {
+        "Tab / Shift+Tab inspect · Esc close · q quit"
+    } else {
+        "q / Esc quit"
+    };
     let status = warning.map_or_else(
-        || format!("q / Esc quit · tick {tick}"),
-        |warning| format!("{warning} · q / Esc quit · tick {tick}"),
+        || format!("{keys} · tick {tick}"),
+        |warning| format!("{warning} · {keys} · tick {tick}"),
     );
-    frame.render_widget(Paragraph::new(Line::from(status)), areas[3]);
+    frame.render_widget(Paragraph::new(Line::from(status)), status_area);
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::{handle_key, retain_selection, scene};
     use super::*;
+    use crate::adapter::Normalizer;
     use crate::protocol::{
         AgentRecord, AgentStateEvent, DeltaOperation, SessionStats, SourceDiagnostic, SourceStatus,
     };
+    use crossterm::event::KeyCode;
     use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
+    use tokio_util::sync::CancellationToken;
 
     fn record(id: &str, state: AgentState) -> AgentRecord {
         AgentRecord {
@@ -359,7 +404,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         terminal
-            .draw(|frame| draw(frame, table, warning, now, 9))
+            .draw(|frame| draw(frame, table, warning, now, 9, None))
             .unwrap();
         buffer_dump(terminal.backend().buffer())
     }
@@ -404,6 +449,98 @@ mod tests {
         ] {
             assert_eq!(workspace_display_name(workspace), expected);
         }
+    }
+
+    #[test]
+    fn real_herdr_snapshot_drives_keyboard_inspection_lifecycle() {
+        let raw = serde_json::from_str(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ))
+        .unwrap();
+        let normalized = Normalizer::default()
+            .normalize_snapshot_value(raw, "2026-08-13T12:00:00Z")
+            .unwrap();
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: normalized.agents,
+        });
+        let shutdown = CancellationToken::new();
+        let mut selected = None;
+        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+        assert_eq!(selected.as_deref(), Some("fictional-session-20"));
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        terminal
+            .draw(|frame| {
+                scene::draw(
+                    frame,
+                    &table,
+                    None,
+                    now,
+                    0,
+                    super::super::canvas::ColorMode::Xterm256,
+                    true,
+                    selected.as_deref(),
+                )
+            })
+            .unwrap();
+        let strip = terminal
+            .backend()
+            .buffer()
+            .content
+            .chunks(80)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .filter(|row| row.contains("example-cook") || row.contains("Workspace:"))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        for expected in ["example-cook", "WORKING / ON THE FIRE", "Example Kitchen"] {
+            assert!(
+                strip.contains(expected),
+                "missing {expected:?} in {strip:?}"
+            );
+        }
+        assert_eq!(strip.matches("Unavailable").count(), 2);
+        assert!(!terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .any(|cell| cell.modifier.contains(Modifier::REVERSED)));
+        let lower = strip.to_ascii_lowercase();
+        for absent in [
+            "elapsed", "progress", "runtime", "history", "health", "owner", "attach", "open",
+            "copy",
+        ] {
+            assert!(
+                !lower.contains(absent),
+                "unexpected {absent:?} in {strip:?}"
+            );
+        }
+
+        assert!(!handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert_eq!(selected, None);
+        assert!(!shutdown.is_cancelled());
+        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+        table.apply(AgentStateEvent::Delta {
+            version: 1,
+            mode: AppMode::Live,
+            operation: DeltaOperation::Remove,
+            agent: None,
+            agent_id: Some("fictional-session-20".into()),
+        });
+        retain_selection(&mut selected, &table);
+        assert_eq!(selected, None);
+        assert!(handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert!(shutdown.is_cancelled());
     }
 
     #[test]
@@ -472,7 +609,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         terminal
-            .draw(|frame| draw(frame, &table, None, now, 9))
+            .draw(|frame| draw(frame, &table, None, now, 9, None))
             .unwrap();
         let text = buffer_text(&terminal);
         for expected in [
@@ -571,7 +708,16 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         terminal
-            .draw(|frame| draw(frame, &AgentTable::default(), Some("bind warning"), now, 7))
+            .draw(|frame| {
+                draw(
+                    frame,
+                    &AgentTable::default(),
+                    Some("bind warning"),
+                    now,
+                    7,
+                    None,
+                )
+            })
             .unwrap();
         let rendered = terminal
             .backend()
@@ -598,7 +744,7 @@ mod tests {
             let backend = TestBackend::new(width, height);
             let mut terminal = Terminal::new(backend).unwrap();
             terminal
-                .draw(|frame| draw(frame, &table, None, now, 7))
+                .draw(|frame| draw(frame, &table, None, now, 7, None))
                 .unwrap();
             let rendered = terminal
                 .backend()
