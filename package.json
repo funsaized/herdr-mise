@@ -4,7 +4,7 @@
   "license": "MIT",
   "author": "Funsaized",
   "scripts": {
-    "build": "npm --prefix client run build",
+    "build": "npm --prefix client run build --",
     "dev:visual": "npm --prefix client run dev:visual --",
     "bundle": "npm run build && cargo build --release --bin herdr-mise",
     "format": "oxfmt \"**/*.{ts,tsx,js,mjs,cjs,json,css,md}\"",
@@ -24,6 +24,7 @@
     "capture:readme": "node scripts/capture-readme-media.mjs",
     "perf": "playwright test --config perf/playwright.config.ts",
     "test:visual": "playwright test --config e2e/playwright.config.ts",
+    "test:hosted": "HOSTED_VISUAL_URL=https://herdr-mise.s11a.com playwright test --config e2e/playwright.config.ts e2e/hosted-smoke.spec.ts",
     "test:acceptance": "node --test scripts/acceptance-evidence.test.mjs scripts/public-artifact.test.mjs",
     "validate:acceptance-evidence": "node scripts/validate-acceptance-evidence.mjs",
     "verify:browser:install": "playwright install chromium",

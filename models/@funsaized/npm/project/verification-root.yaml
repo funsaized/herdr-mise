@@ -17,6 +17,7 @@ globalArguments:
     - test
     - check:herdr-compatibility
     - test:visual
+    - test:hosted
     - audit:tokens
     - audit:accessibility
     - check:bundle

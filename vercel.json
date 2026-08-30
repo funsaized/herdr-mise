@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm ci --prefix client && npm --prefix client run build -- --mode visual",
+  "outputDirectory": "client/dist-visual"
+}

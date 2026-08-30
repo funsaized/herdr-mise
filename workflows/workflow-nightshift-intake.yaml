@@ -1,0 +1,51 @@
+id: ca20d478-5c75-4e42-934a-881fe2e29656
+name: nightshift-intake
+description: Start GitHub issue tracking and a matching Nightshift factory run.
+tags:
+  factory: nightshift
+inputs:
+  properties:
+    workItem:
+      type: string
+      pattern: '^[0-9]+$'
+      maxLength: 16
+      description: GitHub issue number as a string; this is the factory work-item key.
+    issueNumber:
+      type: integer
+      minimum: 1
+  required: [workItem, issueNumber]
+jobs:
+  - name: intake
+    description: Bind one GitHub issue to one factory work item.
+    steps:
+      - name: matching-identities
+        task:
+          type: assert
+          expr: int(inputs.workItem) == inputs.issueNumber
+          message: workItem must be the decimal GitHub issue number.
+          severity: high
+        dependsOn: []
+      - name: start-issue
+        guard: ${{ data.latest("nightshift-issues", "state-issue-" + inputs.workItem) != null }}
+        task:
+          type: model_method
+          modelIdOrName: nightshift-issues
+          methodName: start
+          inputs:
+            issue_number: ${{ inputs.issueNumber }}
+        dependsOn:
+          - step: matching-identities
+            condition: { type: succeeded }
+      - name: start-factory
+        guard: ${{ data.latest("the-nightshift", "state-" + inputs.workItem) != null }}
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: start
+          inputs:
+            workItem: ${{ inputs.workItem }}
+        dependsOn:
+          - step: start-issue
+            condition: { type: completed }
+    dependsOn: []
+version: 1

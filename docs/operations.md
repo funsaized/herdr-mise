@@ -38,6 +38,16 @@ HERDR_SOCKET_PATH=/tmp/no-herdr.sock ./target/release/herdr-mise
 embedded into the binary by `rust-embed` at compile time
 (`server/Cargo.toml`, `server/src/service.rs`).
 
+The hosted static demo is a separate visual-mode build:
+
+```sh
+npm run build -- --mode visual
+```
+
+It writes `client/dist-visual/`, including visual-only social metadata and the
+checked-in TUI demo assets. Vercel deploys that directory. The default build
+continues to write `client/dist/`, which remains the only rust-embed input.
+
 ### Run the release archive
 
 The current public distribution is the GitHub release `v0.1.0`. Matching `v*`
@@ -122,9 +132,10 @@ npm run dev:visual
 On boot, `client/src/main.tsx` calls `initializeVisualMode("visual", …)`
 before React mounts. That installs a deterministic in-browser
 WebSocket mock by replacing `window.WebSocket` for the application
-`/ws` endpoint only — the native constructor is preserved and
-delegated for every other URL, including Vite HMR and any
-unrelated socket. The real `AgentWebSocketClient` still opens
+`/ws` endpoint only. During local development, the native constructor is
+preserved and delegated for every other URL, including Vite HMR. In a visual
+production build, every socket except same-origin `/ws` is refused without
+calling the native constructor. The real `AgentWebSocketClient` still opens
 `/ws` against the live origin; the mock simply answers on the
 client side. Source: `client/src/main.tsx`,
 `client/src/runtime.ts`, `client/src/visual-harness.ts`.
@@ -215,11 +226,18 @@ npm --prefix client run test -- --run src/visual-harness.test.ts
 ```
 
 The browser acceptance matrix is checked in as `e2e/visual-matrix.spec.ts`
-and runs in CI via `npm run test:visual`. It starts the real root
-`npm run dev:visual` entry point (port 4174) and covers every preset and
+and runs in CI via `npm run test:visual`. It builds `client/dist-visual`, serves
+it with `vite preview` on port 4174, and covers every preset and
 supported count, the ended 86-board flow, the exact dinner URL,
-invalid-query fallback, storage isolation, native non-`/ws` delegation
-(Vite HMR connects), and liveness beyond the client stale timeout.
+invalid-query fallback, storage isolation, emitted TUI fixtures, hosted socket
+isolation, and liveness beyond the client stale timeout.
+
+After promoting Vercel, run the hosted smoke once:
+
+```sh
+HOSTED_VISUAL_URL=https://herdr-mise.s11a.com \
+  npm run test:visual -- hosted-smoke.spec.ts
+```
 
 This is a client-development harness check, not full-product release
 acceptance. Use [CONTRIBUTING.md](../CONTRIBUTING.md#verification-commands) for

@@ -1,5 +1,6 @@
 import type { SceneHit } from "../scene/kitchen-scene";
 import type { AgentStore, CoarseSlice } from "../state/store";
+import { isVisualMode } from "../visual-harness";
 import { DetailCard, SessionSummary, Tooltip } from "./agent-panels";
 import { SettingsPanel } from "./settings-panel";
 import {
@@ -80,6 +81,18 @@ export function Chrome(props: ChromeProps) {
         sourceDiagnostic={props.coarse.sourceDiagnostic}
         lastUpdateSeconds={props.lastUpdateSeconds}
       />
+      {isVisualMode(import.meta.env.MODE) && (
+        <picture className="visualTuiFigure">
+          <source
+            media="(prefers-reduced-motion: reduce)"
+            srcSet="/tui-demo-poster.png"
+          />
+          <img
+            src="/tui-demo.gif"
+            alt="Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label."
+          />
+        </picture>
+      )}
       {props.hintVisible && (
         <div className="firstHint" role="note">
           Blocked cooks ring the service bell.{" "}

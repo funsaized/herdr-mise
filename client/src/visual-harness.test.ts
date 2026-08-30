@@ -419,7 +419,7 @@ describe("visual WebSocket boundary", () => {
     client.stop();
   });
 
-  it("delegates every socket except the application /ws endpoint", () => {
+  it("delegates every socket except the application /ws endpoint in development", () => {
     const nativeSocket = { readyState: WebSocket.CONNECTING };
     const Native = vi.fn(function () {
       return nativeSocket;
@@ -438,6 +438,27 @@ describe("visual WebSocket boundary", () => {
     expect(Native).toHaveBeenCalledTimes(2);
     expect(new Installed("ws://localhost:5173/ws")).not.toBe(nativeSocket);
     expect(Native).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses non-application sockets without calling native WebSocket when fail-closed", () => {
+    const Native = vi.fn() as unknown as typeof WebSocket,
+      target = { WebSocket: Native },
+      error = vi.spyOn(console, "error").mockImplementation(() => {});
+    installVisualWebSocket(
+      target,
+      { preset: "working", agents: 1, theme: "light" },
+      { failClosed: true },
+    );
+    const Installed = target.WebSocket!;
+    new Installed("ws://127.0.0.1:8686/ws");
+    new Installed("ws://localhost/other");
+    expect(Native).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenCalledWith(
+      "[mise] visual production refuses WebSocket",
+      "ws://127.0.0.1:8686/ws",
+    );
+    error.mockRestore();
   });
 
   it("stays live beyond the stale window and releases heartbeat timers on close", async () => {

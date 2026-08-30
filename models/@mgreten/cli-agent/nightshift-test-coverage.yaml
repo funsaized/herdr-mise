@@ -1,0 +1,27 @@
+type: '@mgreten/cli-agent'
+typeVersion: 2026.08.26.1
+id: 426aee3d-ce89-4e07-88eb-592b57435fdf
+name: nightshift-test-coverage
+version: 1
+tags: {}
+globalArguments:
+  defaultProvider: opencode
+  defaultModel: openai/gpt-5.6-terra
+  defaultToolProfile: readonly
+  commandsDir: .claude/commands
+  commandSubdirs: []
+  claudePath: claude
+  opencodePath: opencode
+  ampPath: amp
+  geminiPath: gemini
+  codexPath: codex
+  grokPath: grok
+  piPath: pi
+  idleTimeoutMs: 600000
+  wallTimeoutMs: 3600000
+  maxRetries: 2
+  sandboxMode: off
+  sandboxRequired: false
+  sandboxNetwork: allow
+  sandboxCredentialAccess: provider
+methods: {}

@@ -32,5 +32,93 @@
     "checksum": "78174c10498cef22fd70f93f93b5914e7fcbd141faa006a45ed3946356b4d135",
     "filesChecksum": "1e59ff0450a15da68626ae20b8abd6518f0e854a9010f34082f149b7b6746a7c",
     "serverUrl": "https://swamp-club.com"
+  },
+  "@mgreten/cli-agent": {
+    "version": "2026.08.26.1",
+    "pulledAt": "2026-08-29T19:39:26.461Z",
+    "files": [
+      ".swamp/bundles/da06fc84/cli_agent.js",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/files/LICENSE.txt",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/files/README.md",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/files/cli_agent.sandbox.sb",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/files/cli_agent.sandbox.strict.sb",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/manifest.yaml",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/models/cli_agent.ts",
+      ".swamp/pulled-extensions/@mgreten/cli-agent/models/cli_agent_orb.ts"
+    ],
+    "checksum": "b0762086f2a0c1ded6026acd1f85c4eb807b9a4be405d553156f56d640968f10",
+    "filesChecksum": "06a1956f2eb48e66c1f2d43177e4ebbc9fc7396d08ab42ce4e2687485ba97fd7",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@mgreten/software-factory-flow-metrics": {
+    "version": "2026.08.02.1",
+    "pulledAt": "2026-08-29T19:40:12.211Z",
+    "files": [
+      ".swamp/pulled-extensions/@mgreten/software-factory-flow-metrics/files/LICENSE.txt",
+      ".swamp/pulled-extensions/@mgreten/software-factory-flow-metrics/files/README.md",
+      ".swamp/pulled-extensions/@mgreten/software-factory-flow-metrics/manifest.yaml",
+      ".swamp/pulled-extensions/@mgreten/software-factory-flow-metrics/reports/flow_metrics_report.ts",
+      ".swamp/report-bundles/82c3cf12/flow_metrics_report.js"
+    ],
+    "checksum": "360154629df9c9544820271b2716fb7a7cd3958301be6b3d0ae83d7f8cbf524b",
+    "filesChecksum": "0a97d08aa64607aa9d83de29666ae41f14cfc822bc97913589f57a55dbf13f58",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@swamp/software-factory": {
+    "version": "2026.06.24.1",
+    "pulledAt": "2026-08-29T19:40:12.242Z",
+    "files": [
+      ".agents/skills/software-factory",
+      ".swamp/bundles/a324fda6/software_factory.js",
+      ".swamp/pulled-extensions/@swamp/software-factory/files/LICENSE.txt",
+      ".swamp/pulled-extensions/@swamp/software-factory/files/README.md",
+      ".swamp/pulled-extensions/@swamp/software-factory/manifest.yaml",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/artifact_schema.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/bindings.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/definition_schema.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/gates.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/graph.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/mermaid.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/run_data.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/run_names.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/summary.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/models/software_factory.ts",
+      ".swamp/pulled-extensions/@swamp/software-factory/reports/work_item_summary_report.ts",
+      ".swamp/report-bundles/637144ef/work_item_summary_report.js"
+    ],
+    "checksum": "29622d1cb0a3bffabf82f68b3d6cbe7e18efcac2c38458b7231e436eb91ab55f",
+    "filesChecksum": "b67885110295b63236743cdc42522703b2c5b18fae873892420b72e662c6c9d7",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@webframp/github": {
+    "version": "2026.08.28.1",
+    "pulledAt": "2026-08-29T19:43:15.081Z",
+    "files": [
+      ".swamp/bundles/9d92b9c9/github/repos.js",
+      ".swamp/pulled-extensions/@webframp/github/files/LICENSE.md",
+      ".swamp/pulled-extensions/@webframp/github/files/README.md",
+      ".swamp/pulled-extensions/@webframp/github/manifest.yaml",
+      ".swamp/pulled-extensions/@webframp/github/models/github/repos.ts"
+    ],
+    "checksum": "6b8dae42f6943125fdfaff803cc34fd407a8b5b02ae6850d8505c92f5fccb488",
+    "filesChecksum": "07c08a05ece9b9a8a05036d4749798ab57eb5e2e9595afd7ee0042a866dbc5f2",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@webframp/github-issue-lifecycle": {
+    "version": "2026.08.28.1",
+    "pulledAt": "2026-08-29T19:43:15.115Z",
+    "files": [
+      ".swamp/bundles/54d902f8/github-issue-lifecycle/lifecycle.js",
+      ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/files/LICENSE.md",
+      ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/files/README.md",
+      ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/manifest.yaml",
+      ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/models/github-issue-lifecycle/lifecycle.ts",
+      ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/reports/lifecycle_metrics.ts",
+      ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/workflows/issue-lifecycle-drive.yaml",
+      ".swamp/report-bundles/32cfbffd/lifecycle_metrics.js"
+    ],
+    "checksum": "bdc2cba9c068248d9d1f237526c2f96b5fc989fba939b6f1fbaeb321a69b804f",
+    "filesChecksum": "053e1e6baa09e771ad93f54d81fde92f26fe9052dc59c9fe86ed49e411c93215",
+    "serverUrl": "https://swamp-club.com"
   }
 }

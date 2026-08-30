@@ -1,0 +1,27 @@
+type: '@mgreten/cli-agent'
+typeVersion: 2026.08.26.1
+id: feda62ec-9e88-4efd-9d35-727f19675029
+name: nightshift-ddd
+version: 1
+tags: {}
+globalArguments:
+  defaultProvider: opencode
+  defaultModel: xai/grok-4.6
+  defaultToolProfile: readonly
+  commandsDir: .claude/commands
+  commandSubdirs: []
+  claudePath: claude
+  opencodePath: scripts/opencode-xhigh
+  ampPath: amp
+  geminiPath: gemini
+  codexPath: codex
+  grokPath: grok
+  piPath: pi
+  idleTimeoutMs: 600000
+  wallTimeoutMs: 3600000
+  maxRetries: 2
+  sandboxMode: off
+  sandboxRequired: false
+  sandboxNetwork: allow
+  sandboxCredentialAccess: provider
+methods: {}
