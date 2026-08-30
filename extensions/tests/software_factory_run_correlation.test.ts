@@ -63,17 +63,20 @@ function context(expectedRunId: string, summaryRunIds: string[]) {
           : encoder.encode(JSON.stringify(value));
       },
     },
-    queryData: async (predicate: string) =>
-      predicate.includes('name == "artifact-67-plan"')
-        ? [{}]
-        : summaryRunIds.map((workflowRunId) => ({
-            content: {
-              status: "succeeded",
-              workflowName: "nightshift-plan",
-              workflowRunId,
-            },
-            createdAt: "2026-08-30T00:01:00Z",
-          })),
+    queryData: async (predicate: string) => {
+      if (predicate.includes('name == "artifact-67-plan"')) return [{}];
+      if (!predicate.includes("version > 0")) {
+        throw new Error("workflow summary query did not request history");
+      }
+      return summaryRunIds.map((workflowRunId) => ({
+        content: {
+          status: "succeeded",
+          workflowName: "nightshift-plan",
+          workflowRunId,
+        },
+        createdAt: "2026-08-30T00:01:00Z",
+      }));
+    },
   };
 }
 

@@ -212,7 +212,7 @@ export async function checkCorrelatedWorkflowRun(
   let records: StoredData[];
   try {
     records = (await query(
-      'name == "report-swamp-workflow-summary-json" && modelType == "workflow"',
+      'name == "report-swamp-workflow-summary-json" && modelType == "workflow" && version > 0',
     )) as StoredData[];
   } catch (error) {
     return fail(

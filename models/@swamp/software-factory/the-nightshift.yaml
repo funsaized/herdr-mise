@@ -1,307 +1,344 @@
-type: '@swamp/software-factory'
+type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
 version: 2
 tags: {}
 globalArguments:
-  stages:
-    - id: planning
-      description: Refresh the GitHub issue, qualify scope, and record an implementation plan.
-      initial: true
-      maxCycles: 5
-      work:
-        mode: workflow
-        workflow:
-          name: nightshift-plan
-          inputs:
-            workItem: '${{ self.workItem }}'
-            issueNumber: '${{ double(self.workItem) }}'
-            reviewFeedback: '${{ data.latest(self.name, "artifact-plan-review").?payload.?findings.orValue([]) }}'
-        resultEvidence: planning-run
-      artifacts:
-        - name: plan
-          schema:
-            type: object
-            required: [summary, steps, testingStrategy, risks, outOfScope]
-            properties:
-              summary: { type: string, minLength: 1 }
-              steps:
-                type: array
-                minItems: 1
-                items: { type: string, minLength: 1 }
-              testingStrategy: { type: string, minLength: 1 }
-              risks:
-                type: array
-                items: { type: string, minLength: 1 }
-              outOfScope:
-                type: array
-                items: { type: string, minLength: 1 }
-      transitions:
-        - name: submit
-          to: plan-review
-          gates:
-            - type: evidence-recorded
-              config: { name: planning-run, requireField: { status: succeeded } }
-            - type: artifact-exists
-              config: { artifact: plan }
+    stages:
+        - id: planning
+          description: Refresh the GitHub issue, qualify scope, and nrecord an implementation plan.
+          initial: true
+          maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-plan
+                  inputs:
+                      workItem: "${{ self.workItem }}"
+                      issueNumber: "${{ double(self.workItem) }}"
+                      reviewFeedback: '${{ data.latest(self.name, "artifact-plan-review").?payload.?findings.orValue([]) }}'
+              resultEvidence: planning-run
+          artifacts:
+              - name: plan
+                schema:
+                    type: object
+                    required:
+                        [summary, steps, testingStrategy, risks, outOfScope]
+                    properties:
+                        summary: { type: string, minLength: 1 }
+                        steps:
+                            type: array
+                            minItems: 1
+                            items: { type: string, minLength: 1 }
+                        testingStrategy: { type: string, minLength: 1 }
+                        risks:
+                            type: array
+                            items: { type: string, minLength: 1 }
+                        outOfScope:
+                            type: array
+                            items: { type: string, minLength: 1 }
+          transitions:
+              - name: submit
+                to: plan-review
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: planning-run,
+                              requireField: { status: succeeded },
+                          }
+                    - type: artifact-exists
+                      config: { artifact: plan }
 
-    - id: plan-review
-      description: Run seven isolated reviewers against the current plan.
-      maxCycles: 5
-      work:
-        mode: workflow
-        workflow:
-          name: nightshift-review
-          inputs:
-            workItem: '${{ self.workItem }}'
-            phase: plan
-            artifactName: plan-review
-            subject: '${{ data.latest(self.name, "artifact-plan").payload }}'
-            subjectRoot: .
-        resultEvidence: plan-review-run
-      artifacts:
-        - name: plan-review
-          kind: findings
-          reviews: plan
-      transitions:
-        - name: approve
-          to: building
-          gates:
-            - type: evidence-recorded
-              config: { name: plan-review-run, requireField: { status: succeeded } }
-            - type: artifact-fresh
-              config: { artifact: plan-review, recordedThisCycle: true }
-            - type: findings-clear
-              config: { artifact: plan-review, blocking: [high] }
-            - type: cel
-              config:
-                expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
-                message: The plan review round must resolve to pass or warn.
-            - type: human-approval
-              config: { id: plan-approval }
-        - name: rework
-          to: planning
-          gates:
-            - type: artifact-fresh
-              config: { artifact: plan-review, recordedThisCycle: true }
-            - type: cel
-              config:
-                expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
-                message: Rework is available only for a failed plan review round.
+        - id: plan-review
+          description: Run seven isolated reviewers against the current plan.
+          maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-review
+                  inputs:
+                      workItem: "${{ self.workItem }}"
+                      phase: plan
+                      artifactName: plan-review
+                      subject: '${{ data.latest(self.name, "artifact-plan").payload }}'
+                      subjectRoot: .
+              resultEvidence: plan-review-run
+          artifacts:
+              - name: plan-review
+                kind: findings
+                reviews: plan
+          transitions:
+              - name: approve
+                to: building
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: plan-review-run,
+                              requireField: { status: succeeded },
+                          }
+                    - type: artifact-fresh
+                      config: { artifact: plan-review, recordedThisCycle: true }
+                    - type: findings-clear
+                      config: { artifact: plan-review, blocking: [high] }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
+                          message: The plan review round must resolve to pass or warn.
+                    - type: human-approval
+                      config: { id: plan-approval }
+              - name: rework
+                to: planning
+                gates:
+                    - type: artifact-fresh
+                      config: { artifact: plan-review, recordedThisCycle: true }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          message: Rework is available only for a failed plan review round.
 
-    - id: building
-      description: Implement the approved plan without committing or pushing.
-      maxCycles: 5
-      work:
-        mode: workflow
-        workflow:
-          name: nightshift-build
-          inputs:
-            workItem: '${{ self.workItem }}'
-            issueNumber: '${{ double(self.workItem) }}'
-            plan: '${{ data.latest(self.name, "artifact-plan").payload }}'
-            reviewFeedback: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) }}'
-        resultEvidence: build-run
-      artifacts:
-        - name: workspace
-          schema:
-            type: object
-            required: [workItem, subjectRoot, branch, baseCommit]
-            properties:
-              workItem: { type: string, minLength: 1 }
-              subjectRoot: { type: string, pattern: '^/' }
-              branch: { type: string, minLength: 1 }
-              baseCommit: { type: string, pattern: '^[0-9a-f]{40}$' }
-        - name: change-summary
-          schema:
-            type: object
-            required: [summary, files, tests, branch, baseCommit]
-            properties:
-              summary: { type: string, minLength: 1 }
-              files:
-                type: array
-                minItems: 1
-                items: { type: string, minLength: 1 }
-              tests:
-                type: array
-                minItems: 1
-                items: { type: string, minLength: 1 }
-              branch: { type: string, minLength: 1 }
-              baseCommit: { type: string, pattern: '^[0-9a-f]{40}$' }
-      transitions:
-        - name: submit
-          to: code-review
-          gates:
-            - type: evidence-recorded
-              config: { name: build-run, requireField: { status: succeeded } }
-            - type: artifact-exists
-              config: { artifact: change-summary }
+        - id: building
+          description: Implement the approved plan without committing or pushing.
+          maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-build
+                  inputs:
+                      workItem: "${{ self.workItem }}"
+                      issueNumber: "${{ double(self.workItem) }}"
+                      plan: '${{ data.latest(self.name, "artifact-plan").payload }}'
+                      reviewFeedback: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) }}'
+              resultEvidence: build-run
+          artifacts:
+              - name: workspace
+                schema:
+                    type: object
+                    required: [workItem, subjectRoot, branch, baseCommit]
+                    properties:
+                        workItem: { type: string, minLength: 1 }
+                        subjectRoot: { type: string, pattern: "^/" }
+                        branch: { type: string, minLength: 1 }
+                        baseCommit: { type: string, pattern: "^[0-9a-f]{40}$" }
+              - name: change-summary
+                schema:
+                    type: object
+                    required: [summary, files, tests, branch, baseCommit]
+                    properties:
+                        summary: { type: string, minLength: 1 }
+                        files:
+                            type: array
+                            minItems: 1
+                            items: { type: string, minLength: 1 }
+                        tests:
+                            type: array
+                            minItems: 1
+                            items: { type: string, minLength: 1 }
+                        branch: { type: string, minLength: 1 }
+                        baseCommit: { type: string, pattern: "^[0-9a-f]{40}$" }
+          transitions:
+              - name: submit
+                to: code-review
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: build-run,
+                              requireField: { status: succeeded },
+                          }
+                    - type: artifact-exists
+                      config: { artifact: change-summary }
 
-    - id: code-review
-      description: Run seven isolated reviewers against the written code and tests.
-      maxCycles: 5
-      work:
-        mode: workflow
-        workflow:
-          name: nightshift-review
-          inputs:
-            workItem: '${{ self.workItem }}'
-            phase: code
-            artifactName: code-review
-            subject: '${{ data.latest(self.name, "artifact-change-summary").payload }}'
-            subjectRoot: '${{ data.latest(self.name, "artifact-workspace").payload.subjectRoot }}'
-        resultEvidence: code-review-run
-      artifacts:
-        - name: code-review
-          kind: findings
-          reviews: change-summary
-      transitions:
-        - name: approve
-          to: ship-prep
-          gates:
-            - type: evidence-recorded
-              config: { name: code-review-run, requireField: { status: succeeded } }
-            - type: artifact-fresh
-              config: { artifact: code-review, recordedThisCycle: true }
-            - type: findings-clear
-              config: { artifact: code-review, blocking: [high] }
-            - type: cel
-              config:
-                expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
-                message: The code review round must resolve to pass or warn.
-        - name: rework
-          to: building
-          gates:
-            - type: artifact-fresh
-              config: { artifact: code-review, recordedThisCycle: true }
-            - type: cel
-              config:
-                expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
-                message: Rework is available only for a failed code review round.
+        - id: code-review
+          description: Run seven isolated reviewers against the written code and tests.
+          maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-review
+                  inputs:
+                      workItem: "${{ self.workItem }}"
+                      phase: code
+                      artifactName: code-review
+                      subject: '${{ data.latest(self.name, "artifact-change-summary").payload }}'
+                      subjectRoot: '${{ data.latest(self.name, "artifact-workspace").payload.subjectRoot }}'
+              resultEvidence: code-review-run
+          artifacts:
+              - name: code-review
+                kind: findings
+                reviews: change-summary
+          transitions:
+              - name: approve
+                to: ship-prep
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: code-review-run,
+                              requireField: { status: succeeded },
+                          }
+                    - type: artifact-fresh
+                      config: { artifact: code-review, recordedThisCycle: true }
+                    - type: findings-clear
+                      config: { artifact: code-review, blocking: [high] }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
+                          message: The code review round must resolve to pass or warn.
+              - name: rework
+                to: building
+                gates:
+                    - type: artifact-fresh
+                      config: { artifact: code-review, recordedThisCycle: true }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          message: Rework is available only for a failed code review round.
 
-    - id: ship-prep
-      description: A human creates and reviews the clean commit and pull request candidate.
-      maxCycles: 5
-      artifacts:
-        - name: release-candidate
-          schema:
-            type: object
-            required: [commit, baseCommit, subjectRoot, prUrl, branch]
-            properties:
-              commit: { type: string, pattern: '^[0-9a-f]{40}$' }
-              baseCommit: { type: string, pattern: '^[0-9a-f]{40}$' }
-              subjectRoot: { type: string, minLength: 1 }
-              prUrl: { type: string, minLength: 1 }
-              branch: { type: string, minLength: 1 }
-      transitions:
-        - name: ship
-          to: shipping
-          gates:
-            - type: artifact-exists
-              config: { artifact: release-candidate }
-            - type: human-approval
-              config: { id: ship-approval }
+        - id: ship-prep
+          description: A human creates and reviews the clean commit and pull request candidate.
+          maxCycles: 5
+          artifacts:
+              - name: release-candidate
+                schema:
+                    type: object
+                    required: [commit, baseCommit, subjectRoot, prUrl, branch]
+                    properties:
+                        commit: { type: string, pattern: "^[0-9a-f]{40}$" }
+                        baseCommit: { type: string, pattern: "^[0-9a-f]{40}$" }
+                        subjectRoot: { type: string, minLength: 1 }
+                        prUrl: { type: string, minLength: 1 }
+                        branch: { type: string, minLength: 1 }
+          transitions:
+              - name: ship
+                to: shipping
+                gates:
+                    - type: artifact-exists
+                      config: { artifact: release-candidate }
+                    - type: human-approval
+                      config: { id: ship-approval }
 
-    - id: shipping
-      description: Verify the exact commit and link its pull request.
-      maxCycles: 5
-      work:
-        mode: workflow
-        workflow:
-          name: nightshift-ship
-          inputs:
-            issueNumber: '${{ double(self.workItem) }}'
-            commit: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
-            baseCommit: '${{ data.latest(self.name, "artifact-release-candidate").payload.baseCommit }}'
-            subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
-            prUrl: '${{ data.latest(self.name, "artifact-release-candidate").payload.prUrl }}'
-            branch: '${{ data.latest(self.name, "artifact-release-candidate").payload.branch }}'
-        resultEvidence: shipping-run
-      transitions:
-        - name: complete
-          to: await-merge
-          gates:
-            - type: evidence-recorded
-              config: { name: shipping-run, requireField: { status: succeeded } }
-        - name: rework
-          to: building
-          gates:
-            - type: evidence-recorded
-              config: { name: shipping-run, requireField: { status: failed } }
+        - id: shipping
+          description: Verify the exact commit and link its pull request.
+          maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-ship
+                  inputs:
+                      issueNumber: "${{ double(self.workItem) }}"
+                      commit: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
+                      baseCommit: '${{ data.latest(self.name, "artifact-release-candidate").payload.baseCommit }}'
+                      subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
+                      prUrl: '${{ data.latest(self.name, "artifact-release-candidate").payload.prUrl }}'
+                      branch: '${{ data.latest(self.name, "artifact-release-candidate").payload.branch }}'
+              resultEvidence: shipping-run
+          transitions:
+              - name: complete
+                to: await-merge
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: shipping-run,
+                              requireField: { status: succeeded },
+                          }
+              - name: rework
+                to: building
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: shipping-run,
+                              requireField: { status: failed },
+                          }
 
-    - id: await-merge
-      description: Wait for an explicit human decision on the verified pull request.
-      maxCycles: 5
-      transitions:
-        - name: close
-          to: deployed-verification
-          gates:
-            - type: human-approval
-              config: { id: merge-confirmation }
-        - name: rework
-          to: building
-          gates:
-            - type: human-approval
-              config: { id: merge-rework }
+        - id: await-merge
+          description: Wait for an explicit human decision on the verified pull request.
+          maxCycles: 5
+          transitions:
+              - name: close
+                to: deployed-verification
+                gates:
+                    - type: human-approval
+                      config: { id: merge-confirmation }
+              - name: rework
+                to: building
+                gates:
+                    - type: human-approval
+                      config: { id: merge-rework }
 
-    - id: deployed-verification
-      description: Verify the deployed visual playground before closing the issue.
-      maxCycles: 5
-      work:
-        mode: method
-        method:
-          modelIdOrName: verification-root
-          methodName: run_subject
-          inputs:
-            subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
-            expectedGitHead: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
-            script: test:hosted
-        resultEvidence: hosted-smoke-run
-      transitions:
-        - name: complete
-          to: closing
+        - id: deployed-verification
+          description: Verify the deployed visual playground before closing the issue.
+          maxCycles: 5
+          work:
+              mode: method
+              method:
+                  modelIdOrName: verification-root
+                  methodName: run_subject
+                  inputs:
+                      subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
+                      expectedGitHead: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
+                      script: test:hosted
+              resultEvidence: hosted-smoke-run
+          transitions:
+              - name: complete
+                to: closing
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: hosted-smoke-run,
+                              requireField: { status: succeeded },
+                          }
+
+        - id: closing
+          description: Record the confirmed merge and complete the issue lifecycle.
+          maxCycles: 5
+          work:
+              mode: method
+              method:
+                  modelIdOrName: nightshift-issues
+                  methodName: pr_merged
+                  inputs:
+                      issue_number: "${{ double(self.workItem) }}"
+              resultEvidence: close-run
+          transitions:
+              - name: complete
+                to: done
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: close-run,
+                              requireField: { status: succeeded },
+                          }
+              - name: retry
+                to: await-merge
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          { name: close-run, requireField: { status: failed } }
+
+        - id: done
+          terminal: true
+
+        - id: aborted
+          terminal: true
+
+    globalTransitions:
+        - name: abort
+          to: aborted
           gates:
-            - type: evidence-recorded
-              config: { name: hosted-smoke-run, requireField: { status: succeeded } }
-
-    - id: closing
-      description: Record the confirmed merge and complete the issue lifecycle.
-      maxCycles: 5
-      work:
-        mode: method
-        method:
-          modelIdOrName: nightshift-issues
-          methodName: pr_merged
-          inputs:
-            issue_number: '${{ double(self.workItem) }}'
-        resultEvidence: close-run
-      transitions:
-        - name: complete
-          to: done
-          gates:
-            - type: evidence-recorded
-              config: { name: close-run, requireField: { status: succeeded } }
-        - name: retry
-          to: await-merge
-          gates:
-            - type: evidence-recorded
-              config: { name: close-run, requireField: { status: failed } }
-
-    - id: done
-      terminal: true
-
-    - id: aborted
-      terminal: true
-
-  globalTransitions:
-    - name: abort
-      to: aborted
-      gates:
-        - type: human-approval
-          config: { id: abort-confirmation }
+              - type: human-approval
+                config: { id: abort-confirmation }
 reports:
-  require:
-    - { name: '@swamp/software-factory/work-item-summary', methods: [summary] }
-    - { name: '@mgreten/software-factory-flow-metrics', methods: [summary] }
+    require:
+        - {
+              name: "@swamp/software-factory/work-item-summary",
+              methods: [summary],
+          }
+        - { name: "@mgreten/software-factory-flow-metrics", methods: [summary] }
 methods: {}
