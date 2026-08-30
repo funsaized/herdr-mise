@@ -344,11 +344,25 @@ test("visual production serves fixtures and stays isolated from native and local
   });
   await expect(figure).toBeVisible();
   await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
+  await expect(page.locator(".visualTuiFigure")).toHaveCSS(
+    "pointer-events",
+    "none",
+  );
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
   expect((await request.get("/og.png")).status()).toBe(200);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     "content",
     "https://herdr-mise.s11a.com/og.png",
+  );
+  const socialAlt =
+    "The herdr-mise demo kitchen showing agent stations and the DEMO SERVICE placard.";
+  await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
+    "content",
+    socialAlt,
+  );
+  await expect(page.locator('meta[name="twitter:image:alt"]')).toHaveAttribute(
+    "content",
+    socialAlt,
   );
   await page.waitForTimeout(6_500);
   await expect(page.getByRole("alert")).toHaveCount(0);

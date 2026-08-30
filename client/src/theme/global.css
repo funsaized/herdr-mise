@@ -424,6 +424,7 @@ select:focus-visible {
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: var(--shadowPlacard);
+  pointer-events: none;
 }
 .visualTuiFigure img {
   display: block;

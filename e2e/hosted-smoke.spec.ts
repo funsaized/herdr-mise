@@ -14,7 +14,14 @@ test("hosted visual demo serves static assets without localhost sockets", async 
   await expect(
     page.getByRole("status").filter({ hasText: "DEMO SERVICE" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toHaveCount(1);
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
   expect((await request.get("/og.png")).status()).toBe(200);
-  expect(sockets.filter((url) => new URL(url).port === "8686")).toEqual([]);
+  await page.waitForTimeout(3_500);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(sockets).toEqual([]);
 });

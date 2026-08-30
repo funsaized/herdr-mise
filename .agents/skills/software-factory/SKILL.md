@@ -24,7 +24,7 @@ that serves **many work items concurrently** — every method takes `workItem`,
 and all run data is namespaced per work item. You are a generic interpreter:
 the definition is the program, each work item's run state is a program
 counter, and `status` tells you what is required next. You never need to
-know what any stage *means*.
+know what any stage _means_.
 
 ## Core principles
 
@@ -100,13 +100,13 @@ method reference. In short:
      with the (already resolved) inputs, wait, and record the outcome under
      `resultEvidence`.
 3. Record products: `record_artifact workItem=<ref> name=<n>
-   payload='<json>'`, `record_evidence workItem=<ref> name=<n>
-   payload='<json>'`.
+payload='<json>'`, `record_evidence workItem=<ref> name=<n>
+payload='<json>'`.
 4. Re-check `status`. **Propulsion rule**: if exactly one transition is
    `satisfied` and it has no failing or pending `human-approval` gate and no
    `manual: true`, advance automatically. If a human gate is the only
    blocker, fetch the recorded subject/own artifacts with `swamp data
-   query`, present their actual payloads, and stop. If several transitions
+query`, present their actual payloads, and stop. If several transitions
    are satisfied, ask the human.
 5. `advance transition=<name>`. Gate failures return actionable reasons —
    follow them; they are the factory steering you.
@@ -120,21 +120,21 @@ escalation/abort transition, or rethink the approach.
 
 ## Quick reference
 
-| I want to… | Command |
-| --- | --- |
-| Overview of all runs | `swamp model method run <factory> status` |
-| See what's next | `swamp model method run <factory> status --input workItem=<ref>` |
-| Start a work item | `swamp model method run <factory> start --input workItem=<ref>` |
-| Mark a stage's work as running | `swamp model method run <factory> record_dispatch --input workItem=<ref>` (before executing the work) |
-| Record a work product | `swamp model method run <factory> record_artifact --input workItem=<ref> --input name=<n> --input payload='<json>'` |
-| Record an external fact | `swamp model method run <factory> record_evidence --input workItem=<ref> --input name=<n> --input payload='<json>'` |
-| Resolve review findings | `swamp model method run <factory> resolve_findings --input workItem=<ref> --input artifact=<n> --input resolutions='<json>'` |
-| Human approves a gate | `swamp model method run <factory> approve --input workItem=<ref> --input gateId=<id> --input actor=<who>` |
-| Human rejects a gate | `swamp model method run <factory> reject --input workItem=<ref> --input gateId=<id> --input actor=<who> --input note='<why>'` |
-| Move forward | `swamp model method run <factory> advance --input workItem=<ref> --input transition=<name>` |
-| Lint a definition | `swamp model method run <factory> validate` |
-| Render the machine | `swamp model method run <factory> describe` |
-| Report a work item's history | `swamp model method run <factory> summary --input workItem=<ref>` |
-| Discover the method surface | `swamp model type describe @swamp/software-factory` |
-| List what's recorded | `swamp data query 'modelName == "<factory>"' --select name` |
-| Fetch a payload field | `swamp data query 'modelName == "<factory>" && name == "artifact-<workItem>-<artifact>"' --select attributes.payload.<field> --json` (see references/driving.md "Querying run data") |
+| I want to…                     | Command                                                                                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Overview of all runs           | `swamp model method run <factory> status`                                                                                                                                            |
+| See what's next                | `swamp model method run <factory> status --input workItem=<ref>`                                                                                                                     |
+| Start a work item              | `swamp model method run <factory> start --input workItem=<ref>`                                                                                                                      |
+| Mark a stage's work as running | `swamp model method run <factory> record_dispatch --input workItem=<ref>` (before executing the work)                                                                                |
+| Record a work product          | `swamp model method run <factory> record_artifact --input workItem=<ref> --input name=<n> --input payload='<json>'`                                                                  |
+| Record an external fact        | `swamp model method run <factory> record_evidence --input workItem=<ref> --input name=<n> --input payload='<json>'`                                                                  |
+| Resolve review findings        | `swamp model method run <factory> resolve_findings --input workItem=<ref> --input artifact=<n> --input resolutions='<json>'`                                                         |
+| Human approves a gate          | `swamp model method run <factory> approve --input workItem=<ref> --input gateId=<id> --input actor=<who>`                                                                            |
+| Human rejects a gate           | `swamp model method run <factory> reject --input workItem=<ref> --input gateId=<id> --input actor=<who> --input note='<why>'`                                                        |
+| Move forward                   | `swamp model method run <factory> advance --input workItem=<ref> --input transition=<name>`                                                                                          |
+| Lint a definition              | `swamp model method run <factory> validate`                                                                                                                                          |
+| Render the machine             | `swamp model method run <factory> describe`                                                                                                                                          |
+| Report a work item's history   | `swamp model method run <factory> summary --input workItem=<ref>`                                                                                                                    |
+| Discover the method surface    | `swamp model type describe @swamp/software-factory`                                                                                                                                  |
+| List what's recorded           | `swamp data query 'modelName == "<factory>"' --select name`                                                                                                                          |
+| Fetch a payload field          | `swamp data query 'modelName == "<factory>" && name == "artifact-<workItem>-<artifact>"' --select attributes.payload.<field> --json` (see references/driving.md "Querying run data") |

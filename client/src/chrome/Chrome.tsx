@@ -1,6 +1,5 @@
 import type { SceneHit } from "../scene/kitchen-scene";
 import type { AgentStore, CoarseSlice } from "../state/store";
-import { isVisualMode } from "../visual-harness";
 import { DetailCard, SessionSummary, Tooltip } from "./agent-panels";
 import { SettingsPanel } from "./settings-panel";
 import {
@@ -81,7 +80,7 @@ export function Chrome(props: ChromeProps) {
         sourceDiagnostic={props.coarse.sourceDiagnostic}
         lastUpdateSeconds={props.lastUpdateSeconds}
       />
-      {isVisualMode(import.meta.env.MODE) && (
+      {import.meta.env.MODE === "visual" && (
         <picture className="visualTuiFigure">
           <source
             media="(prefers-reduced-motion: reduce)"

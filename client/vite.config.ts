@@ -50,6 +50,15 @@ function visualSite(): Plugin {
             },
             injectTo: "head" as const,
           })),
+          ...["og:image:alt", "twitter:image:alt"].map((name) => ({
+            tag: "meta",
+            attrs: {
+              [name.startsWith("og:") ? "property" : "name"]: name,
+              content:
+                "The herdr-mise demo kitchen showing agent stations and the DEMO SERVICE placard.",
+            },
+            injectTo: "head" as const,
+          })),
           {
             tag: "meta",
             attrs: { property: "og:title", content: "herdr-mise demo" },

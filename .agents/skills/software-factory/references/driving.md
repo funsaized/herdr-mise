@@ -39,19 +39,44 @@ has this shape:
 {
   "started": true,
   "workItem": "PAY-218",
-  "stage": { "id": "plan-review", "cycle": 2, "maxCycles": 5, "terminal": false },
-  "work": { "mode": "dispatch", "skills": ["architecture"], "systemPrompt": "…resolved…" },
+  "stage": {
+    "id": "plan-review",
+    "cycle": 2,
+    "maxCycles": 5,
+    "terminal": false
+  },
+  "work": {
+    "mode": "dispatch",
+    "skills": ["architecture"],
+    "systemPrompt": "…resolved…"
+  },
   "unresolvedBindings": [],
   "transitions": [
-    { "name": "approve", "to": "implementing", "satisfied": false, "manual": false,
+    {
+      "name": "approve",
+      "to": "implementing",
+      "satisfied": false,
+      "manual": false,
       "cycleLimitBlocked": false,
-      "gates": [ { "type": "human-approval", "pass": false,
-                   "reasons": ["awaiting human approval 'plan-approval' (0/1)…"] } ] },
+      "gates": [
+        {
+          "type": "human-approval",
+          "pass": false,
+          "reasons": ["awaiting human approval 'plan-approval' (0/1)…"]
+        }
+      ]
+    },
     { "name": "rework", "to": "planning", "satisfied": true, "gates": [] }
   ],
   "contextManifest": [
-    { "name": "plan", "type": "artifact", "role": "subject", "recorded": true,
-      "version": 2, "declaredIn": "planning" }
+    {
+      "name": "plan",
+      "type": "artifact",
+      "role": "subject",
+      "recorded": true,
+      "version": 2,
+      "declaredIn": "planning"
+    }
   ],
   "cycles": { "planning": 2, "review": 2 },
   "pendingApprovals": ["approve"]
@@ -108,7 +133,7 @@ Field notes (whichever you project):
 
 ## Querying run data
 
-Run records are swamp data. `swamp data query` loads *specific fields* into
+Run records are swamp data. `swamp data query` loads _specific fields_ into
 context instead of whole payloads — never guess at the syntax; it follows
 mechanically from the definition:
 
@@ -276,7 +301,7 @@ queries together.
 - **workflow** — trigger the named swamp workflow with the resolved inputs
   (`swamp workflow run <name> --input k=v`), wait for completion, then record
   the outcome: `record_evidence name=<resultEvidence>
-  payload='{"status":"succeeded|failed","runId":"…"}'`. The outcome must
+payload='{"status":"succeeded|failed","runId":"…"}'`. The outcome must
   satisfy the built-in contract (`status` + `runId` required) — an empty or
   malformed record is rejected, so a workflow that "succeeded" without
   recording surfaces as a loud `record_evidence` error rather than a silent
@@ -335,7 +360,7 @@ configured them.
 
 ## The dispatch guard (don't loop on a stage)
 
-Call `record_dispatch` once per stage entry, *before* doing the work. It is the
+Call `record_dispatch` once per stage entry, _before_ doing the work. It is the
 deterministic record that the stage ran, and it counts re-dispatches of the
 same `(stage, cycle)`:
 
@@ -372,7 +397,7 @@ definition.
   `validation-<target>` record — the rejected value plus the path-bearing
   errors. You don't record this yourself; the engine does. If the stage is set
   up for retry-with-feedback, the next attempt binds it automatically. Either
-  way, fix the *shape* the errors name — don't reshape the schema.
+  way, fix the _shape_ the errors name — don't reshape the schema.
 - `kind: findings` artifact payloads must carry
   `findings: [{id, severity, description, category?, resolved?, resolutionNote?}]`
   with severity exactly one of `critical`/`high`/`medium`/`low` — there is

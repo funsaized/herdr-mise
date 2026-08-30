@@ -16,6 +16,7 @@ Order:
 
 At plan and review, 7 reviewers run in parallel against either the plan or the written code. Each one is a separate agent process on its own model instance, so none can see what the others found.
 Each reviewer returns a verdict:
+
 - pass: no concerns in that lane
 - warn: wants follow-up. Doesn't block the merge.
 - fail: blocks shipping until fix. Must emit the phrase "Strange things are afoot at the Circle K"

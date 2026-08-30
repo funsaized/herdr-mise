@@ -18,26 +18,26 @@ beside it, not inside it.
 
 ```yaml
 stages:
-  - id: plan-review              # lowercase, -/_ separators
+  - id: plan-review # lowercase, -/_ separators
     description: optional prose
-    initial: true                # exactly one stage
-    terminal: true               # at least one stage (no transitions out)
-    maxCycles: 5                 # re-entry circuit breaker, default 5
-    maxDispatchesPerCycle: 2     # dispatches allowed per entry, default 2
-    work: { ... }                # how the work gets done (below)
-    artifacts: [ ... ]           # declared data products (below)
-    evidence: [ ... ]            # declared external facts, each with a schema (below)
-    transitions: [ ... ]         # gated edges (below)
+    initial: true # exactly one stage
+    terminal: true # at least one stage (no transitions out)
+    maxCycles: 5 # re-entry circuit breaker, default 5
+    maxDispatchesPerCycle: 2 # dispatches allowed per entry, default 2
+    work: { ... } # how the work gets done (below)
+    artifacts: [...] # declared data products (below)
+    evidence: [...] # declared external facts, each with a schema (below)
+    transitions: [...] # gated edges (below)
 ```
 
 ## Work modes
 
-| mode | executor | keys |
-| --- | --- | --- |
-| `interactive` | the driving agent in conversation | `skills`, `systemPrompt`, `constraints` |
-| `dispatch` | one subagent per listed skill, parallel | + `command` template |
-| `workflow` | a named swamp workflow | `workflow: {name, inputs}`, `resultEvidence` |
-| `method` | one model method call | `method: {modelIdOrName, methodName, inputs}`, `resultEvidence` |
+| mode          | executor                                | keys                                                            |
+| ------------- | --------------------------------------- | --------------------------------------------------------------- |
+| `interactive` | the driving agent in conversation       | `skills`, `systemPrompt`, `constraints`                         |
+| `dispatch`    | one subagent per listed skill, parallel | + `command` template                                            |
+| `workflow`    | a named swamp workflow                  | `workflow: {name, inputs}`, `resultEvidence`                    |
+| `method`      | one model method call                   | `method: {modelIdOrName, methodName, inputs}`, `resultEvidence` |
 
 `workflow`/`method` stages should declare `resultEvidence` (the evidence name
 the driver records the outcome under) — `validate` warns otherwise. They may
@@ -61,9 +61,9 @@ the work spec with bindings already resolved.
 ```yaml
 artifacts:
   - name: plan-review
-    kind: findings        # unlocks findings gates + resolve_findings
-    reviews: plan         # subject link: pins subject version on record
-    schema:               # JSON-Schema-flavored subset, compiled to zod
+    kind: findings # unlocks findings gates + resolve_findings
+    reviews: plan # subject link: pins subject version on record
+    schema: # JSON-Schema-flavored subset, compiled to zod
       type: object
       required: [summary]
       properties:
@@ -127,7 +127,7 @@ downstream stage never consumes a malformed upstream product.
   ```yaml
   schema:
     type: object
-    additionalProperties: true   # this object accepts undeclared keys
+    additionalProperties: true # this object accepts undeclared keys
     properties: { ... }
   ```
 
@@ -150,7 +150,8 @@ downstream stage never consumes a malformed upstream product.
   ```yaml
   work:
     mode: method
-    method: { modelIdOrName: "@my/planner", methodName: generate, inputs: { ... } }
+    method:
+      { modelIdOrName: "@my/planner", methodName: generate, inputs: { ... } }
     inputsSchema:
       type: object
       required: [risks]
@@ -182,13 +183,13 @@ stages:
         modelIdOrName: "@my/planner"
         methodName: generate
         inputs:
-          workItem: '${{ self.workItem }}'
+          workItem: "${{ self.workItem }}"
           # Whole record, null-safe: null on the first attempt, the recorded
           # failure (its .rejected value + .errors) on a retry. NEVER bind a
           # sub-field like `…"validation-plan").errors` — that throws on the
           # first attempt (no record yet) and leaves the input unresolved.
           feedback: '${{ data.latest(self.name, "validation-plan") }}'
-      resultEvidence: plan-run     # captures the run outcome {status, runId}
+      resultEvidence: plan-run # captures the run outcome {status, runId}
     artifacts:
       - name: plan
         schema:
@@ -196,7 +197,7 @@ stages:
           required: [scope, risks]
           properties:
             scope: { type: string, minLength: 1 }
-            risks: { type: array, items: { type: string } }   # the field LLMs drift on
+            risks: { type: array, items: { type: string } } # the field LLMs drift on
     transitions:
       - name: submit
         to: done
@@ -245,17 +246,17 @@ This factory is bundled runnable as
 
 All gates on a transition must pass for `advance`.
 
-| type | config | passes when |
-| --- | --- | --- |
-| `artifact-exists` | `artifact` | ≥1 version recorded |
-| `artifact-fresh` | `artifact`, `recordedThisCycle?` | pinned subject version is current; with `recordedThisCycle`, latest version was recorded during the current stage entry (forces re-review on re-entry) |
-| `findings-clear` | `artifact`, `blocking: [severities]` | no unresolved finding at a blocking severity |
-| `human-approval` | `id`, `minApprovals?` | enough `approve` records for the current (stage, cycle); any rejection blocks |
-| `evidence-recorded` | `name`, `requireField?` | evidence recorded during the current (stage, cycle); optional dot-path field matching, e.g. `{status: succeeded}` |
-| `cooldown` | `afterEvidence`\|`afterArtifact`, `seconds` | enough wall-clock time since the record |
-| `max-cycles` | `stage`, `limit`, `invert?` | routing only (e.g. make `escalate` live after N rounds) — the safety net is the per-stage `maxCycles` |
-| `cel` | `expr`, `message?` | the CEL predicate is true over `artifacts.<snake_name>`, `evidence.<snake_name>`, `approvals`, `state`, `workItem` |
-| `workflow-succeeded` | `workflow`, `requireStepOutputs?` | swamp's own run record for the named workflow shows the latest run succeeded during this stage entry — verified, not attested |
+| type                 | config                                      | passes when                                                                                                                                            |
+| -------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `artifact-exists`    | `artifact`                                  | ≥1 version recorded                                                                                                                                    |
+| `artifact-fresh`     | `artifact`, `recordedThisCycle?`            | pinned subject version is current; with `recordedThisCycle`, latest version was recorded during the current stage entry (forces re-review on re-entry) |
+| `findings-clear`     | `artifact`, `blocking: [severities]`        | no unresolved finding at a blocking severity                                                                                                           |
+| `human-approval`     | `id`, `minApprovals?`                       | enough `approve` records for the current (stage, cycle); any rejection blocks                                                                          |
+| `evidence-recorded`  | `name`, `requireField?`                     | evidence recorded during the current (stage, cycle); optional dot-path field matching, e.g. `{status: succeeded}`                                      |
+| `cooldown`           | `afterEvidence`\|`afterArtifact`, `seconds` | enough wall-clock time since the record                                                                                                                |
+| `max-cycles`         | `stage`, `limit`, `invert?`                 | routing only (e.g. make `escalate` live after N rounds) — the safety net is the per-stage `maxCycles`                                                  |
+| `cel`                | `expr`, `message?`                          | the CEL predicate is true over `artifacts.<snake_name>`, `evidence.<snake_name>`, `approvals`, `state`, `workItem`                                     |
+| `workflow-succeeded` | `workflow`, `requireStepOutputs?`           | swamp's own run record for the named workflow shows the latest run succeeded during this stage entry — verified, not attested                          |
 
 Reserved: `human-approval` ids must not start with `cycle-override:`.
 
@@ -265,9 +266,9 @@ Reserved: `human-approval` ids must not start with `cycle-override:`.
 transitions:
   - name: approve
     to: implementing
-    manual: true        # optional: human "go" even when all gates pass
-    gates: [ ... ]
-globalTransitions:      # available from every non-terminal stage
+    manual: true # optional: human "go" even when all gates pass
+    gates: [...]
+globalTransitions: # available from every non-terminal stage
   - name: abort
     to: aborted
     gates: [{ type: human-approval, config: { id: abort-confirmation } }]
