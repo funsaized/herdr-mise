@@ -58,6 +58,9 @@ isolated work-item worktrees and have explicit evidence that overlap is safe.
 - Bind the server to loopback and use token authentication.
 - Keep workflow definitions and model configuration in the control checkout.
 
+Implemented by `scripts/nightshift-serve.sh`; operational commands live in
+`SWAMP.md`.
+
 ### 2. Replace The Blanket Overlap Rule
 
 Update `AGENTS.md` and `SWAMP.md` to state:
@@ -82,6 +85,9 @@ fail if they acquire a source-mutating dependency. Allowed operations are:
 Reject CLI-agent invocation, Git workspace preparation, project builds, shell
 execution, release operations, and verification subjects from this path.
 
+Enforced by `auditIntakeWorkflowContract` in
+`scripts/workflow-contract.test.mjs`.
+
 ### 4. Make Intake Retryable
 
 - Preserve the caller-provided `idempotencyKey` through every attempt.
@@ -93,6 +99,9 @@ execution, release operations, and verification subjects from this path.
 - Inspect `@swamp/workflow-summary` or `@swamp/method-summary` before retrying a
   failed run.
 
+Implemented by `scripts/nightshift-intake.mjs`, with prepared FIFO inputs in
+`intake/nightshift-features.json`.
+
 ### 5. Pilot The Three Features
 
 Submit the three prepared feature intakes through `swamp serve`, sequentially
@@ -102,6 +111,11 @@ unnecessary contention on `the-nightshift` and `nightshift-github`.
 
 Stop after each work item reaches `planning`. Do not run `nightshift-plan`
 without a separate instruction.
+
+The authenticated intake and replay checks passed on 2026-08-30 for issues
+`#78`, `#79`, and `#80`; replay returned `created: false`, and all three factory
+items remain at `planning`. No unrelated build was active, so the overlap
+assertion remains a required rollout check.
 
 ## Verification
 
