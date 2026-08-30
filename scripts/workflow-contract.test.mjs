@@ -538,7 +538,6 @@ test("shared verification is subject-bounded and never publishes evidence", () =
     "scripts/workflow-contract.test.mjs",
     "scripts/nightshift-intake.mjs",
     "scripts/nightshift-serve.sh",
-    "PARALLEL.md",
     "intake/nightshift-features.json",
     "verification/**",
     "workflows/**",
