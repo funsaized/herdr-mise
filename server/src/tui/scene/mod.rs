@@ -628,6 +628,7 @@ pub fn draw(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapter::Normalizer;
     use crate::protocol::{
         AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic,
     };
@@ -920,6 +921,73 @@ mod tests {
             .expect("blocked station banner");
         assert_eq!(blocked_banner.fg, theme::TEXT);
         assert!(!blocked_banner.modifier.contains(Modifier::REVERSED));
+    }
+
+    #[test]
+    fn real_fixture_keeps_capped_tall_scene_and_state_chrome() {
+        let value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
+        ))
+        .unwrap();
+        let normalized = Normalizer::default()
+            .normalize_snapshot_value(value, "2026-08-13T12:00:00Z")
+            .unwrap();
+        let table = snapshot(
+            AppMode::Live,
+            SourceStatus::Connected,
+            None,
+            normalized.agents,
+        );
+
+        let LayoutDecision::Scene(compact_layout) = compute_layout(80, 48, 1) else {
+            panic!()
+        };
+        assert!(compact_layout.stations[0].height >= 24);
+        let compact = render(&table, 80, 24, 0);
+        let compact_text = text(&compact);
+        assert!(compact_text.contains("‼ BLOCKED"));
+        assert!(compact_text.contains("AT THE PASS"));
+        assert!(compact.content.iter().any(|cell| cell.symbol() == "▀"));
+        assert!(compact.content.iter().any(|cell| cell.fg == theme::COAT));
+        assert!(compact
+            .content
+            .iter()
+            .any(|cell| cell.symbol() == "‼" && cell.bg == theme::RED_DIM));
+
+        let LayoutDecision::Scene(tall_layout) = compute_layout(80, 120, 1) else {
+            panic!()
+        };
+        assert_eq!(tall_layout.stations[0].height, 28);
+        let tall = render(&table, 80, 60, 0);
+        let tall_text = text(&tall);
+        for expected in [
+            "‼ BLOCKED",
+            "AT THE PASS",
+            "MISE — LIVE",
+            "Connected to Herdr",
+        ] {
+            assert!(tall_text.contains(expected), "missing {expected:?}");
+        }
+        assert!(tall.content.iter().any(|cell| cell.symbol() == "▀"));
+        assert!(tall.content.iter().any(|cell| cell.fg == theme::COAT));
+
+        for (name, table, width, height) in golden_cases()
+            .into_iter()
+            .filter(|(name, ..)| matches!(*name, "demo" | "waiting" | "unsupported" | "fallback"))
+        {
+            let height = if name == "fallback" { height } else { 60 };
+            let output = text(&render(&table, width, height, 0));
+            let expected = match name {
+                "demo" => &["MISE — DEMO SERVICE"][..],
+                "waiting" => &["Waiting for agents"][..],
+                "unsupported" => &["unsupported Herdr protocol", "Mock feed"][..],
+                "fallback" => &["Kitchen status"][..],
+                _ => unreachable!(),
+            };
+            for expected in expected {
+                assert!(output.contains(expected), "{name} missing {expected:?}");
+            }
+        }
     }
 
     #[test]
