@@ -687,6 +687,15 @@ mod tests {
         dump
     }
 
+    fn pixel(buffer: &Buffer, x: u16, y: u16) -> Color {
+        let cell = buffer.cell((x, y / 2)).unwrap();
+        if y.is_multiple_of(2) {
+            cell.fg
+        } else {
+            cell.bg
+        }
+    }
+
     fn snapshot(
         mode: AppMode,
         status: SourceStatus,
@@ -772,6 +781,44 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_fixture_renders_two_tier_unclipped_hats() {
+        let event = serde_json::from_str::<AgentStateEvent>(include_str!(
+            "../../../../protocol/fixtures/snapshot.v1.json"
+        ))
+        .unwrap();
+        let mut table = AgentTable::default();
+        table.apply(event);
+
+        let at_zero = render(&table, 80, 24, 0);
+        let at_four = render(&table, 80, 24, 4);
+        for sprite_x in [12, 53] {
+            let coat_width = |buffer: &Buffer, y| {
+                (sprite_x..sprite_x + sprites::SPRITE_WIDTH as u16)
+                    .filter(|x| pixel(buffer, *x, y) == theme::COAT)
+                    .count()
+            };
+            assert_eq!(coat_width(&at_zero, 24), 5);
+            assert_eq!(coat_width(&at_zero, 26), 9);
+        }
+        for y in 24..29 {
+            for x in 53..53 + sprites::SPRITE_WIDTH as u16 {
+                assert_eq!(pixel(&at_zero, x, y), pixel(&at_four, x, y));
+            }
+        }
+
+        let (_, done, width, height) = golden_cases()
+            .into_iter()
+            .find(|(name, ..)| *name == "done")
+            .unwrap();
+        let done = render(&done, width, height, 0);
+        for y in 24..29 {
+            for x in 34..34 + sprites::SPRITE_WIDTH as u16 {
+                assert!(!matches!(pixel(&done, x, y), theme::PLATE | theme::GREEN));
+            }
+        }
+    }
+
+    #[test]
     fn blocked_and_clear_frames_keep_neutral_outer_chrome_without_pulsing() {
         for table in [
             live_table(vec![record("idle", AgentState::Idle)]),
@@ -847,7 +894,7 @@ mod tests {
                 .collect(),
         );
         let buffer = render(&working, 80, 24, 0);
-        let overlap = buffer.cell((7, 12)).unwrap();
+        let overlap = buffer.cell((7, 13)).unwrap();
         assert_eq!(overlap.fg, theme::COAT);
         assert_eq!(overlap.bg, theme::COAT);
     }
