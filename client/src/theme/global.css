@@ -413,6 +413,24 @@ select:focus-visible {
   font-size: 10px;
   letter-spacing: 0.5px;
 }
+.visualTuiFigure {
+  position: absolute;
+  z-index: 8;
+  top: 20px;
+  right: 20px;
+  max-width: 160px;
+  padding: 5px;
+  background: var(--panelSoft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadowPlacard);
+  pointer-events: none;
+}
+.visualTuiFigure img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 .disconnectScrim {
   position: absolute;
   z-index: 30;
@@ -543,5 +561,10 @@ select:focus-visible {
   }
   .disconnectCard p i {
     animation: none;
+  }
+}
+@media (max-width: 900px), (max-height: 640px) {
+  .visualTuiFigure {
+    display: none;
   }
 }

@@ -1,7 +1,8 @@
-import type {
-  AgentRecord,
-  AgentState,
-  AgentStateEvent,
+import {
+  PROTOCOL_VERSION,
+  type AgentRecord,
+  type AgentState,
+  type AgentStateEvent,
 } from "../../protocol/generated/agent-state-event";
 import type { ThemeChoice } from "./theme/theme";
 
@@ -120,7 +121,7 @@ export function buildVisualFeed(
     ),
   );
   const snapshot: AgentStateEvent = {
-    version: 1,
+    version: PROTOCOL_VERSION,
     type: "snapshot",
     mode: "demo",
     sourceStatus: "unavailableSocket",
@@ -130,7 +131,7 @@ export function buildVisualFeed(
   return [
     snapshot,
     ...agents.map((record) => ({
-      version: 1 as const,
+      version: PROTOCOL_VERSION,
       type: "delta" as const,
       mode: "demo" as const,
       operation: "upsert" as const,
@@ -146,9 +147,13 @@ interface WebSocketTarget {
 export function installVisualWebSocket(
   target: WebSocketTarget,
   config: VisualConfig,
+  options: { failClosed?: boolean } = {},
 ) {
   const feed = buildVisualFeed(config);
-  const heartbeat: AgentStateEvent = { version: 1, type: "heartbeat" };
+  const heartbeat: AgentStateEvent = {
+    version: PROTOCOL_VERSION,
+    type: "heartbeat",
+  };
   const NativeWebSocket = target.WebSocket;
   class VisualWebSocket {
     static readonly CONNECTING = 0;
@@ -170,8 +175,23 @@ export function installVisualWebSocket(
         base =
           typeof location === "undefined"
             ? "http://visual.invalid"
-            : location.origin;
-      if (new URL(value, base).pathname !== "/ws" && NativeWebSocket)
+            : location.origin,
+        resolved = new URL(value, base),
+        page = new URL(base),
+        applicationSocket =
+          resolved.pathname === "/ws" &&
+          (!options.failClosed ||
+            (resolved.host === page.host &&
+              (resolved.protocol === page.protocol ||
+                resolved.protocol ===
+                  (page.protocol === "https:" ? "wss:" : "ws:"))));
+      if (options.failClosed && !applicationSocket) {
+        Object.defineProperty(this, "url", { value });
+        this.readyState = VisualWebSocket.CLOSED;
+        console.error("[mise] visual production refuses WebSocket", url);
+        return;
+      }
+      if (!applicationSocket && NativeWebSocket)
         return new NativeWebSocket(
           url,
           protocols,
@@ -187,7 +207,7 @@ export function installVisualWebSocket(
         this.heartbeatTimer = globalThis.setInterval(() => {
           if (this.readyState === VisualWebSocket.OPEN)
             this.onmessage?.({ data: JSON.stringify(heartbeat) });
-        }, 2_000);
+        }, 1_000);
       });
     }
     close() {
@@ -215,7 +235,7 @@ export function installVisualWebSocket(
           globalThis.setTimeout(() => {
             if (this.readyState !== VisualWebSocket.OPEN) return;
             const event: AgentStateEvent = {
-              version: 1,
+              version: PROTOCOL_VERSION,
               type: "delta",
               mode: "demo",
               operation: "upsert",
@@ -238,9 +258,10 @@ export function initializeVisualMode(
   mode: string,
   target: WebSocketTarget,
   search: string,
+  production = false,
 ) {
   if (!isVisualMode(mode)) return null;
   const config = parseVisualConfig(search);
-  installVisualWebSocket(target, config);
+  installVisualWebSocket(target, config, { failClosed: production });
   return config;
 }

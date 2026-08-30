@@ -4,7 +4,12 @@ import { App } from "./App";
 import { initializeVisualMode } from "./visual-harness";
 import "./theme/global.css";
 
-initializeVisualMode(import.meta.env.MODE, window, location.search);
+initializeVisualMode(
+  import.meta.env.MODE,
+  window,
+  location.search,
+  import.meta.env.PROD,
+);
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

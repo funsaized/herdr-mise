@@ -1,0 +1,52 @@
+id: f9b56e21-fd57-49c3-8969-3cd0f153cba6
+name: nightshift-create-intake
+description: Idempotently create a GitHub issue and start its Nightshift factory run.
+tags:
+  factory: nightshift
+  stage: intake
+inputs:
+  properties:
+    idempotencyKey:
+      type: string
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    title:
+      type: string
+      minLength: 1
+      maxLength: 256
+    body:
+      type: string
+      maxLength: 65000
+      default: ''
+    labels:
+      type: array
+      maxItems: 20
+      items: { type: string, minLength: 1 }
+      default: []
+  required: [idempotencyKey, title]
+jobs:
+  - name: create-and-start
+    description: Create one issue, then bind it to the lifecycle and factory.
+    steps:
+      - name: create-issue
+        task:
+          type: model_method
+          modelIdOrName: nightshift-github
+          methodName: create_issue
+          inputs:
+            idempotencyKey: ${{ inputs.idempotencyKey }}
+            title: ${{ inputs.title }}
+            body: ${{ inputs.body }}
+            labels: ${{ inputs.labels }}
+        dependsOn: []
+      - name: start-nightshift
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-intake
+          inputs:
+            workItem: ${{ string(data.latest("nightshift-github", "created-issue-" + inputs.idempotencyKey).attributes.number) }}
+            issueNumber: ${{ data.latest("nightshift-github", "created-issue-" + inputs.idempotencyKey).attributes.number }}
+        dependsOn:
+          - step: create-issue
+            condition: { type: succeeded }
+    dependsOn: []
+version: 1

@@ -1,8 +1,7 @@
 // Browser acceptance for the visual playground matrix: every preset x
 // supported count, the dinner theme URL, invalid-query fallback, storage
-// isolation, native WebSocket delegation for non-/ws traffic (Vite HMR), and
-// liveness beyond the client
-// stale timeout. Runs against `npm run dev:visual` via the webServer config.
+// isolation, emitted static fixtures, and liveness beyond the client stale
+// timeout. Runs against the visual production build via the webServer config.
 import { test, expect, type Page } from "@playwright/test";
 
 const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
@@ -325,29 +324,71 @@ test("visual mode never touches persisted storage", async ({ page }) => {
   await expect(page.getByRole("note")).toBeVisible();
 });
 
-test("HMR socket delegates to native WebSocket and feed stays live past the stale timeout", async ({
+test("visual production serves fixtures and stays isolated from native and localhost sockets", async ({
   page,
+  request,
 }) => {
   const errors = watchErrors(page);
-  const viteMessages: string[] = [];
-  page.on("console", (message) => {
-    if (message.text().includes("[vite]")) viteMessages.push(message.text());
+  const sockets: string[] = [],
+    escapedRequests: string[] = [];
+  page.on("websocket", (socket) => sockets.push(socket.url()));
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.host !== "127.0.0.1:4174" || url.port === "8686")
+      escapedRequests.push(request.url());
   });
   await page.goto("/?preset=working&agents=6");
   await expect(placard(page)).toBeVisible();
-  // Vite's HMR client connects over a non-/ws WebSocket; it only succeeds if
-  // the visual override delegated to the captured native constructor.
-  await expect
-    .poll(() => viteMessages.some((text) => text.includes("connected")), {
-      timeout: 10_000,
-    })
-    .toBe(true);
-  // The client marks the feed disconnected after 2.9s without frames; mock
-  // heartbeats every 2s must keep it alive well past that.
+  const figure = page.getByRole("img", {
+    name: "Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label.",
+  });
+  await expect(figure).toBeVisible();
+  await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
+  await expect(page.locator(".visualTuiFigure")).toHaveCSS(
+    "pointer-events",
+    "none",
+  );
+  expect((await request.get("/tui-demo.gif")).status()).toBe(200);
+  expect((await request.get("/og.png")).status()).toBe(200);
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+    "content",
+    "https://herdr-mise.s11a.com/og.png",
+  );
+  const socialAlt =
+    "The herdr-mise demo kitchen showing agent stations and the DEMO SERVICE placard.";
+  await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
+    "content",
+    socialAlt,
+  );
+  await expect(page.locator('meta[name="twitter:image:alt"]')).toHaveAttribute(
+    "content",
+    socialAlt,
+  );
   await page.waitForTimeout(6_500);
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(placard(page)).toBeVisible();
+  expect(sockets).toEqual([]);
+  expect(escapedRequests).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+test("reduced motion uses the emitted static poster", async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?preset=blocked&agents=1");
+  const figure = page.getByRole("img", {
+    name: "Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label.",
+  });
+  await expect(figure).toBeVisible();
+  await expect
+    .poll(() =>
+      figure.evaluate((image) => (image as HTMLImageElement).currentSrc),
+    )
+    .toContain("/tui-demo-poster.png");
+  expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
 });
 
 test("semantic station controls are AX-only Tab exclusions and restore focus after details close", async ({

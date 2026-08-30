@@ -1,0 +1,54 @@
+id: c0e70086-74e9-4b5b-b0d8-0c03eb68ef3d
+name: nightshift-ship
+description: Verify an exact commit and link its pull request for human merge review.
+tags:
+  factory: nightshift
+  stage: ship
+inputs:
+  properties:
+    issueNumber:
+      type: integer
+      minimum: 1
+    commit:
+      type: string
+      pattern: '^[0-9a-f]{40}$'
+    baseCommit:
+      type: string
+      pattern: '^[0-9a-f]{40}$'
+    subjectRoot:
+      type: string
+      minLength: 1
+    prUrl:
+      type: string
+      minLength: 1
+    branch:
+      type: string
+      minLength: 1
+  required: [issueNumber, commit, baseCommit, subjectRoot, prUrl, branch]
+jobs:
+  - name: ship
+    description: Verify the exact commit before linking its pull request.
+    steps:
+      - name: verify-candidate
+        task:
+          type: workflow
+          workflowIdOrName: verification
+          inputs:
+            commit: ${{ inputs.commit }}
+            baseCommit: ${{ inputs.baseCommit }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn: []
+      - name: link-pull-request
+        task:
+          type: model_method
+          modelIdOrName: nightshift-issues
+          methodName: link_pr
+          inputs:
+            issue_number: ${{ inputs.issueNumber }}
+            pr_url: ${{ inputs.prUrl }}
+            branch: ${{ inputs.branch }}
+        dependsOn:
+          - step: verify-candidate
+            condition: { type: succeeded }
+    dependsOn: []
+version: 1
