@@ -5,4 +5,7 @@ name: nightshift-github
 version: 1
 tags: {}
 globalArguments: {}
+reports:
+  require:
+    - { name: '@swamp/method-summary', methods: [sync_project_items] }
 methods: {}

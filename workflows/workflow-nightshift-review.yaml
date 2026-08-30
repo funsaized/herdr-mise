@@ -19,7 +19,10 @@ inputs:
     subject:
       type: object
       additionalProperties: true
-  required: [workItem, phase, artifactName, subject]
+    subjectRoot:
+      type: string
+      minLength: 1
+  required: [workItem, phase, artifactName, subject, subjectRoot]
 jobs:
   - name: review
     description: Each lane gets its own model instance and cannot see sibling results.
@@ -30,6 +33,7 @@ jobs:
           modelIdOrName: nightshift-test-coverage
           methodName: invokeAndParse
           inputs:
+            cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-test-coverage-" + run.id }}
             tags: { factory: nightshift, lane: test-coverage, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
             prompt: >-
@@ -56,6 +60,7 @@ jobs:
           modelIdOrName: nightshift-clean-code
           methodName: invokeAndParse
           inputs:
+            cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-clean-code-" + run.id }}
             tags: { factory: nightshift, lane: clean-code, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
             prompt: >-
@@ -76,6 +81,7 @@ jobs:
           modelIdOrName: nightshift-frontend
           methodName: invokeAndParse
           inputs:
+            cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-frontend-" + run.id }}
             tags: { factory: nightshift, lane: frontend, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
             prompt: >-
@@ -96,6 +102,7 @@ jobs:
           modelIdOrName: nightshift-ddd
           methodName: invokeAndParse
           inputs:
+            cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-ddd-" + run.id }}
             tags: { factory: nightshift, lane: ddd, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
             prompt: >-
@@ -116,6 +123,7 @@ jobs:
           modelIdOrName: nightshift-security
           methodName: invokeAndParse
           inputs:
+            cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-security-" + run.id }}
             tags: { factory: nightshift, lane: security, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
             prompt: >-
@@ -142,6 +150,7 @@ jobs:
           modelIdOrName: nightshift-accessibility
           methodName: invokeAndParse
           inputs:
+            cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-accessibility-" + run.id }}
             tags: { factory: nightshift, lane: accessibility, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
             prompt: >-
@@ -162,6 +171,7 @@ jobs:
           modelIdOrName: nightshift-observability
           methodName: invokeAndParse
           inputs:
+            cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-observability-" + run.id }}
             tags: { factory: nightshift, lane: observability, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
             prompt: >-
@@ -290,4 +300,4 @@ jobs:
           - { step: validate-accessibility, condition: { type: succeeded } }
           - { step: validate-observability, condition: { type: succeeded } }
     dependsOn: []
-version: 1
+version: 2
