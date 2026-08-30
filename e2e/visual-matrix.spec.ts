@@ -61,6 +61,18 @@ const sceneMetrics = (page: Page) =>
 const placard = (page: Page) =>
   page.getByRole("status").filter({ hasText: "DEMO SERVICE" });
 
+function boxesIntersect(
+  first: { x: number; y: number; width: number; height: number },
+  second: { x: number; y: number; width: number; height: number },
+) {
+  return !(
+    first.x + first.width <= second.x ||
+    second.x + second.width <= first.x ||
+    first.y + first.height <= second.y ||
+    second.y + second.height <= first.y
+  );
+}
+
 test("reduced motion is static before blocked-scene startup in light and dinner themes", async ({
   page,
 }) => {
@@ -337,17 +349,54 @@ test("visual production serves fixtures and stays isolated from native and local
     if (url.host !== "127.0.0.1:4174" || url.port === "8686")
       escapedRequests.push(request.url());
   });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=working&agents=6");
   await expect(placard(page)).toBeVisible();
+  const figureBox = page.locator(".visualTuiFigure"),
+    settings = page.getByRole("button", { name: "Open settings" });
   const figure = page.getByRole("img", {
     name: "Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label.",
   });
   await expect(figure).toBeVisible();
   await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
-  await expect(page.locator(".visualTuiFigure")).toHaveCSS(
-    "pointer-events",
-    "none",
-  );
+  const defaultBox = await figureBox.boundingBox();
+  expect(defaultBox).not.toBeNull();
+  expect(defaultBox!.width).toBeGreaterThanOrEqual(319);
+  expect(defaultBox!.width).toBeLessThanOrEqual(321);
+  await figureBox.hover();
+  await expect
+    .poll(async () => (await figureBox.boundingBox())?.width)
+    .toBeGreaterThan(defaultBox!.width);
+  const hoverBox = await figureBox.boundingBox(),
+    settingsBox = await settings.boundingBox();
+  expect(hoverBox).not.toBeNull();
+  expect(settingsBox).not.toBeNull();
+  expect(boxesIntersect(hoverBox!, settingsBox!)).toBe(false);
+  await settings.click();
+  await expect(
+    page.getByRole("complementary", { name: "Settings" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeFocused();
+  await page.mouse.move(400, 500);
+  await expect
+    .poll(async () => (await figureBox.boundingBox())?.width)
+    .toBeLessThanOrEqual(321);
+
+  await page.setViewportSize({ width: 901, height: 641 });
+  await expect(figureBox).toBeVisible();
+  await figureBox.hover();
+  await expect
+    .poll(async () => (await figureBox.boundingBox())?.width)
+    .toBeGreaterThan(320);
+  const boundaryFigureBox = await figureBox.boundingBox(),
+    placardBox = await placard(page).boundingBox();
+  expect(boundaryFigureBox).not.toBeNull();
+  expect(placardBox).not.toBeNull();
+  expect(boxesIntersect(boundaryFigureBox!, placardBox!)).toBe(false);
+
+  await page.setViewportSize({ width: 800, height: 500 });
+  await expect(figureBox).toBeHidden();
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
   expect((await request.get("/og.png")).status()).toBe(200);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
@@ -388,6 +437,10 @@ test("reduced motion uses the emitted static poster", async ({
       figure.evaluate((image) => (image as HTMLImageElement).currentSrc),
     )
     .toContain("/tui-demo-poster.png");
+  await expect(page.locator(".visualTuiFigure")).toHaveCSS(
+    "transition-property",
+    "none",
+  );
   expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
 });
 
