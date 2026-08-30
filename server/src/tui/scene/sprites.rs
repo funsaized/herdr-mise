@@ -1,7 +1,7 @@
 use crate::protocol::AgentState;
 
 pub const SPRITE_WIDTH: usize = 11;
-pub const SPRITE_HALF_ROWS: usize = 14;
+pub const SPRITE_HALF_ROWS: usize = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Sprite {
@@ -19,7 +19,9 @@ impl Sprite {
 }
 
 pub const PREP_A: &[&str] = &[
-    "..HHHHHHH..",
+    "...HHHHH...",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
     "..HhHhHhH..",
     "...ooooo...",
     "..oSSSSSo..",
@@ -35,7 +37,9 @@ pub const PREP_A: &[&str] = &[
     "..BB...BB..",
 ];
 pub const PREP_B: &[&str] = &[
-    "..HHHHHHH..",
+    "...HHHHH...",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
     "..HhHhHhH..",
     "...ooooo...",
     "..oSSSSS.K.",
@@ -51,7 +55,9 @@ pub const PREP_B: &[&str] = &[
     "..BB...BB..",
 ];
 pub const WORK: &[&str] = &[
-    "..HHHHHHH..",
+    "...HHHHH...",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
     "..HhHhHhH..",
     "...ooooo...",
     "..oSSSSSo..",
@@ -67,15 +73,17 @@ pub const WORK: &[&str] = &[
     "..BB...BB..",
 ];
 pub const PLATED: &[&str] = &[
-    ".....WWGWWW",
-    "..HHHHH.K..",
-    "..HhHhH.C..",
-    "...ooo..C..",
-    "..SSSSS.C..",
-    "..SeSeS.C..",
-    "..SSSSS.C..",
+    "...HHHHH...",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
+    "..HhHhHhH..",
+    "...ooooo...",
+    ".oSSSSSo...",
+    "..SeSeS....",
+    "..SSSSS....",
     ".CaaaaaCC..",
     "CCCCCCCC...",
+    "CCCCKWWGWWW",
     "KCAAAAAC...",
     "..AAAAA....",
     "..D...D....",
@@ -84,8 +92,10 @@ pub const PLATED: &[&str] = &[
 ];
 pub const BLOCKED: &[&str] = &[
     "...HHHHH...",
-    ".K.HhHhH.K.",
-    ".K..ooo..K.",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
+    "..HhHhHhH..",
+    ".K.ooooo.K.",
     ".C.RRRRR.C.",
     ".C.RbRbR.C.",
     ".C.ReReR.C.",
@@ -121,13 +131,26 @@ mod tests {
         for rows in [PREP_A, PREP_B, WORK, BLOCKED, PLATED] {
             assert_eq!(rows.len(), SPRITE_HALF_ROWS);
             assert!(rows.iter().all(|row| row.len() == SPRITE_WIDTH));
-            assert!(rows[12].contains('D'));
-            assert!(rows[13].contains('B'));
+            assert!(rows[14].contains('D'));
+            assert!(rows[15].contains('B'));
         }
-        assert_eq!(BLOCKED[4], ".C.RbRbR.C.");
-        assert_eq!(BLOCKED[5], ".C.ReReR.C.");
-        assert_eq!(PLATED[0], ".....WWGWWW");
+        assert_eq!(BLOCKED[6], ".C.RbRbR.C.");
+        assert_eq!(BLOCKED[7], ".C.ReReR.C.");
         assert_ne!(PLATED, WORK);
+    }
+
+    #[test]
+    fn hats_have_a_narrow_puff_over_a_shared_wider_brim() {
+        for rows in [PREP_A, PREP_B, WORK, BLOCKED, PLATED] {
+            let coat_width =
+                |row: &str| row.bytes().filter(|key| matches!(key, b'H' | b'h')).count();
+            assert_eq!(&rows[..4], &PREP_A[..4]);
+            assert!(coat_width(rows[0]) < coat_width(rows[2]));
+            assert_eq!(rows[4].bytes().filter(|key| *key == b'o').count(), 5);
+        }
+        assert_eq!(&PREP_A[..5], &PREP_B[..5]);
+        assert!(PLATED[..5].iter().all(|row| !row.contains(['W', 'G'])));
+        assert!(PLATED[10].contains("WWGWWW"));
     }
 
     #[test]
