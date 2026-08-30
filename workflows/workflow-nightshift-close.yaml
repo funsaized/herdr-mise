@@ -1,0 +1,57 @@
+id: a6621866-b73d-4b34-9621-482cfab8038b
+name: nightshift-close
+description: Confirm merge, safely clean the worktree, and record closure evidence.
+tags:
+  factory: nightshift
+  stage: closing
+inputs:
+  properties:
+    workItem:
+      type: string
+      minLength: 1
+    issueNumber:
+      type: integer
+      minimum: 1
+    subjectRoot:
+      type: string
+      minLength: 1
+  required: [workItem, issueNumber, subjectRoot]
+jobs:
+  - name: close
+    description: Close the lifecycle and remove only a clean worktree.
+    steps:
+      - name: confirm-merge
+        task:
+          type: model_method
+          modelIdOrName: nightshift-issues
+          methodName: pr_merged
+          inputs:
+            issue_number: ${{ inputs.issueNumber }}
+        dependsOn: []
+      - name: cleanup-workspace
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: cleanup_workspace
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn:
+          - { step: confirm-merge, condition: { type: succeeded } }
+      - name: record-close-run
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: close-run
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+              outputs:
+                cleanup: ${{ data.latest("verification-source-git", "cleanup-" + inputs.workItem).attributes }}
+        dependsOn:
+          - { step: cleanup-workspace, condition: { type: succeeded } }
+    dependsOn: []
+version: 1

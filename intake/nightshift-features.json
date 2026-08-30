@@ -1,0 +1,20 @@
+[
+  {
+    "idempotencyKey": "nightshift-responsive-layout-v1",
+    "title": "Make browser and TUI layouts responsive without obtrusive expansion",
+    "body": "Improve browser and TUI layout behavior across supported viewport and terminal sizes. Avoid forced fill, hover-driven expansion, or controls that obscure the primary kitchen view. Preserve existing accessibility and reduced-motion behavior. Leave implementation details and exact acceptance fixtures to the Nightshift planning stage.",
+    "labels": []
+  },
+  {
+    "idempotencyKey": "nightshift-truthful-station-inspection-v1",
+    "title": "Add truthful TUI station inspection",
+    "body": "Let users inspect a TUI station using only state that Herdr actually provides. Clearly distinguish known values from unavailable details and do not infer activity, ownership, timing, or health that is absent from the protocol. Leave interaction design and fixture selection to the Nightshift planning stage.",
+    "labels": []
+  },
+  {
+    "idempotencyKey": "nightshift-optional-kitchen-atmosphere-v1",
+    "title": "Add optional kitchen atmosphere treatments",
+    "body": "Explore optional visual atmosphere treatments for the kitchen while preserving readability, performance, reduced-motion behavior, and the existing state hierarchy. Treatments must remain decorative and removable rather than becoming required protocol or layout state. Leave the final scope to the Nightshift planning stage.",
+    "labels": []
+  }
+]

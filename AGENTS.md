@@ -52,5 +52,8 @@ the full tree, and `swamp help model method run` scopes to a subtree.
   request head before merge. Any new commit requires a new managed run.
 - Trust-boundary changes must be dispatched by `@funsaized`; proposed controls
   are verified by the trusted versions on `main`.
-- Never overlap Swamp workflow runs in the same checkout because models, build
-  outputs, and runtime state are shared.
+- Metadata-only `nightshift-create-intake`, `nightshift-intake`, and
+  `nightshift-project-sync` runs may overlap an orchestrated factory run when
+  all callers use the same `swamp serve` process.
+- All other Swamp workflows remain mutually exclusive in one checkout because
+  they may share checkout files, build outputs, or runtime processes.

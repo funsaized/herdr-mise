@@ -3,4 +3,4 @@ set -eu
 
 subcommand=$1
 shift
-exec opencode "$subcommand" --variant medium "$@"
+exec opencode --auto "$subcommand" --variant medium "$@"

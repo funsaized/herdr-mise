@@ -181,8 +181,33 @@ npm run format:check
 swamp workflow validate verification --json
 ```
 
-Never overlap Swamp workflow runs in one checkout because models, build outputs,
-and runtime state are shared.
+Metadata-only `nightshift-create-intake`, `nightshift-intake`, and
+`nightshift-project-sync` runs may overlap an orchestrated factory run when all
+callers use the same loopback `swamp serve` process. All other workflows remain
+mutually exclusive because they may share checkout files, build outputs, or
+runtime processes. `scripts/workflow-contract.test.mjs` enforces this allowlist.
+
+Start the single loopback orchestrator with token authentication:
+
+```sh
+swamp access token mint nightshift-orchestrator \
+  --principal user:nightshift-orchestrator
+SWAMP_SERVE_ADMIN=user:nightshift-orchestrator npm run orchestrator:serve
+```
+
+In client terminals, reveal the stored server token into the environment and
+submit the prepared intake lane through the server. The client keeps each
+idempotency key unchanged, retries only model-lock timeouts with bounded
+backoff, and reconciles Project 2 after an interrupted attempt:
+
+```sh
+export SWAMP_SERVE_URL=ws://127.0.0.1:9090
+export SWAMP_SERVER_TOKEN="$(swamp access token reveal nightshift-orchestrator -y --json | jq -er .token)"
+npm run intake:nightshift
+```
+
+While this server is running, submit every other Swamp workflow through the
+same `SWAMP_SERVE_URL`; do not mix server and local workflow runners.
 
 ## Limits
 

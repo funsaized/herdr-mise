@@ -8,18 +8,7 @@ import {
   SEPARATOR,
 } from "jsr:@std/path@1.1.2";
 
-/** Resolve a checkout that is either the control repository or its sibling. */
-export async function subjectRoot(
-  controlRoot: string,
-  value: string,
-): Promise<string> {
-  const candidate = resolve(controlRoot, value);
-  const info = await Deno.lstat(candidate);
-  if (!info.isDirectory || info.isSymlink) {
-    throw new Error("subjectRoot must be a regular directory");
-  }
-  const control = await Deno.realPath(controlRoot);
-  const subject = await Deno.realPath(candidate);
+export function assertSubjectRootLocation(control: string, subject: string) {
   if (
     subject !== control &&
     (subject.startsWith(`${control}${SEPARATOR}`) ||
@@ -32,6 +21,21 @@ export async function subjectRoot(
       "subjectRoot must be the control repository or its sibling",
     );
   }
+}
+
+/** Resolve a checkout that is either the control repository or its sibling. */
+export async function subjectRoot(
+  controlRoot: string,
+  value: string,
+): Promise<string> {
+  const candidate = resolve(controlRoot, value);
+  const info = await Deno.lstat(candidate);
+  if (!info.isDirectory || info.isSymlink) {
+    throw new Error("subjectRoot must be a regular directory");
+  }
+  const control = await Deno.realPath(controlRoot);
+  const subject = await Deno.realPath(candidate);
+  assertSubjectRootLocation(control, subject);
   return subject;
 }
 

@@ -12,6 +12,17 @@ const workflows = Object.fromEntries(
       readFileSync(`${workflowDirectory}/${name}`, "utf8"),
     ]),
 );
+const intakeWorkflowNames = [
+  "workflow-nightshift-create-intake.yaml",
+  "workflow-nightshift-intake.yaml",
+  "workflow-nightshift-project-sync.yaml",
+];
+const intakeWorkflows = Object.fromEntries(
+  intakeWorkflowNames.map((name) => [
+    name,
+    readFileSync(`workflows/${name}`, "utf8"),
+  ]),
+);
 const dependabot = readFileSync(".github/dependabot.yml", "utf8");
 const gitleaks = readFileSync(".gitleaks.toml", "utf8");
 const managedVerification = readFileSync(
@@ -376,12 +387,106 @@ export function auditWorkflowContract(
   return errors;
 }
 
+export function auditIntakeWorkflowContract(candidateWorkflows) {
+  const errors = [];
+  const allowedMethods = new Set([
+    "nightshift-github.create_issue",
+    "nightshift-github.sync_project_items",
+    "nightshift-issues.start",
+    "the-nightshift.start",
+    "the-nightshift.status",
+  ]);
+  const allowedWorkflows = new Set([
+    "nightshift-intake",
+    "nightshift-project-sync",
+  ]);
+
+  for (const [name, source] of Object.entries(candidateWorkflows)) {
+    const taskBlocks = [
+      ...source.matchAll(
+        /^[ \t]+task:[ \t]*\n([\s\S]*?)(?=^[ \t]+dependsOn:)/gm,
+      ),
+    ].map((match) => match[1]);
+    const taskCount = [...source.matchAll(/^[ \t]+task:/gm)].length;
+    if (taskBlocks.length !== taskCount) {
+      errors.push(`${name}: every task must have a parseable dependency block`);
+    }
+    for (const task of taskBlocks) {
+      const type = task.match(/^[ \t]+type:[ \t]*([^\s]+)/m)?.[1];
+      if (!type) {
+        errors.push(`${name}: task type is required`);
+        continue;
+      }
+      if (!["assert", "model_method", "workflow"].includes(type)) {
+        errors.push(`${name}: task type ${type} is not metadata-only`);
+      }
+      if (type === "model_method") {
+        const model = task.match(/^[ \t]+modelIdOrName:[ \t]*([^\s]+)/m)?.[1];
+        const method = task.match(/^[ \t]+methodName:[ \t]*([^\s]+)/m)?.[1];
+        const operation = `${model}.${method}`;
+        if (!model || !method || !allowedMethods.has(operation)) {
+          errors.push(`${name}: ${operation} is not metadata-only`);
+        }
+      }
+      if (type === "workflow") {
+        const workflow = task.match(
+          /^[ \t]+workflowIdOrName:[ \t]*([^\s]+)/m,
+        )?.[1];
+        if (!workflow || !allowedWorkflows.has(workflow)) {
+          errors.push(
+            `${name}: nested workflow ${workflow} is not allowlisted`,
+          );
+        }
+      }
+    }
+  }
+  return errors;
+}
+
 function mutateWorkflow(name, transform) {
   return { ...workflows, [name]: transform(workflows[name]) };
 }
 
 test("repository workflows satisfy the supply-chain contract", () => {
   assert.deepEqual(auditWorkflowContract(workflows, dependabot, gitleaks), []);
+});
+
+test("parallel intake workflows stay metadata-only", () => {
+  assert.deepEqual(auditIntakeWorkflowContract(intakeWorkflows), []);
+});
+
+test("parallel intake rejects source-mutating dependencies", () => {
+  const unsafe = {
+    ...intakeWorkflows,
+    "workflow-nightshift-intake.yaml": intakeWorkflows[
+      "workflow-nightshift-intake.yaml"
+    ].replace(
+      "modelIdOrName: nightshift-issues\n          methodName: start",
+      "modelIdOrName: verification-source-git\n          methodName: prepare_workspace",
+    ),
+  };
+  assert.ok(
+    auditIntakeWorkflowContract(unsafe).some((error) =>
+      error.includes("prepare_workspace is not metadata-only"),
+    ),
+  );
+});
+
+test("parallel intake allowlist is independent of YAML field order", () => {
+  const unsafe = {
+    ...intakeWorkflows,
+    "workflow-nightshift-intake.yaml": intakeWorkflows[
+      "workflow-nightshift-intake.yaml"
+    ].replace(
+      "type: model_method\n          modelIdOrName: nightshift-issues\n          methodName: start",
+      "methodName: prepare_workspace\n          type: model_method\n          modelIdOrName: verification-source-git",
+    ),
+  };
+  assert.ok(
+    auditIntakeWorkflowContract(unsafe).some((error) =>
+      error.includes("prepare_workspace is not metadata-only"),
+    ),
+  );
 });
 
 test("shared verification is subject-bounded and never publishes evidence", () => {
@@ -427,10 +532,14 @@ test("shared verification is subject-bounded and never publishes evidence", () =
     "extensions/models/**",
     "extensions/tests/**",
     "models/**",
-    "scripts/managed-verification-evidence.test.mjs",
     "scripts/install-swamp-managed.sh",
     "scripts/managed-verification-evidence.mjs",
+    "scripts/managed-verification-evidence.test.mjs",
     "scripts/workflow-contract.test.mjs",
+    "scripts/nightshift-intake.mjs",
+    "scripts/nightshift-serve.sh",
+    "PARALLEL.md",
+    "intake/nightshift-features.json",
     "verification/**",
     "workflows/**",
   ]);

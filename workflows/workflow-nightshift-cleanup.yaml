@@ -1,0 +1,67 @@
+id: 57c8838e-0155-4085-90b0-c7f661a5fc19
+name: nightshift-cleanup
+description: Remove generated artifacts and clean worktrees while preserving dirty source.
+tags:
+  factory: nightshift
+  stage: cleanup
+inputs:
+  properties:
+    workItem:
+      type: string
+      minLength: 1
+    subjectRoot:
+      type: string
+    evidenceName:
+      type: string
+      enum: [cleanup-run, abort-cleanup-run]
+  required: [workItem, subjectRoot, evidenceName]
+jobs:
+  - name: cleanup
+    description: Clean one registered worktree and persist the bounded result.
+    steps:
+      - name: cleanup-workspace
+        guard: ${{ inputs.subjectRoot != "" }}
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: cleanup_workspace
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+        dependsOn: []
+      - name: record-cleanup-run
+        guard: ${{ inputs.subjectRoot != "" }}
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: ${{ inputs.evidenceName }}
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+              outputs:
+                cleanup: ${{ data.latest("verification-source-git", "cleanup-" + inputs.workItem).attributes }}
+        dependsOn:
+          - { step: cleanup-workspace, condition: { type: succeeded } }
+      - name: record-empty-cleanup-run
+        guard: ${{ inputs.subjectRoot == "" }}
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: ${{ inputs.evidenceName }}
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+              outputs:
+                cleanup:
+                  removed: false
+                  preserved: false
+                  reason: workspace was never created
+        dependsOn: []
+    dependsOn: []
+version: 1

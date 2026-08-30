@@ -107,8 +107,9 @@ jobs:
           methodName: prepare_workspace
           inputs:
             workItem: ${{ inputs.workItem }}
+            directoryName: ${{ "herdr-mise-nightshift-" + inputs.workItem }}
             repositoryUrl: https://github.com/funsaized/herdr-mise.git
-            workspaceRoot: ../herdr-mise-nightshift
+            workspaceRoot: ..
             baseRef: main
             branch: ${{ "nightshift/" + inputs.workItem }}
         dependsOn:
@@ -194,5 +195,18 @@ jobs:
         dependsOn:
           - step: implement-plan
             condition: { type: succeeded }
+      - name: record-build-run
+        task:
+          type: model_method
+          modelIdOrName: the-nightshift
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: build-run
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+        dependsOn:
+          - { step: record-change-summary, condition: { type: succeeded } }
     dependsOn: []
-version: 2
+version: 3

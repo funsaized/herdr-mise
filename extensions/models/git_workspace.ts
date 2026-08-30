@@ -1,10 +1,22 @@
 /** Adds idempotent per-work-item worktree preparation to @swamp/git. */
-import { isAbsolute, relative, resolve, SEPARATOR } from "jsr:@std/path@1.1.2";
+import {
+  basename,
+  dirname,
+  join,
+  relative,
+  resolve,
+  SEPARATOR,
+} from "jsr:@std/path@1.1.2";
 import { z } from "npm:zod@4.4.3";
+import { assertSubjectRootLocation, subjectRoot } from "./subject_root.ts";
 
 const Sha = z.string().regex(/^[0-9a-f]{40}$/);
+const WorkspaceName = z
+  .string()
+  .regex(/^(?![.-])(?!.*[.-]$)[A-Za-z0-9._-]{1,64}$/);
 const Arguments = z.object({
-  workItem: z.string().regex(/^(?![.-])(?!.*[.-]$)[A-Za-z0-9._-]{1,48}$/),
+  workItem: WorkspaceName,
+  directoryName: WorkspaceName.optional(),
   repositoryUrl: z.string().min(1).max(2048),
   workspaceRoot: z.string().min(1),
   baseRef: z
@@ -16,8 +28,25 @@ const Arguments = z.object({
     .min(1)
     .refine((value) => !value.startsWith("-")),
 });
+const CleanupArguments = z.object({
+  workItem: WorkspaceName,
+  subjectRoot: z.string().min(1),
+});
+
+const GENERATED_PATHS = [
+  "target",
+  "target-linux-x64",
+  "node_modules",
+  "client/node_modules",
+  "client/dist",
+  "client/dist-visual",
+  "dist",
+  "perf/artifacts",
+  "e2e/artifacts",
+] as const;
 
 export type WorkspaceArguments = z.infer<typeof Arguments>;
+export type CleanupWorkspaceArguments = z.infer<typeof CleanupArguments>;
 
 type Context = {
   repoDir: string;
@@ -143,19 +172,13 @@ export async function prepareWorkspace(
     throw new Error("workspaceRoot must be a regular directory");
   }
   const root = await Deno.realPath(unresolvedRoot);
-  const relation = relative(control, root);
-  const reverseRelation = relative(root, control);
-  if (
-    relation === "" ||
-    (!isAbsolute(relation) && !relation.startsWith(`..${SEPARATOR}`)) ||
-    (!isAbsolute(reverseRelation) &&
-      !reverseRelation.startsWith(`..${SEPARATOR}`))
-  ) {
-    throw new Error("workspaceRoot must be separate from the control checkout");
-  }
-  const subject = resolve(root, args.workItem);
+  const subject = resolve(root, args.directoryName ?? args.workItem);
   if (relative(root, subject).startsWith(`..${SEPARATOR}`)) {
     throw new Error("workItem escapes workspaceRoot");
+  }
+  assertSubjectRootLocation(control, subject);
+  if (subject === control) {
+    throw new Error("workspace must not replace the control checkout");
   }
 
   await git(control, ["fetch", "--no-tags", "origin", args.baseRef], signal);
@@ -254,6 +277,125 @@ export async function prepareWorkspace(
   };
 }
 
+export async function cleanupWorkspace(
+  controlRoot: string,
+  rawArgs: CleanupWorkspaceArguments,
+  signal?: AbortSignal,
+) {
+  const args = CleanupArguments.parse(rawArgs);
+  const control = await Deno.realPath(controlRoot);
+  const unresolvedCandidate = resolve(control, args.subjectRoot);
+  const candidate = join(
+    await Deno.realPath(dirname(unresolvedCandidate)),
+    basename(unresolvedCandidate),
+  );
+  assertSubjectRootLocation(control, candidate);
+  if (candidate === control) {
+    throw new Error("cleanup must not target the control checkout");
+  }
+  const exists = await Deno.lstat(candidate).then(
+    () => true,
+    (error) => {
+      if (error instanceof Deno.errors.NotFound) return false;
+      throw error;
+    },
+  );
+  if (!exists) {
+    return {
+      workItem: args.workItem,
+      subjectRoot: candidate,
+      removed: true,
+      preserved: false,
+      reason: "already removed",
+      removedPaths: [],
+    };
+  }
+
+  const subject = await subjectRoot(control, candidate);
+  const listed = worktrees(
+    (await git(control, ["worktree", "list", "--porcelain"], signal)).stdout,
+  );
+  if (!listed.some((entry) => resolve(entry.path) === subject)) {
+    throw new Error("workspace path exists but is not a registered worktree");
+  }
+  const common = await Deno.realPath(
+    (
+      await git(
+        subject,
+        ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        signal,
+      )
+    ).stdout,
+  );
+  const controlCommon = await Deno.realPath(
+    (
+      await git(
+        control,
+        ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        signal,
+      )
+    ).stdout,
+  );
+  if (common !== controlCommon) {
+    throw new Error("workspace belongs to a different repository");
+  }
+
+  const sourceStatus = (
+    await git(
+      subject,
+      ["status", "--porcelain", "--untracked-files=all"],
+      signal,
+    )
+  ).stdout;
+  const removedPaths: string[] = [];
+  for (const path of GENERATED_PATHS) {
+    const target = resolve(subject, path);
+    const found = await Deno.lstat(target).then(
+      () => true,
+      (error) => {
+        if (error instanceof Deno.errors.NotFound) return false;
+        throw error;
+      },
+    );
+    if (!found) continue;
+    await Deno.remove(target, { recursive: true });
+    removedPaths.push(path);
+  }
+  if (sourceStatus) {
+    return {
+      workItem: args.workItem,
+      subjectRoot: subject,
+      removed: false,
+      preserved: true,
+      reason: "workspace has uncommitted source changes",
+      removedPaths,
+    };
+  }
+
+  const ignoredStatus = (
+    await git(subject, ["status", "--porcelain", "--ignored"], signal)
+  ).stdout;
+  if (ignoredStatus) {
+    return {
+      workItem: args.workItem,
+      subjectRoot: subject,
+      removed: false,
+      preserved: true,
+      reason: "workspace has unrecognized ignored files",
+      removedPaths,
+    };
+  }
+  await git(control, ["worktree", "remove", subject], signal);
+  return {
+    workItem: args.workItem,
+    subjectRoot: subject,
+    removed: true,
+    preserved: false,
+    reason: "clean workspace removed",
+    removedPaths,
+  };
+}
+
 export const extension = {
   type: "@swamp/git",
   resources: {
@@ -264,6 +406,19 @@ export const extension = {
         subjectRoot: z.string().startsWith("/"),
         branch: z.string(),
         baseCommit: Sha,
+      }),
+      lifetime: "infinite",
+      garbageCollection: 20,
+    },
+    cleanupResult: {
+      description: "Safe cleanup result for one isolated work-item worktree",
+      schema: z.object({
+        workItem: z.string(),
+        subjectRoot: z.string().startsWith("/"),
+        removed: z.boolean(),
+        preserved: z.boolean(),
+        reason: z.string(),
+        removedPaths: z.array(z.string()),
       }),
       lifetime: "infinite",
       garbageCollection: 20,
@@ -284,6 +439,26 @@ export const extension = {
             "workspaceResult",
             `workspace-${args.workItem}`,
             workspace,
+          );
+          return { dataHandles: [handle] };
+        },
+      },
+    },
+    {
+      cleanup_workspace: {
+        description:
+          "Remove generated artifacts and a clean registered worktree, preserving dirty source",
+        arguments: CleanupArguments,
+        execute: async (args: CleanupWorkspaceArguments, context: Context) => {
+          const cleanup = await cleanupWorkspace(
+            context.repoDir,
+            args,
+            context.signal,
+          );
+          const handle = await context.writeResource(
+            "cleanupResult",
+            `cleanup-${args.workItem}`,
+            cleanup,
           );
           return { dataHandles: [handle] };
         },
