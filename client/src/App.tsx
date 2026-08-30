@@ -145,6 +145,7 @@ export function App() {
         clientStore.select(null);
         return;
       }
+      if (settingsOpen) return;
       if (isInteractiveKeyboardTarget(event.target)) return;
       if (event.key.toLowerCase() === "s" && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
@@ -184,7 +185,7 @@ export function App() {
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
-  }, [focusedId, hits]);
+  }, [focusedId, hits, settingsOpen]);
   useEffect(() => {
     if (coarse.selectedId === null && semanticRestoreRef.current) {
       semanticRestoreRef.current.focus();

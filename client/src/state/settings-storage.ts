@@ -1,10 +1,5 @@
 import type { Settings } from "./store";
 
-export interface SettingsStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
 export const SETTINGS_STORAGE_KEY = "herdr-mise:settings";
 export const SETTINGS_STORAGE_VERSION = 1;
 
@@ -14,7 +9,7 @@ const fastThresholds = new Set([30_000, 60_000, 120_000]);
 const vignetteThresholds = new Set([180_000, 300_000, 600_000]);
 
 export function loadSettings(
-  storage: SettingsStorage | null,
+  storage: Pick<Storage, "getItem" | "setItem"> | null,
   defaults: Settings,
 ): Settings {
   if (!storage) return { ...defaults };
@@ -33,6 +28,10 @@ export function loadSettings(
     return {
       sound:
         typeof settings.sound === "boolean" ? settings.sound : defaults.sound,
+      atmosphere:
+        typeof settings.atmosphere === "boolean"
+          ? settings.atmosphere
+          : defaults.atmosphere,
       theme:
         typeof settings.theme === "string" && themes.has(settings.theme)
           ? (settings.theme as Settings["theme"])
@@ -59,16 +58,17 @@ export function loadSettings(
 }
 
 export function saveSettings(
-  storage: SettingsStorage | null,
+  storage: Pick<Storage, "getItem" | "setItem"> | null,
   settings: Settings,
 ) {
-  if (!storage) return;
+  if (!storage) return true;
   try {
     storage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({ version: SETTINGS_STORAGE_VERSION, settings }),
     );
+    return true;
   } catch {
-    // Storage can be unavailable in hardened/private browser contexts.
+    return false;
   }
 }

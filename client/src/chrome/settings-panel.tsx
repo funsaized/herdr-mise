@@ -27,10 +27,12 @@ function Toggle({
 
 export function SettingsPanel({
   settings,
+  persistenceFailed = false,
   onChange,
   onClose,
 }: {
   settings: Settings;
+  persistenceFailed?: boolean;
   onChange(patch: Partial<Settings>): void;
   onClose(): void;
 }) {
@@ -39,18 +41,30 @@ export function SettingsPanel({
     onChange({ sound: !settings.sound });
   };
   return (
-    <FocusedPanel className="panel settingsPanel" label="Settings">
+    <FocusedPanel className="panel settingsPanel" label="Settings" modal>
       <header className="settingsHeader">
         <h2>Settings</h2>
         <button onClick={onClose} aria-label="Close settings">
           ✕
         </button>
       </header>
+      {persistenceFailed && (
+        <p className="settingsWarning" role="status">
+          Settings changed for this session but could not be saved.
+        </p>
+      )}
       <SettingRow title="Service bell" note="Single ding when an agent blocks">
         <Toggle
           label="Service bell"
           on={settings.sound}
           onChange={toggleSound}
+        />
+      </SettingRow>
+      <SettingRow title="Kitchen atmosphere" note="Steam over working stations">
+        <Toggle
+          label="Kitchen atmosphere"
+          on={settings.atmosphere}
+          onChange={() => onChange({ atmosphere: !settings.atmosphere })}
         />
       </SettingRow>
       <section className="settingBlock">

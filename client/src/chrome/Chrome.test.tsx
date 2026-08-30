@@ -140,6 +140,8 @@ describe("chrome interactions", () => {
     );
     fireEvent.click(screen.getByRole("switch", { name: "Service bell" }));
     expect(change).toHaveBeenCalledWith({ sound: true });
+    fireEvent.click(screen.getByRole("switch", { name: "Kitchen atmosphere" }));
+    expect(change).toHaveBeenCalledWith({ atmosphere: false });
     fireEvent.click(screen.getByRole("button", { name: "Dinner" }));
     expect(change).toHaveBeenCalledWith({ theme: "dark" });
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));

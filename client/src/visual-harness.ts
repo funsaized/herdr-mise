@@ -4,6 +4,7 @@ import {
   type AgentState,
   type AgentStateEvent,
 } from "../../protocol/generated/agent-state-event";
+import snapshotFixture from "../../protocol/fixtures/snapshot.v1.json";
 import type { ThemeChoice } from "./theme/theme";
 
 export type VisualPreset = AgentState | "mixed";
@@ -142,19 +143,29 @@ export function buildVisualFeed(
 
 interface WebSocketTarget {
   WebSocket?: typeof WebSocket;
+  __misePauseHeartbeats?: () => void;
 }
 
 export function installVisualWebSocket(
   target: WebSocketTarget,
   config: VisualConfig,
-  options: { failClosed?: boolean } = {},
+  options: {
+    failClosed?: boolean;
+    feed?: AgentStateEvent[];
+    exposeHeartbeatPause?: boolean;
+  } = {},
 ) {
-  const feed = buildVisualFeed(config);
+  const feed = options.feed ?? buildVisualFeed(config);
   const heartbeat: AgentStateEvent = {
     version: PROTOCOL_VERSION,
     type: "heartbeat",
   };
   const NativeWebSocket = target.WebSocket;
+  let heartbeatsPaused = false;
+  if (options.exposeHeartbeatPause)
+    target.__misePauseHeartbeats = () => {
+      heartbeatsPaused = true;
+    };
   class VisualWebSocket {
     static readonly CONNECTING = 0;
     static readonly OPEN = 1;
@@ -201,11 +212,13 @@ export function installVisualWebSocket(
         if (this.readyState !== VisualWebSocket.CONNECTING) return;
         this.readyState = VisualWebSocket.OPEN;
         this.onopen?.();
-        for (const event of feed)
-          this.onmessage?.({ data: JSON.stringify(event) });
-        this.scheduleMixedLifecycle();
+        if (!heartbeatsPaused) {
+          for (const event of feed)
+            this.onmessage?.({ data: JSON.stringify(event) });
+          this.scheduleMixedLifecycle();
+        }
         this.heartbeatTimer = globalThis.setInterval(() => {
-          if (this.readyState === VisualWebSocket.OPEN)
+          if (!heartbeatsPaused && this.readyState === VisualWebSocket.OPEN)
             this.onmessage?.({ data: JSON.stringify(heartbeat) });
         }, 1_000);
       });
@@ -221,7 +234,7 @@ export function installVisualWebSocket(
       this.onclose?.();
     }
     private scheduleMixedLifecycle() {
-      if (config.preset !== "mixed") return;
+      if (options.feed || config.preset !== "mixed") return;
       const snapshot = feed[0],
         hero = snapshot?.type === "snapshot" ? snapshot.agents[0] : undefined;
       if (!hero) return;
@@ -261,7 +274,13 @@ export function initializeVisualMode(
   production = false,
 ) {
   if (!isVisualMode(mode)) return null;
-  const config = parseVisualConfig(search);
-  installVisualWebSocket(target, config, { failClosed: production });
+  const config = parseVisualConfig(search),
+    query = new URLSearchParams(search),
+    fixture = query.get("fixture") === "snapshot.v1";
+  installVisualWebSocket(target, config, {
+    failClosed: production,
+    feed: fixture ? [snapshotFixture as AgentStateEvent] : undefined,
+    exposeHeartbeatPause: fixture && query.has("stats"),
+  });
   return config;
 }

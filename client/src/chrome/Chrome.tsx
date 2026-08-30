@@ -61,6 +61,7 @@ export function Chrome(props: ChromeProps) {
       {props.settingsOpen && (
         <SettingsPanel
           settings={props.coarse.settings}
+          persistenceFailed={props.coarse.settingsPersistenceFailed}
           onChange={(patch) => props.store.setSettings(patch)}
           onClose={props.onCloseSettings}
         />

@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AgentStore, defaultSettings } from "./store";
-import {
-  loadSettings,
-  SETTINGS_STORAGE_KEY,
-  type SettingsStorage,
-} from "./settings-storage";
+import { loadSettings, SETTINGS_STORAGE_KEY } from "./settings-storage";
 
-class MemoryStorage implements SettingsStorage {
+class MemoryStorage {
   value: string | null = null;
   getItem(key: string) {
     return key === SETTINGS_STORAGE_KEY ? this.value : null;
@@ -22,6 +18,7 @@ describe("versioned settings persistence", () => {
       store = new AgentStore(undefined, {}, storage),
       expected = {
         sound: true,
+        atmosphere: false,
         theme: "dark" as const,
         doneTimeoutMs: 300_000,
         escalationFastMs: 30_000,
@@ -37,7 +34,12 @@ describe("versioned settings persistence", () => {
     JSON.stringify({ version: 99, settings: { sound: true } }),
     JSON.stringify({
       version: 1,
-      settings: { sound: "yes", theme: "neon", doneTimeoutMs: -1 },
+      settings: {
+        sound: "yes",
+        atmosphere: "yes",
+        theme: "neon",
+        doneTimeoutMs: -1,
+      },
     }),
   ])("uses safe defaults for corrupt or invalid data", (value) => {
     const storage = new MemoryStorage();
@@ -50,6 +52,7 @@ describe("versioned settings persistence", () => {
       version: 1,
       settings: {
         sound: true,
+        atmosphere: false,
         theme: "nope",
         doneTimeoutMs: 300_000,
         escalationFastMs: 30_000,
@@ -59,6 +62,7 @@ describe("versioned settings persistence", () => {
     expect(loadSettings(storage, defaultSettings)).toEqual({
       ...defaultSettings,
       sound: true,
+      atmosphere: false,
       doneTimeoutMs: 300_000,
       escalationFastMs: 30_000,
       escalationVignetteMs: 180_000,
@@ -70,6 +74,7 @@ describe("versioned settings persistence", () => {
       version: 1,
       settings: {
         sound: true,
+        atmosphere: false,
         theme: "dark",
         doneTimeoutMs: 300_000,
         escalationFastMs: 30_000,
@@ -80,6 +85,7 @@ describe("versioned settings persistence", () => {
     const settings = loadSettings(storage, defaultSettings);
     expect(settings).toEqual({
       sound: true,
+      atmosphere: false,
       theme: "dark",
       doneTimeoutMs: 300_000,
       escalationFastMs: 30_000,

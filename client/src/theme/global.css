@@ -246,6 +246,15 @@ select:focus-visible {
 }
 .settingsPanel {
   width: 340px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.settingsWarning {
+  margin: 0;
+  padding: 10px 18px;
+  color: var(--textWarm);
+  border-bottom: 1px solid var(--hairline2);
+  font-size: 12px;
 }
 .settingsHeader {
   align-items: center;

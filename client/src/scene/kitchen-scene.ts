@@ -403,11 +403,16 @@ export class KitchenScene {
   reconcile(force = false) {
     const snapshot = this.store.snapshot();
     if (document.hidden) {
+      this.particles.releaseAll();
+      this.drawParticles();
       this.ticker.stop();
       return;
     }
-    if (snapshot.mode === "disconnected") this.ticker.stop();
-    else this.ticker.start();
+    if (snapshot.mode === "disconnected") {
+      this.particles.releaseAll();
+      this.drawParticles();
+      this.ticker.stop();
+    } else this.ticker.start();
     const now = performance.now();
     this.store.reconcileRendered(undefined, force);
     if (force) this.transitions.reconcile();
@@ -1052,7 +1057,11 @@ export class KitchenScene {
     const now = performance.now();
     this.bell.tick(Date.now());
     const snapshot = this.store.snapshot();
-    if (snapshot.mode === "disconnected") return;
+    if (snapshot.mode === "disconnected") {
+      this.particles.releaseAll();
+      this.drawParticles();
+      return;
+    }
     const visualInterval = 125;
     if (now - this.lastVisualUpdate >= visualInterval) {
       const visualDelta = this.lastVisualUpdate
@@ -1061,7 +1070,7 @@ export class KitchenScene {
       this.lastVisualUpdate = now;
       this.store.reconcileRendered();
       const motion = sceneMotionPolicy(this.reducedMotion);
-      if (motion.steam) {
+      if (motion.steam && snapshot.settings.atmosphere) {
         for (const agent of snapshot.agents.values())
           if (agent.targetState === "working" && now - this.lastSteam > 220) {
             const rect = this.layout.stations.find(
@@ -1256,8 +1265,11 @@ export class KitchenScene {
     this.dirty = true;
   }
   private onVisibility() {
-    if (document.hidden) this.ticker.stop();
-    else {
+    if (document.hidden) {
+      this.particles.releaseAll();
+      this.drawParticles();
+      this.ticker.stop();
+    } else {
       this.reconcile(true);
       if (this.store.snapshot().mode !== "disconnected") this.ticker.start();
     }

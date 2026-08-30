@@ -6,15 +6,12 @@ import type {
   SourceStatus,
 } from "../../../protocol/generated/agent-state-event";
 import type { ThemeChoice } from "../theme/theme";
-import {
-  loadSettings,
-  saveSettings,
-  type SettingsStorage,
-} from "./settings-storage";
+import { loadSettings, saveSettings } from "./settings-storage";
 
 export type AppMode = FeedMode | "empty" | "disconnected";
 export interface Settings {
   sound: boolean;
+  atmosphere: boolean;
   doneTimeoutMs: number;
   escalationFastMs: number;
   escalationVignetteMs: number;
@@ -61,6 +58,7 @@ export interface CoarseSlice {
   sourceDiagnostic: SourceDiagnostic | null;
   selectedId: string | null;
   settings: Settings;
+  settingsPersistenceFailed: boolean;
 }
 export type StoreEvent =
   | { type: "clear" | "busser"; agentId: string }
@@ -84,6 +82,7 @@ const nativeScheduler: Scheduler = {
 };
 export const defaultSettings: Settings = {
   sound: false,
+  atmosphere: true,
   doneTimeoutMs: 600_000,
   escalationFastMs: 60_000,
   escalationVignetteMs: 300_000,
@@ -99,6 +98,7 @@ export class AgentStore {
   private sourceDiagnostic: SourceDiagnostic | null = null;
   private selectedId: string | null = null;
   private settings: Settings;
+  private settingsPersistenceFailed = false;
   private lastUpdateAt = 0;
   private coarseListeners = new Set<Listener<CoarseSlice>>();
   private changeListeners = new Set<() => void>();
@@ -107,7 +107,7 @@ export class AgentStore {
   constructor(
     private scheduler: Scheduler = nativeScheduler,
     settings: Partial<Settings> = {},
-    private settingsStorage: SettingsStorage | null = null,
+    private settingsStorage: Pick<Storage, "getItem" | "setItem"> | null = null,
   ) {
     this.settings = {
       ...loadSettings(settingsStorage, defaultSettings),
@@ -138,6 +138,7 @@ export class AgentStore {
       sourceDiagnostic: this.sourceDiagnostic,
       selectedId: this.selectedId,
       settings: this.settings,
+      settingsPersistenceFailed: this.settingsPersistenceFailed,
     };
   }
   subscribe(listener: () => void) {
@@ -166,7 +167,10 @@ export class AgentStore {
   }
   setSettings(patch: Partial<Settings>) {
     this.settings = { ...this.settings, ...patch };
-    saveSettings(this.settingsStorage, this.settings);
+    this.settingsPersistenceFailed = !saveSettings(
+      this.settingsStorage,
+      this.settings,
+    );
     this.emitCoarse();
     this.emitChange();
   }
