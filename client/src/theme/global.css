@@ -418,13 +418,19 @@ select:focus-visible {
   z-index: 8;
   top: 20px;
   right: 20px;
-  max-width: 160px;
+  max-width: 320px;
+  max-height: calc(100vh - 80px);
   padding: 5px;
+  overflow: hidden;
   background: var(--panelSoft);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: var(--shadowPlacard);
-  pointer-events: none;
+  pointer-events: auto;
+  transition: max-width 150ms ease;
+}
+.visualTuiFigure:hover {
+  max-width: 640px;
 }
 .visualTuiFigure img {
   display: block;
@@ -556,7 +562,8 @@ select:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .canvasHost,
-  .toggle i {
+  .toggle i,
+  .visualTuiFigure {
     transition: none;
   }
   .disconnectCard p i {
