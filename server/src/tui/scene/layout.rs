@@ -1,6 +1,7 @@
 pub const MIN_SCENE_WIDTH: u16 = 80;
 pub const MIN_SCENE_PIXEL_HEIGHT: u16 = 48;
 const MIN_STATION_PITCH: u16 = 4;
+const MAX_STATION_PITCH: u16 = 28;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PixelRect {
@@ -77,7 +78,7 @@ pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> Layo
         let Ok(rows_u16) = u16::try_from(rows) else {
             return LayoutDecision::Fallback;
         };
-        let station_height = grid_height / rows_u16;
+        let station_height = (grid_height / rows_u16).min(MAX_STATION_PITCH);
         if station_height < MIN_STATION_PITCH {
             return LayoutDecision::Fallback;
         }
