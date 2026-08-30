@@ -18,23 +18,27 @@ playground's deterministic feed. Regenerate them with `npm run capture:readme`
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
 
-The same binary also runs as a Herdr pane. The pane below is the real release
-binary launched with `--tui` and captured in a real terminal. With no Herdr
-session available, it renders the truthful `MISE — DEMO SERVICE` shell:
+The same binary also runs as a Herdr pane. This full-screen capture opens Mise
+Kitchen as a split in a live Herdr verifier session:
 
-![The release binary running as a Herdr pane under the truthful DEMO SERVICE fallback](docs/assets/herdr-mise-tui-demo.gif)
+<details open>
+<summary>Show or hide the animated terminal capture</summary>
+
+![A live Herdr verifier session with Mise Kitchen open as a split and animated chef stations](docs/assets/herdr-mise-tui-demo.gif)
+
+</details>
 
 | Live kitchen                                                                                           | Blocked at the pass                                                                                                                                         | Compact fallback                                                                                                                     |
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
 
-The live capture uses verifier workspace labels. The blocked and compact
+The GIF and live capture use verifier workspace labels. The blocked and compact
 examples retain the persistent `MISE — DEMO SERVICE` treatment, so mock data is
-never presented as live state. Regenerate the GIF with
-`scripts/capture-tui-demo.sh` and the static screens with
-`scripts/capture-tui-states.sh`. The GIF wrapper requires `vhs`; the static
-wrapper also requires `ffmpeg`, ImageMagick's `identify`, `tesseract`, and
-macOS `sips`.
+never presented as live state. Prepare a live verifier session, then regenerate
+the GIF with `scripts/capture-tui-demo.sh --force` and the static screens with
+`scripts/capture-tui-states.sh`. The GIF wrapper requires Herdr, `vhs`,
+`ffmpeg`, ImageMagick's `identify`, `tesseract`, and macOS `sips`; the static
+wrapper uses the same media tools.
 
 ## Quick start
 

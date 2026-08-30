@@ -354,11 +354,17 @@ test("visual production serves fixtures and stays isolated from native and local
   await expect(placard(page)).toBeVisible();
   const figureBox = page.locator(".visualTuiFigure"),
     settings = page.getByRole("button", { name: "Open settings" });
-  const figure = page.getByRole("img", {
-    name: "Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label.",
-  });
-  await expect(figure).toBeVisible();
+  const figure = page.getByAltText(
+    "Herdr verifier terminal with Mise Kitchen open as a split.",
+    { exact: true },
+  );
+  await expect(figure).toBeHidden();
   await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
+  const summary = page.getByText("Terminal preview");
+  await summary.focus();
+  await expect(summary).toBeFocused();
+  await summary.press("Enter");
+  await expect(figure).toBeVisible();
   const defaultBox = await figureBox.boundingBox();
   expect(defaultBox).not.toBeNull();
   expect(defaultBox!.width).toBeGreaterThanOrEqual(319);
@@ -429,8 +435,9 @@ test("reduced motion uses the emitted static poster", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?preset=blocked&agents=1");
   const figure = page.getByRole("img", {
-    name: "Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label.",
+    name: "Herdr verifier terminal with Mise Kitchen open as a split.",
   });
+  await page.getByText("Terminal preview").click();
   await expect(figure).toBeVisible();
   await expect
     .poll(() =>

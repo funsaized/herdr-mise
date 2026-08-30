@@ -432,6 +432,16 @@ select:focus-visible {
 .visualTuiFigure:hover {
   max-width: 640px;
 }
+.visualTuiFigure summary {
+  padding: 3px 5px;
+  color: var(--secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.visualTuiFigure summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 .visualTuiFigure img {
   display: block;
   width: 100%;

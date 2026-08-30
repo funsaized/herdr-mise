@@ -16,6 +16,7 @@
     "typecheck": "npm --prefix client run typecheck",
     "lint": "oxlint --deny-warnings .",
     "test": "node --test scripts/*.test.mjs && npm --prefix client run test",
+    "test:tui-capture": "node --test scripts/tui-demo-capture.integration.mjs",
     "check:herdr-compatibility": "node scripts/check-herdr-compatibility.mjs",
     "audit:tokens": "node scripts/audit-tokens.mjs",
     "audit:architecture": "node scripts/audit-pixi-architecture.mjs",

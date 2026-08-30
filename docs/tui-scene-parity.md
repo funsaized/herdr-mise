@@ -137,6 +137,14 @@ undocumented.
 - Goldens: `server/tests/goldens/scene-*.txt`.
 - Capture sources: `scripts/tui-demo.tape`, `scripts/capture-tui-demo.sh`,
   `scripts/capture-tui-states.sh`.
+- GIF capture notes: prepare a public `verifier-kitchen` Herdr workspace, open
+  Mise Kitchen as a split, and run `scripts/capture-tui-demo.sh --force`. The
+  wrapper attaches to the named session that owns the validated socket, keeps
+  that workspace's existing tab focused throughout capture, then rejects any
+  frame without the live split labels or with `DEMO SERVICE`, a home path,
+  local branch, or credential-like text. It also rejects a static recording.
+  Verify the checked-in fixture and metadata with
+  `scripts/capture-tui-demo.sh --verify-only`.
 - Captured media: `docs/assets/herdr-mise-tui-demo.gif`,
   `docs/assets/herdr-mise-tui-{live,blocked,compact}.png`,
   `scripts/tui-demo.tape.capture.json`, and `scripts/tui-states.capture.json`.

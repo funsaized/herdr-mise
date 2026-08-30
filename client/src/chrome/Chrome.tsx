@@ -81,16 +81,19 @@ export function Chrome(props: ChromeProps) {
         lastUpdateSeconds={props.lastUpdateSeconds}
       />
       {import.meta.env.MODE === "visual" && (
-        <picture className="visualTuiFigure">
-          <source
-            media="(prefers-reduced-motion: reduce)"
-            srcSet="/tui-demo-poster.png"
-          />
-          <img
-            src="/tui-demo.gif"
-            alt="Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label."
-          />
-        </picture>
+        <details className="visualTuiFigure">
+          <summary>Terminal preview</summary>
+          <picture>
+            <source
+              media="(prefers-reduced-motion: reduce)"
+              srcSet="/tui-demo-poster.png"
+            />
+            <img
+              src="/tui-demo.gif"
+              alt="Herdr verifier terminal with Mise Kitchen open as a split."
+            />
+          </picture>
+        </details>
       )}
       {props.hintVisible && (
         <div className="firstHint" role="note">
