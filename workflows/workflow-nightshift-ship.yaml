@@ -40,7 +40,8 @@ jobs:
             commit: ${{ inputs.commit }}
             baseCommit: ${{ inputs.baseCommit }}
             subjectRoot: ${{ inputs.subjectRoot }}
-        dependsOn: []
+        dependsOn:
+          - { step: project-shipping-stage, condition: { type: succeeded } }
       - name: link-pull-request
         task:
           type: model_method
@@ -67,7 +68,14 @@ jobs:
               outputs:
                 failureKind: none
         dependsOn:
-          - step: link-pull-request
-            condition: { type: succeeded }
+          - { step: link-pull-request, condition: { type: succeeded } }
+      - name: project-shipping-stage
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: shipping
+        dependsOn: []
     dependsOn: []
-version: 2
+version: 3

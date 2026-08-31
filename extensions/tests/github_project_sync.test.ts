@@ -1,5 +1,6 @@
 import {
   FACTORY_STAGES,
+  projectSyncResourceName,
   resolveStatusField,
 } from "../models/github_project_sync.ts";
 
@@ -43,4 +44,17 @@ Deno.test("Project 2 requires every exact factory stage once", () => {
       ]),
     "found 2",
   );
+});
+
+Deno.test("single-item project syncs have isolated result names", () => {
+  const item = { issueNumber: 67, stageId: "planning" as const };
+  if (projectSyncResourceName([item]) !== "project-sync-67") {
+    throw new Error("single-item result is not isolated");
+  }
+  if (
+    projectSyncResourceName([item, { ...item, issueNumber: 68 }]) !==
+    "project-sync"
+  ) {
+    throw new Error("fleet result name changed");
+  }
 });

@@ -29,7 +29,8 @@ jobs:
             workItem: ${{ inputs.workItem }}
             repo: funsaized/herdr-mise
             prUrl: ${{ inputs.prUrl }}
-        dependsOn: []
+        dependsOn:
+          - { step: project-deployed-verification-stage, condition: { type: succeeded } }
       - name: prepare-merged-workspace
         task:
           type: model_method
@@ -110,5 +111,13 @@ jobs:
         dependsOn:
           - { step: hosted-smoke, condition: { type: succeeded } }
           - { step: cleanup-workspace, condition: { type: succeeded } }
+      - name: project-deployed-verification-stage
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: deployed-verification
+        dependsOn: []
     dependsOn: []
-version: 1
+version: 2

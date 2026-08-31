@@ -131,6 +131,12 @@ export function resolveStatusField(rawFields: unknown[]) {
   return { fieldId: field.id, optionIds };
 }
 
+export function projectSyncResourceName(items: SyncArguments["items"]) {
+  return items.length === 1
+    ? `project-sync-${items[0].issueNumber}`
+    : "project-sync";
+}
+
 async function projectId(
   owner: string,
   projectNumber: number,
@@ -407,7 +413,7 @@ export const extension = {
           const items = await syncProjectItems(args, context.signal);
           const handle = await context.writeResource(
             "project_sync",
-            "project-sync",
+            projectSyncResourceName(args.items),
             {
               owner: args.owner,
               projectNumber: args.projectNumber,
