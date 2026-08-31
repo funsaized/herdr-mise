@@ -3,6 +3,7 @@
 // isolation, emitted static fixtures, and liveness beyond the client stale
 // timeout. Runs against the visual production build via the webServer config.
 import { test, expect, type Page } from "@playwright/test";
+import { computeLayout } from "../client/src/scene/layout";
 
 const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const STATE_WORDS = {
@@ -366,10 +367,11 @@ test("visual production serves fixtures and stays isolated from native and local
   await figureBox.hover();
   await expect
     .poll(async () => (await figureBox.boundingBox())?.width)
-    .toBeGreaterThan(defaultBox!.width);
+    .toBeGreaterThanOrEqual(319);
   const hoverBox = await figureBox.boundingBox(),
     settingsBox = await settings.boundingBox();
   expect(hoverBox).not.toBeNull();
+  expect(hoverBox!.width).toBeLessThanOrEqual(321);
   expect(settingsBox).not.toBeNull();
   expect(boxesIntersect(hoverBox!, settingsBox!)).toBe(false);
   await settings.click();
@@ -385,15 +387,26 @@ test("visual production serves fixtures and stays isolated from native and local
 
   await page.setViewportSize({ width: 901, height: 641 });
   await expect(figureBox).toBeVisible();
+  const boundaryDefaultBox = await figureBox.boundingBox();
+  expect(boundaryDefaultBox).not.toBeNull();
+  expect(boundaryDefaultBox!.width).toBeGreaterThanOrEqual(199);
+  expect(boundaryDefaultBox!.width).toBeLessThanOrEqual(201);
   await figureBox.hover();
   await expect
     .poll(async () => (await figureBox.boundingBox())?.width)
-    .toBeGreaterThan(320);
+    .toBeLessThanOrEqual(201);
   const boundaryFigureBox = await figureBox.boundingBox(),
     placardBox = await placard(page).boundingBox();
   expect(boundaryFigureBox).not.toBeNull();
   expect(placardBox).not.toBeNull();
   expect(boxesIntersect(boundaryFigureBox!, placardBox!)).toBe(false);
+  const kitchen = computeLayout(
+    901,
+    641,
+    Array.from({ length: 6 }, (_, index) => `working-${index}`),
+  );
+  for (const hit of [kitchen.pass, ...kitchen.stations])
+    expect(boxesIntersect(boundaryFigureBox!, hit)).toBe(false);
 
   await page.setViewportSize({ width: 800, height: 500 });
   await expect(figureBox).toBeHidden();
@@ -437,10 +450,6 @@ test("reduced motion uses the emitted static poster", async ({
       figure.evaluate((image) => (image as HTMLImageElement).currentSrc),
     )
     .toContain("/tui-demo-poster.png");
-  await expect(page.locator(".visualTuiFigure")).toHaveCSS(
-    "transition-property",
-    "none",
-  );
   expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
 });
 
