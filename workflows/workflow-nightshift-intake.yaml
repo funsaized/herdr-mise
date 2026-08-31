@@ -47,16 +47,5 @@ jobs:
         dependsOn:
           - step: start-issue
             condition: { type: completed }
-      - name: reconcile-project
-        task:
-          type: workflow
-          workflowIdOrName: nightshift-project-sync
-        dependsOn:
-          - step: start-factory
-            condition:
-              type: or
-              conditions:
-                - { type: succeeded }
-                - { type: skipped }
     dependsOn: []
-version: 2
+version: 3

@@ -30,7 +30,8 @@ jobs:
           methodName: status
           inputs:
             issue_number: ${{ inputs.issueNumber }}
-        dependsOn: []
+        dependsOn:
+          - { step: project-planning-stage, condition: { type: succeeded } }
       - name: qualify-and-plan
         task:
           type: model_method
@@ -151,5 +152,13 @@ jobs:
               conditions:
                 - { type: succeeded }
                 - { type: skipped }
+      - name: project-planning-stage
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: planning
+        dependsOn: []
     dependsOn: []
-version: 2
+version: 3

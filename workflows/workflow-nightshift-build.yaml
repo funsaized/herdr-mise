@@ -32,7 +32,8 @@ jobs:
           expr: data.latest("the-nightshift", "state-" + inputs.workItem).attributes.stageId == "building"
           message: The work item must be in the factory building stage.
           severity: high
-        dependsOn: []
+        dependsOn:
+          - { step: project-building-stage, condition: { type: succeeded } }
       - name: refresh-issue
         task:
           type: model_method
@@ -208,5 +209,13 @@ jobs:
               runId: ${{ run.id }}
         dependsOn:
           - { step: record-change-summary, condition: { type: succeeded } }
+      - name: project-building-stage
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: building
+        dependsOn: []
     dependsOn: []
-version: 3
+version: 4

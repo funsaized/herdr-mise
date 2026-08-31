@@ -27,6 +27,15 @@ jobs:
           methodName: pr_merged
           inputs:
             issue_number: ${{ inputs.issueNumber }}
+        dependsOn:
+          - { step: project-closing-stage, condition: { type: succeeded } }
+      - name: project-closing-stage
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: closing
         dependsOn: []
       - name: cleanup-workspace
         task:
@@ -53,5 +62,14 @@ jobs:
                 cleanup: ${{ data.latest("verification-source-git", "cleanup-" + inputs.workItem).attributes }}
         dependsOn:
           - { step: cleanup-workspace, condition: { type: succeeded } }
+      - name: project-done-stage
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: done
+        dependsOn:
+          - { step: record-close-run, condition: { type: succeeded } }
     dependsOn: []
-version: 1
+version: 2

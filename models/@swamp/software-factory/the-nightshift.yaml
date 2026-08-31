@@ -200,6 +200,15 @@ globalArguments:
         - id: ship-prep
           description: A human creates and reviews the clean commit and pull request candidate.
           maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-project-stage
+                  inputs:
+                      workItem: "${{ self.workItem }}"
+                      stageId: ship-prep
+                      evidenceName: ship-prep-projection-run
+              resultEvidence: ship-prep-projection-run
           artifacts:
               - name: release-candidate
                 schema:
@@ -215,6 +224,12 @@ globalArguments:
               - name: ship
                 to: shipping
                 gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: ship-prep-projection-run,
+                              requireField: { status: succeeded },
+                          }
                     - type: artifact-exists
                       config: { artifact: release-candidate }
                     - type: human-approval
@@ -276,15 +291,36 @@ globalArguments:
         - id: await-merge
           description: Wait for an explicit human decision on the verified pull request.
           maxCycles: 5
+          work:
+              mode: workflow
+              workflow:
+                  name: nightshift-project-stage
+                  inputs:
+                      workItem: "${{ self.workItem }}"
+                      stageId: await-merge
+                      evidenceName: await-merge-projection-run
+              resultEvidence: await-merge-projection-run
           transitions:
               - name: close
                 to: deployed-verification
                 gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: await-merge-projection-run,
+                              requireField: { status: succeeded },
+                          }
                     - type: human-approval
                       config: { id: merge-confirmation }
               - name: rework
                 to: building
                 gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: await-merge-projection-run,
+                              requireField: { status: succeeded },
+                          }
                     - type: human-approval
                       config: { id: merge-rework }
 

@@ -15,7 +15,6 @@ const workflows = Object.fromEntries(
 const intakeWorkflowNames = [
   "workflow-nightshift-create-intake.yaml",
   "workflow-nightshift-intake.yaml",
-  "workflow-nightshift-project-sync.yaml",
 ];
 const intakeWorkflows = Object.fromEntries(
   intakeWorkflowNames.map((name) => [
@@ -391,15 +390,10 @@ export function auditIntakeWorkflowContract(candidateWorkflows) {
   const errors = [];
   const allowedMethods = new Set([
     "nightshift-github.create_issue",
-    "nightshift-github.sync_project_items",
     "nightshift-issues.start",
     "the-nightshift.start",
-    "the-nightshift.status",
   ]);
-  const allowedWorkflows = new Set([
-    "nightshift-intake",
-    "nightshift-project-sync",
-  ]);
+  const allowedWorkflows = new Set(["nightshift-intake"]);
 
   for (const [name, source] of Object.entries(candidateWorkflows)) {
     const taskBlocks = [
