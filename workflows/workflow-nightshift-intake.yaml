@@ -1,6 +1,6 @@
 id: ca20d478-5c75-4e42-934a-881fe2e29656
 name: nightshift-intake
-description: Start GitHub issue tracking and a matching Nightshift factory run.
+description: Refresh GitHub issue context and start a matching Nightshift factory run.
 tags:
   factory: nightshift
 inputs:
@@ -48,4 +48,4 @@ jobs:
           - step: start-issue
             condition: { type: completed }
     dependsOn: []
-version: 3
+version: 4

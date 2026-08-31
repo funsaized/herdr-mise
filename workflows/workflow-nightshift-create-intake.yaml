@@ -25,7 +25,7 @@ inputs:
   required: [idempotencyKey, title]
 jobs:
   - name: create-and-start
-    description: Create one issue, then bind it to the lifecycle and factory.
+    description: Create one issue, then bind its context to the factory.
     steps:
       - name: create-issue
         task:
@@ -49,4 +49,4 @@ jobs:
           - step: create-issue
             condition: { type: succeeded }
     dependsOn: []
-version: 1
+version: 2

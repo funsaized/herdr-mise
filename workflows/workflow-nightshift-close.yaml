@@ -1,6 +1,6 @@
 id: a6621866-b73d-4b34-9621-482cfab8038b
 name: nightshift-close
-description: Confirm merge, safely clean the worktree, and record closure evidence.
+description: Safely clean the worktree and record factory closure evidence.
 tags:
   factory: nightshift
   stage: closing
@@ -9,34 +9,14 @@ inputs:
     workItem:
       type: string
       minLength: 1
-    issueNumber:
-      type: integer
-      minimum: 1
     subjectRoot:
       type: string
       minLength: 1
-  required: [workItem, issueNumber, subjectRoot]
+  required: [workItem, subjectRoot]
 jobs:
   - name: close
-    description: Close the lifecycle and remove only a clean worktree.
+    description: Remove only a clean worktree and record the result.
     steps:
-      - name: confirm-merge
-        task:
-          type: model_method
-          modelIdOrName: nightshift-issues
-          methodName: pr_merged
-          inputs:
-            issue_number: ${{ inputs.issueNumber }}
-        dependsOn:
-          - { step: project-closing-stage, condition: { type: succeeded } }
-      - name: project-closing-stage
-        task:
-          type: workflow
-          workflowIdOrName: nightshift-project-stage
-          inputs:
-            workItem: ${{ inputs.workItem }}
-            stageId: closing
-        dependsOn: []
       - name: cleanup-workspace
         task:
           type: model_method
@@ -45,8 +25,7 @@ jobs:
           inputs:
             workItem: ${{ inputs.workItem }}
             subjectRoot: ${{ inputs.subjectRoot }}
-        dependsOn:
-          - { step: confirm-merge, condition: { type: succeeded } }
+        dependsOn: []
       - name: record-close-run
         task:
           type: model_method
@@ -62,14 +41,5 @@ jobs:
                 cleanup: ${{ data.latest("verification-source-git", "cleanup-" + inputs.workItem).attributes }}
         dependsOn:
           - { step: cleanup-workspace, condition: { type: succeeded } }
-      - name: project-done-stage
-        task:
-          type: workflow
-          workflowIdOrName: nightshift-project-stage
-          inputs:
-            workItem: ${{ inputs.workItem }}
-            stageId: done
-        dependsOn:
-          - { step: record-close-run, condition: { type: succeeded } }
     dependsOn: []
-version: 2
+version: 3

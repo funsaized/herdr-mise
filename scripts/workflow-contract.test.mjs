@@ -22,6 +22,24 @@ const intakeWorkflows = Object.fromEntries(
     readFileSync(`workflows/${name}`, "utf8"),
   ]),
 );
+const nightshiftWorkflows = Object.fromEntries(
+  readdirSync("workflows")
+    .filter((name) => /^workflow-nightshift-.*\.yaml$/.test(name))
+    .sort()
+    .map((name) => [name, readFileSync(`workflows/${name}`, "utf8")]),
+);
+const nightshiftIssueModel = readFileSync(
+  "models/@webframp/github-issue-lifecycle/nightshift-issues.yaml",
+  "utf8",
+);
+const nightshiftFactory = readFileSync(
+  "models/@swamp/software-factory/the-nightshift.yaml",
+  "utf8",
+);
+const nightshiftIntakeClient = readFileSync(
+  "scripts/nightshift-intake.mjs",
+  "utf8",
+);
 const dependabot = readFileSync(".github/dependabot.yml", "utf8");
 const gitleaks = readFileSync(".gitleaks.toml", "utf8");
 const managedVerification = readFileSync(
@@ -437,6 +455,71 @@ export function auditIntakeWorkflowContract(candidateWorkflows) {
   return errors;
 }
 
+export function auditNightshiftStateOwnership(
+  candidateWorkflows,
+  issueModel,
+  factory,
+  intakeClient,
+) {
+  const errors = [];
+  const forbidden = [
+    [
+      "nightshift-project-stage",
+      "factory workflows must not project board state",
+    ],
+    ["sync_project_items", "factory workflows must not sync board state"],
+    [
+      "attributes.phase",
+      "factory workflows must not gate on issue lifecycle phase",
+    ],
+  ];
+  const lifecycleTransitions =
+    /methodName: (triage|plan|iterate|approve|implement|link_pr|pr_merged|pr_failed|complete|close)\b/;
+
+  const sources = {
+    ...candidateWorkflows,
+    "the-nightshift.yaml": factory,
+    "nightshift-intake.mjs": intakeClient,
+  };
+  for (const [name, source] of Object.entries(sources)) {
+    for (const [value, message] of forbidden) {
+      if (source.includes(value)) errors.push(`${name}: ${message}`);
+    }
+    if (lifecycleTransitions.test(source)) {
+      errors.push(
+        `${name}: factory workflows must not advance issue lifecycle state`,
+      );
+    }
+  }
+  if (!issueModel.includes("postComments: false")) {
+    errors.push(
+      "nightshift-issues: lifecycle transition comments must be disabled",
+    );
+  }
+  if (!issueModel.includes("syncLabels: false")) {
+    errors.push("nightshift-issues: lifecycle label sync must be disabled");
+  }
+  if (
+    !candidateWorkflows["workflow-nightshift-plan.yaml"].includes(
+      "- step: publish-plan\n            condition: { type: succeeded }",
+    )
+  ) {
+    errors.push(
+      "nightshift-plan: successful evidence must wait for plan publication",
+    );
+  }
+  if (
+    !candidateWorkflows["workflow-nightshift-review.yaml"].includes(
+      "- { step: publish-review, condition: { type: succeeded } }",
+    )
+  ) {
+    errors.push(
+      "nightshift-review: successful evidence must wait for review publication",
+    );
+  }
+  return errors;
+}
+
 function mutateWorkflow(name, transform) {
   return { ...workflows, [name]: transform(workflows[name]) };
 }
@@ -447,6 +530,29 @@ test("repository workflows satisfy the supply-chain contract", () => {
 
 test("parallel intake workflows stay metadata-only", () => {
   assert.deepEqual(auditIntakeWorkflowContract(intakeWorkflows), []);
+});
+
+test("Nightshift leaves GitHub board and issue lifecycle state external", () => {
+  assert.deepEqual(
+    auditNightshiftStateOwnership(
+      nightshiftWorkflows,
+      nightshiftIssueModel,
+      nightshiftFactory,
+      nightshiftIntakeClient,
+    ),
+    [],
+  );
+});
+
+test("Nightshift ownership contract rejects board projection from the factory", () => {
+  assert.ok(
+    auditNightshiftStateOwnership(
+      nightshiftWorkflows,
+      nightshiftIssueModel,
+      `${nightshiftFactory}\nsync_project_items`,
+      nightshiftIntakeClient,
+    ).some((error) => error.includes("must not sync board state")),
+  );
 });
 
 test("parallel intake rejects source-mutating dependencies", () => {
