@@ -18,6 +18,13 @@ inputs:
       items:
         type: object
         additionalProperties: true
+    currentPlan:
+      type: object
+      additionalProperties: true
+      default: {}
+    humanFeedback:
+      type: string
+      default: ''
   required: [workItem, issueNumber, reviewFeedback]
 jobs:
   - name: plan
@@ -51,6 +58,11 @@ jobs:
               Keep scope to the accepted issue and reuse current architecture.
               The test strategy must name a real checked-in fixture and the
               integration boundary it proves; mocks alone are insufficient.
+              If the existing plan is non-empty, preserve its valid decisions
+              and return a complete replacement plan that incorporates the
+              human feedback and prior review findings. Existing plan:
+              ${{ inputs.currentPlan }} Human feedback:
+              ${{ inputs.humanFeedback }}
               Address these prior plan-review findings on revision:
               ${{ inputs.reviewFeedback }} Issue context:
               ${{ data.latest("nightshift-issues", "context-issue-" + inputs.workItem).attributes }}
@@ -161,4 +173,4 @@ jobs:
             stageId: planning
         dependsOn: []
     dependsOn: []
-version: 3
+version: 4
