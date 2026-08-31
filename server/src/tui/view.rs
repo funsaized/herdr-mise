@@ -197,6 +197,7 @@ pub fn draw(
         .split(frame.area());
     frame.render_widget(header, areas[0]);
     let rows = table.agents().map(|agent| {
+        let selected_row = selected_id == Some(agent.id.as_str());
         let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
             .ok()
             .map(|d| d.with_timezone(&Utc));
@@ -205,14 +206,18 @@ pub fn draw(
             .unwrap_or(0);
         let style = if agent.state == AgentState::Blocked {
             Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
-        } else if selected_id == Some(agent.id.as_str()) {
+        } else if selected_row {
             Style::default().add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
         Row::new(vec![
-            Cell::from(agent.name.clone())
-                .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
+            Cell::from(if selected_row {
+                format!("> {}", agent.name)
+            } else {
+                agent.name.clone()
+            })
+            .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
             Cell::from(state_label(&agent.state))
                 .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
@@ -525,6 +530,23 @@ mod tests {
                 "unexpected {absent:?} in {strip:?}"
             );
         }
+
+        let mut compact = Terminal::new(TestBackend::new(79, 23)).unwrap();
+        compact
+            .draw(|frame| {
+                scene::draw(
+                    frame,
+                    &table,
+                    None,
+                    now,
+                    0,
+                    super::super::canvas::ColorMode::Xterm256,
+                    true,
+                    selected.as_deref(),
+                )
+            })
+            .unwrap();
+        assert!(buffer_text(&compact).contains("> example-cook"));
 
         assert!(!handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
         assert_eq!(selected, None);
