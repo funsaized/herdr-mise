@@ -265,17 +265,18 @@ pub fn draw(
     tick: u64,
     color_mode: ColorMode,
     scene_supported: bool,
+    selected_id: Option<&str>,
 ) {
     let area = frame.area();
     let agents = table.agents().collect::<Vec<_>>();
     let LayoutDecision::Scene(layout) =
         compute_layout(area.width, area.height.saturating_mul(2), agents.len())
     else {
-        view::draw(frame, table, warning, now, tick);
+        view::draw(frame, table, warning, now, tick, selected_id);
         return;
     };
     if !scene_supported {
-        view::draw(frame, table, warning, now, tick);
+        view::draw(frame, table, warning, now, tick, selected_id);
         return;
     }
 
@@ -465,16 +466,23 @@ pub fn draw(
     for (station, agent) in layout.stations.iter().copied().zip(agents.iter().copied()) {
         let station_area = cell_rect(station);
         let blocked = agent.state == AgentState::Blocked;
+        let selected = selected_id == Some(agent.id.as_str());
         frame.render_widget(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(if blocked {
+                .border_type(if blocked || selected {
                     BorderType::Double
                 } else {
                     BorderType::Plain
                 })
                 .border_style(Style::default().fg(mapped(
-                    if blocked { theme::RED } else { theme::STEEL_LO },
+                    if blocked {
+                        theme::RED
+                    } else if selected {
+                        theme::BRASS
+                    } else {
+                        theme::STEEL_LO
+                    },
                     color_mode,
                 ))),
             station_area,
@@ -571,6 +579,25 @@ pub fn draw(
         );
     }
 
+    if let Some(agent) = selected_id.and_then(|id| agents.iter().find(|agent| agent.id == id)) {
+        for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
+            render_line(
+                frame,
+                area,
+                2,
+                area.height.saturating_sub(3) + row as u16,
+                area.width.saturating_sub(4),
+                Line::styled(
+                    facts,
+                    Style::default()
+                        .fg(mapped(theme::TEXT, color_mode))
+                        .bg(mapped(theme::PANEL2, color_mode))
+                        .add_modifier(Modifier::BOLD),
+                ),
+            );
+        }
+    }
+
     let connection = connection_text(table, warning);
     render_line(
         frame,
@@ -583,7 +610,11 @@ pub fn draw(
             Style::default().fg(mapped(theme::DIM, color_mode)),
         ),
     );
-    let keys = "q / Esc quit · ? help";
+    let keys = if selected_id.is_some() {
+        "Tab / Shift+Tab inspect · Esc close · q quit"
+    } else {
+        "q / Esc quit · ? help"
+    };
     render_line(
         frame,
         area,
@@ -634,6 +665,16 @@ mod tests {
     }
 
     fn render(table: &AgentTable, width: u16, height: u16, tick: u64) -> Buffer {
+        render_selected(table, width, height, tick, None)
+    }
+
+    fn render_selected(
+        table: &AgentTable,
+        width: u16,
+        height: u16,
+        tick: u64,
+        selected_id: Option<&str>,
+    ) -> Buffer {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
@@ -645,6 +686,7 @@ mod tests {
                     tick,
                     ColorMode::Xterm256,
                     true,
+                    selected_id,
                 )
             })
             .unwrap();
@@ -832,6 +874,20 @@ mod tests {
                 assert_eq!(buffer.cell((79, 23)).unwrap().fg, theme::FRAME);
             }
         }
+    }
+
+    #[test]
+    fn selected_blocked_station_keeps_alarm_chrome_and_fact_strip() {
+        let table = live_table(vec![record("blocked", AgentState::Blocked)]);
+        let buffer = render_selected(&table, 80, 24, 0, Some("blocked"));
+        let output = text(&buffer);
+
+        assert!(output.contains("Cook blocked · BLOCKED / AT THE PASS"));
+        assert!(output.contains("‼ BLOCKED 00:00 ‼"));
+        assert!(buffer
+            .content
+            .iter()
+            .any(|cell| cell.symbol() == "╔" && cell.fg == theme::RED));
     }
 
     #[test]
