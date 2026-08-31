@@ -6,6 +6,6 @@ version: 1
 tags: {}
 globalArguments:
   repo: funsaized/herdr-mise
-  postComments: false
+  postComments: true
   syncLabels: true
 methods: {}

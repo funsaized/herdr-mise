@@ -63,5 +63,25 @@ jobs:
                   preserved: false
                   reason: workspace was never created
         dependsOn: []
+      - name: project-aborted-after-cleanup
+        guard: ${{ inputs.subjectRoot == "" }}
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: aborted
+        dependsOn:
+          - { step: record-cleanup-run, condition: { type: succeeded } }
+      - name: project-aborted-without-workspace
+        guard: ${{ inputs.subjectRoot != "" }}
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-project-stage
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            stageId: aborted
+        dependsOn:
+          - { step: record-empty-cleanup-run, condition: { type: succeeded } }
     dependsOn: []
-version: 1
+version: 2
