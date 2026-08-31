@@ -12,6 +12,19 @@ const visualAssets = [
 function visualSite(): Plugin {
   return {
     name: "visual-site",
+    // Fix npm run dev:visual assets
+    configureServer(server) {
+      for (const [path, fileName] of visualAssets)
+        server.middlewares.use(`/${fileName}`, (_request, response) => {
+          response.setHeader(
+            "Content-Type",
+            fileName.endsWith(".gif") ? "image/gif" : "image/png",
+          );
+          response.end(
+            readFileSync(fileURLToPath(new URL(path, import.meta.url))),
+          );
+        });
+    },
     generateBundle() {
       for (const [path, fileName] of visualAssets)
         this.emitFile({
@@ -96,6 +109,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), ...(visual ? [visualSite()] : [])],
     server: {
       host: "127.0.0.1",
+      // set b/c maintainer homelab server
+      // remove or re-configure for your local
+      allowedHosts: ["herdr-mise.dev.s11a.com"],
       port: 8686,
       strictPort: true,
     },
