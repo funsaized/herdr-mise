@@ -359,6 +359,9 @@ select:focus-visible {
   cursor: pointer;
   font-size: 12px;
 }
+.freezerTrigger {
+  right: 92px;
+}
 .emptyPill {
   position: absolute;
   z-index: 8;
@@ -573,5 +576,10 @@ select:focus-visible {
 @media (max-width: 900px), (max-height: 640px) {
   .visualTuiFigure {
     display: none;
+  }
+}
+@media (max-width: 480px) {
+  .firstHint {
+    bottom: 52px;
   }
 }

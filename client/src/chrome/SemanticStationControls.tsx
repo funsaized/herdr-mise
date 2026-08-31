@@ -7,12 +7,14 @@ import {
 export function SemanticStationControls({
   agents,
   onSelect,
+  label = "Agent stations",
 }: {
   agents: readonly SemanticAgent[];
   onSelect(id: string, element: HTMLButtonElement): void;
+  label?: string;
 }) {
   return (
-    <nav className="stationA11yMirror" aria-label="Agent stations">
+    <nav className="stationA11yMirror" aria-label={label}>
       {agents.map((agent) => (
         <button
           key={agent.id}

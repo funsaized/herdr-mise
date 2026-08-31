@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { SemanticStationControls } from "./chrome/SemanticStationControls";
 import {
   humanStateWords,
@@ -58,6 +58,20 @@ describe("semantic station controls", () => {
     expect(control.getAttribute("tabindex")).toBe("-1");
     fireEvent.click(control);
     expect(onSelect).toHaveBeenCalledWith("a", control);
+  });
+  it("accepts the freezer landmark name without changing button tab behavior", () => {
+    render(
+      <SemanticStationControls
+        agents={[{ ...agent, targetState: "ended" }]}
+        label="Ended chefs"
+        onSelect={() => {}}
+      />,
+    );
+    const navigation = screen.getByRole("navigation", { name: "Ended chefs" });
+    expect(navigation).toBeTruthy();
+    expect(
+      within(navigation).getByRole("button").getAttribute("tabindex"),
+    ).toBe("-1");
   });
   it("deduplicates source updates that do not change the semantic slice", () => {
     const same = [agent],

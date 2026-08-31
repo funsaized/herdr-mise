@@ -42,6 +42,16 @@ pub enum LayoutDecision {
     Fallback,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FreezerLayout {
+    pub room: PixelRect,
+    pub door: PixelRect,
+    pub racks: [PixelRect; 2],
+    pub frost: Vec<PixelRect>,
+    pub floor: PixelRect,
+    pub spirits: Vec<(String, PixelRect)>,
+}
+
 pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> LayoutDecision {
     if width < MIN_SCENE_WIDTH || pixel_height < MIN_SCENE_PIXEL_HEIGHT {
         return LayoutDecision::Fallback;
@@ -103,6 +113,107 @@ pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> Layo
         pass,
         board,
         stations,
+    })
+}
+
+pub fn compute_freezer_layout(
+    width: u16,
+    pixel_height: u16,
+    board_ids: &[String],
+) -> Option<FreezerLayout> {
+    if width < MIN_SCENE_WIDTH || pixel_height < MIN_SCENE_PIXEL_HEIGHT {
+        return None;
+    }
+    let room = PixelRect {
+        x: 0,
+        y: 0,
+        width,
+        height: pixel_height,
+    };
+    let rack_width = 12;
+    let racks = [
+        PixelRect {
+            x: 3,
+            y: 8,
+            width: rack_width,
+            height: pixel_height - 16,
+        },
+        PixelRect {
+            x: width - rack_width - 3,
+            y: 8,
+            width: rack_width,
+            height: pixel_height - 16,
+        },
+    ];
+    let door = PixelRect {
+        x: width / 2 - 9,
+        y: 4,
+        width: 18,
+        height: 12,
+    };
+    let frost = vec![
+        PixelRect {
+            x: 2,
+            y: 2,
+            width: width - 4,
+            height: 2,
+        },
+        PixelRect {
+            x: 2,
+            y: pixel_height - 8,
+            width: width - 4,
+            height: 3,
+        },
+        PixelRect {
+            x: door.x - 2,
+            y: door.bottom() - 2,
+            width: door.width + 4,
+            height: 3,
+        },
+    ];
+    let floor = PixelRect {
+        x: racks[0].right() + 2,
+        y: door.bottom() + 2,
+        width: racks[1].x - racks[0].right() - 4,
+        height: pixel_height.saturating_sub(door.bottom() + 9),
+    };
+    let slot_width = 13_u16;
+    let slot_height = 22_u16;
+    let columns = usize::from(floor.width / slot_width);
+    let rows = usize::from(floor.height / slot_height);
+    let capacity = columns.saturating_mul(rows);
+    let visible = &board_ids[board_ids.len().saturating_sub(capacity)..];
+    let used_columns = columns.min(visible.len().max(1));
+    let mut spirits = Vec::with_capacity(visible.len());
+    for (index, id) in visible.iter().enumerate() {
+        let row = index / used_columns;
+        let count = used_columns.min(visible.len() - row * used_columns);
+        let column = index % used_columns;
+        let count = u16::try_from(count).ok()?;
+        let extra_gap = if row % 2 == 1 && count > 1 {
+            (floor.width.saturating_sub(count.saturating_mul(slot_width)) / (count - 1)).min(12)
+        } else {
+            0
+        };
+        let pitch = slot_width.saturating_add(extra_gap);
+        let row_width = slot_width.saturating_add((count - 1).saturating_mul(pitch));
+        let rect = PixelRect {
+            x: floor.x
+                + floor.width.saturating_sub(row_width) / 2
+                + u16::try_from(column).ok()?.saturating_mul(pitch),
+            y: floor.y + u16::try_from(row).ok()?.saturating_mul(slot_height),
+            width: slot_width,
+            height: slot_height,
+        };
+        spirits.push((id.clone(), rect));
+    }
+    Some(FreezerLayout {
+        room,
+        door,
+        racks,
+        frost,
+        floor,
+        spirits,
     })
 }
 
@@ -200,5 +311,41 @@ mod tests {
             compute_layout(300, 160, usize::MAX),
             LayoutDecision::Fallback
         );
+    }
+
+    #[test]
+    fn freezer_slots_are_deterministic_bounded_and_newest_first_when_truncated() {
+        let ids = (0..8).map(|index| format!("p-{index}")).collect::<Vec<_>>();
+        let layout = compute_freezer_layout(80, 48, &ids).unwrap();
+        let visible = layout
+            .spirits
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(visible, ["p-5", "p-6", "p-7"]);
+        for (index, (_, slot)) in layout.spirits.iter().enumerate() {
+            assert!(slot.x >= layout.floor.x && slot.right() <= layout.floor.right());
+            assert!(slot.y >= layout.floor.y && slot.bottom() <= layout.floor.bottom());
+            assert!(!slot.intersects(layout.door));
+            assert!(layout.racks.iter().all(|rack| !slot.intersects(*rack)));
+            assert!(layout.frost.iter().all(|frost| !slot.intersects(*frost)));
+            assert!(layout.spirits[index + 1..]
+                .iter()
+                .all(|(_, other)| !slot.intersects(*other)));
+        }
+        assert_eq!(layout, compute_freezer_layout(80, 48, &ids).unwrap());
+
+        let wide_ids = (0..12)
+            .map(|index| format!("p-{index}"))
+            .collect::<Vec<_>>();
+        let wide = compute_freezer_layout(110, 80, &wide_ids).unwrap();
+        assert_ne!(wide.spirits[0].1.x, wide.spirits[5].1.x);
+        for (index, (_, slot)) in wide.spirits.iter().enumerate() {
+            assert!(slot.x >= wide.floor.x && slot.right() <= wide.floor.right());
+            assert!(slot.y >= wide.floor.y && slot.bottom() <= wide.floor.bottom());
+            assert!(wide.spirits[index + 1..]
+                .iter()
+                .all(|(_, other)| !slot.intersects(*other)));
+        }
     }
 }

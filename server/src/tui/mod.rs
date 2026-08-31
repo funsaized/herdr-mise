@@ -30,6 +30,13 @@ use state::AgentTable;
 
 const SCENE_TICK_INTERVAL: Duration = Duration::from_millis(100);
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum SceneView {
+    #[default]
+    Kitchen,
+    Freezer,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct TerminalCapabilities {
     color_mode: canvas::ColorMode,
@@ -134,17 +141,30 @@ fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable) {
     }
 }
 
-fn handle_key(
+fn handle_key_with_view(
     code: KeyCode,
     table: &AgentTable,
     selected_id: &mut Option<String>,
+    view: &mut SceneView,
     shutdown: &CancellationToken,
 ) -> bool {
-    if code == KeyCode::Char('q') || (code == KeyCode::Esc && selected_id.is_none()) {
+    if code == KeyCode::Char('q') {
         shutdown.cancel();
         true
-    } else if code == KeyCode::Esc {
+    } else if code == KeyCode::Esc && selected_id.is_some() {
         *selected_id = None;
+        false
+    } else if code == KeyCode::Esc && *view == SceneView::Freezer {
+        *view = SceneView::Kitchen;
+        false
+    } else if code == KeyCode::Esc {
+        shutdown.cancel();
+        true
+    } else if code == KeyCode::Char('f') {
+        *view = match *view {
+            SceneView::Kitchen => SceneView::Freezer,
+            SceneView::Freezer => SceneView::Kitchen,
+        };
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
         let agents = table.agents().collect::<Vec<_>>();
@@ -167,6 +187,16 @@ fn handle_key(
     } else {
         false
     }
+}
+
+#[cfg(test)]
+fn handle_key(
+    code: KeyCode,
+    table: &AgentTable,
+    selected_id: &mut Option<String>,
+    shutdown: &CancellationToken,
+) -> bool {
+    handle_key_with_view(code, table, selected_id, &mut SceneView::Kitchen, shutdown)
 }
 
 struct TerminalGuard;
@@ -198,11 +228,12 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
     let mut selected_id = None;
+    let mut view = SceneView::Kitchen;
     loop {
         retain_selection(&mut selected_id, &table);
         let now = Utc::now();
         terminal.draw(|frame| {
-            scene::draw(
+            scene::draw_view(
                 frame,
                 &table,
                 warning.message(),
@@ -211,6 +242,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 capabilities.color_mode,
                 capabilities.scene_supported,
                 selected_id.as_deref(),
+                view,
             )
         })?;
         tokio::select! {
@@ -226,7 +258,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 FeedDecision::Closed => break,
             },
             event = events.next() => match event {
-                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key(key.code, &table, &mut selected_id, &shutdown) => break,
+                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key_with_view(key.code, &table, &mut selected_id, &mut view, &shutdown) => break,
                 Some(Err(error)) => return Err(error),
                 None => break,
                 _ => {}
@@ -347,6 +379,39 @@ mod tests {
         });
         retain_selection(&mut selected, &table);
         assert_eq!(selected, None);
+    }
+
+    #[test]
+    fn freezer_key_toggles_and_escape_returns_to_kitchen_before_quitting() {
+        let table = AgentTable::default();
+        let shutdown = CancellationToken::new();
+        let mut selected = None;
+        let mut view = SceneView::Kitchen;
+        assert!(!handle_key_with_view(
+            KeyCode::Char('f'),
+            &table,
+            &mut selected,
+            &mut view,
+            &shutdown,
+        ));
+        assert_eq!(view, SceneView::Freezer);
+        assert!(!handle_key_with_view(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut view,
+            &shutdown,
+        ));
+        assert_eq!(view, SceneView::Kitchen);
+        assert!(!shutdown.is_cancelled());
+        assert!(handle_key_with_view(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut view,
+            &shutdown,
+        ));
+        assert!(shutdown.is_cancelled());
     }
 
     #[tokio::test]

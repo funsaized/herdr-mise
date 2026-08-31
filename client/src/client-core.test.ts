@@ -23,7 +23,11 @@ import {
   shouldDisposeRetainedStation,
   shouldReconcileBusserClear,
 } from "./scene/kitchen-scene";
-import { computeLayout, stationVisualMetrics } from "./scene/layout";
+import {
+  computeFreezerLayout,
+  computeLayout,
+  stationVisualMetrics,
+} from "./scene/layout";
 import { ParticlePool } from "./scene/particles";
 import { TransitionEngine } from "./scene/transition";
 import { BellController, SharedBellAudio } from "./sound/bell";
@@ -229,6 +233,45 @@ describe("agent store machines", () => {
 });
 
 describe("layout, transitions and resources", () => {
+  it("places only the newest fitting freezer spirits in deterministic safe slots", () => {
+    const ids = Array.from({ length: 20 }, (_, index) => `ended-${index}`),
+      first = computeFreezerLayout(420, 480, ids),
+      second = computeFreezerLayout(420, 480, ids);
+    expect(first).toEqual(second);
+    expect(first.spirits.length).toBeGreaterThan(0);
+    expect(first.spirits.map((slot) => slot.id)).toEqual(
+      ids.slice(-first.spirits.length),
+    );
+    for (const [index, slot] of first.spirits.entries()) {
+      expect(slot.x).toBeGreaterThanOrEqual(first.floor.x);
+      expect(slot.y).toBeGreaterThanOrEqual(first.floor.y);
+      expect(slot.x + slot.width).toBeLessThanOrEqual(
+        first.floor.x + first.floor.width,
+      );
+      expect(slot.y + slot.height).toBeLessThanOrEqual(
+        first.floor.y + first.floor.height,
+      );
+      for (const keepout of [
+        first.door,
+        ...first.racks,
+        ...first.frost,
+        first.emptyPill,
+      ])
+        expect(
+          slot.x < keepout.x + keepout.width &&
+            keepout.x < slot.x + slot.width &&
+            slot.y < keepout.y + keepout.height &&
+            keepout.y < slot.y + slot.height,
+        ).toBe(false);
+      for (const other of first.spirits.slice(index + 1))
+        expect(
+          slot.x < other.x + other.width &&
+            other.x < slot.x + slot.width &&
+            slot.y < other.y + other.height &&
+            other.y < slot.y + slot.height,
+        ).toBe(false);
+    }
+  });
   it("disables every decorative scene motion channel only while reduced motion is active", () => {
     expect(sceneMotionPolicy(true)).toEqual({
       idle: false,

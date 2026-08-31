@@ -303,7 +303,7 @@ pub fn draw(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{handle_key, retain_selection, scene};
+    use super::super::{handle_key, retain_selection, scene, SceneView};
     use super::*;
     use crate::adapter::Normalizer;
     use crate::protocol::{
@@ -485,7 +485,7 @@ mod tests {
             .with_timezone(&Utc);
         terminal
             .draw(|frame| {
-                scene::draw(
+                scene::draw_view(
                     frame,
                     &table,
                     None,
@@ -494,6 +494,7 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
+                    SceneView::Kitchen,
                 )
             })
             .unwrap();
@@ -534,7 +535,7 @@ mod tests {
         let mut compact = Terminal::new(TestBackend::new(79, 23)).unwrap();
         compact
             .draw(|frame| {
-                scene::draw(
+                scene::draw_view(
                     frame,
                     &table,
                     None,
@@ -543,6 +544,7 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
+                    SceneView::Kitchen,
                 )
             })
             .unwrap();

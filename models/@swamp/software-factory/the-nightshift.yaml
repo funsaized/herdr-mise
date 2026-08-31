@@ -209,7 +209,7 @@ globalArguments:
                 reviews: change-summary
           transitions:
               - name: approve
-                to: ship-prep
+                to: ship-prep-project
                 gates:
                     - type: evidence-recorded
                       config:
@@ -235,8 +235,8 @@ globalArguments:
                           expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
                           message: Rework is available only for a failed code review round.
 
-        - id: ship-prep
-          description: A human creates and reviews the clean commit and pull request candidate.
+        - id: ship-prep-project
+          description: Project ship preparation before human candidate review.
           maxCycles: 5
           work:
               mode: workflow
@@ -245,8 +245,25 @@ globalArguments:
                   inputs:
                       workItem: "${{ self.workItem }}"
                       stageId: ship-prep
+                      authoritativeStageId: ship-prep-project
                       evidenceName: ship-prep-projection-run
               resultEvidence: ship-prep-projection-run
+          transitions:
+              - name: complete
+                to: ship-prep
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: ship-prep-projection-run,
+                              requireField: { status: succeeded },
+                          }
+
+        - id: ship-prep
+          description: A human creates and reviews the clean commit and pull request candidate.
+          maxCycles: 5
+          work:
+              mode: interactive
           artifacts:
               - name: release-candidate
                 schema:
@@ -262,12 +279,6 @@ globalArguments:
               - name: ship
                 to: shipping
                 gates:
-                    - type: evidence-recorded
-                      config:
-                          {
-                              name: ship-prep-projection-run,
-                              requireField: { status: succeeded },
-                          }
                     - type: artifact-exists
                       config: { artifact: release-candidate }
                     - type: human-approval

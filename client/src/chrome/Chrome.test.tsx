@@ -177,6 +177,8 @@ describe("chrome interactions", () => {
         onOpenSettings={() => {}}
         hintVisible
         onDismissHint={dismiss}
+        view="kitchen"
+        onToggleFreezer={() => {}}
       />,
     );
     expect(screen.getByRole("tooltip").textContent).toContain(
@@ -188,6 +190,33 @@ describe("chrome interactions", () => {
     expect(dismiss).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
     expect(store.coarse().selectedId).toBeNull();
+  });
+  it("exposes a native boolean freezer toggle", () => {
+    const store = new AgentStore(),
+      toggle = vi.fn();
+    render(
+      <Chrome
+        store={store}
+        coarse={store.coarse()}
+        hoveredId={null}
+        focusedId={null}
+        hits={[]}
+        settingsOpen={false}
+        statsOpen={false}
+        lastUpdateSeconds={0}
+        metrics={{ drawCalls: 0, socketBytesPerSecond: 0 }}
+        onCloseSettings={() => {}}
+        onOpenSettings={() => {}}
+        hintVisible={false}
+        onDismissHint={() => {}}
+        view="freezer"
+        onToggleFreezer={toggle}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Freezer" });
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(button);
+    expect(toggle).toHaveBeenCalledOnce();
   });
   it.each([
     ["blocked", "Blocked — at the pass"],

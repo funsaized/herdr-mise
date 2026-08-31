@@ -109,6 +109,24 @@ pub const BLOCKED: &[&str] = &[
     "..BB...BB..",
 ];
 const ENDED: &[&str] = &[];
+pub const SPIRIT: &[&str] = &[
+    "...HHHHH...",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
+    "..HhHhHhH..",
+    "...ooooo...",
+    "..oSSSSSo..",
+    "...SXSXS...",
+    "...SSSSS...",
+    "..CaaaaaC..",
+    ".CCCCCCCCC.",
+    ".CCAAAAACC.",
+    "..CAAAAAC..",
+    "...AAAAA...",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
+];
 
 pub fn cook_sprite(state: &AgentState, tick: u64) -> Sprite {
     let rows = match state {
@@ -168,5 +186,8 @@ mod tests {
     #[test]
     fn ended_has_no_active_cook_sprite() {
         assert!(cook_sprite(&AgentState::Ended, 0).rows.is_empty());
+        assert_eq!(SPIRIT.len(), SPRITE_HALF_ROWS);
+        assert!(SPIRIT.iter().all(|row| row.len() == SPRITE_WIDTH));
+        assert_eq!(SPIRIT[6].matches('X').count(), 2);
     }
 }
