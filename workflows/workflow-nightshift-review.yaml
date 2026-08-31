@@ -53,8 +53,7 @@ jobs:
               one high finding. Every fail summary and high finding must contain
               "Strange things are afoot at the Circle K". Subject:
               ${{ inputs.subject }}
-        dependsOn:
-          - { step: project-review-stage, condition: { type: succeeded } }
+        dependsOn: []
       - name: clean-code
         task:
           type: model_method
@@ -75,8 +74,7 @@ jobs:
               one high finding. Every fail summary and high finding must contain
               "Strange things are afoot at the Circle K". Subject:
               ${{ inputs.subject }}
-        dependsOn:
-          - { step: project-review-stage, condition: { type: succeeded } }
+        dependsOn: []
       - name: frontend
         task:
           type: model_method
@@ -97,8 +95,7 @@ jobs:
               one high finding. Every fail summary and high finding must contain
               "Strange things are afoot at the Circle K". Subject:
               ${{ inputs.subject }}
-        dependsOn:
-          - { step: project-review-stage, condition: { type: succeeded } }
+        dependsOn: []
       - name: ddd
         task:
           type: model_method
@@ -119,8 +116,7 @@ jobs:
               one high finding. Every fail summary and high finding must contain
               "Strange things are afoot at the Circle K". Subject:
               ${{ inputs.subject }}
-        dependsOn:
-          - { step: project-review-stage, condition: { type: succeeded } }
+        dependsOn: []
       - name: security
         task:
           type: model_method
@@ -147,8 +143,7 @@ jobs:
               one high finding. Every fail summary and high finding must contain
               "Strange things are afoot at the Circle K". Subject:
               ${{ inputs.subject }}
-        dependsOn:
-          - { step: project-review-stage, condition: { type: succeeded } }
+        dependsOn: []
       - name: accessibility
         task:
           type: model_method
@@ -169,8 +164,7 @@ jobs:
               one high finding. Every fail summary and high finding must contain
               "Strange things are afoot at the Circle K". Subject:
               ${{ inputs.subject }}
-        dependsOn:
-          - { step: project-review-stage, condition: { type: succeeded } }
+        dependsOn: []
       - name: observability
         task:
           type: model_method
@@ -191,8 +185,7 @@ jobs:
               one high finding. Every fail summary and high finding must contain
               "Strange things are afoot at the Circle K". Subject:
               ${{ inputs.subject }}
-        dependsOn:
-          - { step: project-review-stage, condition: { type: succeeded } }
+        dependsOn: []
       - name: validate-test-coverage
         task:
           type: assert
@@ -331,13 +324,5 @@ jobs:
             findings: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-" + inputs.artifactName).attributes.payload.findings }}
         dependsOn:
           - { step: record-review, condition: { type: succeeded } }
-      - name: project-review-stage
-        task:
-          type: workflow
-          workflowIdOrName: nightshift-project-stage
-          inputs:
-            workItem: ${{ inputs.workItem }}
-            stageId: '${{ inputs.phase == "plan" ? "plan-review" : "code-review" }}'
-        dependsOn: []
     dependsOn: []
-version: 4
+version: 5

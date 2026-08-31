@@ -2,10 +2,10 @@ type: '@webframp/github-issue-lifecycle'
 typeVersion: 2026.08.28.1
 id: f51e51d0-44c8-48f8-b9c6-b5aea399e4c3
 name: nightshift-issues
-version: 1
+version: 2
 tags: {}
 globalArguments:
   repo: funsaized/herdr-mise
-  postComments: true
-  syncLabels: true
+  postComments: false
+  syncLabels: false
 methods: {}

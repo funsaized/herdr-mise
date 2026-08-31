@@ -30,9 +30,8 @@ jobs:
           workflowIdOrName: nightshift-build
           inputs:
             workItem: ${{ self.workItem }}
-            issueNumber: ${{ int(self.workItem) }}
             plan: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan").attributes.payload }}
             reviewFeedback: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-code-review").?attributes.?payload.?findings.orValue([]) }}
         dependsOn: []
     dependsOn: []
-version: 1
+version: 2

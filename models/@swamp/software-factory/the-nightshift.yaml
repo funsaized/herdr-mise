@@ -2,7 +2,7 @@ type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 3
+version: 4
 tags: {}
 globalArguments:
     stages:
@@ -146,7 +146,6 @@ globalArguments:
                   name: nightshift-build
                   inputs:
                       workItem: "${{ self.workItem }}"
-                      issueNumber: "${{ double(self.workItem) }}"
                       plan: '${{ data.latest(self.name, "artifact-plan").payload }}'
                       reviewFeedback: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) }}'
               resultEvidence: build-run
@@ -209,7 +208,7 @@ globalArguments:
                 reviews: change-summary
           transitions:
               - name: approve
-                to: ship-prep-project
+                to: ship-prep
                 gates:
                     - type: evidence-recorded
                       config:
@@ -234,30 +233,6 @@ globalArguments:
                       config:
                           expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
                           message: Rework is available only for a failed code review round.
-
-        - id: ship-prep-project
-          description: Project ship preparation before human candidate review.
-          maxCycles: 5
-          work:
-              mode: workflow
-              workflow:
-                  name: nightshift-project-stage
-                  inputs:
-                      workItem: "${{ self.workItem }}"
-                      stageId: ship-prep
-                      authoritativeStageId: ship-prep-project
-                      evidenceName: ship-prep-projection-run
-              resultEvidence: ship-prep-projection-run
-          transitions:
-              - name: complete
-                to: ship-prep
-                gates:
-                    - type: evidence-recorded
-                      config:
-                          {
-                              name: ship-prep-projection-run,
-                              requireField: { status: succeeded },
-                          }
 
         - id: ship-prep
           description: A human creates and reviews the clean commit and pull request candidate.
@@ -285,7 +260,7 @@ globalArguments:
                       config: { id: ship-approval }
 
         - id: shipping
-          description: Verify the exact commit and link its pull request.
+          description: Verify the exact commit before human merge review.
           maxCycles: 5
           work:
               mode: workflow
@@ -293,12 +268,9 @@ globalArguments:
                   name: nightshift-ship
                   inputs:
                       workItem: "${{ self.workItem }}"
-                      issueNumber: "${{ double(self.workItem) }}"
                       commit: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
                       baseCommit: '${{ data.latest(self.name, "artifact-release-candidate").payload.baseCommit }}'
                       subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
-                      prUrl: '${{ data.latest(self.name, "artifact-release-candidate").payload.prUrl }}'
-                      branch: '${{ data.latest(self.name, "artifact-release-candidate").payload.branch }}'
               resultEvidence: shipping-run
           transitions:
               - name: complete
@@ -340,36 +312,15 @@ globalArguments:
         - id: await-merge
           description: Wait for an explicit human decision on the verified pull request.
           maxCycles: 5
-          work:
-              mode: workflow
-              workflow:
-                  name: nightshift-project-stage
-                  inputs:
-                      workItem: "${{ self.workItem }}"
-                      stageId: await-merge
-                      evidenceName: await-merge-projection-run
-              resultEvidence: await-merge-projection-run
           transitions:
               - name: close
                 to: deployed-verification
                 gates:
-                    - type: evidence-recorded
-                      config:
-                          {
-                              name: await-merge-projection-run,
-                              requireField: { status: succeeded },
-                          }
                     - type: human-approval
                       config: { id: merge-confirmation }
               - name: rework
                 to: building
                 gates:
-                    - type: evidence-recorded
-                      config:
-                          {
-                              name: await-merge-projection-run,
-                              requireField: { status: succeeded },
-                          }
                     - type: human-approval
                       config: { id: merge-rework }
 
@@ -423,7 +374,7 @@ globalArguments:
                           message: Only candidate failures return to building.
 
         - id: closing
-          description: Record the confirmed merge and complete the issue lifecycle.
+          description: Clean the workspace and record factory closure.
           maxCycles: 5
           work:
               mode: workflow
@@ -431,7 +382,6 @@ globalArguments:
                   name: nightshift-close
                   inputs:
                       workItem: "${{ self.workItem }}"
-                      issueNumber: "${{ double(self.workItem) }}"
                       subjectRoot: '${{ data.latest(self.name, "artifact-workspace").payload.subjectRoot }}'
               resultEvidence: close-run
           transitions:

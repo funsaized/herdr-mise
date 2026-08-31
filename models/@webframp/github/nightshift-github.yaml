@@ -2,10 +2,7 @@ type: '@webframp/github'
 typeVersion: 2026.08.28.1
 id: e6b21712-71d7-48ac-baea-c06c42ad7c57
 name: nightshift-github
-version: 1
+version: 2
 tags: {}
 globalArguments: {}
-reports:
-  require:
-    - { name: '@swamp/method-summary', methods: [sync_project_items] }
 methods: {}

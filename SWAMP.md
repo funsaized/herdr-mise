@@ -156,41 +156,41 @@ propels work; `swamp serve` does not poll queued work.
 
 ### State Ownership
 
-`the-nightshift` is authoritative for each work item's stage. GitHub Project 2
-is the operator view. GitHub issue lifecycle data records public delivery
-milestones.
+State has three deliberately independent owners:
 
-The Project 2 `Status` field mirrors these factory stages:
+| Concern                                                     | Owner                                    | Contract                                                         |
+| ----------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
+| Delivery gates, artifacts, evidence, retries, and approvals | `the-nightshift`                         | The factory stage is authoritative only for factory execution.   |
+| `Todo`, `in-progress`, `await-merge`, and `done` swim lanes | GitHub Project 2 workflows               | Swamp never writes the Project `Status` field.                   |
+| Issue open/closed state                                     | GitHub issue and pull-request automation | Swamp never closes issues or advances the issue lifecycle model. |
 
-| Factory stage           | Board status            | GitHub issue lifecycle                         |
-| ----------------------- | ----------------------- | ---------------------------------------------- |
-| `planning`              | `planning`              | Triaged, then planned                          |
-| `plan-review`           | `plan-review`           | Plan remains planned; review results comment   |
-| `building`              | `building`              | Approved, then implementing                    |
-| `code-review`           | `code-review`           | Implementing; review results comment           |
-| `ship-prep`             | `ship-prep`             | Implementing                                   |
-| `shipping`              | `shipping`              | Pull request linked after candidate validation |
-| `await-merge`           | `await-merge`           | Pull request open                              |
-| `deployed-verification` | `deployed-verification` | Pull request open                              |
-| `closing`               | `closing`               | Merge recorded and issue closed                |
-| `done`                  | `done`                  | Done                                           |
-| `aborted`               | `aborted`               | Factory run aborted                            |
+The GitHub issue number is the factory `workItem`. Intake creates or refreshes
+the issue context and starts the matching factory run. The lifecycle model's
+phase record is not delivery state and must not be used by factory gates.
 
-Each factory-dispatched stage workflow projects its stage before substantive
-work begins. Board movement is therefore part of stage execution, not an extra
-action after `advance`.
+Nightshift's only GitHub writes after issue creation are implementation-plan
+and adversarial-review comments. Both use hidden publication markers and are
+idempotent per workflow run. Comment publication is fail-closed: the stage does
+not record successful result evidence when GitHub publication fails.
 
-`ship-prep` and `await-merge` contain projection-only work. A driver must
-dispatch that work before their human-gated transitions can pass. `done` and
-`aborted` are projected only after cleanup succeeds.
+GitHub and factory state may diverge by design. For example, a project workflow
+may move an issue to `done` when its pull request merges while Nightshift remains
+in `deployed-verification` or `closing`. Those post-merge stages remain factory
+work and do not move the board backwards.
 
-The issue lifecycle model posts transition comments. Its `plan` and `iterate`
-methods publish implementation plans. Each seven-lane plan or code review posts
-one idempotent findings comment. Retrying the same workflow run does not
-duplicate its comment.
+Configure these GitHub Project 2 workflows outside Swamp:
 
-`nightshift-project-sync` repairs board drift from current factory state. Normal
-factory driving does not depend on it.
+| GitHub event                                             | Project status |
+| -------------------------------------------------------- | -------------- |
+| Issue added to project                                   | `Todo`         |
+| Work starts, such as assignment or pull-request creation | `in-progress`  |
+| Pull request is ready and waiting for merge              | `await-merge`  |
+| Issue closes                                             | `done`         |
+
+The exact triggers are repository policy. Keep the four statuses coarse and do
+not recreate factory stages as board columns. GitHub's supported Projects API
+does not update workflow rules, so configure and verify these mappings in the
+Nightshift project's Workflows UI, including `Item closed` to `done`.
 
 ### Operating Modes
 
@@ -201,9 +201,8 @@ factory driving does not depend on it.
 | Parallel build batch  | Build approved, independent work items                                | Requires `nightshift-build-fanout`; allows two builders              |
 | Review swarm          | Review a plan or implementation through seven specialist lanes        | Produces findings and a deterministic worst verdict                  |
 | Plan-only advisory    | Produce a reviewed implementation plan without changing source        | Stops at plan approval                                               |
-| Pull-request closeout | Verify a merged change, clean its worktree, and close its issue       | Requires explicit merge confirmation                                 |
+| Pull-request closeout | Verify a merged change and clean its worktree                         | Requires explicit merge confirmation                                 |
 | Recovery              | Resume failed or interrupted work from persisted state                | Human input is required when failure classification is ambiguous     |
-| Board repair          | Reconcile Project 2 from current factory stages                       | Recovery-only, metadata-only, and safe to repeat                     |
 | Canary delivery       | Exercise the complete factory with one low-risk change                | Use after changing factory definitions or controls                   |
 
 The driver records dispatch, executes the resolved work specification, inspects
@@ -214,7 +213,7 @@ approval on a human's behalf.
 ### Concurrency
 
 - Use one authenticated `swamp serve` process per checkout.
-- Metadata-only intake and board-repair workflows may overlap factory work.
+- Metadata-only intake workflows may overlap factory work.
 - Keep planning, build, review, shipping, and verification workflows mutually
   exclusive in one checkout.
 - Internal fan-out is bounded at seven review lanes and two builders.
@@ -284,11 +283,11 @@ npm run format:check
 swamp workflow validate verification --json
 ```
 
-Metadata-only `nightshift-create-intake`, `nightshift-intake`, and
-`nightshift-project-sync` runs may overlap an orchestrated factory run when all
-callers use the same loopback `swamp serve` process. All other workflows remain
-mutually exclusive because they may share checkout files, build outputs, or
-runtime processes. `scripts/workflow-contract.test.mjs` enforces this allowlist.
+Metadata-only `nightshift-create-intake` and `nightshift-intake` runs may overlap
+an orchestrated factory run when all callers use the same loopback `swamp serve`
+process. All other workflows remain mutually exclusive because they may share
+checkout files, build outputs, or runtime processes.
+`scripts/workflow-contract.test.mjs` enforces this allowlist.
 
 ### Drive Nightshift State
 
@@ -303,26 +302,14 @@ swamp model method run the-nightshift advance \
 ```
 
 After an advance, refresh `status` and dispatch the destination stage's resolved
-work specification. Stage work projects the matching GitHub Project 2 status
-before substantive work begins. Projection-only work in `ship-prep` and
-`await-merge` must also be dispatched.
+work specification. Gate-only stages such as `await-merge` require no dispatch.
+GitHub Project workflows move board cards independently; there is no Swamp
+projection or repair workflow.
 
-Do not call `nightshift-github.sync_project_items` during normal driving. Use
-the fleet workflow only to repair drift:
-
-```sh
-swamp workflow validate nightshift-project-sync
-swamp workflow run nightshift-project-sync
-```
-
-The repair workflow reads factory-wide status and overwrites board status from
-that authority. It does not advance factory or issue lifecycle state.
-
-The `nightshift-issues` model posts lifecycle comments. Planning publishes the
-initial or revised plan. Plan-review and code-review workflows publish their
-seven-lane findings after recording the factory artifact. Comment publication
-is fail-closed: the stage does not record successful result evidence when
-GitHub publication fails.
+The `nightshift-issues` model refreshes issue context without posting lifecycle
+comments or syncing lifecycle labels. Planning publishes the current plan.
+Plan-review and code-review workflows publish their seven-lane findings after
+recording the factory artifact.
 
 Start the single loopback orchestrator with token authentication:
 
@@ -335,7 +322,7 @@ SWAMP_SERVE_ADMIN=user:nightshift-orchestrator npm run orchestrator:serve
 In client terminals, reveal the stored server token into the environment and
 submit the prepared intake lane through the server. The client keeps each
 idempotency key unchanged, retries only model-lock timeouts with bounded
-backoff, and runs drift repair after an interrupted attempt:
+backoff, and resumes without modifying board state:
 
 ```sh
 export SWAMP_SERVE_URL=ws://127.0.0.1:9090

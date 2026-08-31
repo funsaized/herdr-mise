@@ -1,4 +1,27 @@
-import { reviewComment } from "../models/github_issue_review.ts";
+import { planComment, reviewComment } from "../models/github_issue_review.ts";
+
+Deno.test("plan comments include an idempotency marker and plan sections", () => {
+  const comment = planComment({
+    issue_number: 67,
+    publication_key: "run-1",
+    plan: {
+      summary: "Decouple factory and board state",
+      steps: ["Remove projection workflows"],
+      testingStrategy: "Validate the factory definition",
+      risks: [],
+      outOfScope: ["GitHub Project configuration"],
+    },
+  });
+  if (!comment.includes("<!-- nightshift-plan:run-1 -->")) {
+    throw new Error("idempotency marker is missing");
+  }
+  if (!comment.includes("1. Remove projection workflows")) {
+    throw new Error("plan step is missing");
+  }
+  if (!comment.includes("- GitHub Project configuration")) {
+    throw new Error("out-of-scope item is missing");
+  }
+});
 
 Deno.test("review comments include an idempotency marker and findings", () => {
   const comment = reviewComment({

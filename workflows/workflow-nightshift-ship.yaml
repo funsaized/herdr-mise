@@ -1,6 +1,6 @@
 id: c0e70086-74e9-4b5b-b0d8-0c03eb68ef3d
 name: nightshift-ship
-description: Verify an exact commit and link its pull request for human merge review.
+description: Verify an exact commit for human merge review.
 tags:
   factory: nightshift
   stage: ship
@@ -9,9 +9,6 @@ inputs:
     workItem:
       type: string
       minLength: 1
-    issueNumber:
-      type: integer
-      minimum: 1
     commit:
       type: string
       pattern: '^[0-9a-f]{40}$'
@@ -21,16 +18,10 @@ inputs:
     subjectRoot:
       type: string
       minLength: 1
-    prUrl:
-      type: string
-      minLength: 1
-    branch:
-      type: string
-      minLength: 1
-  required: [workItem, issueNumber, commit, baseCommit, subjectRoot, prUrl, branch]
+  required: [workItem, commit, baseCommit, subjectRoot]
 jobs:
   - name: ship
-    description: Verify the exact commit before linking its pull request.
+    description: Verify the exact commit before human merge review.
     steps:
       - name: verify-candidate
         task:
@@ -40,20 +31,7 @@ jobs:
             commit: ${{ inputs.commit }}
             baseCommit: ${{ inputs.baseCommit }}
             subjectRoot: ${{ inputs.subjectRoot }}
-        dependsOn:
-          - { step: project-shipping-stage, condition: { type: succeeded } }
-      - name: link-pull-request
-        task:
-          type: model_method
-          modelIdOrName: nightshift-issues
-          methodName: link_pr
-          inputs:
-            issue_number: ${{ inputs.issueNumber }}
-            pr_url: ${{ inputs.prUrl }}
-            branch: ${{ inputs.branch }}
-        dependsOn:
-          - step: verify-candidate
-            condition: { type: succeeded }
+        dependsOn: []
       - name: record-shipping-run
         task:
           type: model_method
@@ -68,14 +46,6 @@ jobs:
               outputs:
                 failureKind: none
         dependsOn:
-          - { step: link-pull-request, condition: { type: succeeded } }
-      - name: project-shipping-stage
-        task:
-          type: workflow
-          workflowIdOrName: nightshift-project-stage
-          inputs:
-            workItem: ${{ inputs.workItem }}
-            stageId: shipping
-        dependsOn: []
+          - { step: verify-candidate, condition: { type: succeeded } }
     dependsOn: []
-version: 3
+version: 4

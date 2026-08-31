@@ -71,12 +71,6 @@ for (const feature of features) {
     }
 
     await delay(backoff[attempt]);
-    const reconciliation = swamp([
-      "workflow",
-      "run",
-      "nightshift-project-sync",
-    ]);
-    if (reconciliation.status !== 0) diagnostics("nightshift-project-sync");
   }
   if (!completed)
     throw new Error(`intake failed for ${feature.idempotencyKey}`);

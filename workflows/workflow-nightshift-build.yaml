@@ -10,9 +10,6 @@ inputs:
       type: string
       pattern: '^[0-9]+$'
       maxLength: 16
-    issueNumber:
-      type: integer
-      minimum: 1
     plan:
       type: object
       additionalProperties: true
@@ -21,10 +18,10 @@ inputs:
       items:
         type: object
         additionalProperties: true
-  required: [workItem, issueNumber, plan, reviewFeedback]
+  required: [workItem, plan, reviewFeedback]
 jobs:
   - name: build
-    description: Move the issue into implementation, then make the smallest tested change.
+    description: Make the smallest tested change from the approved factory plan.
     steps:
       - name: require-building-stage
         task:
@@ -32,75 +29,7 @@ jobs:
           expr: data.latest("the-nightshift", "state-" + inputs.workItem).attributes.stageId == "building"
           message: The work item must be in the factory building stage.
           severity: high
-        dependsOn:
-          - { step: project-building-stage, condition: { type: succeeded } }
-      - name: refresh-issue
-        task:
-          type: model_method
-          modelIdOrName: nightshift-issues
-          methodName: status
-          inputs:
-            issue_number: ${{ inputs.issueNumber }}
-        dependsOn:
-          - step: require-building-stage
-            condition: { type: succeeded }
-      - name: mark-open-pr-failed
-        guard: ${{ data.latest("nightshift-issues", "state-issue-" + inputs.workItem).attributes.phase != "pr_open" }}
-        task:
-          type: model_method
-          modelIdOrName: nightshift-issues
-          methodName: pr_failed
-          inputs:
-            issue_number: ${{ inputs.issueNumber }}
-            reason: Factory rework requested after an open pull request.
-        dependsOn:
-          - step: refresh-issue
-            condition: { type: succeeded }
-      - name: resume-failed-pr
-        guard: ${{ data.latest("nightshift-issues", "state-issue-" + inputs.workItem).attributes.phase != "pr_failed" }}
-        task:
-          type: model_method
-          modelIdOrName: nightshift-issues
-          methodName: implement
-          inputs:
-            issue_number: ${{ inputs.issueNumber }}
-        dependsOn:
-          - step: mark-open-pr-failed
-            condition:
-              type: or
-              conditions:
-                - { type: succeeded }
-                - { type: skipped }
-      - name: approve-issue-plan
-        guard: ${{ data.latest("nightshift-issues", "state-issue-" + inputs.workItem).attributes.phase != "planned" }}
-        task:
-          type: model_method
-          modelIdOrName: nightshift-issues
-          methodName: approve
-          inputs:
-            issue_number: ${{ inputs.issueNumber }}
-        dependsOn:
-          - step: resume-failed-pr
-            condition:
-              type: or
-              conditions:
-                - { type: succeeded }
-                - { type: skipped }
-      - name: begin-implementation
-        guard: ${{ data.latest("nightshift-issues", "state-issue-" + inputs.workItem).attributes.phase != "approved" }}
-        task:
-          type: model_method
-          modelIdOrName: nightshift-issues
-          methodName: implement
-          inputs:
-            issue_number: ${{ inputs.issueNumber }}
-        dependsOn:
-          - step: approve-issue-plan
-            condition:
-              type: or
-              conditions:
-                - { type: succeeded }
-                - { type: skipped }
+        dependsOn: []
       - name: prepare-workspace
         task:
           type: model_method
@@ -114,12 +43,8 @@ jobs:
             baseRef: main
             branch: ${{ "nightshift/" + inputs.workItem }}
         dependsOn:
-          - step: begin-implementation
-            condition:
-              type: or
-              conditions:
-                - { type: succeeded }
-                - { type: skipped }
+          - step: require-building-stage
+            condition: { type: succeeded }
       - name: record-workspace
         task:
           type: model_method
@@ -209,13 +134,5 @@ jobs:
               runId: ${{ run.id }}
         dependsOn:
           - { step: record-change-summary, condition: { type: succeeded } }
-      - name: project-building-stage
-        task:
-          type: workflow
-          workflowIdOrName: nightshift-project-stage
-          inputs:
-            workItem: ${{ inputs.workItem }}
-            stageId: building
-        dependsOn: []
     dependsOn: []
-version: 4
+version: 5

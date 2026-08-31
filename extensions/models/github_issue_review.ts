@@ -14,6 +14,19 @@ const Arguments = z.object({
   findings: z.array(Finding).min(1).max(200),
 });
 type Arguments = z.infer<typeof Arguments>;
+const Plan = z.object({
+  summary: z.string().min(1),
+  steps: z.array(z.string().min(1)).min(1),
+  testingStrategy: z.string().min(1),
+  risks: z.array(z.string().min(1)),
+  outOfScope: z.array(z.string().min(1)),
+});
+const PlanArguments = z.object({
+  issue_number: z.number().int().positive(),
+  publication_key: z.string().min(1).max(128),
+  plan: Plan,
+});
+type PlanArguments = z.infer<typeof PlanArguments>;
 
 type Context = {
   globalArgs: Record<string, unknown>;
@@ -73,6 +86,70 @@ export function reviewComment(args: Arguments) {
   return `${marker}\n### Nightshift ${heading}\n\n${findings}`.slice(0, 60_000);
 }
 
+export function planComment(args: PlanArguments) {
+  const list = (items: string[]) =>
+    items.length === 0 ? "- None" : items.map((item) => `- ${item}`).join("\n");
+  const steps = args.plan.steps
+    .map((step, index) => `${index + 1}. ${step}`)
+    .join("\n");
+  return `<!-- nightshift-plan:${args.publication_key} -->
+### Nightshift implementation plan
+
+${args.plan.summary}
+
+#### Steps
+
+${steps}
+
+#### Testing
+
+${args.plan.testingStrategy}
+
+#### Risks
+
+${list(args.plan.risks)}
+
+#### Out of scope
+
+${list(args.plan.outOfScope)}`.slice(0, 60_000);
+}
+
+async function publishComment(
+  repo: string,
+  issueNumber: number,
+  marker: string,
+  body: string,
+  signal?: AbortSignal,
+) {
+  const comments = z
+    .array(z.array(z.object({ body: z.string() })))
+    .parse(
+      JSON.parse(
+        await gh(
+          [
+            "api",
+            `repos/${repo}/issues/${issueNumber}/comments`,
+            "--paginate",
+            "--slurp",
+          ],
+          signal,
+        ),
+      ),
+    )
+    .flat();
+  if (!comments.some((comment) => comment.body.includes(marker))) {
+    await gh(
+      [
+        "api",
+        `repos/${repo}/issues/${issueNumber}/comments`,
+        "-f",
+        `body=${body}`,
+      ],
+      signal,
+    );
+  }
+}
+
 export const extension = {
   type: "@webframp/github-issue-lifecycle",
   resources: {
@@ -89,8 +166,48 @@ export const extension = {
       lifetime: "infinite",
       garbageCollection: 20,
     },
+    published_plan: {
+      description: "A Nightshift implementation plan published to GitHub",
+      schema: z.object({
+        issueNumber: z.number().int().positive(),
+        publicationKey: z.string(),
+        publishedAt: z.iso.datetime(),
+      }),
+      lifetime: "infinite",
+      garbageCollection: 20,
+    },
   },
   methods: [
+    {
+      publish_plan: {
+        description: "Publish one idempotent Nightshift plan to an issue",
+        arguments: PlanArguments,
+        execute: async (args: PlanArguments, context: Context) => {
+          const repo = z
+            .string()
+            .regex(/^[\w.-]+\/[\w.-]+$/)
+            .parse(context.globalArgs.repo);
+          const marker = `<!-- nightshift-plan:${args.publication_key} -->`;
+          await publishComment(
+            repo,
+            args.issue_number,
+            marker,
+            planComment(args),
+            context.signal,
+          );
+          const handle = await context.writeResource(
+            "published_plan",
+            `published-plan-${args.issue_number}`,
+            {
+              issueNumber: args.issue_number,
+              publicationKey: args.publication_key,
+              publishedAt: new Date().toISOString(),
+            },
+          );
+          return { dataHandles: [handle] };
+        },
+      },
+    },
     {
       publish_review: {
         description:
@@ -102,33 +219,13 @@ export const extension = {
             .regex(/^[\w.-]+\/[\w.-]+$/)
             .parse(context.globalArgs.repo);
           const marker = `<!-- nightshift-review:${args.phase}:${args.publication_key} -->`;
-          const comments = z
-            .array(z.array(z.object({ body: z.string() })))
-            .parse(
-              JSON.parse(
-                await gh(
-                  [
-                    "api",
-                    `repos/${repo}/issues/${args.issue_number}/comments`,
-                    "--paginate",
-                    "--slurp",
-                  ],
-                  context.signal,
-                ),
-              ),
-            )
-            .flat();
-          if (!comments.some((comment) => comment.body.includes(marker))) {
-            await gh(
-              [
-                "api",
-                `repos/${repo}/issues/${args.issue_number}/comments`,
-                "-f",
-                `body=${reviewComment(args)}`,
-              ],
-              context.signal,
-            );
-          }
+          await publishComment(
+            repo,
+            args.issue_number,
+            marker,
+            reviewComment(args),
+            context.signal,
+          );
           const handle = await context.writeResource(
             "published_review",
             `published-review-${args.issue_number}-${args.phase}`,
