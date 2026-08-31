@@ -245,6 +245,7 @@ globalArguments:
                   inputs:
                       workItem: "${{ self.workItem }}"
                       stageId: ship-prep
+                      authoritativeStageId: ship-prep-project
                       evidenceName: ship-prep-projection-run
               resultEvidence: ship-prep-projection-run
           transitions:

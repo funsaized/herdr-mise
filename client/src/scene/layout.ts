@@ -139,38 +139,54 @@ export function computeFreezerLayout(
     ),
     door = {
       x: width / 2 - doorWidth / 2,
-      y: frame + 8,
+      y: frame + freezer.door.top,
       width: doorWidth,
       height: doorHeight,
     },
     racks = [
       {
-        x: frame + 8,
-        y: frame + 28,
+        x: frame + freezer.rack.inset,
+        y: frame + freezer.rack.top,
         width: rackWidth,
-        height: Math.max(80, inner.height - 68),
+        height: Math.max(
+          freezer.rack.minHeight,
+          inner.height - freezer.rack.top - freezer.rack.bottom,
+        ),
       },
       {
-        x: width - frame - rackWidth - 8,
-        y: frame + 28,
+        x: width - frame - rackWidth - freezer.rack.inset,
+        y: frame + freezer.rack.top,
         width: rackWidth,
-        height: Math.max(80, inner.height - 68),
+        height: Math.max(
+          freezer.rack.minHeight,
+          inner.height - freezer.rack.top - freezer.rack.bottom,
+        ),
       },
     ],
     frost = [
-      { x: frame, y: frame, width: inner.width, height: 12 },
-      { x: frame, y: height - frame - 16, width: inner.width, height: 16 },
       {
-        x: door.x - 10,
-        y: door.y + door.height - 8,
-        width: door.width + 20,
-        height: 18,
+        x: frame,
+        y: frame,
+        width: inner.width,
+        height: freezer.frost.topHeight,
+      },
+      {
+        x: frame,
+        y: height - frame - freezer.frost.bottomHeight,
+        width: inner.width,
+        height: freezer.frost.bottomHeight,
+      },
+      {
+        x: door.x - freezer.frost.door.x,
+        y: door.y + door.height - freezer.frost.door.y,
+        width: door.width + freezer.frost.door.x * 2,
+        height: freezer.frost.door.height,
       },
       ...racks.map((rack) => ({
-        x: rack.x - 6,
-        y: rack.y + rack.height - 10,
-        width: rack.width + 12,
-        height: 18,
+        x: rack.x - freezer.frost.rack.x,
+        y: rack.y + rack.height - freezer.frost.rack.y,
+        width: rack.width + freezer.frost.rack.x * 2,
+        height: freezer.frost.rack.height,
       })),
     ],
     emptyPill = {
@@ -181,10 +197,18 @@ export function computeFreezerLayout(
       height: freezer.emptyPill.height,
     },
     floor = {
-      x: racks[0]!.x + racks[0]!.width + 14,
-      y: door.y + door.height + 20,
-      width: Math.max(0, racks[1]!.x - (racks[0]!.x + racks[0]!.width) - 28),
-      height: Math.max(0, emptyPill.y - (door.y + door.height + 20)),
+      x: racks[0]!.x + racks[0]!.width + freezer.rack.floorGap,
+      y: door.y + door.height + freezer.door.floorGap,
+      width: Math.max(
+        0,
+        racks[1]!.x -
+          (racks[0]!.x + racks[0]!.width) -
+          freezer.rack.floorGap * 2,
+      ),
+      height: Math.max(
+        0,
+        emptyPill.y - (door.y + door.height + freezer.door.floorGap),
+      ),
     },
     slotWidth = freezer.slot.width,
     slotHeight = freezer.slot.height,

@@ -519,7 +519,11 @@ export class KitchenScene {
     )
       g.moveTo(x, layout.floor.y)
         .lineTo(x, layout.inner.y + layout.inner.height)
-        .stroke({ color: p.scene.steel[2][index], width: 1, alpha: 0.65 });
+        .stroke({
+          color: p.scene.steel[2][index],
+          width: 1,
+          alpha: tokens.freezer.tile.alpha,
+        });
     for (
       let y = layout.floor.y;
       y < layout.inner.y + layout.inner.height;
@@ -527,58 +531,94 @@ export class KitchenScene {
     )
       g.moveTo(layout.inner.x, y)
         .lineTo(layout.inner.x + layout.inner.width, y)
-        .stroke({ color: p.scene.steel[2][index], width: 1, alpha: 0.65 });
+        .stroke({
+          color: p.scene.steel[2][index],
+          width: 1,
+          alpha: tokens.freezer.tile.alpha,
+        });
     g.rect(
-      layout.door.x - 7,
-      layout.door.y - 7,
-      layout.door.width + 14,
-      layout.door.height + 14,
+      layout.door.x - tokens.freezer.door.frame,
+      layout.door.y - tokens.freezer.door.frame,
+      layout.door.width + tokens.freezer.door.frame * 2,
+      layout.door.height + tokens.freezer.door.frame * 2,
     )
       .fill(p.scene.ink)
       .rect(layout.door.x, layout.door.y, layout.door.width, layout.door.height)
       .fill(p.scene.steel[1][index])
       .rect(
-        layout.door.x + 12,
-        layout.door.y + 12,
-        layout.door.width - 24,
-        layout.door.height - 24,
+        layout.door.x + tokens.freezer.door.panelInset,
+        layout.door.y + tokens.freezer.door.panelInset,
+        layout.door.width - tokens.freezer.door.panelInset * 2,
+        layout.door.height - tokens.freezer.door.panelInset * 2,
       )
-      .stroke({ color: p.scene.steel[2][index], width: 3 })
-      .rect(layout.door.x + 7, layout.door.y + 20, 6, 18)
-      .fill(p.scene.ink)
-      .rect(layout.door.x + 7, layout.door.y + layout.door.height - 38, 6, 18)
+      .stroke({
+        color: p.scene.steel[2][index],
+        width: tokens.freezer.door.panelStroke,
+      })
+      .rect(
+        layout.door.x + tokens.freezer.door.hinge.x,
+        layout.door.y + tokens.freezer.door.hinge.top,
+        tokens.freezer.door.hinge.width,
+        tokens.freezer.door.hinge.height,
+      )
       .fill(p.scene.ink)
       .rect(
-        layout.door.x + layout.door.width - 28,
+        layout.door.x + tokens.freezer.door.hinge.x,
+        layout.door.y + layout.door.height - tokens.freezer.door.hinge.bottom,
+        tokens.freezer.door.hinge.width,
+        tokens.freezer.door.hinge.height,
+      )
+      .fill(p.scene.ink)
+      .rect(
+        layout.door.x + layout.door.width - tokens.freezer.door.latch.right,
         layout.door.y + layout.door.height / 2,
-        20,
-        7,
+        tokens.freezer.door.latch.width,
+        tokens.freezer.door.latch.height,
       )
       .fill(p.scene.ink);
     for (const [rackIndex, rack] of layout.racks.entries()) {
       g.rect(rack.x, rack.y, rack.width, rack.height).stroke({
         color: p.scene.ink,
-        width: 5,
+        width: tokens.freezer.rack.borderWidth,
       });
-      for (let shelf = 1; shelf < 4; shelf++) {
-        const y = rack.y + (rack.height * shelf) / 4;
-        g.rect(rack.x, y, rack.width, 5)
+      for (let shelf = 1; shelf <= tokens.freezer.rack.shelfCount; shelf++) {
+        const y =
+          rack.y + (rack.height * shelf) / (tokens.freezer.rack.shelfCount + 1);
+        g.rect(rack.x, y, rack.width, tokens.freezer.rack.shelfWidth)
           .fill(p.scene.ink)
-          .rect(rack.x + 10, y - 18, rack.width * 0.42, 14)
+          .rect(
+            rack.x + tokens.freezer.rack.paper.x,
+            y - tokens.freezer.rack.paper.y,
+            rack.width * tokens.freezer.rack.paper.widthRatio,
+            tokens.freezer.rack.paper.height,
+          )
           .fill(shelf % 2 ? p.scene.coat[index] : p.accents[4]!)
-          .rect(rack.x + rack.width * 0.58, y - 15, rack.width * 0.28, 11)
+          .rect(
+            rack.x + rack.width * tokens.freezer.rack.crate.xRatio,
+            y - tokens.freezer.rack.crate.y,
+            rack.width * tokens.freezer.rack.crate.widthRatio,
+            tokens.freezer.rack.crate.height,
+          )
           .fill(p.accents[rackIndex ? 6 : 0]!);
       }
     }
     for (const frost of layout.frost)
       g.rect(frost.x, frost.y, frost.width, frost.height).fill({
         color: p.scene.steel[1][index],
-        alpha: 0.78,
+        alpha: tokens.freezer.frost.alpha,
       });
-    for (let x = 10; x < layout.room.width; x += tokens.freezer.rivetPitch)
-      g.circle(x, 7, 2)
+    for (
+      let x = tokens.freezer.rivet.start;
+      x < layout.room.width;
+      x += tokens.freezer.rivet.pitch
+    )
+      g.circle(x, tokens.freezer.rivet.y, tokens.freezer.rivet.radius)
         .fill(p.scene.ink)
-        .circle(x, layout.room.height - 7, 2)
+        .circle(
+          x,
+          layout.room.height - tokens.freezer.rivet.y,
+          tokens.freezer.rivet.radius,
+        )
         .fill(p.scene.ink);
     this.room.addChild(g);
     const snapshot = this.store.snapshot();
@@ -587,13 +627,13 @@ export class KitchenScene {
       if (!entry) continue;
       const spirit = new Graphics(),
         u = Math.max(
-          tokens.freezer.spiritScale.min,
+          tokens.freezer.spirit.scale.min,
           Math.min(
-            tokens.freezer.spiritScale.max,
-            slot.width / tokens.freezer.spiritScale.slotDivisor,
+            tokens.freezer.spirit.scale.max,
+            slot.width / tokens.freezer.spirit.scale.slotDivisor,
           ),
         ),
-        base = slot.y + slot.height - 28;
+        base = slot.y + slot.height - tokens.freezer.spirit.baseInset;
       drawCookSilhouette(
         spirit,
         slot.x + slot.width / 2,
@@ -607,20 +647,34 @@ export class KitchenScene {
       );
       if (snapshot.selectedId === entry.id || this.focusedId === entry.id)
         spirit
-          .rect(slot.x + 3, slot.y + 3, slot.width - 6, slot.height - 6)
+          .rect(
+            slot.x + tokens.freezer.spirit.focusInset,
+            slot.y + tokens.freezer.spirit.focusInset,
+            slot.width - tokens.freezer.spirit.focusInset * 2,
+            slot.height - tokens.freezer.spirit.focusInset * 2,
+          )
           .stroke({
             color: p.scene.ink,
-            width: 3,
+            width: tokens.freezer.spirit.focusStroke,
           });
       const name = new Text({
         text: compactPixelText(
           entry.name.toUpperCase(),
           tokens.freezer.slot.nameCharacters,
         ),
-        style: worldText(p.scene.ink, Math.max(9, u * 2.4)),
+        style: worldText(
+          p.scene.ink,
+          Math.max(
+            tokens.freezer.spirit.nameFont.min,
+            u * tokens.freezer.spirit.nameFont.scale,
+          ),
+        ),
       });
       name.anchor.set(0.5, 0);
-      name.position.set(slot.x + slot.width / 2, base + 5);
+      name.position.set(
+        slot.x + slot.width / 2,
+        base + tokens.freezer.spirit.nameOffset,
+      );
       this.room.addChild(spirit, name);
       this.hits.push({ kind: "spirit", id: entry.id, rect: slot });
     }

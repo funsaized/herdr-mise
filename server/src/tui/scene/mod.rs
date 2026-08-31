@@ -696,6 +696,24 @@ fn draw_freezer(
         i32::from(area.height.saturating_mul(2).saturating_sub(4)),
         theme::STEEL,
     );
+    for x in (layout.floor.x..layout.floor.right()).step_by(4) {
+        canvas.fill_rect(
+            x.into(),
+            layout.floor.y.into(),
+            1,
+            layout.floor.height.into(),
+            theme::STEEL_LO,
+        );
+    }
+    for y in (layout.floor.y..layout.floor.bottom()).step_by(4) {
+        canvas.fill_rect(
+            layout.floor.x.into(),
+            y.into(),
+            layout.floor.width.into(),
+            1,
+            theme::STEEL_LO,
+        );
+    }
     for rack in layout.racks {
         canvas.fill_rect(
             rack.x.into(),
@@ -747,6 +765,9 @@ fn draw_freezer(
         2,
         theme::COAT_LO,
     );
+    for y in [layout.door.y + 2, layout.door.bottom() - 4] {
+        canvas.fill_rect(layout.door.x.into(), y.into(), 1, 2, theme::COAT_LO);
+    }
     for frost in &layout.frost {
         canvas.fill_rect(
             frost.x.into(),

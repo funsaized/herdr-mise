@@ -189,11 +189,18 @@ pub fn compute_freezer_layout(
         let row = index / used_columns;
         let count = used_columns.min(visible.len() - row * used_columns);
         let column = index % used_columns;
-        let row_width = u16::try_from(count).ok()?.saturating_mul(slot_width);
+        let count = u16::try_from(count).ok()?;
+        let extra_gap = if row % 2 == 1 && count > 1 {
+            (floor.width.saturating_sub(count.saturating_mul(slot_width)) / (count - 1)).min(12)
+        } else {
+            0
+        };
+        let pitch = slot_width.saturating_add(extra_gap);
+        let row_width = slot_width.saturating_add((count - 1).saturating_mul(pitch));
         let rect = PixelRect {
             x: floor.x
                 + floor.width.saturating_sub(row_width) / 2
-                + u16::try_from(column).ok()?.saturating_mul(slot_width),
+                + u16::try_from(column).ok()?.saturating_mul(pitch),
             y: floor.y + u16::try_from(row).ok()?.saturating_mul(slot_height),
             width: slot_width,
             height: slot_height,
@@ -327,5 +334,18 @@ mod tests {
                 .all(|(_, other)| !slot.intersects(*other)));
         }
         assert_eq!(layout, compute_freezer_layout(80, 48, &ids).unwrap());
+
+        let wide_ids = (0..12)
+            .map(|index| format!("p-{index}"))
+            .collect::<Vec<_>>();
+        let wide = compute_freezer_layout(110, 80, &wide_ids).unwrap();
+        assert_ne!(wide.spirits[0].1.x, wide.spirits[5].1.x);
+        for (index, (_, slot)) in wide.spirits.iter().enumerate() {
+            assert!(slot.x >= wide.floor.x && slot.right() <= wide.floor.right());
+            assert!(slot.y >= wide.floor.y && slot.bottom() <= wide.floor.bottom());
+            assert!(wide.spirits[index + 1..]
+                .iter()
+                .all(|(_, other)| !slot.intersects(*other)));
+        }
     }
 }
