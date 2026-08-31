@@ -125,10 +125,45 @@ fn panic_restore_install_count() -> usize {
     PANIC_RESTORE_INSTALL_COUNT.load(Ordering::SeqCst)
 }
 
-pub fn handle_key(code: KeyCode, shutdown: &CancellationToken) -> bool {
-    if matches!(code, KeyCode::Char('q') | KeyCode::Esc) {
+fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable) {
+    if selected_id
+        .as_ref()
+        .is_some_and(|id| !table.agents().any(|agent| &agent.id == id))
+    {
+        *selected_id = None;
+    }
+}
+
+fn handle_key(
+    code: KeyCode,
+    table: &AgentTable,
+    selected_id: &mut Option<String>,
+    shutdown: &CancellationToken,
+) -> bool {
+    if code == KeyCode::Char('q') || (code == KeyCode::Esc && selected_id.is_none()) {
         shutdown.cancel();
         true
+    } else if code == KeyCode::Esc {
+        *selected_id = None;
+        false
+    } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
+        let agents = table.agents().collect::<Vec<_>>();
+        if agents.is_empty() {
+            *selected_id = None;
+            return false;
+        }
+        let current = selected_id
+            .as_ref()
+            .and_then(|id| agents.iter().position(|agent| &agent.id == id));
+        let index = if code == KeyCode::BackTab {
+            current.map_or(agents.len() - 1, |index| {
+                (index + agents.len() - 1) % agents.len()
+            })
+        } else {
+            current.map_or(0, |index| (index + 1) % agents.len())
+        };
+        *selected_id = Some(agents[index].id.clone());
+        false
     } else {
         false
     }
@@ -162,7 +197,9 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     table.apply(feed.snapshot().await);
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
+    let mut selected_id = None;
     loop {
+        retain_selection(&mut selected_id, &table);
         let now = Utc::now();
         terminal.draw(|frame| {
             scene::draw(
@@ -173,18 +210,23 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 tick,
                 capabilities.color_mode,
                 capabilities.scene_supported,
+                selected_id.as_deref(),
             )
         })?;
         tokio::select! {
             _ = shutdown.cancelled() => break,
             _ = interval.tick() => tick = tick.wrapping_add(1),
             event = receiver.recv() => match decide_feed_event(&mut receiver, event) {
-                FeedDecision::Apply(event) => table.apply(event),
-                FeedDecision::Resnapshot => table.apply(feed.snapshot().await),
+                FeedDecision::Apply(event) => {
+                    table.apply(event);
+                },
+                FeedDecision::Resnapshot => {
+                    table.apply(feed.snapshot().await);
+                },
                 FeedDecision::Closed => break,
             },
             event = events.next() => match event {
-                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key(key.code, &shutdown) => break,
+                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key(key.code, &table, &mut selected_id, &shutdown) => break,
                 Some(Err(error)) => return Err(error),
                 None => break,
                 _ => {}
@@ -233,11 +275,78 @@ mod tests {
     }
     #[test]
     fn quit_keys_cancel_shared_token() {
+        let table = AgentTable::default();
         for code in [KeyCode::Char('q'), KeyCode::Esc] {
             let token = CancellationToken::new();
-            assert!(handle_key(code, &token));
+            assert!(handle_key(code, &table, &mut None, &token));
             assert!(token.is_cancelled());
         }
+    }
+
+    #[test]
+    fn station_keys_cycle_dismiss_then_quit() {
+        use crate::protocol::{
+            AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SessionStats,
+            SourceStatus,
+        };
+
+        let agent = |id: &str| AgentRecord {
+            id: id.into(),
+            name: id.into(),
+            state: AgentState::Working,
+            progress: None,
+            state_entered_at: String::new(),
+            accent_index: 0,
+            model: String::new(),
+            workspace: String::new(),
+            session: SessionStats {
+                runtime_ms: 0,
+                tickets: 0,
+            },
+        };
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![agent("a"), agent("b")],
+        });
+        let quit = CancellationToken::new();
+        let mut selected = Some("a".into());
+        assert!(handle_key(KeyCode::Char('q'), &table, &mut selected, &quit));
+        assert!(quit.is_cancelled());
+
+        let shutdown = CancellationToken::new();
+        let mut selected = None;
+
+        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+        assert_eq!(selected.as_deref(), Some("a"));
+        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+        assert_eq!(selected.as_deref(), Some("b"));
+        assert!(!handle_key(
+            KeyCode::BackTab,
+            &table,
+            &mut selected,
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("a"));
+        assert!(!handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert_eq!(selected, None);
+        assert!(!shutdown.is_cancelled());
+        assert!(handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert!(shutdown.is_cancelled());
+
+        selected = Some("b".into());
+        table.apply(AgentStateEvent::Delta {
+            version: 1,
+            mode: AppMode::Live,
+            operation: DeltaOperation::Remove,
+            agent: None,
+            agent_id: Some("b".into()),
+        });
+        retain_selection(&mut selected, &table);
+        assert_eq!(selected, None);
     }
 
     #[tokio::test]
