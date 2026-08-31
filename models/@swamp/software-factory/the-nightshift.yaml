@@ -19,7 +19,7 @@ globalArguments:
                       issueNumber: "${{ double(self.workItem) }}"
                       reviewFeedback: '${{ data.latest(self.name, "artifact-plan-review").?payload.?findings.orValue([]) }}'
                       currentPlan: '${{ data.latest(self.name, "artifact-plan").?payload.orValue({}) }}'
-                      humanFeedback: '${{ data.latest(self.name, "artifact-plan-feedback").?cycle.orValue(0) == data.latest(self.name, "artifact-plan-review").?cycle.orValue(-1) ? data.latest(self.name, "artifact-plan-feedback").payload.feedback : "" }}'
+                      humanFeedback: '${{ data.latest(self.name, "artifact-plan-feedback").?subjectVersion.orValue(0) == data.latest(self.name, "artifact-plan").?version.orValue(-1) ? data.latest(self.name, "artifact-plan-feedback").payload.feedback : "" }}'
               resultEvidence: planning-run
           artifacts:
               - name: plan
@@ -71,13 +71,6 @@ globalArguments:
               - name: plan-review
                 kind: findings
                 reviews: plan
-              - name: plan-feedback
-                reviews: plan
-                schema:
-                    type: object
-                    required: [feedback]
-                    properties:
-                        feedback: { type: string, minLength: 1 }
           transitions:
               - name: approve
                 to: building
@@ -108,7 +101,7 @@ globalArguments:
                           expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
                           message: Rework is available only for a failed plan review round.
               - name: request-rework
-                to: planning
+                to: plan-feedback
                 manual: true
                 gates:
                     - type: evidence-recorded
@@ -123,6 +116,24 @@ globalArguments:
                       config:
                           expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
                           message: Human-requested rework is available only after a passing plan review round.
+
+        - id: plan-feedback
+          description: Persist human feedback against the reviewed plan before revision.
+          maxCycles: 5
+          work:
+              mode: interactive
+          artifacts:
+              - name: plan-feedback
+                reviews: plan
+                schema:
+                    type: object
+                    required: [feedback]
+                    properties:
+                        feedback: { type: string, minLength: 1 }
+          transitions:
+              - name: revise
+                to: planning
+                gates:
                     - type: artifact-fresh
                       config: { artifact: plan-feedback, recordedThisCycle: true }
 
