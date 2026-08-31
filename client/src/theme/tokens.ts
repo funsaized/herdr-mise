@@ -69,6 +69,23 @@ export const tokens = {
     transparent: "rgba(0, 0, 0, 0)",
     blockedChip: "rgba(26, 22, 18, 0.82)",
   },
+  freezer: {
+    frame: { min: 8, max: 16, widthRatio: 0.018 },
+    rack: { minWidth: 56, maxWidth: 110, widthRatio: 0.12 },
+    door: {
+      minWidth: 110,
+      maxWidth: 190,
+      widthRatio: 0.2,
+      minHeight: 90,
+      maxHeight: 150,
+      heightRatio: 0.22,
+    },
+    slot: { width: 104, height: 142, nameCharacters: 11 },
+    emptyPill: { width: 240, height: 48, bottomRatio: 0.18 },
+    tile: { min: 28, max: 54, columns: 18 },
+    rivetPitch: 42,
+    spiritScale: { min: 2.7, max: 4, slotDivisor: 28 },
+  },
   chrome: {
     panel: "#fdfcf9",
     panelSoft: "rgba(250, 248, 242, 0.94)",

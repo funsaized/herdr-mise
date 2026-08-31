@@ -11,11 +11,11 @@ use ratatui::{
     Frame,
 };
 
-use self::layout::{compute_layout, LayoutDecision, PixelRect};
+use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, PixelRect};
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
     state::{AgentTable, BoardEntry},
-    theme, view,
+    theme, view, SceneView,
 };
 use crate::protocol::{AgentRecord, AgentState, SourceStatus};
 
@@ -176,6 +176,35 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
     }
 }
 
+fn draw_spirit(canvas: &mut PixelCanvas, slot: PixelRect) {
+    let sprite = sprites::SPIRIT;
+    let x = slot.x + slot.width.saturating_sub(sprites::SPRITE_WIDTH as u16) / 2;
+    let y = slot.y + 2;
+    for (row, pixels) in sprite.iter().enumerate() {
+        for (column, key) in pixels.bytes().enumerate() {
+            let color = match key {
+                b'H' | b'C' => Some(theme::COAT),
+                b'h' | b'c' => Some(theme::COAT_LO),
+                b'S' | b'K' => Some(theme::STEEL),
+                b'X' => Some(theme::EYE),
+                b'a' => Some(theme::ACCENTS[4]),
+                b'A' => Some(theme::ACCENT_DIMS[4]),
+                b'D' => Some(theme::PANTS),
+                b'B' => Some(theme::BOOT),
+                b'o' => Some(theme::BAND),
+                _ => None,
+            };
+            if let Some(color) = color {
+                canvas.put(
+                    i32::from(x) + column as i32,
+                    i32::from(y) + row as i32,
+                    color,
+                );
+            }
+        }
+    }
+}
+
 fn render_line(frame: &mut Frame<'_>, area: Rect, x: u16, y: u16, width: u16, line: Line<'static>) {
     if x >= area.width || y >= area.height || width == 0 {
         return;
@@ -257,7 +286,8 @@ fn connection_text(table: &AgentTable, warning: Option<&str>) -> String {
     )
 }
 
-pub fn draw(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_view(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
@@ -266,8 +296,13 @@ pub fn draw(
     color_mode: ColorMode,
     scene_supported: bool,
     selected_id: Option<&str>,
+    scene_view: SceneView,
 ) {
     let area = frame.area();
+    if scene_view == SceneView::Freezer {
+        draw_freezer(frame, table, warning, color_mode, scene_supported);
+        return;
+    }
     let agents = table.agents().collect::<Vec<_>>();
     let LayoutDecision::Scene(layout) =
         compute_layout(area.width, area.height.saturating_mul(2), agents.len())
@@ -611,9 +646,9 @@ pub fn draw(
         ),
     );
     let keys = if selected_id.is_some() {
-        "Tab / Shift+Tab inspect · Esc close · q quit"
+        "Tab / Shift+Tab inspect · f freezer · Esc close · q quit"
     } else {
-        "q / Esc quit · ? help"
+        "f freezer · q / Esc quit · ? help"
     };
     render_line(
         frame,
@@ -625,8 +660,174 @@ pub fn draw(
     );
 }
 
+fn draw_freezer(
+    frame: &mut Frame<'_>,
+    table: &AgentTable,
+    warning: Option<&str>,
+    color_mode: ColorMode,
+    scene_supported: bool,
+) {
+    let area = frame.area();
+    let ids = table
+        .board()
+        .iter()
+        .map(|entry| entry.id.clone())
+        .collect::<Vec<_>>();
+    let Some(layout) = compute_freezer_layout(area.width, area.height.saturating_mul(2), &ids)
+    else {
+        view::draw(frame, table, warning, Utc::now(), 0, None);
+        return;
+    };
+    if !scene_supported {
+        view::draw(frame, table, warning, Utc::now(), 0, None);
+        return;
+    }
+    let mut canvas = PixelCanvas::new(
+        area.width,
+        area.height.saturating_mul(2),
+        theme::STEEL_LO,
+        color_mode,
+    );
+    canvas.clear(theme::STEEL_LO);
+    canvas.fill_rect(
+        2,
+        2,
+        i32::from(area.width.saturating_sub(4)),
+        i32::from(area.height.saturating_mul(2).saturating_sub(4)),
+        theme::STEEL,
+    );
+    for rack in layout.racks {
+        canvas.fill_rect(
+            rack.x.into(),
+            rack.y.into(),
+            rack.width.into(),
+            rack.height.into(),
+            theme::STEEL_LO,
+        );
+        for shelf in 1..4 {
+            let y = rack.y + rack.height * shelf / 4;
+            canvas.fill_rect(
+                rack.x.into(),
+                y.into(),
+                rack.width.into(),
+                2,
+                theme::COAT_LO,
+            );
+            canvas.fill_rect(
+                i32::from(rack.x + 2),
+                i32::from(y.saturating_sub(4)),
+                i32::from(rack.width / 3),
+                3,
+                if shelf.is_multiple_of(2) {
+                    theme::ACCENTS[4]
+                } else {
+                    theme::COAT
+                },
+            );
+        }
+    }
+    canvas.fill_rect(
+        layout.door.x.into(),
+        layout.door.y.into(),
+        layout.door.width.into(),
+        layout.door.height.into(),
+        theme::STEEL_LO,
+    );
+    canvas.fill_rect(
+        i32::from(layout.door.x + 2),
+        i32::from(layout.door.y + 2),
+        i32::from(layout.door.width - 4),
+        i32::from(layout.door.height - 4),
+        theme::STEEL,
+    );
+    canvas.fill_rect(
+        i32::from(layout.door.x + layout.door.width - 4),
+        i32::from(layout.door.y + layout.door.height / 2),
+        3,
+        2,
+        theme::COAT_LO,
+    );
+    for frost in &layout.frost {
+        canvas.fill_rect(
+            frost.x.into(),
+            frost.y.into(),
+            frost.width.into(),
+            frost.height.into(),
+            theme::STEAM_HI,
+        );
+    }
+    for x in (2..area.width.saturating_sub(2)).step_by(8) {
+        canvas.put(i32::from(x), 1, theme::COAT_LO);
+        canvas.put(
+            i32::from(x),
+            i32::from(layout.room.height - 2),
+            theme::COAT_LO,
+        );
+    }
+    for (_, slot) in &layout.spirits {
+        draw_spirit(&mut canvas, *slot);
+    }
+    frame.render_widget(&canvas, area);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled(
+                " WALK-IN FREEZER ",
+                Style::default()
+                    .fg(mapped(theme::STEAM_HI, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .border_style(Style::default().fg(mapped(theme::STEEL, color_mode))),
+        area,
+    );
+    for (id, slot) in &layout.spirits {
+        if let Some(entry) = table.board().iter().find(|entry| &entry.id == id) {
+            let name = entry
+                .name
+                .to_uppercase()
+                .chars()
+                .take(11)
+                .collect::<String>();
+            render_line(
+                frame,
+                area,
+                slot.x + slot.width.saturating_sub(name.chars().count() as u16) / 2,
+                slot.bottom().saturating_sub(2) / 2,
+                slot.width,
+                Line::styled(
+                    name,
+                    Style::default()
+                        .fg(mapped(theme::TEXT, color_mode))
+                        .add_modifier(Modifier::BOLD),
+                ),
+            );
+        }
+    }
+    let connection = connection_text(table, warning);
+    render_line(
+        frame,
+        area,
+        2,
+        area.height.saturating_sub(1),
+        area.width.saturating_sub(4),
+        Line::styled(
+            connection,
+            Style::default().fg(mapped(theme::DIM, color_mode)),
+        ),
+    );
+    let keys = "f kitchen · Esc kitchen · q quit";
+    render_line(
+        frame,
+        area,
+        area.width.saturating_sub(keys.chars().count() as u16 + 2),
+        area.height.saturating_sub(1),
+        keys.chars().count() as u16,
+        Line::styled(keys, Style::default().fg(mapped(theme::DIM, color_mode))),
+    );
+}
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::adapter::Normalizer;
     use crate::protocol::{
@@ -678,7 +879,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
-                draw(
+                draw_view(
                     frame,
                     table,
                     Some("bind warning"),
@@ -687,13 +888,34 @@ mod tests {
                     ColorMode::Xterm256,
                     true,
                     selected_id,
+                    SceneView::Kitchen,
                 )
             })
             .unwrap();
         terminal.backend().buffer().clone()
     }
 
-    fn text(buffer: &Buffer) -> String {
+    pub(crate) fn render_freezer(table: &AgentTable, width: u16, height: u16) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| {
+                draw_view(
+                    frame,
+                    table,
+                    Some("bind warning"),
+                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                    9,
+                    ColorMode::Xterm256,
+                    true,
+                    None,
+                    SceneView::Freezer,
+                )
+            })
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    pub(crate) fn text(buffer: &Buffer) -> String {
         buffer.content.iter().map(|cell| cell.symbol()).collect()
     }
 
@@ -821,6 +1043,52 @@ mod tests {
                 .unwrap_or_else(|error| panic!("missing golden {path}: {error}"));
             assert_eq!(actual, expected, "golden mismatch: {path}");
         }
+    }
+
+    #[test]
+    fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
+        let mut table = live_table(vec![
+            record("alpha", AgentState::Done),
+            record("bravo", AgentState::Working),
+            record("charlie", AgentState::Blocked),
+        ]);
+        for (id, state) in [
+            ("alpha", AgentState::Ended),
+            ("bravo", AgentState::Ended),
+            ("charlie", AgentState::Ended),
+        ] {
+            table.apply(AgentStateEvent::Delta {
+                version: 1,
+                mode: AppMode::Live,
+                operation: DeltaOperation::Upsert,
+                agent: Some(record(id, state)),
+                agent_id: None,
+            });
+        }
+        let buffer = render_freezer(&table, 80, 24);
+        let actual = buffer_dump(&buffer);
+        let path = format!(
+            "{}/tests/goldens/scene-freezer.txt",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        if std::env::var_os("UPDATE_SCENE_GOLDENS").is_some() {
+            std::fs::write(&path, &actual).unwrap();
+        }
+        let expected = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("missing golden {path}: {error}"));
+        assert_eq!(actual, expected);
+        assert!(text(&buffer).contains("WALK-IN FREEZER"));
+        assert_eq!(
+            layout::compute_freezer_layout(
+                80,
+                48,
+                &["alpha".into(), "bravo".into(), "charlie".into(),]
+            )
+            .unwrap()
+            .spirits
+            .len(),
+            3
+        );
     }
 
     #[test]

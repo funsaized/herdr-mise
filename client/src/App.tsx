@@ -60,6 +60,7 @@ export function App() {
     [hits, setHits] = useState<readonly SceneHit[]>([]),
     [hoveredId, setHoveredId] = useState<string | null>(null),
     [focusedId, setFocusedId] = useState<string | null>(null),
+    [view, setView] = useState<"kitchen" | "freezer">("kitchen"),
     [settingsOpen, setSettingsOpen] = useState(false),
     [statsOpen, setStatsOpen] = useState(() =>
       new URLSearchParams(location.search).has("stats"),
@@ -120,6 +121,9 @@ export function App() {
     };
   }, []);
   useEffect(() => {
+    sceneRef.current?.setView(view);
+  }, [view]);
+  useEffect(() => {
     if (coarse.mode !== "disconnected") return;
     const timer = window.setInterval(
       () => setLastUpdateSeconds(clientStore.lastUpdateSeconds()),
@@ -141,18 +145,28 @@ export function App() {
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (isGlobalEscape(event)) {
-        setSettingsOpen(false);
-        clientStore.select(null);
+        if (settingsOpen) setSettingsOpen(false);
+        else if (coarse.selectedId) clientStore.select(null);
+        else if (view === "freezer") {
+          setView("kitchen");
+          setAnnouncement("Kitchen");
+        }
         return;
       }
-      if (isInteractiveKeyboardTarget(event.target)) return;
+      const semanticNav =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>(".stationA11yMirror")
+          : null;
+      if (isInteractiveKeyboardTarget(event.target) && !semanticNav) return;
       if (event.key.toLowerCase() === "s" && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         setStatsOpen((value) => !value);
         return;
       }
       const stationIds = hits
-        .filter((hit) => hit.kind === "station")
+        .filter(
+          (hit) => hit.kind === (view === "freezer" ? "spirit" : "station"),
+        )
         .map((hit) => hit.id);
       if (!stationIds.length) return;
       if (
@@ -168,13 +182,21 @@ export function App() {
             event.shiftKey
               ? -1
               : 1,
-          index = Math.max(0, stationIds.indexOf(focusedId ?? "")),
-          next =
-            stationIds[
-              (index + direction + stationIds.length) % stationIds.length
-            ]!;
+          buttons = semanticNav
+            ? [...semanticNav.querySelectorAll<HTMLButtonElement>("button")]
+            : [],
+          index = Math.max(
+            0,
+            semanticNav
+              ? buttons.indexOf(event.target as HTMLButtonElement)
+              : stationIds.indexOf(focusedId ?? ""),
+          ),
+          nextIndex =
+            (index + direction + stationIds.length) % stationIds.length,
+          next = stationIds[nextIndex]!;
         setFocusedId(next);
         sceneRef.current?.focus(next);
+        buttons[nextIndex]?.focus();
         return;
       }
       if (event.key === "Enter" && focusedId) {
@@ -184,7 +206,7 @@ export function App() {
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
-  }, [focusedId, hits]);
+  }, [coarse.selectedId, focusedId, hits, settingsOpen, view]);
   useEffect(() => {
     if (coarse.selectedId === null && semanticRestoreRef.current) {
       semanticRestoreRef.current.focus();
@@ -193,7 +215,11 @@ export function App() {
   }, [coarse.selectedId]);
   useEffect(() => {
     if (!settingsOpen && settingsRestorePendingRef.current) {
-      document.querySelector<HTMLButtonElement>(".settingsTrigger")?.focus();
+      document
+        .querySelector<HTMLButtonElement>(
+          ".settingsTrigger:not(.freezerTrigger)",
+        )
+        ?.focus();
       settingsRestorePendingRef.current = false;
     }
   }, [settingsOpen]);
@@ -213,13 +239,31 @@ export function App() {
     settingsRestorePendingRef.current = true;
     setSettingsOpen(true);
   };
+  const toggleFreezer = () => {
+    const next = view === "kitchen" ? "freezer" : "kitchen";
+    if (next === "freezer" && coarse.selectedId) clientStore.select(null);
+    setFocusedId(null);
+    sceneRef.current?.focus(null);
+    setView(next);
+    if (next === "kitchen") setAnnouncement("Kitchen");
+  };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
+  const spiritAgents = hits
+    .filter((hit) => hit.kind === "spirit")
+    .flatMap((hit) => {
+      const entry = clientStore
+        .snapshot()
+        .board.find((item) => item.id === hit.id);
+      return entry
+        ? [{ id: entry.id, name: entry.name, targetState: "ended" as const }]
+        : [];
+    });
   return (
     <main className="appShell" style={cssTokens}>
       <div
         ref={host}
         className={canvasClass}
-        aria-label="Agent state kitchen scene"
+        aria-label={`Agent state ${view} scene`}
         onPointerDown={() => {
           semanticRestoreRef.current = null;
         }}
@@ -227,7 +271,8 @@ export function App() {
         onPointerLeave={() => setHoveredId(null)}
       />
       <SemanticStationControls
-        agents={agents}
+        agents={view === "freezer" ? spiritAgents : agents}
+        label={view === "freezer" ? "Ended chefs" : undefined}
         onSelect={(id, element) => {
           semanticRestoreRef.current = element;
           clientStore.select(id);
@@ -248,6 +293,8 @@ export function App() {
           onOpenSettings={openSettings}
           hintVisible={hintVisible}
           onDismissHint={dismissHint}
+          view={view}
+          onToggleFreezer={toggleFreezer}
         />
       </div>
       <div
@@ -256,7 +303,9 @@ export function App() {
         aria-live="polite"
         aria-atomic="true"
       >
-        {announcement}
+        {view === "freezer"
+          ? `Freezer, ${spiritAgents.length} ended chefs`
+          : announcement}
       </div>
     </main>
   );

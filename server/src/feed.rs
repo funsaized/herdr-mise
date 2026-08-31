@@ -411,7 +411,11 @@ fn now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{AgentState, SessionStats};
+    use crate::{
+        adapter::{decode_event, AdapterEvent},
+        protocol::{AgentState, SessionStats},
+        tui::state::AgentTable,
+    };
     use tokio::{
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
         net::UnixListener,
@@ -543,6 +547,62 @@ mod tests {
         assert!(
             matches!(feed.snapshot().await,AgentStateEvent::Snapshot{agents,..} if agents.is_empty())
         );
+    }
+
+    #[tokio::test]
+    async fn freezer_board_membership_from_disappearance_snapshots() {
+        let mut normalizer = Normalizer::default();
+        let first = normalizer
+            .normalize_snapshot_value(
+                serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json"))
+                    .unwrap(),
+                "2026-08-13T12:00:00Z",
+            )
+            .unwrap();
+        let second = normalizer
+            .normalize_snapshot_value(
+                serde_json::from_str(include_str!(
+                    "../tests/fixtures/snapshot-protocol-19-empty-agents.json"
+                ))
+                .unwrap(),
+                "2026-08-13T12:01:00Z",
+            )
+            .unwrap();
+        assert_eq!(second.ended_ids, ["p-1"]);
+
+        let feed = Feed::fixed(AppMode::Live, vec![]).await;
+        let mut changes = feed.subscribe();
+        let mut table = AgentTable::default();
+        feed.apply_live(first.agents, first.ended_ids).await;
+        table.apply(changes.recv().await.unwrap());
+        feed.apply_live(second.agents, second.ended_ids).await;
+        table.apply(changes.recv().await.unwrap());
+        assert_eq!(
+            table
+                .board()
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["p-1"]
+        );
+        assert!(table.agents().all(|agent| agent.id != "p-1"));
+        let freezer = crate::tui::scene::tests::render_freezer(&table, 80, 24);
+        let freezer_text = crate::tui::scene::tests::text(&freezer);
+        assert!(freezer_text.contains("WALK-IN FREEZER"));
+        assert!(freezer_text.contains("CODEX"));
+
+        let before = table.board().to_vec();
+        let exited = decode_event(
+            serde_json::from_str(include_str!("../tests/fixtures/event-pane-exited.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            exited,
+            AdapterEvent::Exited {
+                pane_id: "p-1".into()
+            }
+        );
+        assert_eq!(table.board(), before);
     }
 
     #[tokio::test]

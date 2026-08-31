@@ -3,6 +3,11 @@
 // isolation, emitted static fixtures, and liveness beyond the client stale
 // timeout. Runs against the visual production build via the webServer config.
 import { test, expect, type Page } from "@playwright/test";
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer, type Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { computeLayout } from "../client/src/scene/layout";
 
 const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
@@ -51,6 +56,8 @@ type MotionMetrics = {
   blockedIndicators: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
+  view: "kitchen" | "freezer";
+  visibleSpirits: number;
 };
 const sceneMetrics = (page: Page) =>
   page.evaluate(() =>
@@ -183,6 +190,136 @@ test("reduced startup preserves idle working blocked waiting and ended state ind
     page.getByRole("complementary", { name: "mise-01 session summary" }),
   ).toContainText("86'D — SESSION ENDED");
   expect(errors).toEqual([]);
+});
+
+test("native freezer control renders only visible board spirits and preserves Escape order", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/?preset=ended&agents=12&stats");
+  const freezer = page.getByRole("button", { name: "Freezer" });
+  await expect(freezer).toHaveAttribute("aria-pressed", "false");
+  await page.mouse.click((1280 - 368) / 2 + 3 * 4 + 16, (4 + 12) * 4 + 4);
+  await expect(
+    page.locator('aside[aria-label$="session summary"]'),
+  ).toBeVisible();
+  await freezer.click();
+  await expect(
+    page.locator('aside[aria-label$="session summary"]'),
+  ).toHaveCount(0);
+  await expect(freezer).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({ view: "freezer", endedEntries: 12, visibleSpirits: 12 });
+  await expect(
+    page.getByRole("navigation", { name: "Ended chefs" }),
+  ).toBeAttached();
+  await expect(
+    page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
+  ).toHaveCount(12);
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.locator('aside[aria-label$="session summary"]'),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.locator('aside[aria-label$="session summary"]'),
+  ).toHaveCount(0);
+  await expect(freezer).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(freezer).toHaveAttribute("aria-pressed", "false");
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({ view: "kitchen" });
+  expect(errors).toEqual([]);
+});
+
+test("authoritative fixture disappearance reaches browser freezer spirits", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-freezer-")),
+    socketPath = join(directory, "herdr.sock"),
+    working = JSON.stringify(
+      JSON.parse(
+        await readFile(
+          join(process.cwd(), "server/tests/fixtures/snapshot-working.json"),
+          "utf8",
+        ),
+      ),
+    ),
+    empty = JSON.stringify(
+      JSON.parse(
+        await readFile(
+          join(
+            process.cwd(),
+            "server/tests/fixtures/snapshot-protocol-19-empty-agents.json",
+          ),
+          "utf8",
+        ),
+      ),
+    ),
+    sockets = new Set<Socket>();
+  let snapshot = working;
+  const fixtureServer = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    let request = "";
+    socket.on("data", (chunk) => {
+      request += chunk;
+      if (!request.includes("\n")) return;
+      const method = JSON.parse(request).method;
+      if (method === "session.snapshot") socket.end(`${snapshot.trim()}\n`);
+      else socket.write('{"result":{"type":"subscription_started"}}\n');
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    fixtureServer.once("error", reject);
+    fixtureServer.listen(socketPath, resolve);
+  });
+  const app = spawn("target/debug/herdr-mise", [], {
+    env: { ...process.env, HERDR_SOCKET_PATH: socketPath },
+    stdio: "ignore",
+  });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch("http://127.0.0.1:8686/")).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.goto("http://127.0.0.1:8686/?stats");
+    await expect(
+      page.getByRole("button", {
+        name: "Codex, Working — on the fire, open details",
+      }),
+    ).toBeAttached();
+    snapshot = empty;
+    await expect(
+      page.getByRole("button", {
+        name: "Codex, Working — on the fire, open details",
+      }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Freezer" }).click();
+    await expect(
+      page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
+    ).toHaveCount(1);
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({ view: "freezer", endedEntries: 1, visibleSpirits: 1 });
+  } finally {
+    app.kill("SIGTERM");
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 // Keyboard-cycle station focus and collect tooltip names until every
@@ -471,6 +608,12 @@ test("semantic station controls are AX-only Tab exclusions and restore focus aft
     page.getByRole("complementary", { name: "mise-01 details" }),
   ).toHaveCount(0);
   await expect(station).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    page.getByRole("button", {
+      name: "mise-02, Working — on the fire, open details",
+    }),
+  ).toBeFocused();
 });
 
 test("settings restores focus to its visible trigger", async ({ page }) => {

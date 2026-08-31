@@ -27,6 +27,8 @@ export interface ChromeProps {
   onOpenSettings(): void;
   onDismissHint(): void;
   hintVisible: boolean;
+  view: "kitchen" | "freezer";
+  onToggleFreezer(): void;
 }
 
 export function Chrome(props: ChromeProps) {
@@ -66,13 +68,22 @@ export function Chrome(props: ChromeProps) {
         />
       )}
       {!props.settingsOpen && (
-        <button
-          className="settingsTrigger"
-          onClick={props.onOpenSettings}
-          aria-label="Open settings"
-        >
-          Settings
-        </button>
+        <>
+          <button
+            className="settingsTrigger freezerTrigger"
+            onClick={props.onToggleFreezer}
+            aria-pressed={props.view === "freezer"}
+          >
+            Freezer
+          </button>
+          <button
+            className="settingsTrigger"
+            onClick={props.onOpenSettings}
+            aria-label="Open settings"
+          >
+            Settings
+          </button>
+        </>
       )}
       <ModeTreatment
         mode={props.coarse.mode}

@@ -27,7 +27,14 @@ import {
   resolveTheme,
   type ResolvedTheme,
 } from "../theme/theme";
-import { computeLayout, type Rect, type SceneLayout } from "./layout";
+import { tokens } from "../theme/tokens";
+import {
+  computeFreezerLayout,
+  computeLayout,
+  type FreezerLayout,
+  type Rect,
+  type SceneLayout,
+} from "./layout";
 import { ParticlePool } from "./particles";
 import { TransitionEngine } from "./transition";
 import {
@@ -45,6 +52,7 @@ import {
 } from "../runtime";
 import {
   blockedPassGeometry,
+  compactPixelText,
   donePlateGeometry,
   doorGeometry,
   passBellGeometry,
@@ -68,7 +76,7 @@ export {
 } from "./geometry";
 
 export interface SceneHit {
-  kind: "station" | "board";
+  kind: "station" | "board" | "spirit";
   id: string;
   rect: Rect;
 }
@@ -85,6 +93,8 @@ export interface SceneMetrics {
   blockedIndicators: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
+  view: "kitchen" | "freezer";
+  visibleSpirits: number;
   motion: {
     reduced: boolean;
     activeParticles: number;
@@ -228,6 +238,10 @@ export class KitchenScene {
   private lastTheme: ResolvedTheme | null = null;
   private boardSelection: string | null = null;
   private layout!: SceneLayout;
+  private freezerLayout: FreezerLayout | null = null;
+  private view: "kitchen" | "freezer" = "kitchen";
+  private lastLiveIds = "";
+  private lastBoardIds = "";
   private unsubscribe: (() => void) | null = null;
   private unsubscribeEvents: (() => void) | null = null;
   private unsubscribeMotion: (() => void) | null = null;
@@ -344,10 +358,17 @@ export class KitchenScene {
   focus(id: string | null) {
     if (this.focusedId === id) return;
     this.focusedId = id;
-    if (this.layout) {
+    if (this.layout && this.view === "kitchen") {
       this.drawStations(performance.now());
       this.dirty = true;
+    } else if (this.view === "freezer") {
+      this.redraw();
     }
+  }
+  setView(view: "kitchen" | "freezer") {
+    if (this.view === view) return;
+    this.view = view;
+    this.redraw();
   }
   metrics(): SceneMetrics {
     const idlePoses: Record<string, IdlePose> = {},
@@ -374,6 +395,8 @@ export class KitchenScene {
       blockedIndicators,
       stateIndicators,
       endedEntries: snapshot.board.length,
+      view: this.view,
+      visibleSpirits: this.freezerLayout?.spirits.length ?? 0,
       motion: {
         reduced: this.reducedMotion,
         activeParticles,
@@ -412,7 +435,8 @@ export class KitchenScene {
     this.store.reconcileRendered(undefined, force);
     if (force) this.transitions.reconcile();
     const ids = [...snapshot.agents.keys()],
-      layoutIds = this.layout?.stations.map((station) => station.id) ?? [],
+      liveIds = ids.join("|"),
+      boardIds = snapshot.board.map((entry) => entry.id).join("|"),
       boardSelection = snapshot.board.some(
         (item) => item.id === snapshot.selectedId,
       )
@@ -420,18 +444,21 @@ export class KitchenScene {
         : null;
     if (
       !this.layout ||
-      ids.join("|") !== layoutIds.join("|") ||
+      liveIds !== this.lastLiveIds ||
+      boardIds !== this.lastBoardIds ||
       boardSelection !== this.boardSelection ||
       this.lastTheme !== this.resolvedTheme()
     )
       this.redraw();
-    else this.drawStations(now);
+    else if (this.view === "kitchen") this.drawStations(now);
     this.dirty = true;
   }
   private redraw() {
     if (!this.app.renderer) return;
     const snapshot = this.store.snapshot();
     this.lastTheme = this.resolvedTheme();
+    this.lastLiveIds = [...snapshot.agents.keys()].join("|");
+    this.lastBoardIds = snapshot.board.map((entry) => entry.id).join("|");
     this.boardSelection = snapshot.board.some(
       (item) => item.id === snapshot.selectedId,
     )
@@ -441,9 +468,163 @@ export class KitchenScene {
       height = this.host.clientHeight || innerHeight;
     this.layout = computeLayout(width, height, [...snapshot.agents.keys()]);
     this.app.renderer.resize(width, height);
-    this.drawRoom();
-    this.drawStations(performance.now());
+    const kitchen = this.view === "kitchen";
+    this.stationLayer.visible = kitchen;
+    this.particleLayer.visible = kitchen;
+    this.escalationLayer.visible = kitchen;
+    this.busserLayer.visible = kitchen;
+    if (kitchen) {
+      this.freezerLayout = null;
+      this.drawRoom();
+      this.drawStations(performance.now());
+    } else {
+      this.particles.releaseAll();
+      this.hits = [];
+      this.freezerLayout = computeFreezerLayout(
+        width,
+        height,
+        snapshot.board.map((entry) => entry.id),
+      );
+      this.drawFreezer();
+    }
     this.dirty = true;
+  }
+  private drawFreezer() {
+    const layout = this.freezerLayout;
+    if (!layout) return;
+    const p = getTheme().palette,
+      index = paletteIndex(this.resolvedTheme()),
+      g = new Graphics();
+    destroyChildren(this.room);
+    g.rect(0, 0, layout.room.width, layout.room.height)
+      .fill(p.scene.steel[2][index])
+      .rect(
+        layout.inner.x,
+        layout.inner.y,
+        layout.inner.width,
+        layout.inner.height,
+      )
+      .fill(p.scene.steel[0][index]);
+    const tile = Math.max(
+      tokens.freezer.tile.min,
+      Math.min(
+        tokens.freezer.tile.max,
+        layout.room.width / tokens.freezer.tile.columns,
+      ),
+    );
+    for (
+      let x = layout.inner.x;
+      x < layout.inner.x + layout.inner.width;
+      x += tile
+    )
+      g.moveTo(x, layout.floor.y)
+        .lineTo(x, layout.inner.y + layout.inner.height)
+        .stroke({ color: p.scene.steel[2][index], width: 1, alpha: 0.65 });
+    for (
+      let y = layout.floor.y;
+      y < layout.inner.y + layout.inner.height;
+      y += tile
+    )
+      g.moveTo(layout.inner.x, y)
+        .lineTo(layout.inner.x + layout.inner.width, y)
+        .stroke({ color: p.scene.steel[2][index], width: 1, alpha: 0.65 });
+    g.rect(
+      layout.door.x - 7,
+      layout.door.y - 7,
+      layout.door.width + 14,
+      layout.door.height + 14,
+    )
+      .fill(p.scene.ink)
+      .rect(layout.door.x, layout.door.y, layout.door.width, layout.door.height)
+      .fill(p.scene.steel[1][index])
+      .rect(
+        layout.door.x + 12,
+        layout.door.y + 12,
+        layout.door.width - 24,
+        layout.door.height - 24,
+      )
+      .stroke({ color: p.scene.steel[2][index], width: 3 })
+      .rect(layout.door.x + 7, layout.door.y + 20, 6, 18)
+      .fill(p.scene.ink)
+      .rect(layout.door.x + 7, layout.door.y + layout.door.height - 38, 6, 18)
+      .fill(p.scene.ink)
+      .rect(
+        layout.door.x + layout.door.width - 28,
+        layout.door.y + layout.door.height / 2,
+        20,
+        7,
+      )
+      .fill(p.scene.ink);
+    for (const [rackIndex, rack] of layout.racks.entries()) {
+      g.rect(rack.x, rack.y, rack.width, rack.height).stroke({
+        color: p.scene.ink,
+        width: 5,
+      });
+      for (let shelf = 1; shelf < 4; shelf++) {
+        const y = rack.y + (rack.height * shelf) / 4;
+        g.rect(rack.x, y, rack.width, 5)
+          .fill(p.scene.ink)
+          .rect(rack.x + 10, y - 18, rack.width * 0.42, 14)
+          .fill(shelf % 2 ? p.scene.coat[index] : p.accents[4]!)
+          .rect(rack.x + rack.width * 0.58, y - 15, rack.width * 0.28, 11)
+          .fill(p.accents[rackIndex ? 6 : 0]!);
+      }
+    }
+    for (const frost of layout.frost)
+      g.rect(frost.x, frost.y, frost.width, frost.height).fill({
+        color: p.scene.steel[1][index],
+        alpha: 0.78,
+      });
+    for (let x = 10; x < layout.room.width; x += tokens.freezer.rivetPitch)
+      g.circle(x, 7, 2)
+        .fill(p.scene.ink)
+        .circle(x, layout.room.height - 7, 2)
+        .fill(p.scene.ink);
+    this.room.addChild(g);
+    const snapshot = this.store.snapshot();
+    for (const slot of layout.spirits) {
+      const entry = snapshot.board.find((item) => item.id === slot.id);
+      if (!entry) continue;
+      const spirit = new Graphics(),
+        u = Math.max(
+          tokens.freezer.spiritScale.min,
+          Math.min(
+            tokens.freezer.spiritScale.max,
+            slot.width / tokens.freezer.spiritScale.slotDivisor,
+          ),
+        ),
+        base = slot.y + slot.height - 28;
+      drawCookSilhouette(
+        spirit,
+        slot.x + slot.width / 2,
+        base,
+        u,
+        p.scene.coat[index],
+        p.scene.steel[1][index],
+        p.scene.ink,
+        p.accents[accentIndexForId(entry.id)]!,
+        "ended",
+      );
+      if (snapshot.selectedId === entry.id || this.focusedId === entry.id)
+        spirit
+          .rect(slot.x + 3, slot.y + 3, slot.width - 6, slot.height - 6)
+          .stroke({
+            color: p.scene.ink,
+            width: 3,
+          });
+      const name = new Text({
+        text: compactPixelText(
+          entry.name.toUpperCase(),
+          tokens.freezer.slot.nameCharacters,
+        ),
+        style: worldText(p.scene.ink, Math.max(9, u * 2.4)),
+      });
+      name.anchor.set(0.5, 0);
+      name.position.set(slot.x + slot.width / 2, base + 5);
+      this.room.addChild(spirit, name);
+      this.hits.push({ kind: "spirit", id: entry.id, rect: slot });
+    }
+    this.publishHits();
   }
   private drawRoom() {
     const p = getTheme().palette,
@@ -684,6 +865,7 @@ export class KitchenScene {
     this.room.addChild(g);
   }
   private drawStations(now: number) {
+    if (this.view !== "kitchen") return;
     const snapshot = this.store.snapshot(),
       index = paletteIndex(this.resolvedTheme()),
       active = new Set<string>();
@@ -705,6 +887,9 @@ export class KitchenScene {
     for (const [id, view] of this.stationViews)
       if (!active.has(id) && !this.busserSweeps.has(id))
         this.disposeStation(id, view);
+    this.publishHits();
+  }
+  private publishHits() {
     const signature = this.hits
       .map(
         (hit) =>
@@ -1053,6 +1238,7 @@ export class KitchenScene {
     this.bell.tick(Date.now());
     const snapshot = this.store.snapshot();
     if (snapshot.mode === "disconnected") return;
+    if (this.view === "freezer") return;
     const visualInterval = 125;
     if (now - this.lastVisualUpdate >= visualInterval) {
       const visualDelta = this.lastVisualUpdate
@@ -1327,12 +1513,20 @@ function drawCookSilhouette(
     .rect(cx - 4 * u, base - 19 * u, 8 * u, 5 * u)
     .fill(ink)
     .rect(cx - 3 * u, base - 18 * u, 6 * u, 4 * u)
-    .fill(skin)
-    .rect(cx - 2 * u, base - 17 * u, u, u)
-    .fill(ink)
-    .rect(cx + u, base - 17 * u, u, u)
-    .fill(ink)
-    .rect(cx - 6 * u, base - 22 * u, 12 * u, 3 * u)
+    .fill(skin);
+  if (state === "ended") {
+    for (const eye of [-1.5, 1.5])
+      g.moveTo(cx + (eye - 0.6) * u, base - 17.8 * u)
+        .lineTo(cx + (eye + 0.6) * u, base - 16.2 * u)
+        .moveTo(cx + (eye + 0.6) * u, base - 17.8 * u)
+        .lineTo(cx + (eye - 0.6) * u, base - 16.2 * u)
+        .stroke({ color: ink, width: Math.max(1, u * 0.55) });
+  } else
+    g.rect(cx - 2 * u, base - 17 * u, u, u)
+      .fill(ink)
+      .rect(cx + u, base - 17 * u, u, u)
+      .fill(ink);
+  g.rect(cx - 6 * u, base - 22 * u, 12 * u, 3 * u)
     .fill(ink)
     .rect(cx - 5 * u, base - 23 * u, 10 * u, 3 * u)
     .fill(coat)
