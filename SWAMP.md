@@ -161,7 +161,7 @@ State has three deliberately independent owners:
 | Concern                                                     | Owner                                    | Contract                                                         |
 | ----------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
 | Delivery gates, artifacts, evidence, retries, and approvals | `the-nightshift`                         | The factory stage is authoritative only for factory execution.   |
-| `Todo`, `in-progress`, `await-merge`, and `done` swim lanes | GitHub Project 2 workflows               | Swamp never writes the Project `Status` field.                   |
+| `Todo`, `in-progress`, `await-merge`, and `done` swim lanes | GitHub Nightshift workflows              | Swamp never writes the Project `Status` field.                   |
 | Issue open/closed state                                     | GitHub issue and pull-request automation | Swamp never closes issues or advances the issue lifecycle model. |
 
 The GitHub issue number is the factory `workItem`. Intake creates or refreshes
@@ -178,7 +178,7 @@ may move an issue to `done` when its pull request merges while Nightshift remain
 in `deployed-verification` or `closing`. Those post-merge stages remain factory
 work and do not move the board backwards.
 
-Configure these GitHub Project 2 workflows outside Swamp:
+Configure these GitHub Nightshift workflows outside Swamp:
 
 | GitHub event                                             | Project status |
 | -------------------------------------------------------- | -------------- |
