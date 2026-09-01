@@ -2,7 +2,7 @@ type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 5
+version: 6
 tags: {}
 globalArguments:
     stages:
@@ -265,6 +265,7 @@ globalArguments:
           maxCycles: 5
           work:
               mode: interactive
+              constraints: agent-constraints/ship-prep.md
           artifacts:
               - name: release-candidate
                 schema:
@@ -297,6 +298,7 @@ globalArguments:
                       commit: '${{ data.latest(self.name, "artifact-release-candidate").payload.commit }}'
                       baseCommit: '${{ data.latest(self.name, "artifact-release-candidate").payload.baseCommit }}'
                       subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
+                      prUrl: '${{ data.latest(self.name, "artifact-release-candidate").payload.prUrl }}'
               resultEvidence: shipping-run
           transitions:
               - name: complete

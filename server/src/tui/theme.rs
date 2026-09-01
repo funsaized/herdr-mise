@@ -16,6 +16,8 @@ pub const STEEL_LO: Color = Color::Indexed(240);
 
 pub const COAT: Color = Color::Indexed(230);
 pub const COAT_LO: Color = Color::Indexed(187);
+pub const ICE: Color = Color::Indexed(159);
+pub const ICE_LO: Color = Color::Indexed(24);
 pub const BAND: Color = Color::Indexed(235);
 pub const SKIN: Color = Color::Indexed(180);
 pub const EYE: Color = Color::Indexed(234);
@@ -56,6 +58,104 @@ pub const ACCENT_DIMS: [Color; 6] = [
     Color::Indexed(95),
     Color::Indexed(94),
 ];
+pub const SPIRIT: Color = ACCENTS[4];
+pub const SPIRIT_DIM: Color = ACCENT_DIMS[4];
+
+pub const FREEZER_SHELL_INSET: i32 = 2;
+pub const FREEZER_BIN_FRACTION: u16 = 3;
+pub const SPIRIT_LABEL_CHARS: usize = 11;
+pub const SPIRIT_LABEL_Y_INSET: u16 = 2;
+pub const FREEZER_RACK_WIDTH: u16 = 12;
+pub const FREEZER_RACK_MARGIN_X: u16 = 3;
+pub const FREEZER_RACK_MARGIN_Y: u16 = 8;
+pub const FREEZER_RACK_VERTICAL_INSET: u16 = 16;
+pub const FREEZER_DOOR_HALF: u16 = 9;
+pub const FREEZER_DOOR_Y: u16 = 4;
+pub const FREEZER_DOOR_WIDTH: u16 = 18;
+pub const FREEZER_DOOR_HEIGHT: u16 = 12;
+pub const FREEZER_FROST_MARGIN: u16 = 2;
+pub const FREEZER_FROST_TOP_HEIGHT: u16 = 2;
+pub const FREEZER_FROST_BOTTOM_Y: u16 = 8;
+pub const FREEZER_FROST_BOTTOM_HEIGHT: u16 = 3;
+pub const FREEZER_FROST_DOOR_PAD: u16 = 2;
+pub const FREEZER_FROST_DOOR_HEIGHT: u16 = 3;
+pub const FREEZER_FLOOR_GAP: u16 = 2;
+pub const FREEZER_FLOOR_WIDTH_GAP: u16 = 4;
+pub const FREEZER_FLOOR_BOTTOM_INSET: u16 = 9;
+pub const FREEZER_TILE: u16 = 4;
+pub const FREEZER_SHELF_DIVISIONS: u16 = 4;
+pub const FREEZER_SHELF_THICKNESS: u16 = 2;
+pub const FREEZER_BIN_X_INSET: u16 = 2;
+pub const FREEZER_BIN_Y_LIFT: u16 = 4;
+pub const FREEZER_BIN_HEIGHT: u16 = 3;
+pub const FREEZER_PLATE_Y_LIFT: u16 = 7;
+pub const FREEZER_PLATE_HEIGHT: u16 = 2;
+pub const FREEZER_DOOR_FRAME: u16 = 2;
+pub const FREEZER_HANDLE_WIDTH: u16 = 3;
+pub const FREEZER_HANDLE_HEIGHT: u16 = 2;
+pub const FREEZER_HINGE_HEIGHT: u16 = 2;
+pub const FREEZER_RIVET_STEP: u16 = 8;
+pub const SNOW_SLOT_PHASE: u64 = 5;
+pub const SNOW_SLOT_X: u64 = 11;
+pub const SNOW_PHASE_X_DIV: u64 = 4;
+pub const SNOW_SLOT_Y: u64 = 3;
+pub const PARTICLE_SHADE_AGE: u64 = 4;
+pub const TICKET_MIN_STATION_WIDTH: u16 = 24;
+pub const WORKING_SHIFT: u16 = 3;
+pub const SPRITE_Y_PAD: u16 = 4;
+pub const TICKET_X_INSET: i32 = 2;
+pub const TICKET_Y_INSET: i32 = 3;
+pub const TICKET_WIDTH: i32 = 4;
+pub const TICKET_HEIGHT: i32 = 6;
+pub const POT_X_OFFSET: i32 = 13;
+pub const POT_Y_OFFSET: i32 = 9;
+pub const POT_WIDTH: i32 = 5;
+pub const POT_BODY_ROWS: i32 = 2;
+pub const POT_SPOUT_X: i32 = 5;
+pub const POT_SPOUT_Y: i32 = 1;
+pub const FIRE_Y: i32 = 3;
+pub const FIRE_LEFT_X: i32 = 1;
+pub const FIRE_RIGHT_X: i32 = 3;
+pub const TICKET_PIN_Y: i32 = -1;
+pub const TICKET_PIN_START: i32 = 1;
+pub const TICKET_PIN_END: i32 = 2;
+pub const TICKET_MARK_W: i32 = 3;
+pub const TICKET_MARK_Y1: i32 = 1;
+pub const TICKET_MARK_Y2: i32 = 3;
+pub const TICKET_MARK_Y3: i32 = 5;
+pub const TICKET_MARK3_W: i32 = 2;
+pub const SNOWMAN_STACK_X: i32 = 1;
+pub const SNOWMAN_EYE_X: i32 = 2;
+pub const SNOWMAN_EYE_Y: i32 = 1;
+pub const GRAVE_BODY_Y: i32 = 1;
+pub const GRAVE_CAP_X: i32 = 1;
+pub const SNOWMAN_X_INSET: u16 = 3;
+pub const SNOWMAN_Y_INSET: u16 = 8;
+pub const SNOWMAN_BASE_W: i32 = 5;
+pub const SNOWMAN_BASE_H: i32 = 3;
+pub const SNOWMAN_MID_W: i32 = 3;
+pub const SNOWMAN_MID_H: i32 = 3;
+pub const SNOWMAN_HEAD_W: i32 = 3;
+pub const SNOWMAN_HEAD_H: i32 = 2;
+pub const GRAVE_X_INSET: u16 = 8;
+pub const GRAVE_Y_INSET: u16 = 7;
+pub const GRAVE_W: i32 = 5;
+pub const GRAVE_H: i32 = 5;
+pub const GRAVE_CAP_W: i32 = 3;
+pub const GRAVE_CAP_H: i32 = 2;
+pub const ICICLE_MARGIN: u16 = 4;
+pub const ICICLE_STEP: usize = 7;
+pub const ICICLE_Y: i32 = 3;
+pub const ICICLE_BASE_H: u16 = 2;
+pub const ICICLE_H_MOD: u16 = 3;
+pub const PUDDLE_NEAR_X: u16 = 6;
+pub const PUDDLE_NEAR_Y: u16 = 2;
+pub const PUDDLE_NEAR_W: i32 = 8;
+pub const PUDDLE_NEAR_H: i32 = 2;
+pub const PUDDLE_FAR_X: u16 = 20;
+pub const PUDDLE_FAR_Y: u16 = 1;
+pub const PUDDLE_FAR_W: i32 = 6;
+pub const PUDDLE_FAR_H: i32 = 1;
 
 pub const COMPACT_ACCENTS: [Color; 12] = [
     Color::Rgb(0x5b, 0x8a, 0x8f),
@@ -115,8 +215,8 @@ mod tests {
             [233, 234, 235, 242, 248, 230, 246, 245, 240].map(Color::Indexed)
         );
         assert_eq!(
-            [COAT, COAT_LO, BAND, SKIN, EYE, PANTS, BOOT, PLATE, SKIN_MAD, BROW_MAD],
-            [230, 187, 235, 180, 234, 59, 94, 255, 167, 52].map(Color::Indexed)
+            [COAT, COAT_LO, ICE, ICE_LO, BAND, SKIN, EYE, PANTS, BOOT, PLATE, SKIN_MAD, BROW_MAD],
+            [230, 187, 159, 24, 235, 180, 234, 59, 94, 255, 167, 52].map(Color::Indexed)
         );
         assert_eq!(
             [FIRE, FIRE_HI, RED, RED_HI, RED_DIM, GREEN, GREEN_HI, BOARD, BRASS, CHALK],

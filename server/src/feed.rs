@@ -124,8 +124,9 @@ impl Feed {
         self.reconcile(agents, false).await;
         self.end_ids(ended_ids).await;
     }
-    async fn transition_to_live(&self, agents: Vec<AgentRecord>) {
+    async fn transition_to_live(&self, agents: Vec<AgentRecord>, ended_ids: Vec<String>) {
         self.inner.pending.lock().await.clear();
+        self.end_ids(ended_ids).await;
         {
             let mut state = self.inner.state.write().await;
             state.mode = AppMode::Live;
@@ -147,12 +148,12 @@ impl Feed {
             let _ = self.inner.changes.send(event);
         }
     }
-    async fn set_demo_error(&self, error: &adapter::AdapterError) {
+    async fn set_source_error(&self, error: &adapter::AdapterError, expected: AppMode) {
         let source_status = error.source_status();
         let source_diagnostic = error.source_diagnostic();
         {
             let mut state = self.inner.state.write().await;
-            if state.mode != AppMode::Demo
+            if state.mode != expected
                 || (state.source_status == source_status
                     && state.source_diagnostic == source_diagnostic)
             {
@@ -164,7 +165,7 @@ impl Feed {
             agents.sort_by(|a, b| a.id.cmp(&b.id));
             let event = AgentStateEvent::Snapshot {
                 version: PROTOCOL_VERSION,
-                mode: AppMode::Demo,
+                mode: expected,
                 source_status,
                 source_diagnostic,
                 agents,
@@ -288,11 +289,12 @@ async fn run_startup_recovery(
         };
         match result {
             Ok(snapshot) => {
-                feed.transition_to_live(snapshot.agents).await;
+                feed.transition_to_live(snapshot.agents, snapshot.ended_ids)
+                    .await;
                 tokio::spawn(run_live(feed, path, normalizer, shutdown));
                 return;
             }
-            Err(error) => feed.set_demo_error(&error).await,
+            Err(error) => feed.set_source_error(&error, AppMode::Demo).await,
         }
         let delay = tokio::time::sleep(backoff);
         tokio::pin!(delay);
@@ -350,7 +352,8 @@ async fn run_live(
             Ok(snapshot) => {
                 failures = 0;
                 if reconnecting {
-                    feed.transition_to_live(snapshot.agents).await;
+                    feed.transition_to_live(snapshot.agents, snapshot.ended_ids)
+                        .await;
                     reconnecting = false;
                 } else {
                     // Event wakes can burst; all production snapshot upserts therefore use
@@ -366,11 +369,12 @@ async fn run_live(
                     feed.inner.health.send_replace(true);
                 }
             }
-            Err(_) => {
+            Err(error) => {
                 failures = failures.saturating_add(1);
                 if failures >= 3 && *feed.inner.health.borrow() {
                     reconnecting = true;
                     feed.inner.health.send_replace(false);
+                    feed.set_source_error(&error, AppMode::Live).await;
                 }
             }
         }
@@ -606,6 +610,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reconnect_snapshot_ends_ids_before_live_replace() {
+        let mut normalizer = Normalizer::default();
+        let first = normalizer
+            .normalize_snapshot_value(
+                serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json"))
+                    .unwrap(),
+                "2026-08-13T12:00:00Z",
+            )
+            .unwrap();
+        let second = normalizer
+            .normalize_snapshot_value(
+                serde_json::from_str(include_str!(
+                    "../tests/fixtures/snapshot-protocol-19-empty-agents.json"
+                ))
+                .unwrap(),
+                "2026-08-13T12:01:00Z",
+            )
+            .unwrap();
+        let feed = Feed::fixed(AppMode::Live, vec![]).await;
+        let mut changes = feed.subscribe();
+        let mut table = AgentTable::default();
+        feed.apply_live(first.agents, first.ended_ids).await;
+        table.apply(changes.recv().await.unwrap());
+        feed.transition_to_live(second.agents, second.ended_ids)
+            .await;
+        table.apply(changes.recv().await.unwrap());
+        table.apply(changes.recv().await.unwrap());
+        assert!(table.agents().all(|agent| agent.id != "p-1"));
+        assert_eq!(
+            table
+                .board()
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["p-1"]
+        );
+    }
+
+    #[tokio::test]
     async fn twelve_record_chatty_source_stays_below_wire_budget() {
         let initial = (0..12)
             .map(|i| {
@@ -767,6 +810,14 @@ mod tests {
         })
         .await
         .expect("source loss surfaced");
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot {
+                mode: AppMode::Live,
+                source_status: SourceStatus::UnavailableSocket | SourceStatus::Timeout,
+                ..
+            }
+        ));
         std::fs::remove_file(&path).unwrap();
         const RESTORED: &[u8] = br#"{"result":{"snapshot":{"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[{"pane_id":"p-restored","agent_status":"idle"}]}}}"#;
         let restored = serve_snapshot_response(UnixListener::bind(&path).unwrap(), RESTORED);

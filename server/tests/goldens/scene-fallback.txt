@@ -230,7 +230,7 @@ TEXT 20 "└──────────────────────�
 CELL 20 000..001 symbol="└" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE diff=None
 CELL 20 001..078 symbol="─" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE diff=None
 CELL 20 078..079 symbol="┘" fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE diff=None
-TEXT 21 "bind warning · q / Esc quit · tick 9                                           "
+TEXT 21 "bind warning · q / Esc quit · tick 9 · 86 0/64                                 "
 CELL 21 000..001 symbol="b" fg=Reset bg=Reset mod=NONE diff=None
 CELL 21 001..002 symbol="i" fg=Reset bg=Reset mod=NONE diff=None
 CELL 21 002..003 symbol="n" fg=Reset bg=Reset mod=NONE diff=None
@@ -267,6 +267,16 @@ CELL 21 032..033 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
 CELL 21 033..034 symbol="k" fg=Reset bg=Reset mod=NONE diff=None
 CELL 21 034..035 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 CELL 21 035..036 symbol="9" fg=Reset bg=Reset mod=NONE diff=None
-CELL 21 036..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 036..037 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 037..038 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 038..039 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 039..040 symbol="8" fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 040..041 symbol="6" fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 041..042 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 042..043 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 043..044 symbol="/" fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 044..045 symbol="6" fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 045..046 symbol="4" fg=Reset bg=Reset mod=NONE diff=None
+CELL 21 046..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 TEXT 22 "                                                                               "
 CELL 22 000..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None

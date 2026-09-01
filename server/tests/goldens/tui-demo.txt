@@ -31,5 +31,5 @@ TEXT 20 "│                                                                    
 STYLE 20 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
 TEXT 21 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
 STYLE 21 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
-TEXT 22 "HTTP 127.0.0.1:8686 unavailable · q / Esc quit · tick 9                                                       "
+TEXT 22 "HTTP 127.0.0.1:8686 unavailable · q / Esc quit · tick 9 · 86 1/64                                             "
 TEXT 23 "                                                                                                              "
