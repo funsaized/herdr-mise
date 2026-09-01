@@ -13,8 +13,11 @@ use super::{
 };
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceDiagnostic, SourceStatus};
 
-pub(super) fn sanitize_external(text: &str) -> String {
-    text.chars().filter(|ch| !ch.is_control()).collect()
+pub(super) fn sanitize_external(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect()
 }
 
 #[cfg(test)]
@@ -37,11 +40,12 @@ fn workspace_display_name(workspace: &str) -> &str {
 }
 
 pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
-    let model = sanitize_external(if agent.model.trim().is_empty() {
+    let model = sanitize_external(&agent.model);
+    let model = if model.trim().is_empty() {
         "Unavailable"
     } else {
-        agent.model.trim()
-    });
+        model.trim()
+    };
     let tickets = if agent.session.tickets == 0 {
         "Unavailable".into()
     } else {
@@ -813,5 +817,46 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn compact_view_strips_c0_c1_del_from_herdr_strings() {
+        let mut event = fixture("snapshot.v1.json");
+        let tainted = "\x1b[31m\u{9b}\x7fSAFE";
+        let AgentStateEvent::Snapshot {
+            source_status,
+            source_diagnostic,
+            agents,
+            ..
+        } = &mut event
+        else {
+            unreachable!()
+        };
+        *source_status = SourceStatus::UnsupportedProtocol;
+        *source_diagnostic = Some(SourceDiagnostic {
+            observed_protocol: 23,
+            supported_protocols: vec![20],
+            next_action: tainted.into(),
+        });
+        for agent in agents.iter_mut() {
+            agent.name = tainted.into();
+            agent.model = tainted.into();
+            agent.workspace = format!("/work/{tainted}");
+        }
+        let mut ended = agents[0].clone();
+        ended.state = AgentState::Ended;
+        let mut table = AgentTable::default();
+        table.apply(event);
+        apply_upsert(&mut table, ended);
+
+        let mut terminal = Terminal::new(TestBackend::new(79, 23)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &table, None, Utc::now(), 0, Some("agent-02")))
+            .unwrap();
+        let output = buffer_text(&terminal);
+        assert!(output.contains("[31mSAFE"));
+        assert!(['\x1b', '\u{9b}', '\x7f']
+            .into_iter()
+            .all(|character| !output.contains(character)));
     }
 }

@@ -58,6 +58,11 @@ type MotionMetrics = {
   endedEntries: number;
   view: "kitchen" | "freezer";
   visibleSpirits: number;
+  board: {
+    headers: string[];
+    rows: { id: string; text: string[] }[];
+    strokedIds: string[];
+  };
 };
 const sceneMetrics = (page: Page) =>
   page.evaluate(() =>
@@ -79,6 +84,15 @@ function boxesIntersect(
     first.y + first.height <= second.y ||
     second.y + second.height <= first.y
   );
+}
+
+function boardRowPoint(width: number, height: number) {
+  const layout = computeLayout(width, height, []),
+    boardWidth = Math.min(layout.unit * 92, layout.wall.width * 0.36);
+  return {
+    x: (layout.wall.width - boardWidth) / 2 + layout.unit * 3 + 16,
+    y: layout.unit * (4 + 12) + 4,
+  };
 }
 
 test("reduced motion is static before blocked-scene startup in light and dinner themes", async ({
@@ -305,6 +319,31 @@ test("authoritative fixture disappearance reaches browser freezer spirits", asyn
         name: "Codex, Working — on the fire, open details",
       }),
     ).toHaveCount(0);
+    const boardButton = page
+      .getByRole("navigation", { name: "Agent stations" })
+      .getByRole("button", { name: /codex, Ended/i });
+    await expect(boardButton).toBeAttached();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        board: {
+          headers: ["COOK", "RUNTIME   TICKETS"],
+          rows: [{ text: ["CODEX", "—   —"] }],
+        },
+      });
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await page.keyboard.press("Tab");
+    await expect(boardButton).toBeFocused();
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.board.strokedIds)
+      .toHaveLength(1);
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator('aside[aria-label$="session summary" i]'),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Freezer" }).click();
     await expect(
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
@@ -366,22 +405,59 @@ for (const count of COUNTS) {
     page,
   }) => {
     const errors = watchErrors(page);
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto(`/?preset=ended&agents=${count}`);
-    // Visual playground is demo: empty kitchen keeps DEMO SERVICE, not live waiting.
-    await expect(placard(page)).toBeVisible();
-    // Ended records pass through the store before the first frame, so no
-    // active station exists to focus.
-    await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
-    // The 86 board draws the last three entries; the first drawn row's name
-    // text position follows the scene layout math at 1280x720 (unit=4,
-    // board x=(1280-368)/2, first row y=(4+12)*unit).
-    await page.mouse.click((1280 - 368) / 2 + 3 * 4 + 16, (4 + 12) * 4 + 4);
-    const summary = page.locator('aside[aria-label$="session summary"]');
-    await expect(summary).toBeVisible();
-    await expect(summary).toContainText("86'D — SESSION ENDED");
-    await expect(summary).toContainText("Done — plated");
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 800, height: 500 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`/?preset=ended&agents=${count}&stats`);
+      // Visual playground is demo: the emptied kitchen keeps the DEMO placard.
+      await expect(placard(page)).toBeVisible();
+
+      const navigation = page.getByRole("navigation", {
+          name: "Agent stations",
+        }),
+        buttons = navigation.getByRole("button");
+      await expect(buttons).toHaveCount(Math.min(3, count));
+      await expect(buttons.first()).toHaveAttribute("tabindex", "-1");
+      await expect
+        .poll(async () => sceneMetrics(page))
+        .toMatchObject({
+          board: { headers: ["COOK", "RUNTIME   TICKETS"] },
+        });
+      const painted = await sceneMetrics(page);
+      expect(painted?.board.rows).toHaveLength(Math.min(3, count));
+      for (const row of painted?.board.rows ?? []) {
+        expect(row.text[1]).toMatch(/(?:\d+:\d{2}|—)\s+(?:\d+|—)$/);
+        expect(row.text[1]).not.toMatch(/\d+M/);
+      }
+
+      // Chrome tooltips remain station-only; board keyboard focus is the
+      // chalk row stroke recorded by the Pixi draw branch.
+      await page.keyboard.press("ArrowRight");
+      await expect(page.getByRole("tooltip")).toHaveCount(0);
+      await expect
+        .poll(async () => (await sceneMetrics(page))?.board.strokedIds.length)
+        .toBe(1);
+      const focused = await sceneMetrics(page),
+        focusedId = focused!.board.strokedIds[0]!,
+        focusedName = focused!.board.rows.find((row) => row.id === focusedId)!
+          .text[0];
+      await page.keyboard.press("Enter");
+      const summary = page.locator('aside[aria-label$="session summary"]');
+      await expect(summary).toBeVisible();
+      await expect(summary).toHaveAttribute(
+        "aria-label",
+        new RegExp(`^${focusedName} session summary$`, "i"),
+      );
+      await page.keyboard.press("Escape");
+
+      const point = boardRowPoint(viewport.width, viewport.height);
+      await page.mouse.click(point.x, point.y);
+      await expect(summary).toBeVisible();
+      await expect(summary).toContainText("86'D — SESSION ENDED");
+      await expect(summary).toContainText("Done — plated");
+    }
     expect(errors).toEqual([]);
   });
 }
