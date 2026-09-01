@@ -3,17 +3,16 @@ name: software-factory
 description: >
   Drive @swamp/software-factory runs: a fully generic, model-driven state
   machine for software development lifecycles with adversarial review gates,
-  verified testing, and human approvals. Use when the user wants to start
-  factory work on a work item, check factory status, drive a run forward,
-  author a new factory definition, report on how a work item was
-  implemented, or pull specific fields out of recorded run data (plans,
-  review findings, evidence, the journal). Triggers on "software factory",
-  "factory run", "start work on", "factory status", "advance the factory",
-  "author a factory", "what happened with <work item>", "work item
+  verified testing, and human approvals. Use when the user wants to start or
+  drive factory work, author a factory definition, inspect recorded run data,
+  report work-item history, or operate Nightshift autonomously. Triggers on
+  "software factory", "factory run", "start work on", "factory status",
+  "advance the factory", "autonomous Nightshift", "rework parked", "author a
+  factory", "what happened with <work item>", "work item
   history/report/summary", and any question about artifacts or findings a
   factory recorded. Consult this skill the moment a message mentions a
-  factory, factory run, or work item — before answering or running any
-  command.
+  factory, factory run, work item, or autonomous Nightshift — before answering
+  or running any command.
 ---
 
 # Software Factory Skill
@@ -58,7 +57,10 @@ know what any stage _means_.
 Read only the reference you need: [references/driving.md](references/driving.md)
 to run work items (the loop, querying run data, presenting approvals),
 [references/authoring.md](references/authoring.md) to write or edit a
-definition. You rarely need both at once.
+definition, and
+[references/nightshift-modes.md](references/nightshift-modes.md) for
+Nightshift queue selection, autonomy, parking, and checkout exclusions. You
+rarely need more than one at once.
 
 ## Starting work
 
@@ -113,10 +115,13 @@ query`, present their actual payloads, and stop. If several transitions
 
 ## Cycle limits
 
-Every stage has `maxCycles` (default 5). When an entry is blocked at the
-limit, the run is parked for a human: present the history and let them
-`approve gateId=cycle-override:<stage>` (one grant = one entry), take an
-escalation/abort transition, or rethink the approach.
+Every stage has `maxCycles` (default 5). When an entry is blocked at the limit,
+follow the definition's explicit parking or escalation route. A generic factory
+without one may let a human approve `cycle-override:<stage>` for one entry.
+
+Nightshift uses an explicit `parked` stage instead. Follow
+[references/nightshift-modes.md](references/nightshift-modes.md); a cycle
+override is not a parked exit.
 
 ## Quick reference
 

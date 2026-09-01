@@ -1,0 +1,39 @@
+id: 0874a7b0-f735-4c5f-9bbf-c66eb9bfa481
+name: nightshift-plan-fanout
+description: Plan queued work items serially through the shared planner model.
+tags:
+  factory: nightshift
+  stage: plan
+inputs:
+  properties:
+    workItems:
+      type: array
+      minItems: 1
+      maxItems: 100
+      uniqueItems: true
+      items:
+        type: string
+        pattern: '^[0-9]+$'
+        maxLength: 16
+  required: [workItems]
+jobs:
+  - name: plan-queued-items
+    description: Each child workflow owns one canonical GitHub issue number.
+    steps:
+      - name: plan-${{ self.workItem }}
+        forEach:
+          item: workItem
+          in: ${{ inputs.workItems }}
+        concurrency: 1
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-plan
+          inputs:
+            workItem: ${{ self.workItem }}
+            issueNumber: ${{ int(self.workItem) }}
+            reviewFeedback: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan-review").?attributes.?payload.?findings.orValue([]) }}
+            currentPlan: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan").?attributes.?payload.orValue({}) }}
+            humanFeedback: '${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan-feedback").?attributes.?subjectVersion.orValue(0) == data.latest("the-nightshift", "artifact-" + self.workItem + "-plan").?version.orValue(-1) ? data.latest("the-nightshift", "artifact-" + self.workItem + "-plan-feedback").attributes.payload.feedback : "" }}'
+        dependsOn: []
+    dependsOn: []
+version: 1
