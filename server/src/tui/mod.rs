@@ -33,7 +33,7 @@ const SCENE_TICK_INTERVAL: Duration = Duration::from_millis(100);
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum SceneView {
     #[default]
-    Split,
+    Kitchen,
     Freezer,
 }
 
@@ -159,15 +159,15 @@ fn handle_key_with_view(
         *selected_id = None;
         false
     } else if code == KeyCode::Esc && *view == SceneView::Freezer {
-        *view = SceneView::Split;
+        *view = SceneView::Kitchen;
         false
     } else if code == KeyCode::Esc {
         shutdown.cancel();
         true
     } else if code == KeyCode::Char('f') {
         *view = match *view {
-            SceneView::Split => SceneView::Freezer,
-            SceneView::Freezer => SceneView::Split,
+            SceneView::Kitchen => SceneView::Freezer,
+            SceneView::Freezer => SceneView::Kitchen,
         };
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
@@ -200,7 +200,7 @@ fn handle_key(
     selected_id: &mut Option<String>,
     shutdown: &CancellationToken,
 ) -> bool {
-    handle_key_with_view(code, table, selected_id, &mut SceneView::Split, shutdown)
+    handle_key_with_view(code, table, selected_id, &mut SceneView::Kitchen, shutdown)
 }
 
 struct TerminalGuard {
@@ -407,12 +407,12 @@ mod tests {
     }
 
     #[test]
-    fn freezer_key_toggles_and_escape_returns_to_split_before_quitting() {
+    fn freezer_key_toggles_and_escape_returns_to_kitchen_before_quitting() {
         let table = AgentTable::default();
         let shutdown = CancellationToken::new();
         let mut selected = None;
         let mut view = SceneView::default();
-        assert_eq!(view, SceneView::Split);
+        assert_eq!(view, SceneView::Kitchen);
         assert!(!handle_key_with_view(
             KeyCode::Char('f'),
             &table,
@@ -428,7 +428,7 @@ mod tests {
             &mut view,
             &shutdown,
         ));
-        assert_eq!(view, SceneView::Split);
+        assert_eq!(view, SceneView::Kitchen);
         assert!(!shutdown.is_cancelled());
         assert!(handle_key_with_view(
             KeyCode::Esc,
