@@ -7,7 +7,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
     Frame,
 };
 
@@ -15,9 +15,10 @@ use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, Pixel
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
     state::{AgentTable, BoardEntry},
-    theme, view, SceneView,
+    theme, view, SceneView, HELP_LINES, KEY_ESC_CLOSE, KEY_ESC_KITCHEN, KEY_FREEZER, KEY_HELP,
+    KEY_INSPECT, KEY_KITCHEN, KEY_QUIT, KEY_QUIT_ESC,
 };
-use crate::protocol::{AgentRecord, AgentState, SourceStatus};
+use crate::protocol::{AgentRecord, AgentState, AppMode, SourceStatus};
 
 fn mapped(color: Color, mode: ColorMode) -> Color {
     match (mode, color) {
@@ -286,6 +287,42 @@ fn connection_text(table: &AgentTable, warning: Option<&str>) -> String {
     )
 }
 
+fn draw_help(frame: &mut Frame<'_>, color_mode: ColorMode) {
+    let area = frame.area();
+    let width = HELP_LINES
+        .iter()
+        .map(|line| line.chars().count() as u16)
+        .max()
+        .unwrap_or_default()
+        .saturating_add(4)
+        .min(area.width);
+    let line_width = width.saturating_sub(2).max(1);
+    let height = HELP_LINES
+        .iter()
+        .map(|line| (line.chars().count() as u16).div_ceil(line_width))
+        .sum::<u16>()
+        .saturating_add(2)
+        .min(area.height);
+    let overlay = Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(
+        Paragraph::new(HELP_LINES.map(Line::from).to_vec())
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::default().borders(Borders::ALL).style(
+                    Style::default()
+                        .fg(mapped(theme::TEXT, color_mode))
+                        .bg(mapped(theme::PANEL2, color_mode)),
+                ),
+            ),
+        overlay,
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_view(
     frame: &mut Frame<'_>,
@@ -297,10 +334,23 @@ pub(crate) fn draw_view(
     scene_supported: bool,
     selected_id: Option<&str>,
     scene_view: SceneView,
+    help_open: bool,
 ) {
     let area = frame.area();
     if scene_view == SceneView::Freezer {
-        draw_freezer(frame, table, warning, color_mode, scene_supported);
+        draw_freezer(
+            frame,
+            table,
+            warning,
+            now,
+            tick,
+            color_mode,
+            scene_supported,
+            selected_id,
+        );
+        if help_open {
+            draw_help(frame, color_mode);
+        }
         return;
     }
     let agents = table.agents().collect::<Vec<_>>();
@@ -308,10 +358,16 @@ pub(crate) fn draw_view(
         compute_layout(area.width, area.height.saturating_mul(2), agents.len())
     else {
         view::draw(frame, table, warning, now, tick, selected_id);
+        if help_open {
+            draw_help(frame, color_mode);
+        }
         return;
     };
     if !scene_supported {
         view::draw(frame, table, warning, now, tick, selected_id);
+        if help_open {
+            draw_help(frame, color_mode);
+        }
         return;
     }
 
@@ -646,9 +702,9 @@ pub(crate) fn draw_view(
         ),
     );
     let keys = if selected_id.is_some() {
-        "Tab / Shift+Tab inspect · f freezer · Esc close · q quit"
+        format!("{KEY_INSPECT} · {KEY_FREEZER} · {KEY_ESC_CLOSE} · {KEY_QUIT}")
     } else {
-        "f freezer · q / Esc quit · ? help"
+        format!("{KEY_FREEZER} · {KEY_QUIT_ESC} · {KEY_HELP}")
     };
     render_line(
         frame,
@@ -658,14 +714,20 @@ pub(crate) fn draw_view(
         keys.chars().count() as u16,
         Line::styled(keys, Style::default().fg(mapped(theme::DIM, color_mode))),
     );
+    if help_open {
+        draw_help(frame, color_mode);
+    }
 }
 
 fn draw_freezer(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
+    now: DateTime<Utc>,
+    tick: u64,
     color_mode: ColorMode,
     scene_supported: bool,
+    selected_id: Option<&str>,
 ) {
     let area = frame.area();
     let ids = table
@@ -675,11 +737,11 @@ fn draw_freezer(
         .collect::<Vec<_>>();
     let Some(layout) = compute_freezer_layout(area.width, area.height.saturating_mul(2), &ids)
     else {
-        view::draw(frame, table, warning, Utc::now(), 0, None);
+        view::draw(frame, table, warning, now, tick, selected_id);
         return;
     };
     if !scene_supported {
-        view::draw(frame, table, warning, Utc::now(), 0, None);
+        view::draw(frame, table, warning, now, tick, selected_id);
         return;
     }
     let mut canvas = PixelCanvas::new(
@@ -801,6 +863,44 @@ fn draw_freezer(
             .border_style(Style::default().fg(mapped(theme::STEEL, color_mode))),
         area,
     );
+    if table.mode() != AppMode::Live || table.source_status() != &SourceStatus::Connected {
+        let (title, source) = view::status_lines(
+            table.mode(),
+            table.source_status(),
+            table.source_diagnostic(),
+            table.agents().count(),
+        );
+        render_line(
+            frame,
+            area,
+            2,
+            1,
+            area.width.saturating_sub(4),
+            Line::styled(
+                title,
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        );
+        let width = area.width.saturating_sub(4);
+        let mut remaining = source;
+        for y in 2..=4 {
+            let (line, overflow) = split_line(&remaining, usize::from(width));
+            render_line(
+                frame,
+                area,
+                2,
+                y,
+                width,
+                Line::styled(line, Style::default().fg(mapped(theme::DIM, color_mode))),
+            );
+            if overflow.is_empty() {
+                break;
+            }
+            remaining = overflow;
+        }
+    }
     for (id, slot) in &layout.spirits {
         if let Some(entry) = table.board().iter().find(|entry| &entry.id == id) {
             let name = entry
@@ -836,7 +936,7 @@ fn draw_freezer(
             Style::default().fg(mapped(theme::DIM, color_mode)),
         ),
     );
-    let keys = "f kitchen · Esc kitchen · q quit";
+    let keys = format!("{KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}");
     render_line(
         frame,
         area,
@@ -910,6 +1010,7 @@ pub(crate) mod tests {
                     true,
                     selected_id,
                     SceneView::Kitchen,
+                    false,
                 )
             })
             .unwrap();
@@ -930,6 +1031,7 @@ pub(crate) mod tests {
                     true,
                     None,
                     SceneView::Freezer,
+                    false,
                 )
             })
             .unwrap();
@@ -1110,6 +1212,31 @@ pub(crate) mod tests {
             .len(),
             3
         );
+
+        let mut unsupported = AgentTable::default();
+        unsupported.apply(
+            serde_json::from_str(include_str!(
+                "../../../../protocol/fixtures/snapshot-demo-unsupported.v1.json"
+            ))
+            .unwrap(),
+        );
+        let output = text(&render_freezer(&unsupported, 80, 24))
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        for expected in [
+            "MISE — DEMO SERVICE",
+            "Mock feed",
+            "observed 23",
+            "upgrade or downgrade Herdr",
+            "Nothing",
+            "here is real",
+        ] {
+            assert!(
+                output.contains(expected),
+                "missing {expected:?} in {output:?}"
+            );
+        }
     }
 
     #[test]

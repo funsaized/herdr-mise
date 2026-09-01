@@ -141,16 +141,41 @@ fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable) {
     }
 }
 
+pub(super) const KEY_HELP: &str = "? help";
+pub(super) const KEY_INSPECT: &str = "Tab / Shift+Tab inspect";
+pub(super) const KEY_FREEZER: &str = "f freezer";
+pub(super) const KEY_ESC_CLOSE: &str = "Esc close";
+pub(super) const KEY_QUIT: &str = "q quit";
+pub(super) const KEY_QUIT_ESC: &str = "q / Esc quit";
+pub(super) const KEY_KITCHEN: &str = "f kitchen";
+pub(super) const KEY_ESC_KITCHEN: &str = "Esc kitchen";
+pub(super) const HELP_LINES: [&str; 5] = [
+    KEY_HELP,
+    KEY_INSPECT,
+    KEY_FREEZER,
+    "Esc close / leave / quit",
+    KEY_QUIT,
+];
+
 fn handle_key_with_view(
     code: KeyCode,
     table: &AgentTable,
     selected_id: &mut Option<String>,
     view: &mut SceneView,
+    help_open: &mut bool,
     shutdown: &CancellationToken,
 ) -> bool {
     if code == KeyCode::Char('q') {
         shutdown.cancel();
         true
+    } else if code == KeyCode::Char('?') {
+        *help_open = !*help_open;
+        false
+    } else if *help_open && code == KeyCode::Esc {
+        *help_open = false;
+        false
+    } else if *help_open {
+        false
     } else if code == KeyCode::Esc && selected_id.is_some() {
         *selected_id = None;
         false
@@ -196,7 +221,14 @@ fn handle_key(
     selected_id: &mut Option<String>,
     shutdown: &CancellationToken,
 ) -> bool {
-    handle_key_with_view(code, table, selected_id, &mut SceneView::Kitchen, shutdown)
+    handle_key_with_view(
+        code,
+        table,
+        selected_id,
+        &mut SceneView::Kitchen,
+        &mut false,
+        shutdown,
+    )
 }
 
 struct TerminalGuard;
@@ -229,6 +261,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut tick = 0_u64;
     let mut selected_id = None;
     let mut view = SceneView::Kitchen;
+    let mut help_open = false;
     loop {
         retain_selection(&mut selected_id, &table);
         let now = Utc::now();
@@ -243,6 +276,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 capabilities.scene_supported,
                 selected_id.as_deref(),
                 view,
+                help_open,
             )
         })?;
         tokio::select! {
@@ -258,7 +292,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 FeedDecision::Closed => break,
             },
             event = events.next() => match event {
-                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key_with_view(key.code, &table, &mut selected_id, &mut view, &shutdown) => break,
+                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key_with_view(key.code, &table, &mut selected_id, &mut view, &mut help_open, &shutdown) => break,
                 Some(Err(error)) => return Err(error),
                 None => break,
                 _ => {}
@@ -387,11 +421,13 @@ mod tests {
         let shutdown = CancellationToken::new();
         let mut selected = None;
         let mut view = SceneView::Kitchen;
+        let mut help_open = false;
         assert!(!handle_key_with_view(
             KeyCode::Char('f'),
             &table,
             &mut selected,
             &mut view,
+            &mut help_open,
             &shutdown,
         ));
         assert_eq!(view, SceneView::Freezer);
@@ -400,6 +436,7 @@ mod tests {
             &table,
             &mut selected,
             &mut view,
+            &mut help_open,
             &shutdown,
         ));
         assert_eq!(view, SceneView::Kitchen);
@@ -409,6 +446,7 @@ mod tests {
             &table,
             &mut selected,
             &mut view,
+            &mut help_open,
             &shutdown,
         ));
         assert!(shutdown.is_cancelled());
