@@ -33,7 +33,7 @@ const SCENE_TICK_INTERVAL: Duration = Duration::from_millis(100);
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum SceneView {
     #[default]
-    Kitchen,
+    Split,
     Freezer,
 }
 
@@ -41,12 +41,14 @@ pub(crate) enum SceneView {
 struct TerminalCapabilities {
     color_mode: canvas::ColorMode,
     scene_supported: bool,
+    reduced_motion: bool,
 }
 
 fn terminal_capabilities(
     term: Option<&str>,
     colorterm: Option<&str>,
     no_color: bool,
+    reduced_motion: bool,
 ) -> TerminalCapabilities {
     let color_mode = if colorterm.is_some_and(|value| {
         let value = value.to_ascii_lowercase();
@@ -59,6 +61,7 @@ fn terminal_capabilities(
     TerminalCapabilities {
         color_mode,
         scene_supported: !no_color && !term.is_some_and(|value| value.eq_ignore_ascii_case("dumb")),
+        reduced_motion,
     }
 }
 
@@ -69,6 +72,7 @@ fn startup_terminal_capabilities() -> TerminalCapabilities {
         term.as_deref().and_then(std::ffi::OsStr::to_str),
         colorterm.as_deref().and_then(std::ffi::OsStr::to_str),
         std::env::var_os("NO_COLOR").is_some(),
+        std::env::var_os("HERDR_MISE_REDUCED_MOTION").is_some(),
     )
 }
 
@@ -155,15 +159,15 @@ fn handle_key_with_view(
         *selected_id = None;
         false
     } else if code == KeyCode::Esc && *view == SceneView::Freezer {
-        *view = SceneView::Kitchen;
+        *view = SceneView::Split;
         false
     } else if code == KeyCode::Esc {
         shutdown.cancel();
         true
     } else if code == KeyCode::Char('f') {
         *view = match *view {
-            SceneView::Kitchen => SceneView::Freezer,
-            SceneView::Freezer => SceneView::Kitchen,
+            SceneView::Split => SceneView::Freezer,
+            SceneView::Freezer => SceneView::Split,
         };
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
@@ -196,10 +200,12 @@ fn handle_key(
     selected_id: &mut Option<String>,
     shutdown: &CancellationToken,
 ) -> bool {
-    handle_key_with_view(code, table, selected_id, &mut SceneView::Kitchen, shutdown)
+    handle_key_with_view(code, table, selected_id, &mut SceneView::Split, shutdown)
 }
 
-struct TerminalGuard;
+struct TerminalGuard {
+    board_len: AtomicUsize,
+}
 impl TerminalGuard {
     fn enter() -> io::Result<Self> {
         install_panic_restore_hook();
@@ -208,27 +214,38 @@ impl TerminalGuard {
             let _ = disable_raw_mode();
             return Err(error);
         }
-        Ok(Self)
+        Ok(Self {
+            board_len: AtomicUsize::new(0),
+        })
+    }
+
+    fn set_board_len(&self, len: usize) {
+        self.board_len.store(len, Ordering::Relaxed);
     }
 }
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         restore_terminal();
+        eprintln!(
+            "86 board length: {}",
+            self.board_len.load(Ordering::Relaxed)
+        );
     }
 }
 
 pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) -> io::Result<()> {
     let capabilities = startup_terminal_capabilities();
-    let _guard = TerminalGuard::enter()?;
+    let guard = TerminalGuard::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let mut events = EventStream::new();
     let mut receiver = feed.subscribe();
     let mut table = AgentTable::default();
     table.apply(feed.snapshot().await);
+    guard.set_board_len(table.board().len());
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
     let mut selected_id = None;
-    let mut view = SceneView::Kitchen;
+    let mut view = SceneView::default();
     loop {
         retain_selection(&mut selected_id, &table);
         let now = Utc::now();
@@ -243,6 +260,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 capabilities.scene_supported,
                 selected_id.as_deref(),
                 view,
+                capabilities.reduced_motion,
             )
         })?;
         tokio::select! {
@@ -251,9 +269,11 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
             event = receiver.recv() => match decide_feed_event(&mut receiver, event) {
                 FeedDecision::Apply(event) => {
                     table.apply(event);
+                    guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Resnapshot => {
                     table.apply(feed.snapshot().await);
+                    guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Closed => break,
             },
@@ -274,22 +294,27 @@ mod tests {
     #[test]
     fn startup_capability_detection_is_injectable_and_non_interactive() {
         assert_eq!(
-            terminal_capabilities(Some("xterm-256color"), Some("truecolor"), false),
+            terminal_capabilities(Some("xterm-256color"), Some("truecolor"), false, false),
             TerminalCapabilities {
                 color_mode: canvas::ColorMode::Truecolor,
-                scene_supported: true
+                scene_supported: true,
+                reduced_motion: false,
             }
         );
         assert_eq!(
-            terminal_capabilities(Some("xterm-256color"), None, false),
+            terminal_capabilities(Some("xterm-256color"), None, false, true),
             TerminalCapabilities {
                 color_mode: canvas::ColorMode::Xterm256,
-                scene_supported: true
+                scene_supported: true,
+                reduced_motion: true,
             }
         );
-        assert!(!terminal_capabilities(Some("dumb"), Some("truecolor"), false).scene_supported);
         assert!(
-            !terminal_capabilities(Some("xterm-256color"), Some("truecolor"), true).scene_supported
+            !terminal_capabilities(Some("dumb"), Some("truecolor"), false, false).scene_supported
+        );
+        assert!(
+            !terminal_capabilities(Some("xterm-256color"), Some("truecolor"), true, false)
+                .scene_supported
         );
     }
 
@@ -382,11 +407,12 @@ mod tests {
     }
 
     #[test]
-    fn freezer_key_toggles_and_escape_returns_to_kitchen_before_quitting() {
+    fn freezer_key_toggles_and_escape_returns_to_split_before_quitting() {
         let table = AgentTable::default();
         let shutdown = CancellationToken::new();
         let mut selected = None;
-        let mut view = SceneView::Kitchen;
+        let mut view = SceneView::default();
+        assert_eq!(view, SceneView::Split);
         assert!(!handle_key_with_view(
             KeyCode::Char('f'),
             &table,
@@ -402,7 +428,7 @@ mod tests {
             &mut view,
             &shutdown,
         ));
-        assert_eq!(view, SceneView::Kitchen);
+        assert_eq!(view, SceneView::Split);
         assert!(!shutdown.is_cancelled());
         assert!(handle_key_with_view(
             KeyCode::Esc,

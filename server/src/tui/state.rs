@@ -3,6 +3,8 @@ use crate::protocol::{
     SourceStatus,
 };
 
+pub(crate) const BOARD_CAP: usize = 64;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoardEntry {
     pub id: String,
@@ -126,9 +128,7 @@ impl AgentTable {
             if let Some(final_state) = prior_final_state {
                 existing.final_state = final_state;
                 self.board.push(existing);
-                if self.board.len() > 3 {
-                    self.board.remove(0);
-                }
+                self.trim_board();
             } else {
                 self.board.insert(index, existing);
             }
@@ -141,7 +141,11 @@ impl AgentTable {
             tickets: agent.session.tickets,
             final_state: prior_final_state.unwrap_or(AgentState::Ended),
         });
-        if self.board.len() > 3 {
+        self.trim_board();
+    }
+
+    fn trim_board(&mut self) {
+        while self.board.len() > BOARD_CAP {
             self.board.remove(0);
         }
     }
@@ -291,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn ended_records_leave_roster_and_board_deduplicates_last_three() {
+    fn ended_records_leave_roster_and_board_deduplicates_to_cap() {
         let mut table = AgentTable::default();
         let mut prior = record("a", AgentState::Blocked, 10, 1);
         prior.name = "prior-a".into();
@@ -313,7 +317,7 @@ mod tests {
                 .iter()
                 .map(|entry| entry.id.as_str())
                 .collect::<Vec<_>>(),
-            ["b", "c", "d"]
+            ["a", "b", "c", "d"]
         );
 
         let mut duplicate = record("c", AgentState::Ended, 333, 33);
@@ -325,40 +329,55 @@ mod tests {
                 .iter()
                 .map(|entry| entry.id.as_str())
                 .collect::<Vec<_>>(),
-            ["b", "c", "d"]
+            ["a", "b", "c", "d"]
         );
-        assert_eq!(table.board()[1].name, "updated-c");
-        assert_eq!(table.board()[1].final_state, AgentState::Ended);
+        assert_eq!(table.board()[2].name, "updated-c");
+        assert_eq!(table.board()[2].final_state, AgentState::Ended);
         assert_eq!(
-            (table.board()[1].runtime_ms, table.board()[1].tickets),
+            (table.board()[2].runtime_ms, table.board()[2].tickets),
             (333, 33)
         );
+
+        for index in 0..=BOARD_CAP {
+            table.apply(upsert(record(
+                &format!("cap-{index}"),
+                AgentState::Ended,
+                index as u64,
+                1,
+            )));
+        }
+        assert_eq!(table.board().len(), BOARD_CAP);
+        assert_eq!(table.board()[0].id, "cap-1");
+        assert_eq!(table.board()[BOARD_CAP - 1].id, format!("cap-{BOARD_CAP}"));
     }
 
     #[test]
     fn active_agent_ending_again_moves_to_newest_before_board_cap() {
         let mut table = AgentTable::default();
-        for id in ["a", "b", "c"] {
-            table.apply(upsert(record(id, AgentState::Working, 1, 1)));
-            table.apply(upsert(record(id, AgentState::Ended, 10, 1)));
+        for index in 0..BOARD_CAP {
+            let id = format!("id-{index}");
+            table.apply(upsert(record(&id, AgentState::Working, 1, 1)));
+            table.apply(upsert(record(&id, AgentState::Ended, 10, 1)));
         }
 
-        table.apply(upsert(record("a", AgentState::Blocked, 20, 2)));
-        table.apply(upsert(record("a", AgentState::Ended, 50, 5)));
-        table.apply(upsert(record("d", AgentState::Working, 30, 3)));
-        table.apply(upsert(record("d", AgentState::Ended, 40, 4)));
+        table.apply(upsert(record("id-0", AgentState::Blocked, 20, 2)));
+        table.apply(upsert(record("id-0", AgentState::Ended, 50, 5)));
+        table.apply(upsert(record("new", AgentState::Working, 30, 3)));
+        table.apply(upsert(record("new", AgentState::Ended, 40, 4)));
 
+        assert_eq!(table.board().len(), BOARD_CAP);
+        assert_eq!(table.board()[0].id, "id-2");
+        assert_eq!(table.board()[BOARD_CAP - 2].id, "id-0");
+        assert_eq!(table.board()[BOARD_CAP - 1].id, "new");
         assert_eq!(
-            table
-                .board()
-                .iter()
-                .map(|entry| entry.id.as_str())
-                .collect::<Vec<_>>(),
-            ["c", "a", "d"]
+            table.board()[BOARD_CAP - 2].final_state,
+            AgentState::Blocked
         );
-        assert_eq!(table.board()[1].final_state, AgentState::Blocked);
         assert_eq!(
-            (table.board()[1].runtime_ms, table.board()[1].tickets),
+            (
+                table.board()[BOARD_CAP - 2].runtime_ms,
+                table.board()[BOARD_CAP - 2].tickets
+            ),
             (50, 5)
         );
     }

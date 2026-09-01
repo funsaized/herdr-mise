@@ -4,20 +4,23 @@ pub mod sprites;
 
 use chrono::{DateTime, Utc};
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 
-use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, PixelRect};
+use self::layout::{
+    compute_freezer_layout, compute_layout, split_orientation, LayoutDecision, PixelRect,
+    SplitOrientation,
+};
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
-    state::{AgentTable, BoardEntry},
+    state::{AgentTable, BoardEntry, BOARD_CAP},
     theme, view, SceneView,
 };
-use crate::protocol::{AgentRecord, AgentState, SourceStatus};
+use crate::protocol::{AgentRecord, AgentState, AppMode, SourceStatus};
 
 fn mapped(color: Color, mode: ColorMode) -> Color {
     match (mode, color) {
@@ -52,6 +55,10 @@ fn cell_rect(rect: PixelRect) -> Rect {
     Rect::new(rect.x, rect.y / 2, rect.width, rect.height.div_ceil(2))
 }
 
+fn pane_rect(area: Rect, rect: Rect) -> Rect {
+    Rect::new(area.x + rect.x, area.y + rect.y, rect.width, rect.height)
+}
+
 fn put_inside(canvas: &mut PixelCanvas, station: PixelRect, x: i32, y: i32, color: Color) {
     if x > i32::from(station.x)
         && x < i32::from(station.right().saturating_sub(1))
@@ -59,6 +66,14 @@ fn put_inside(canvas: &mut PixelCanvas, station: PixelRect, x: i32, y: i32, colo
         && y < i32::from(station.bottom().saturating_sub(1))
     {
         canvas.put(x, y, color);
+    }
+}
+
+fn motion_tick(tick: u64, reduced_motion: bool) -> u64 {
+    if reduced_motion {
+        0
+    } else {
+        tick
     }
 }
 
@@ -72,14 +87,13 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
     }
     let working = agent.state == AgentState::Working;
     let centered = station.x + station.width.saturating_sub(sprite.width() as u16) / 2;
-    let sprite_x = i32::from(centered.saturating_sub(u16::from(working) * 3));
-    let sprite_y = i32::from(station.y + 4);
-    if working && station.width >= 24 {
-        // Pinned paper ticket, matching the handoff's 4x6 half-pixel card.
-        let ticket_x = i32::from(station.x + 2);
-        let ticket_y = i32::from(station.y + 3);
-        for row in 0..6 {
-            for column in 0..4 {
+    let sprite_x = i32::from(centered.saturating_sub(u16::from(working) * theme::WORKING_SHIFT));
+    let sprite_y = i32::from(station.y + theme::SPRITE_Y_PAD);
+    if working && station.width >= theme::TICKET_MIN_STATION_WIDTH {
+        let ticket_x = i32::from(station.x) + theme::TICKET_X_INSET;
+        let ticket_y = i32::from(station.y) + theme::TICKET_Y_INSET;
+        for row in 0..theme::TICKET_HEIGHT {
+            for column in 0..theme::TICKET_WIDTH {
                 put_inside(
                     canvas,
                     station,
@@ -89,43 +103,42 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
                 );
             }
         }
-        for column in 1..=2 {
+        for column in theme::TICKET_PIN_START..=theme::TICKET_PIN_END {
             put_inside(
                 canvas,
                 station,
                 ticket_x + column,
-                ticket_y - 1,
+                ticket_y + theme::TICKET_PIN_Y,
                 theme::STEEL_LO,
             );
         }
-        for column in 0..3 {
+        for column in 0..theme::TICKET_MARK_W {
             put_inside(
                 canvas,
                 station,
                 ticket_x + column,
-                ticket_y + 1,
+                ticket_y + theme::TICKET_MARK_Y1,
                 theme::STEAM,
             );
             put_inside(
                 canvas,
                 station,
                 ticket_x + column,
-                ticket_y + 3,
+                ticket_y + theme::TICKET_MARK_Y2,
                 theme::STEAM,
             );
         }
-        for column in 0..2 {
+        for column in 0..theme::TICKET_MARK3_W {
             put_inside(
                 canvas,
                 station,
                 ticket_x + column,
-                ticket_y + 5,
+                ticket_y + theme::TICKET_MARK_Y3,
                 theme::STEAM,
             );
         }
     }
 
-    // Match the mock's z-order: the cook wins any overlap with the ticket.
     for (row_index, row) in sprite.rows.iter().enumerate() {
         for (column, key) in row.bytes().enumerate() {
             if let Some(color) = pixel_color(key, agent) {
@@ -140,26 +153,49 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
         }
     }
 
-    if !working || station.width < 24 {
+    if !working || station.width < theme::TICKET_MIN_STATION_WIDTH {
         return;
     }
 
-    // Pot and alternating flames sit to the right of the static working pose.
-    let pot_x = sprite_x + 13;
-    let pot_y = sprite_y + 9;
-    for column in 0..5 {
+    let pot_x = sprite_x + theme::POT_X_OFFSET;
+    let pot_y = sprite_y + theme::POT_Y_OFFSET;
+    for column in 0..theme::POT_WIDTH {
         put_inside(canvas, station, pot_x + column, pot_y, theme::POT_HI);
         put_inside(canvas, station, pot_x + column, pot_y + 1, theme::POT);
-        put_inside(canvas, station, pot_x + column, pot_y + 2, theme::POT);
+        put_inside(
+            canvas,
+            station,
+            pot_x + column,
+            pot_y + theme::POT_BODY_ROWS,
+            theme::POT,
+        );
     }
-    put_inside(canvas, station, pot_x + 5, pot_y + 1, theme::POT_HI);
+    put_inside(
+        canvas,
+        station,
+        pot_x + theme::POT_SPOUT_X,
+        pot_y + theme::POT_SPOUT_Y,
+        theme::POT_HI,
+    );
     let (left_fire, right_fire) = if tick.is_multiple_of(2) {
         (theme::FIRE_HI, theme::FIRE)
     } else {
         (theme::FIRE, theme::FIRE_HI)
     };
-    put_inside(canvas, station, pot_x + 1, pot_y + 3, left_fire);
-    put_inside(canvas, station, pot_x + 3, pot_y + 3, right_fire);
+    put_inside(
+        canvas,
+        station,
+        pot_x + theme::FIRE_LEFT_X,
+        pot_y + theme::FIRE_Y,
+        left_fire,
+    );
+    put_inside(
+        canvas,
+        station,
+        pot_x + theme::FIRE_RIGHT_X,
+        pot_y + theme::FIRE_Y,
+        right_fire,
+    );
 
     for particle in particles::steam_at_tick(tick, (pot_x + 1) as i16, (pot_y - 1) as i16) {
         put_inside(
@@ -176,19 +212,19 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
     }
 }
 
-fn draw_spirit(canvas: &mut PixelCanvas, slot: PixelRect) {
-    let sprite = sprites::SPIRIT;
-    let x = slot.x + slot.width.saturating_sub(sprites::SPRITE_WIDTH as u16) / 2;
-    let y = slot.y + 2;
-    for (row, pixels) in sprite.iter().enumerate() {
+fn draw_spirit(canvas: &mut PixelCanvas, slot: PixelRect, pose: u8) {
+    let sprite = sprites::spirit_sprite(pose);
+    let x = slot.x + slot.width.saturating_sub(sprite.width() as u16) / 2;
+    let y = slot.y;
+    for (row, pixels) in sprite.rows.iter().enumerate() {
         for (column, key) in pixels.bytes().enumerate() {
             let color = match key {
-                b'H' | b'C' => Some(theme::COAT),
-                b'h' | b'c' => Some(theme::COAT_LO),
+                b'H' | b'C' => Some(theme::ICE),
+                b'h' | b'c' => Some(theme::ICE_LO),
                 b'S' | b'K' => Some(theme::STEEL),
-                b'X' => Some(theme::EYE),
-                b'a' => Some(theme::ACCENTS[4]),
-                b'A' => Some(theme::ACCENT_DIMS[4]),
+                b'X' | b'e' => Some(theme::EYE),
+                b'a' => Some(theme::SPIRIT),
+                b'A' => Some(theme::SPIRIT_DIM),
                 b'D' => Some(theme::PANTS),
                 b'B' => Some(theme::BOOT),
                 b'o' => Some(theme::BAND),
@@ -203,6 +239,84 @@ fn draw_spirit(canvas: &mut PixelCanvas, slot: PixelRect) {
             }
         }
     }
+}
+
+fn draw_snowman(canvas: &mut PixelCanvas, floor: PixelRect) {
+    let x = i32::from(floor.x.saturating_add(theme::SNOWMAN_X_INSET));
+    let y = i32::from(floor.bottom().saturating_sub(theme::SNOWMAN_Y_INSET));
+    canvas.fill_rect(
+        x,
+        y + theme::SNOWMAN_MID_H + theme::SNOWMAN_HEAD_H,
+        theme::SNOWMAN_BASE_W,
+        theme::SNOWMAN_BASE_H,
+        theme::ICE,
+    );
+    canvas.fill_rect(
+        x + theme::SNOWMAN_STACK_X,
+        y + theme::SNOWMAN_HEAD_H,
+        theme::SNOWMAN_MID_W,
+        theme::SNOWMAN_MID_H,
+        theme::ICE,
+    );
+    canvas.fill_rect(
+        x + theme::SNOWMAN_STACK_X,
+        y,
+        theme::SNOWMAN_HEAD_W,
+        theme::SNOWMAN_HEAD_H,
+        theme::ICE,
+    );
+    canvas.put(
+        x + theme::SNOWMAN_EYE_X,
+        y + theme::SNOWMAN_EYE_Y,
+        theme::EYE,
+    );
+}
+
+fn draw_gravestone(canvas: &mut PixelCanvas, floor: PixelRect) {
+    let x = i32::from(floor.right().saturating_sub(theme::GRAVE_X_INSET));
+    let y = i32::from(floor.bottom().saturating_sub(theme::GRAVE_Y_INSET));
+    canvas.fill_rect(
+        x,
+        y + theme::GRAVE_BODY_Y,
+        theme::GRAVE_W,
+        theme::GRAVE_H,
+        theme::STEEL,
+    );
+    canvas.fill_rect(
+        x + theme::GRAVE_CAP_X,
+        y,
+        theme::GRAVE_CAP_W,
+        theme::GRAVE_CAP_H,
+        theme::ICE_LO,
+    );
+}
+
+fn draw_icicles_and_puddles(canvas: &mut PixelCanvas, area: Rect, floor: PixelRect) {
+    for x in (theme::ICICLE_MARGIN..area.width.saturating_sub(theme::ICICLE_MARGIN))
+        .step_by(theme::ICICLE_STEP)
+    {
+        canvas.fill_rect(
+            i32::from(x),
+            theme::ICICLE_Y,
+            1,
+            i32::from(theme::ICICLE_BASE_H + x % theme::ICICLE_H_MOD),
+            theme::ICE,
+        );
+    }
+    canvas.fill_rect(
+        i32::from(floor.x.saturating_add(theme::PUDDLE_NEAR_X)),
+        i32::from(floor.bottom().saturating_sub(theme::PUDDLE_NEAR_Y)),
+        theme::PUDDLE_NEAR_W,
+        theme::PUDDLE_NEAR_H,
+        theme::ICE_LO,
+    );
+    canvas.fill_rect(
+        i32::from(floor.x.saturating_add(theme::PUDDLE_FAR_X)),
+        i32::from(floor.bottom().saturating_sub(theme::PUDDLE_FAR_Y)),
+        theme::PUDDLE_FAR_W,
+        theme::PUDDLE_FAR_H,
+        theme::ICE,
+    );
 }
 
 fn render_line(frame: &mut Frame<'_>, area: Rect, x: u16, y: u16, width: u16, line: Line<'static>) {
@@ -255,15 +369,14 @@ fn split_line(text: &str, width: usize) -> (String, String) {
 }
 
 fn board_line(entry: &BoardEntry, width: usize) -> String {
+    let name = view::sanitize_external(&entry.name);
     if width < 12 {
-        return entry.name.chars().take(width).collect();
+        return name.chars().take(width).collect();
     }
     let name_width = width.saturating_sub(12).max(4);
     format!(
         "{:<name_width$} {:>5} {:>3}T",
-        entry
-            .name
-            .to_uppercase()
+        name.to_uppercase()
             .chars()
             .take(name_width)
             .collect::<String>(),
@@ -282,7 +395,23 @@ fn connection_text(table: &AgentTable, warning: Option<&str>) -> String {
     };
     warning.map_or_else(
         || connection.into(),
-        |warning| format!("{connection} · {warning}"),
+        |warning| format!("{connection} · {}", view::sanitize_external(warning)),
+    )
+}
+
+fn board_count_text(table: &AgentTable) -> String {
+    format!("86 {}/{BOARD_CAP}", table.board().len())
+}
+
+fn footer_connection(table: &AgentTable, warning: Option<&str>, width: u16) -> String {
+    let board = board_count_text(table);
+    let connection_width = usize::from(width).saturating_sub(board.chars().count() + 3);
+    format!(
+        "{} · {board}",
+        connection_text(table, warning)
+            .chars()
+            .take(connection_width)
+            .collect::<String>()
     )
 }
 
@@ -297,23 +426,134 @@ pub(crate) fn draw_view(
     scene_supported: bool,
     selected_id: Option<&str>,
     scene_view: SceneView,
+    reduced_motion: bool,
 ) {
-    let area = frame.area();
-    if scene_view == SceneView::Freezer {
-        draw_freezer(frame, table, warning, color_mode, scene_supported);
+    if !scene_supported {
+        view::draw(
+            frame,
+            table,
+            warning,
+            now,
+            motion_tick(tick, reduced_motion),
+            selected_id,
+        );
         return;
     }
+    let area = frame.area();
+    match scene_view {
+        SceneView::Freezer => draw_freezer(
+            frame,
+            area,
+            table,
+            warning,
+            now,
+            tick,
+            color_mode,
+            selected_id,
+            reduced_motion,
+            true,
+        ),
+        SceneView::Split => match split_orientation(
+            area.width,
+            area.height,
+            table
+                .agents()
+                .any(|agent| agent.state == AgentState::Blocked),
+        ) {
+            None => draw_kitchen(
+                frame,
+                area,
+                table,
+                warning,
+                now,
+                tick,
+                color_mode,
+                selected_id,
+                reduced_motion,
+            ),
+            Some(orientation) => {
+                let chunks = Layout::default()
+                    .direction(match orientation {
+                        SplitOrientation::Horizontal => Direction::Horizontal,
+                        SplitOrientation::Vertical => Direction::Vertical,
+                    })
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .split(area);
+                if compute_layout(
+                    chunks[0].width,
+                    chunks[0].height.saturating_mul(2),
+                    table.agents().count(),
+                ) == LayoutDecision::Fallback
+                {
+                    draw_kitchen(
+                        frame,
+                        area,
+                        table,
+                        warning,
+                        now,
+                        tick,
+                        color_mode,
+                        selected_id,
+                        reduced_motion,
+                    );
+                    return;
+                }
+                draw_kitchen(
+                    frame,
+                    chunks[0],
+                    table,
+                    warning,
+                    now,
+                    tick,
+                    color_mode,
+                    selected_id,
+                    reduced_motion,
+                );
+                draw_freezer(
+                    frame,
+                    chunks[1],
+                    table,
+                    warning,
+                    now,
+                    tick,
+                    color_mode,
+                    selected_id,
+                    reduced_motion,
+                    false,
+                );
+            }
+        },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_kitchen(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    table: &AgentTable,
+    warning: Option<&str>,
+    now: DateTime<Utc>,
+    tick: u64,
+    color_mode: ColorMode,
+    selected_id: Option<&str>,
+    reduced_motion: bool,
+) {
     let agents = table.agents().collect::<Vec<_>>();
     let LayoutDecision::Scene(layout) =
         compute_layout(area.width, area.height.saturating_mul(2), agents.len())
     else {
-        view::draw(frame, table, warning, now, tick, selected_id);
+        if area == frame.area() {
+            view::draw(
+                frame,
+                table,
+                warning,
+                now,
+                motion_tick(tick, reduced_motion),
+                selected_id,
+            );
+        }
         return;
     };
-    if !scene_supported {
-        view::draw(frame, table, warning, now, tick, selected_id);
-        return;
-    }
 
     let mut canvas = PixelCanvas::new(
         area.width,
@@ -358,7 +598,12 @@ pub(crate) fn draw_view(
                 theme::GREEN,
             );
         }
-        draw_sprite(&mut canvas, station, agent, tick);
+        draw_sprite(
+            &mut canvas,
+            station,
+            agent,
+            motion_tick(tick, reduced_motion),
+        );
     }
     frame.render_widget(&canvas, area);
 
@@ -389,7 +634,7 @@ pub(crate) fn draw_view(
                 .add_modifier(Modifier::BOLD),
         )]),
     );
-    let tick_text = format!("10Hz · tick {tick}");
+    let tick_text = format!("10Hz · tick {}", motion_tick(tick, reduced_motion));
     render_line(
         frame,
         area,
@@ -440,7 +685,7 @@ pub(crate) fn draw_view(
                     .add_modifier(Modifier::BOLD),
             ))
             .border_style(Style::default().fg(mapped(theme::BRASS, color_mode))),
-        board_area,
+        pane_rect(area, board_area),
     );
     for (row, entry) in table.board().iter().rev().take(4).enumerate() {
         render_line(
@@ -478,7 +723,7 @@ pub(crate) fn draw_view(
     } else {
         let names = blocked
             .iter()
-            .map(|agent| agent.name.as_str())
+            .map(|agent| view::sanitize_external(&agent.name))
             .collect::<Vec<_>>()
             .join(", ");
         let elapsed = blocked_elapsed(blocked[0], now);
@@ -520,7 +765,7 @@ pub(crate) fn draw_view(
                     },
                     color_mode,
                 ))),
-            station_area,
+            pane_rect(area, station_area),
         );
 
         let chip = format!(" {}T ", agent.session.tickets);
@@ -574,7 +819,10 @@ pub(crate) fn draw_view(
         let maximum_name = usize::from(available)
             .saturating_sub(suffix.chars().count() + 2)
             .max(1);
-        let display_name = agent.name.chars().take(maximum_name).collect::<String>();
+        let display_name = view::sanitize_external(&agent.name)
+            .chars()
+            .take(maximum_name)
+            .collect::<String>();
         render_line(
             frame,
             area,
@@ -602,7 +850,10 @@ pub(crate) fn draw_view(
         );
     }
 
-    if agents.is_empty() {
+    if agents.is_empty()
+        && table.mode() == AppMode::Live
+        && table.source_status() == &SourceStatus::Connected
+    {
         let waiting = "Waiting for agents — start one in herdr";
         render_line(
             frame,
@@ -633,23 +884,24 @@ pub(crate) fn draw_view(
         }
     }
 
-    let connection = connection_text(table, warning);
-    render_line(
-        frame,
-        area,
-        2,
-        area.height.saturating_sub(1),
-        area.width.saturating_sub(4),
-        Line::styled(
-            connection,
-            Style::default().fg(mapped(theme::DIM, color_mode)),
-        ),
-    );
     let keys = if selected_id.is_some() {
         "Tab / Shift+Tab inspect · f freezer · Esc close · q quit"
     } else {
         "f freezer · q / Esc quit · ? help"
     };
+    let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
+    let connection = footer_connection(table, warning, connection_width);
+    render_line(
+        frame,
+        area,
+        2,
+        area.height.saturating_sub(1),
+        connection_width,
+        Line::styled(
+            connection,
+            Style::default().fg(mapped(theme::DIM, color_mode)),
+        ),
+    );
     render_line(
         frame,
         area,
@@ -660,28 +912,38 @@ pub(crate) fn draw_view(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_freezer(
     frame: &mut Frame<'_>,
+    area: Rect,
     table: &AgentTable,
     warning: Option<&str>,
+    now: DateTime<Utc>,
+    tick: u64,
     color_mode: ColorMode,
-    scene_supported: bool,
+    selected_id: Option<&str>,
+    reduced_motion: bool,
+    fullscreen: bool,
 ) {
-    let area = frame.area();
     let ids = table
         .board()
         .iter()
-        .map(|entry| entry.id.clone())
+        .map(|entry| entry.id.as_str())
         .collect::<Vec<_>>();
     let Some(layout) = compute_freezer_layout(area.width, area.height.saturating_mul(2), &ids)
     else {
-        view::draw(frame, table, warning, Utc::now(), 0, None);
+        if area == frame.area() {
+            view::draw(
+                frame,
+                table,
+                warning,
+                now,
+                motion_tick(tick, reduced_motion),
+                selected_id,
+            );
+        }
         return;
     };
-    if !scene_supported {
-        view::draw(frame, table, warning, Utc::now(), 0, None);
-        return;
-    }
     let mut canvas = PixelCanvas::new(
         area.width,
         area.height.saturating_mul(2),
@@ -690,13 +952,13 @@ fn draw_freezer(
     );
     canvas.clear(theme::STEEL_LO);
     canvas.fill_rect(
-        2,
-        2,
-        i32::from(area.width.saturating_sub(4)),
-        i32::from(area.height.saturating_mul(2).saturating_sub(4)),
+        theme::FREEZER_SHELL_INSET,
+        theme::FREEZER_SHELL_INSET,
+        i32::from(area.width) - theme::FREEZER_SHELL_INSET * 2,
+        i32::from(area.height.saturating_mul(2)) - theme::FREEZER_SHELL_INSET * 2,
         theme::STEEL,
     );
-    for x in (layout.floor.x..layout.floor.right()).step_by(4) {
+    for x in (layout.floor.x..layout.floor.right()).step_by(theme::FREEZER_TILE.into()) {
         canvas.fill_rect(
             x.into(),
             layout.floor.y.into(),
@@ -705,7 +967,7 @@ fn draw_freezer(
             theme::STEEL_LO,
         );
     }
-    for y in (layout.floor.y..layout.floor.bottom()).step_by(4) {
+    for y in (layout.floor.y..layout.floor.bottom()).step_by(theme::FREEZER_TILE.into()) {
         canvas.fill_rect(
             layout.floor.x.into(),
             y.into(),
@@ -722,25 +984,34 @@ fn draw_freezer(
             rack.height.into(),
             theme::STEEL_LO,
         );
-        for shelf in 1..4 {
-            let y = rack.y + rack.height * shelf / 4;
+        for shelf in 1..theme::FREEZER_SHELF_DIVISIONS {
+            let y = rack.y + rack.height * shelf / theme::FREEZER_SHELF_DIVISIONS;
             canvas.fill_rect(
                 rack.x.into(),
                 y.into(),
                 rack.width.into(),
-                2,
+                theme::FREEZER_SHELF_THICKNESS.into(),
                 theme::COAT_LO,
             );
             canvas.fill_rect(
-                i32::from(rack.x + 2),
-                i32::from(y.saturating_sub(4)),
-                i32::from(rack.width / 3),
-                3,
+                i32::from(rack.x + theme::FREEZER_BIN_X_INSET),
+                i32::from(y.saturating_sub(theme::FREEZER_BIN_Y_LIFT)),
+                i32::from(rack.width / theme::FREEZER_BIN_FRACTION),
+                i32::from(theme::FREEZER_BIN_HEIGHT),
                 if shelf.is_multiple_of(2) {
-                    theme::ACCENTS[4]
+                    theme::SPIRIT
                 } else {
                     theme::COAT
                 },
+            );
+            canvas.fill_rect(
+                i32::from(rack.right().saturating_sub(
+                    rack.width / theme::FREEZER_BIN_FRACTION + theme::FREEZER_BIN_X_INSET,
+                )),
+                i32::from(y.saturating_sub(theme::FREEZER_PLATE_Y_LIFT)),
+                i32::from(rack.width / theme::FREEZER_BIN_FRACTION),
+                i32::from(theme::FREEZER_PLATE_HEIGHT),
+                theme::PLATE,
             );
         }
     }
@@ -752,21 +1023,30 @@ fn draw_freezer(
         theme::STEEL_LO,
     );
     canvas.fill_rect(
-        i32::from(layout.door.x + 2),
-        i32::from(layout.door.y + 2),
-        i32::from(layout.door.width - 4),
-        i32::from(layout.door.height - 4),
+        i32::from(layout.door.x + theme::FREEZER_DOOR_FRAME),
+        i32::from(layout.door.y + theme::FREEZER_DOOR_FRAME),
+        i32::from(layout.door.width - theme::FREEZER_DOOR_FRAME * 2),
+        i32::from(layout.door.height - theme::FREEZER_DOOR_FRAME * 2),
         theme::STEEL,
     );
     canvas.fill_rect(
-        i32::from(layout.door.x + layout.door.width - 4),
+        i32::from(layout.door.x + layout.door.width - theme::FREEZER_DOOR_FRAME * 2),
         i32::from(layout.door.y + layout.door.height / 2),
-        3,
-        2,
+        i32::from(theme::FREEZER_HANDLE_WIDTH),
+        i32::from(theme::FREEZER_HANDLE_HEIGHT),
         theme::COAT_LO,
     );
-    for y in [layout.door.y + 2, layout.door.bottom() - 4] {
-        canvas.fill_rect(layout.door.x.into(), y.into(), 1, 2, theme::COAT_LO);
+    for y in [
+        layout.door.y + theme::FREEZER_DOOR_FRAME,
+        layout.door.bottom() - theme::FREEZER_DOOR_FRAME * 2,
+    ] {
+        canvas.fill_rect(
+            layout.door.x.into(),
+            y.into(),
+            1,
+            theme::FREEZER_HINGE_HEIGHT.into(),
+            theme::COAT_LO,
+        );
     }
     for frost in &layout.frost {
         canvas.fill_rect(
@@ -777,7 +1057,8 @@ fn draw_freezer(
             theme::STEAM_HI,
         );
     }
-    for x in (2..area.width.saturating_sub(2)).step_by(8) {
+    draw_icicles_and_puddles(&mut canvas, area, layout.floor);
+    for x in (2..area.width.saturating_sub(2)).step_by(theme::FREEZER_RIVET_STEP.into()) {
         canvas.put(i32::from(x), 1, theme::COAT_LO);
         canvas.put(
             i32::from(x),
@@ -785,8 +1066,32 @@ fn draw_freezer(
             theme::COAT_LO,
         );
     }
-    for (_, slot) in &layout.spirits {
-        draw_spirit(&mut canvas, *slot);
+    let snow_tick = if fullscreen && !reduced_motion {
+        tick
+    } else {
+        0
+    };
+    for particle in particles::snow_at_tick(
+        snow_tick,
+        area.width.min(i16::MAX as u16) as i16,
+        layout.room.height.min(i16::MAX as u16) as i16,
+    ) {
+        canvas.put(
+            i32::from(particle.x),
+            i32::from(particle.y),
+            if particle.shade == 0 {
+                theme::ICE
+            } else {
+                theme::ICE_LO
+            },
+        );
+    }
+    if fullscreen && !reduced_motion {
+        draw_snowman(&mut canvas, layout.floor);
+        draw_gravestone(&mut canvas, layout.floor);
+    }
+    for (_, (slot, pose)) in table.board().iter().zip(&layout.spirits) {
+        draw_spirit(&mut canvas, *slot, *pose);
     }
     frame.render_widget(&canvas, area);
     frame.render_widget(
@@ -801,42 +1106,128 @@ fn draw_freezer(
             .border_style(Style::default().fg(mapped(theme::STEEL, color_mode))),
         area,
     );
-    for (id, slot) in &layout.spirits {
-        if let Some(entry) = table.board().iter().find(|entry| &entry.id == id) {
-            let name = entry
-                .name
-                .to_uppercase()
-                .chars()
-                .take(11)
-                .collect::<String>();
-            render_line(
-                frame,
-                area,
-                slot.x + slot.width.saturating_sub(name.chars().count() as u16) / 2,
-                slot.bottom().saturating_sub(2) / 2,
-                slot.width,
-                Line::styled(
-                    name,
-                    Style::default()
-                        .fg(mapped(theme::TEXT, color_mode))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            );
+    let (title, source) = view::status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        table.agents().count(),
+    );
+    render_line(
+        frame,
+        area,
+        2,
+        1,
+        area.width.saturating_sub(4),
+        Line::from(vec![Span::styled(
+            title,
+            Style::default()
+                .fg(mapped(theme::TEXT, color_mode))
+                .add_modifier(Modifier::BOLD),
+        )]),
+    );
+    let source_width = area.width.saturating_sub(4);
+    let (source_first, source_overflow) = split_line(&source, usize::from(source_width));
+    render_line(
+        frame,
+        area,
+        2,
+        2,
+        source_width,
+        Line::styled(
+            source_first,
+            Style::default().fg(mapped(theme::DIM, color_mode)),
+        ),
+    );
+    if !source_overflow.is_empty() {
+        render_line(
+            frame,
+            area,
+            2,
+            3,
+            source_width,
+            Line::styled(
+                source_overflow,
+                Style::default().fg(mapped(theme::DIM, color_mode)),
+            ),
+        );
+    }
+    for (entry, (slot, _)) in table.board().iter().zip(&layout.spirits) {
+        let name = view::sanitize_external(&entry.name)
+            .to_uppercase()
+            .chars()
+            .take(theme::SPIRIT_LABEL_CHARS)
+            .collect::<String>();
+        render_line(
+            frame,
+            area,
+            slot.x + slot.width.saturating_sub(name.chars().count() as u16) / 2,
+            slot.bottom().saturating_sub(theme::SPIRIT_LABEL_Y_INSET) / 2,
+            slot.width,
+            Line::styled(
+                name,
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        );
+    }
+    let caption = table
+        .board()
+        .iter()
+        .rev()
+        .map(|entry| view::sanitize_external(&entry.name))
+        .collect::<Vec<_>>()
+        .join(" · ");
+    render_line(
+        frame,
+        area,
+        layout.floor.x,
+        layout.floor.bottom().saturating_sub(1) / 2,
+        layout.floor.width,
+        Line::styled(
+            caption,
+            Style::default().fg(mapped(theme::TEXT, color_mode)),
+        ),
+    );
+    if fullscreen {
+        if let Some(agent) = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id))
+        {
+            for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
+                render_line(
+                    frame,
+                    area,
+                    2,
+                    area.height.saturating_sub(3) + row as u16,
+                    area.width.saturating_sub(4),
+                    Line::styled(
+                        facts,
+                        Style::default()
+                            .fg(mapped(theme::TEXT, color_mode))
+                            .bg(mapped(theme::PANEL2, color_mode))
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                );
+            }
         }
     }
-    let connection = connection_text(table, warning);
+    let keys = if fullscreen {
+        "f split · Esc split · q quit"
+    } else {
+        "f fullscreen · q quit"
+    };
+    let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
+    let connection = footer_connection(table, warning, connection_width);
     render_line(
         frame,
         area,
         2,
         area.height.saturating_sub(1),
-        area.width.saturating_sub(4),
+        connection_width,
         Line::styled(
             connection,
             Style::default().fg(mapped(theme::DIM, color_mode)),
         ),
     );
-    let keys = "f kitchen · Esc kitchen · q quit";
     render_line(
         frame,
         area,
@@ -897,19 +1288,63 @@ pub(crate) mod tests {
         tick: u64,
         selected_id: Option<&str>,
     ) -> Buffer {
+        render_view(
+            table,
+            width,
+            height,
+            tick,
+            selected_id,
+            SceneView::Split,
+            false,
+        )
+    }
+
+    fn render_view(
+        table: &AgentTable,
+        width: u16,
+        height: u16,
+        tick: u64,
+        selected_id: Option<&str>,
+        scene_view: SceneView,
+        reduced_motion: bool,
+    ) -> Buffer {
+        render_view_with_warning(
+            table,
+            width,
+            height,
+            tick,
+            selected_id,
+            scene_view,
+            reduced_motion,
+            Some("bind warning"),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_view_with_warning(
+        table: &AgentTable,
+        width: u16,
+        height: u16,
+        tick: u64,
+        selected_id: Option<&str>,
+        scene_view: SceneView,
+        reduced_motion: bool,
+        warning: Option<&str>,
+    ) -> Buffer {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
                 draw_view(
                     frame,
                     table,
-                    Some("bind warning"),
+                    warning,
                     Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
                     tick,
                     ColorMode::Xterm256,
                     true,
                     selected_id,
-                    SceneView::Kitchen,
+                    scene_view,
+                    reduced_motion,
                 )
             })
             .unwrap();
@@ -917,23 +1352,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn render_freezer(table: &AgentTable, width: u16, height: u16) -> Buffer {
-        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        terminal
-            .draw(|frame| {
-                draw_view(
-                    frame,
-                    table,
-                    Some("bind warning"),
-                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
-                    9,
-                    ColorMode::Xterm256,
-                    true,
-                    None,
-                    SceneView::Freezer,
-                )
-            })
-            .unwrap();
-        terminal.backend().buffer().clone()
+        render_view(table, width, height, 9, None, SceneView::Freezer, false)
     }
 
     pub(crate) fn text(buffer: &Buffer) -> String {
@@ -1068,24 +1487,36 @@ pub(crate) mod tests {
 
     #[test]
     fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
-        let mut table = live_table(vec![
-            record("alpha", AgentState::Done),
-            record("bravo", AgentState::Working),
-            record("charlie", AgentState::Blocked),
-        ]);
-        for (id, state) in [
-            ("alpha", AgentState::Ended),
-            ("bravo", AgentState::Ended),
-            ("charlie", AgentState::Ended),
-        ] {
+        let event = serde_json::from_str::<AgentStateEvent>(include_str!(
+            "../../../../protocol/fixtures/snapshot.v1.json"
+        ))
+        .unwrap();
+        let agents = match &event {
+            AgentStateEvent::Snapshot { agents, .. } => agents.clone(),
+            _ => unreachable!(),
+        };
+        let mut table = AgentTable::default();
+        table.apply(event);
+        for mut agent in agents {
+            agent.state = AgentState::Ended;
             table.apply(AgentStateEvent::Delta {
                 version: 1,
                 mode: AppMode::Live,
                 operation: DeltaOperation::Upsert,
-                agent: Some(record(id, state)),
+                agent: Some(agent),
                 agent_id: None,
             });
         }
+        for index in 0..BOARD_CAP - table.board().len() {
+            table.apply(AgentStateEvent::Delta {
+                version: 1,
+                mode: AppMode::Live,
+                operation: DeltaOperation::Upsert,
+                agent: Some(record(&format!("extra-{index}"), AgentState::Ended)),
+                agent_id: None,
+            });
+        }
+        assert_eq!(table.board().len(), BOARD_CAP);
         let buffer = render_freezer(&table, 80, 24);
         let actual = buffer_dump(&buffer);
         let path = format!(
@@ -1099,17 +1530,38 @@ pub(crate) mod tests {
             .unwrap_or_else(|error| panic!("missing golden {path}: {error}"));
         assert_eq!(actual, expected);
         assert!(text(&buffer).contains("WALK-IN FREEZER"));
+        assert!(text(&buffer).contains("MISE — LIVE"));
+        assert!(text(&buffer).contains("86 64/64"));
         assert_eq!(
             layout::compute_freezer_layout(
                 80,
                 48,
-                &["alpha".into(), "bravo".into(), "charlie".into(),]
+                &table
+                    .board()
+                    .iter()
+                    .map(|entry| entry.id.as_str())
+                    .collect::<Vec<_>>()
             )
             .unwrap()
             .spirits
             .len(),
-            3
+            BOARD_CAP
         );
+
+        let compact = text(&render_view(
+            &table,
+            79,
+            23,
+            9,
+            None,
+            SceneView::Split,
+            false,
+        ));
+        for newest in ["Cook extra-61", "Cook extra-60", "Cook extra-59"] {
+            assert!(compact.contains(newest));
+        }
+        assert!(!compact.contains("Cook extra-58"));
+        assert!(compact.contains("86 64/64"));
     }
 
     #[test]
@@ -1406,5 +1858,171 @@ pub(crate) mod tests {
         assert!(output.contains("MISE — DEMO SERVICE"));
         assert!(output.contains("Mock feed"));
         assert!(output.contains("Nothing here is real"));
+    }
+
+    #[test]
+    fn split_layout_and_reduced_motion_keep_both_scenes_stable() {
+        let event = serde_json::from_str::<AgentStateEvent>(include_str!(
+            "../../../../protocol/fixtures/snapshot.v1.json"
+        ))
+        .unwrap();
+        let agents = match &event {
+            AgentStateEvent::Snapshot { agents, .. } => agents.clone(),
+            _ => unreachable!(),
+        };
+        let mut table = AgentTable::default();
+        table.apply(event);
+
+        for (width, height) in [(160, 24), (80, 48)] {
+            let buffer = render_view(&table, width, height, 9, None, SceneView::Split, false);
+            let output = text(&buffer);
+            assert!(output.contains("MISE — LIVE"));
+            assert!(output.contains("WALK-IN FREEZER"));
+            let freezer_origin = if width == 160 { (81, 0) } else { (1, 24) };
+            assert_eq!(buffer.cell(freezer_origin).unwrap().symbol(), " ");
+            assert_eq!(
+                buffer
+                    .cell((freezer_origin.0 + 1, freezer_origin.1))
+                    .unwrap()
+                    .symbol(),
+                "W"
+            );
+        }
+        let minimum = text(&render_view(
+            &table,
+            80,
+            24,
+            9,
+            None,
+            SceneView::Split,
+            false,
+        ));
+        assert!(minimum.contains("MISE — LIVE"));
+        assert!(!minimum.contains("WALK-IN FREEZER"));
+
+        let dense = live_table(
+            (0..19)
+                .map(|index| record(&index.to_string(), AgentState::Idle))
+                .collect(),
+        );
+        let dense = text(&render_view(
+            &dense,
+            160,
+            24,
+            9,
+            None,
+            SceneView::Split,
+            false,
+        ));
+        assert!(dense.contains("Kitchen status"));
+        assert!(!dense.contains("WALK-IN FREEZER"));
+
+        let kitchen_zero = render_view(&table, 80, 24, 0, None, SceneView::Split, true);
+        let kitchen_nine = render_view(&table, 80, 24, 9, None, SceneView::Split, true);
+        assert_eq!(kitchen_zero, kitchen_nine);
+        assert_eq!(
+            render_view(&table, 79, 23, 0, None, SceneView::Split, true),
+            render_view(&table, 79, 23, 9, None, SceneView::Split, true)
+        );
+
+        let split_zero = render_view(&table, 160, 24, 0, None, SceneView::Split, false);
+        let split_nine = render_view(&table, 160, 24, 9, None, SceneView::Split, false);
+        for y in 0..24 {
+            for x in 80..160 {
+                assert_eq!(
+                    split_zero.cell((x, y)).unwrap(),
+                    split_nine.cell((x, y)).unwrap()
+                );
+            }
+        }
+        let reduced_freezer = render_view(&table, 80, 24, 0, None, SceneView::Freezer, true);
+        for y in 0..23 {
+            for x in 0..80 {
+                assert_eq!(
+                    split_zero.cell((80 + x, y)).unwrap(),
+                    reduced_freezer.cell((x, y)).unwrap()
+                );
+            }
+        }
+        assert_ne!(
+            render_view(&table, 80, 24, 0, None, SceneView::Freezer, false),
+            render_view(&table, 80, 24, 9, None, SceneView::Freezer, false)
+        );
+        assert_eq!(
+            render_view(&table, 80, 24, 0, None, SceneView::Freezer, true),
+            render_view(&table, 80, 24, 9, None, SceneView::Freezer, true)
+        );
+
+        let mut blocked = agents[0].clone();
+        blocked.state = AgentState::Blocked;
+        let blocked = live_table(vec![blocked]);
+        let output = text(&render_view(
+            &blocked,
+            160,
+            48,
+            9,
+            Some("agent-01"),
+            SceneView::Split,
+            false,
+        ));
+        assert!(output.contains("BLOCKED"));
+        assert!(output.contains("Workspace:"));
+    }
+
+    #[test]
+    fn tui_strips_control_characters_from_external_strings() {
+        let event = serde_json::from_str::<AgentStateEvent>(include_str!(
+            "../../../../protocol/fixtures/snapshot.v1.json"
+        ))
+        .unwrap();
+        let mut agents = match event {
+            AgentStateEvent::Snapshot { agents, .. } => agents,
+            _ => unreachable!(),
+        };
+        agents[0].id.push('\u{1b}');
+        agents[0].name.push_str("\u{1b}live");
+        agents[0].model.push('\u{1b}');
+        agents[0].workspace.push('\u{1b}');
+        agents[0].state = AgentState::Blocked;
+        agents[1].id.push('\u{1b}');
+        agents[1].name.push_str("\u{1b}ended");
+        agents[1].model.push('\u{1b}');
+        agents[1].workspace.push('\u{1b}');
+        agents[1].state = AgentState::Ended;
+        let selected_id = agents[0].id.clone();
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::UnsupportedProtocol,
+            source_diagnostic: Some(SourceDiagnostic {
+                observed_protocol: 23,
+                supported_protocols: vec![19, 20],
+                next_action: "upgrade\u{1b} now".into(),
+            }),
+            agents,
+        });
+
+        for (width, height, scene_view) in [
+            (79, 23, SceneView::Split),
+            (80, 24, SceneView::Split),
+            (160, 24, SceneView::Split),
+            (80, 24, SceneView::Freezer),
+        ] {
+            let buffer = render_view_with_warning(
+                &table,
+                width,
+                height,
+                9,
+                Some(&selected_id),
+                scene_view,
+                false,
+                Some("bind\u{1b} warning"),
+            );
+            assert!(buffer
+                .content
+                .iter()
+                .all(|cell| !cell.symbol().chars().any(char::is_control)));
+        }
     }
 }

@@ -7,8 +7,15 @@ use ratatui::{
     Frame,
 };
 
-use super::{state::AgentTable, theme};
+use super::{
+    state::{AgentTable, BOARD_CAP},
+    theme,
+};
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceDiagnostic, SourceStatus};
+
+pub(super) fn sanitize_external(text: &str) -> String {
+    text.chars().filter(|ch| !ch.is_control()).collect()
+}
 
 #[cfg(test)]
 use ratatui::buffer::CellDiffOption;
@@ -30,21 +37,25 @@ fn workspace_display_name(workspace: &str) -> &str {
 }
 
 pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
-    let model = if agent.model.trim().is_empty() {
+    let model = sanitize_external(if agent.model.trim().is_empty() {
         "Unavailable"
     } else {
         agent.model.trim()
-    };
+    });
     let tickets = if agent.session.tickets == 0 {
         "Unavailable".into()
     } else {
         agent.session.tickets.to_string()
     };
     [
-        format!("{} · {}", agent.name, state_label(&agent.state)),
+        format!(
+            "{} · {}",
+            sanitize_external(&agent.name),
+            state_label(&agent.state)
+        ),
         format!(
             "Workspace: {} · Model: {model} · Tickets: {tickets}",
-            workspace_display_name(&agent.workspace),
+            sanitize_external(workspace_display_name(&agent.workspace)),
         ),
     ]
 }
@@ -110,7 +121,7 @@ pub(crate) fn status_lines(
                     .map(u64::to_string)
                     .collect::<Vec<_>>()
                     .join(", "),
-                diagnostic.next_action
+                sanitize_external(&diagnostic.next_action)
             )
         })
     } else {
@@ -213,16 +224,16 @@ pub fn draw(
         };
         Row::new(vec![
             Cell::from(if selected_row {
-                format!("> {}", agent.name)
+                format!("> {}", sanitize_external(&agent.name))
             } else {
-                agent.name.clone()
+                sanitize_external(&agent.name)
             })
             .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
             Cell::from(state_label(&agent.state))
                 .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
-            Cell::from(agent.model.clone()),
-            Cell::from(workspace_display_name(&agent.workspace)),
+            Cell::from(sanitize_external(&agent.model)),
+            Cell::from(sanitize_external(workspace_display_name(&agent.workspace))),
             Cell::from(agent.session.tickets.to_string()),
             Cell::from(format_duration(agent.session.runtime_ms)),
         ])
@@ -261,10 +272,10 @@ pub fn draw(
         ),
         areas[1],
     );
-    let board_rows = table.board().iter().map(|entry| {
+    let board_rows = table.board().iter().rev().take(3).map(|entry| {
         Row::new([format!(
             "{} · {} · {} TICKETS · FINAL {}",
-            entry.name,
+            sanitize_external(&entry.name),
             format_duration(entry.runtime_ms),
             entry.tickets,
             state_label(&entry.final_state)
@@ -294,9 +305,15 @@ pub fn draw(
     } else {
         "q / Esc quit"
     };
+    let board = format!("86 {}/{BOARD_CAP}", table.board().len());
     let status = warning.map_or_else(
-        || format!("{keys} · tick {tick}"),
-        |warning| format!("{warning} · {keys} · tick {tick}"),
+        || format!("{keys} · tick {tick} · {board}"),
+        |warning| {
+            format!(
+                "{} · {keys} · tick {tick} · {board}",
+                sanitize_external(warning)
+            )
+        },
     );
     frame.render_widget(Paragraph::new(Line::from(status)), status_area);
 }
@@ -494,7 +511,8 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
-                    SceneView::Kitchen,
+                    SceneView::Split,
+                    false,
                 )
             })
             .unwrap();
@@ -544,7 +562,8 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
-                    SceneView::Kitchen,
+                    SceneView::Split,
+                    false,
                 )
             })
             .unwrap();
