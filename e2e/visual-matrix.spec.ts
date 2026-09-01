@@ -176,9 +176,7 @@ test("reduced startup preserves idle working blocked waiting and ended state ind
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=ended&agents=1&stats");
-  await expect(
-    page.getByRole("status").filter({ hasText: "Waiting for agents" }),
-  ).toBeVisible();
+  await expect(placard(page)).toBeVisible();
   await expect
     .poll(async () => sceneMetrics(page))
     .toMatchObject({
@@ -370,10 +368,8 @@ for (const count of COUNTS) {
     const errors = watchErrors(page);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`/?preset=ended&agents=${count}`);
-    // All records are 86'd, so the truthful mode treatment is the empty pill.
-    await expect(
-      page.getByRole("status").filter({ hasText: "Waiting for agents" }),
-    ).toBeVisible();
+    // Visual playground is demo: empty kitchen keeps DEMO SERVICE, not live waiting.
+    await expect(placard(page)).toBeVisible();
     // Ended records pass through the store before the first frame, so no
     // active station exists to focus.
     await page.keyboard.press("ArrowRight");

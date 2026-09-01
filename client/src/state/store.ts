@@ -196,7 +196,12 @@ export class AgentStore {
       for (const agent of event.agents) this.upsert(agent);
     } else if (event.operation === "upsert") this.upsert(event.agent);
     else this.remove(event.agentId);
-    this.mode = this.agents.size ? event.mode : "empty";
+    this.mode =
+      this.agents.size === 0 &&
+      event.mode === "live" &&
+      this.sourceStatus === "connected"
+        ? "empty"
+        : event.mode;
     this.emitChange();
     if (!sameCoarse(before, this.coarse())) this.emitCoarse();
   }
