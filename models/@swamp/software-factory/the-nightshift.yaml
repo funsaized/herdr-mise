@@ -513,4 +513,8 @@ reports:
               methods: [summary],
           }
         - { name: "@mgreten/software-factory-flow-metrics", methods: [summary] }
+        - {
+              name: "@funsaized/nightshift-factory-analytics",
+              methods: [status, summary],
+          }
 methods: {}
