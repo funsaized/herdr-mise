@@ -329,10 +329,29 @@ attempt and lets the factory distinguish code rework from an operational retry.
   without the human explicitly saying so; record rejections with their
   reason verbatim via `reject`.
 - Multiple transitions satisfied → ask the human which to take.
-- `cycleLimitBlocked: true` → the run is parked. Present the cycle history
-  from the journal query (see "Resuming and recovery") — not from memory —
-  and let the human grant `approve gateId=cycle-override:<stage>` (one grant
-  = one entry) or abort/escalate.
+- `cycleLimitBlocked: true` → present the cycle history from the journal query
+  (see "Resuming and recovery") and follow the definition's explicit parking
+  or escalation policy. Only a generic factory without such a route should
+  offer a human `cycle-override:<stage>` for one entry.
+
+## Nightshift resident mode
+
+For autonomous Nightshift operation, load
+[`nightshift-modes.md`](nightshift-modes.md) before selecting work. Refresh the
+factory-wide status, classify every run, and apply that reference's priority
+and checkout-exclusion rules. Before a fan-out, call `record_dispatch` once for
+each selected work item.
+
+After each execution, persist its products, refresh status, and take at most one
+unambiguous transition without a human gate. Leave human-wait and `parked`
+items in place while selecting other work. Ship preparation remains
+interactive and stops at `ship-approval` after the candidate pull request is
+recorded.
+
+When no work is actionable, fetch each gate's subject and own artifacts from
+Swamp data, report the human queue, and idle without polling. Stop selecting
+new work promptly when instructed. Never call `approve` or `reset` without
+explicit human instruction.
 
 ## Presenting for human approval
 
