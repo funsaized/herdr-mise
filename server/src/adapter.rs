@@ -107,13 +107,6 @@ struct RawAgent {
     #[serde(default)]
     title: Option<String>,
     agent_status: RawStatus,
-    #[serde(default)]
-    agent_session: Option<AgentSession>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct AgentSession {
-    value: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -177,12 +170,7 @@ impl Normalizer {
         let mut current = HashSet::new();
         let mut agents = Vec::with_capacity(source.len());
         for agent in source {
-            let id = agent
-                .agent_session
-                .as_ref()
-                .map(|s| s.value.clone())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| agent.pane_id.clone());
+            let id = agent.pane_id.clone();
             current.insert(id.clone());
             let state = match agent.agent_status {
                 RawStatus::Idle | RawStatus::Unknown => AgentState::Idle,
@@ -378,6 +366,25 @@ mod tests {
             .unwrap();
         assert_eq!(out.ended_ids, vec!["p-1"]);
     }
+
+    #[test]
+    fn starting_agent_session_does_not_end_its_pane() {
+        let mut normalizer = Normalizer::default();
+        let mut snapshot: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        let first = normalizer
+            .normalize_snapshot_value(snapshot.clone(), "before-message")
+            .unwrap();
+        snapshot["result"]["snapshot"]["agents"][0]["agent_session"] =
+            json!({"value": "new-session"});
+        let after_message = normalizer
+            .normalize_snapshot_value(snapshot, "after-message")
+            .unwrap();
+
+        assert_eq!(first.agents[0].id, "p-1");
+        assert_eq!(after_message.agents[0].id, "p-1");
+        assert!(after_message.ended_ids.is_empty());
+    }
     #[test]
     fn rejects_protocol_mismatch_and_malformed() {
         let mut n = Normalizer::default();
@@ -445,19 +452,19 @@ mod tests {
         let cases = [
             (
                 include_str!("../tests/fixtures/snapshot-herdr-0.7.5-p17.json"),
-                "fictional-session-17",
+                "fictional-pane-17",
                 AgentState::Working,
                 "Example Kitchen",
             ),
             (
                 include_str!("../tests/fixtures/snapshot-herdr-0.8.0-p19.json"),
-                "fictional-session-19",
+                "fictional-pane-19",
                 AgentState::Blocked,
                 "Example Pantry",
             ),
             (
                 include_str!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json"),
-                "fictional-session-20",
+                "fictional-pane-20",
                 AgentState::Working,
                 "Example Kitchen",
             ),

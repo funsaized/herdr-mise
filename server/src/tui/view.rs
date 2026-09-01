@@ -497,7 +497,7 @@ mod tests {
         let shutdown = CancellationToken::new();
         let mut selected = None;
         assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
-        assert_eq!(selected.as_deref(), Some("fictional-session-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -515,7 +515,7 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
-                    SceneView::Split,
+                    SceneView::Kitchen,
                     false,
                 )
             })
@@ -566,7 +566,7 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
-                    SceneView::Split,
+                    SceneView::Kitchen,
                     false,
                 )
             })
@@ -582,7 +582,7 @@ mod tests {
             mode: AppMode::Live,
             operation: DeltaOperation::Remove,
             agent: None,
-            agent_id: Some("fictional-session-20".into()),
+            agent_id: Some("fictional-pane-20".into()),
         });
         retain_selection(&mut selected, &table);
         assert_eq!(selected, None);
