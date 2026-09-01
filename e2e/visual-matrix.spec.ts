@@ -411,9 +411,8 @@ for (const count of COUNTS) {
     ]) {
       await page.setViewportSize(viewport);
       await page.goto(`/?preset=ended&agents=${count}&stats`);
-      await expect(
-        page.getByRole("status").filter({ hasText: "Waiting for agents" }),
-      ).toBeVisible();
+      // Visual playground is demo: the emptied kitchen keeps the DEMO placard.
+      await expect(placard(page)).toBeVisible();
 
       const navigation = page.getByRole("navigation", {
           name: "Agent stations",
