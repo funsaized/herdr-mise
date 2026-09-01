@@ -3,7 +3,7 @@ use std::time::Duration;
 use herdr_mise_server::{
     discovery,
     feed::Feed,
-    runtime::{self, Mode, HTTP_ADDRESS},
+    runtime::{self, Mode},
     service, tui,
 };
 use tokio_util::sync::CancellationToken;
@@ -11,6 +11,9 @@ use tokio_util::sync::CancellationToken;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mode = runtime::parse_mode(std::env::args().skip(1))?;
+    let http_address = runtime::http_address(runtime::parse_http_port_env(std::env::var(
+        "HERDR_MISE_PORT",
+    ))?);
     let shutdown = CancellationToken::new();
     let feed = Feed::start(
         discovery::discover_socket(),
@@ -32,8 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match mode {
         Mode::Http => {
-            let listener = tokio::net::TcpListener::bind(HTTP_ADDRESS).await?;
-            eprintln!("herdr-mise listening on http://{HTTP_ADDRESS}");
+            let listener = tokio::net::TcpListener::bind(http_address).await?;
+            eprintln!("herdr-mise listening on http://{}", listener.local_addr()?);
             let signal = shutdown.clone();
             tokio::spawn(async move {
                 let _ = tokio::signal::ctrl_c().await;
@@ -44,9 +47,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Mode::Tui => {
             let mut warning = tui::BindWarning::default();
             let mut http =
-                runtime::bind_for_tui(HTTP_ADDRESS, &mut warning)
+                runtime::bind_for_tui(http_address, &mut warning)
                     .await
                     .map(|listener| {
+                        eprintln!(
+                            "herdr-mise listening on http://{}",
+                            listener
+                                .local_addr()
+                                .expect("bound listener has a local address")
+                        );
                         let shutdown = shutdown.clone();
                         let feed = feed.clone();
                         tokio::spawn(runtime::serve_http(listener, feed, extra_origins, shutdown))

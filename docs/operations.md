@@ -99,8 +99,8 @@ The archive contains three top-level files (no nested directory): the
 `herdr-mise` executable, the project `LICENSE`, and generated
 `THIRD_PARTY_NOTICES.txt` covering the locked production dependency trees and
 bundled font licenses. The binary serves the embedded client, opens the
-WebSocket, and tails the herdr socket (or runs the demo feed). It binds to
-`127.0.0.1:8686` only (`server/src/main.rs`).
+WebSocket, and tails the herdr socket (or runs the demo feed). It binds only to
+`127.0.0.1`, on port `8686` by default (`server/src/main.rs`).
 
 ### Upgrade and uninstall
 
@@ -441,13 +441,17 @@ HERDR_SOCKET_PATH=/tmp/this-socket-does-not-exist.sock ./target/release/herdr-mi
 
 # change demo roster size (default 6, max 12)
 HERDR_MISE_DEMO_COUNT=12 ./target/release/herdr-mise
+
+# change the loopback HTTP port (default 8686; 1024-65535)
+HERDR_MISE_PORT=9000 ./target/release/herdr-mise
 ```
 
 ## Remote viewing through a personal reverse proxy
 
-The binary always binds to `127.0.0.1:8686` and that does not change.
-By default the `/ws` endpoint also rejects any browser `Origin` other
-than `http://localhost:8686` / `http://127.0.0.1:8686`, so a page
+The binary always binds to `127.0.0.1`; `HERDR_MISE_PORT` is the only listener
+override and changes the port only (default `8686`). By default the `/ws`
+endpoint rejects any browser `Origin` other than `http://localhost:<port>` /
+`http://127.0.0.1:<port>` for that effective port, so a page
 served through a reverse proxy loads but its WebSocket is refused
 with HTTP 403 and the client shows _GAS LEAK — SERVICE SUSPENDED_.
 
@@ -827,13 +831,13 @@ workflow additionally checks source at the immutable commits recorded there.
 - If you are running against a live herdr, the source of truth is
   the herdr pane — herdr-mise only reflects what herdr reports.
 
-### The binary will not bind to `127.0.0.1:8686`
+### The binary will not bind to its loopback port
 
-- The TCP listener is hardcoded to `127.0.0.1:8686` and there is no
-  override (`server/src/main.rs`). Something on the host is already
-  on that port; release it and retry.
+- The TCP listener uses `127.0.0.1:8686` by default. Something on the host is
+  already on the effective port; release it or set `HERDR_MISE_PORT` to an
+  available unprivileged port and retry.
 - If you are inside a sandboxed shell that blocks loopback binds
-  (`listen EPERM 127.0.0.1:8686`), run the binary outside the
+  (for example, `listen EPERM 127.0.0.1:8686`), run the binary outside the
   sandbox. The release smoke has a documented guard for this.
 
 ### Settings do not stick across reloads

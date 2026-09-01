@@ -25,19 +25,21 @@ const EMBEDDED_ASSET_MODE: &str = env!("HERDR_MISE_ASSET_MODE");
 
 struct ServiceState {
     feed: Arc<Feed>,
+    port: u16,
     extra_origins: Vec<String>,
 }
 
-pub fn router(feed: Feed) -> Router {
-    router_with_extra_origins(feed, Vec::new())
+pub fn router(feed: Feed, port: u16) -> Router {
+    router_with_extra_origins(feed, port, Vec::new())
 }
 
-pub fn router_with_extra_origins(feed: Feed, extra_origins: Vec<String>) -> Router {
+pub fn router_with_extra_origins(feed: Feed, port: u16, extra_origins: Vec<String>) -> Router {
     Router::new()
         .route("/ws", get(ws))
         .fallback(get(static_asset))
         .with_state(Arc::new(ServiceState {
             feed: Arc::new(feed),
+            port,
             extra_origins,
         }))
 }
@@ -76,7 +78,7 @@ async fn ws(
     headers: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    if !allowed_origin(&headers, &state.extra_origins) {
+    if !allowed_origin(&headers, state.port, &state.extra_origins) {
         return StatusCode::FORBIDDEN.into_response();
     }
     let feed = state.feed.clone();
@@ -84,14 +86,15 @@ async fn ws(
         .on_upgrade(move |socket| client(socket, feed))
         .into_response()
 }
-fn allowed_origin(headers: &HeaderMap, extra_origins: &[String]) -> bool {
+fn allowed_origin(headers: &HeaderMap, port: u16, extra_origins: &[String]) -> bool {
     let Some(origin) = headers.get(header::ORIGIN) else {
         return true;
     };
     let Ok(origin) = origin.to_str() else {
         return false;
     };
-    matches!(origin, "http://localhost:8686" | "http://127.0.0.1:8686")
+    origin == format!("http://localhost:{port}")
+        || origin == format!("http://127.0.0.1:{port}")
         || extra_origins.iter().any(|extra| extra == origin)
 }
 async fn client(socket: WebSocket, feed: Arc<Feed>) {
@@ -177,7 +180,7 @@ mod tests {
     use super::*;
     use crate::protocol::{AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats};
     use axum::body::to_bytes;
-    use std::future::IntoFuture;
+    use std::{ffi::OsString, future::IntoFuture};
     use tokio::{
         io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
         net::UnixListener,
@@ -186,7 +189,7 @@ mod tests {
     use tower::ServiceExt;
     #[tokio::test]
     async fn serves_root_and_spa_fallback() {
-        let app = router(Feed::fixed(AppMode::Demo, vec![]).await);
+        let app = router(Feed::fixed(AppMode::Demo, vec![]).await, 8686);
         for path in ["/", "/nested/route"] {
             let response = app
                 .clone()
@@ -206,7 +209,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_assets_do_not_fall_back_to_html() {
-        let app = router(Feed::fixed(AppMode::Demo, vec![]).await);
+        let app = router(Feed::fixed(AppMode::Demo, vec![]).await, 8686);
         for path in [
             "/assets/missing.js",
             "/assets/missing",
@@ -229,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn embedded_assets_match_selected_mode_and_mime_types() {
-        let app = router(Feed::fixed(AppMode::Demo, vec![]).await);
+        let app = router(Feed::fixed(AppMode::Demo, vec![]).await, 8686);
         let expected = match EMBEDDED_ASSET_MODE {
             "fallback" => vec![
                 ("/fonts/instrument-sans-400.ttf", None),
@@ -280,7 +283,7 @@ mod tests {
             if let Some(origin) = allowed {
                 headers.insert(header::ORIGIN, origin.parse().unwrap());
             }
-            assert!(allowed_origin(&headers, &[]), "{allowed:?}");
+            assert!(allowed_origin(&headers, 8686, &[]), "{allowed:?}");
         }
         for rejected in [
             "https://localhost:8686",
@@ -290,7 +293,7 @@ mod tests {
         ] {
             let mut headers = HeaderMap::new();
             headers.insert(header::ORIGIN, rejected.parse().unwrap());
-            assert!(!allowed_origin(&headers, &[]), "{rejected}");
+            assert!(!allowed_origin(&headers, 8686, &[]), "{rejected}");
         }
     }
 
@@ -304,7 +307,7 @@ mod tests {
         ] {
             let mut headers = HeaderMap::new();
             headers.insert(header::ORIGIN, allowed.parse().unwrap());
-            assert!(allowed_origin(&headers, &extra), "{allowed}");
+            assert!(allowed_origin(&headers, 8686, &extra), "{allowed}");
         }
         for rejected in [
             "http://herdr-mise.example.com",
@@ -313,7 +316,7 @@ mod tests {
         ] {
             let mut headers = HeaderMap::new();
             headers.insert(header::ORIGIN, rejected.parse().unwrap());
-            assert!(!allowed_origin(&headers, &extra), "{rejected}");
+            assert!(!allowed_origin(&headers, 8686, &extra), "{rejected}");
         }
     }
 
@@ -339,6 +342,105 @@ mod tests {
         }
     }
 
+    #[test]
+    fn http_port_configuration_is_fail_closed_and_loopback_only() {
+        use crate::runtime::{http_address, parse_http_port, parse_http_port_env, HTTP_ADDRESS};
+
+        assert_eq!(parse_http_port(None).unwrap(), 8686);
+        assert_eq!(HTTP_ADDRESS, "127.0.0.1:8686".parse().unwrap());
+        assert_eq!(parse_http_port(Some(" 9000 ")).unwrap(), 9000);
+        assert_eq!(
+            parse_http_port_env(Err(std::env::VarError::NotPresent)).unwrap(),
+            8686
+        );
+        assert!(
+            parse_http_port_env(Err(std::env::VarError::NotUnicode(OsString::from(
+                "invalid"
+            ))))
+            .unwrap_err()
+            .starts_with("HERDR_MISE_PORT:")
+        );
+        for invalid in ["", "not-a-port", "0", "80", "65536"] {
+            assert!(
+                parse_http_port(Some(invalid))
+                    .unwrap_err()
+                    .starts_with("HERDR_MISE_PORT:"),
+                "{invalid:?}"
+            );
+        }
+        assert_eq!(http_address(9000), "127.0.0.1:9000".parse().unwrap());
+    }
+
+    #[tokio::test]
+    async fn occupied_configured_port_fails_without_fallback() {
+        let occupied = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind occupied test port: {error}"),
+        };
+        let address = occupied.local_addr().unwrap();
+        assert_eq!(address.ip(), std::net::Ipv4Addr::LOCALHOST);
+        let error = tokio::net::TcpListener::bind(crate::runtime::http_address(address.port()))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AddrInUse);
+    }
+
+    #[tokio::test]
+    async fn serve_http_uses_effective_port_for_assets_and_websocket_origins() {
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind test server: {error}"),
+        };
+        let address = listener.local_addr().unwrap();
+        assert_ne!(address.port(), 8686);
+        let expected: AgentStateEvent = serde_json::from_str(
+            &std::fs::read_to_string(format!(
+                "{}/../protocol/fixtures/snapshot.v1.json",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let (mode, agents) = match &expected {
+            AgentStateEvent::Snapshot { mode, agents, .. } => (mode.clone(), agents.clone()),
+            _ => unreachable!(),
+        };
+        let shutdown = CancellationToken::new();
+        let server = tokio::spawn(crate::runtime::serve_http(
+            listener,
+            Feed::fixed(mode, agents).await,
+            vec!["https://mise.example.ts.net".to_string()],
+            shutdown.clone(),
+        ));
+
+        let root = raw_http_request(address, "/", None).await;
+        assert!(root.starts_with("HTTP/1.1 200"), "{root}");
+        assert!(root.contains("herdr-mise"));
+
+        for origin in [
+            format!("http://127.0.0.1:{}", address.port()),
+            format!("http://localhost:{}", address.port()),
+            "https://mise.example.ts.net".to_string(),
+        ] {
+            let (headers, mut socket) = websocket_request(address, &origin).await;
+            assert!(headers.starts_with("HTTP/1.1 101"), "{origin}: {headers}");
+            let first = read_server_text(&mut socket).await;
+            assert_eq!(
+                serde_json::from_str::<AgentStateEvent>(&first).unwrap(),
+                expected
+            );
+        }
+        for origin in ["http://127.0.0.1:8686", "https://evil.test"] {
+            let (headers, _) = websocket_request(address, origin).await;
+            assert!(headers.starts_with("HTTP/1.1 403"), "{origin}: {headers}");
+        }
+
+        shutdown.cancel();
+        server.abort();
+    }
+
     #[tokio::test]
     async fn websocket_endpoint_accepts_configured_extra_origin() {
         let feed = Feed::fixed(AppMode::Demo, vec![]).await;
@@ -348,7 +450,11 @@ mod tests {
             Err(error) => panic!("bind test server: {error}"),
         };
         let address = listener.local_addr().unwrap();
-        let app = router_with_extra_origins(feed, vec!["https://mise.example.ts.net".to_string()]);
+        let app = router_with_extra_origins(
+            feed,
+            address.port(),
+            vec!["https://mise.example.ts.net".to_string()],
+        );
         let server = tokio::spawn(axum::serve(listener, app).into_future());
         let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
         socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: https://mise.example.ts.net\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
@@ -366,7 +472,8 @@ mod tests {
             Err(error) => panic!("bind test server: {error}"),
         };
         let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(axum::serve(listener, router(feed)).into_future());
+        let server =
+            tokio::spawn(axum::serve(listener, router(feed, address.port())).into_future());
         let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
         socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: https://evil.test\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
         let headers = read_http_headers(&mut socket).await;
@@ -383,9 +490,10 @@ mod tests {
             Err(error) => panic!("bind test server: {error}"),
         };
         let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(axum::serve(listener, router(feed)).into_future());
+        let server =
+            tokio::spawn(axum::serve(listener, router(feed, address.port())).into_future());
         let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
-        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: http://localhost:8686\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: http://localhost:{}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", address.port()).as_bytes()).await.unwrap();
         assert!(read_http_headers(&mut socket)
             .await
             .starts_with("HTTP/1.1 101"));
@@ -437,7 +545,8 @@ mod tests {
             Err(error) => panic!("bind test server: {error}"),
         };
         let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(axum::serve(listener, router(feed.clone())).into_future());
+        let server =
+            tokio::spawn(axum::serve(listener, router(feed.clone(), address.port())).into_future());
         let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
         socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
         let mut headers = Vec::new();
@@ -503,7 +612,8 @@ mod tests {
             Err(error) => panic!("bind test server: {error}"),
         };
         let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(axum::serve(listener, router(feed.clone())).into_future());
+        let server =
+            tokio::spawn(axum::serve(listener, router(feed.clone(), address.port())).into_future());
         let mut first_client = connect_websocket(address).await;
         assert_snapshot_agent(&mut first_client, "agent-a-live").await;
 
@@ -622,7 +732,7 @@ mod tests {
 
     async fn connect_websocket(address: std::net::SocketAddr) -> tokio::net::TcpStream {
         let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
-        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: http://localhost:8686\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: http://localhost:{}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", address.port()).as_bytes()).await.unwrap();
         assert!(read_http_headers(&mut socket)
             .await
             .starts_with("HTTP/1.1 101"));
@@ -636,6 +746,38 @@ mod tests {
             AgentStateEvent::Snapshot { mode: AppMode::Live, source_status: crate::protocol::SourceStatus::Connected, agents, .. }
                 if agents.len() == 1 && agents[0].id == expected
         ));
+    }
+
+    async fn raw_http_request(
+        address: std::net::SocketAddr,
+        path: &str,
+        origin: Option<&str>,
+    ) -> String {
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        let origin = origin
+            .map(|origin| format!("Origin: {origin}\r\n"))
+            .unwrap_or_default();
+        socket
+            .write_all(
+                format!(
+                    "GET {path} HTTP/1.1\r\nHost: {address}\r\n{origin}Connection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        let mut response = String::new();
+        socket.read_to_string(&mut response).await.unwrap();
+        response
+    }
+
+    async fn websocket_request(
+        address: std::net::SocketAddr,
+        origin: &str,
+    ) -> (String, tokio::net::TcpStream) {
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: {origin}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        (read_http_headers(&mut socket).await, socket)
     }
 
     async fn read_server_text(stream: &mut tokio::net::TcpStream) -> String {

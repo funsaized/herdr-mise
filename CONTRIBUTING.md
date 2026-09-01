@@ -86,8 +86,9 @@ Ground rules that reviews will enforce:
   budgets are tested; changes that regress them need a measured justification.
 - **The blocked state is sacred.** Anything that makes a blocked agent less
   obvious from across the room is a regression, whatever else it improves.
-- **Server binds localhost only.** `127.0.0.1:8686` and the origin policy are
-  security boundaries, not defaults to loosen.
+- **Server binds localhost only.** `127.0.0.1`, the effective port (`8686` by
+  default or `HERDR_MISE_PORT`), and its origin policy are security boundaries,
+  not defaults to loosen.
 - Keep diffs small and root-caused; a fix in the shared path beats guards in
   every caller.
 
