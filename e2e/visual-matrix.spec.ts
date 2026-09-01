@@ -190,9 +190,7 @@ test("reduced startup preserves idle working blocked waiting and ended state ind
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=ended&agents=1&stats");
-  await expect(
-    page.getByRole("status").filter({ hasText: "Waiting for agents" }),
-  ).toBeVisible();
+  await expect(placard(page)).toBeVisible();
   await expect
     .poll(async () => sceneMetrics(page))
     .toMatchObject({

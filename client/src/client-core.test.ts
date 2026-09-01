@@ -216,6 +216,27 @@ describe("agent store machines", () => {
     });
     expect([...store.snapshot().agents.keys()]).toEqual(["live-agent"]);
   });
+  it("keeps demo mode for an empty unsupported snapshot", () => {
+    const store = new AgentStore();
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "demo",
+      sourceStatus: "unsupportedProtocol",
+      sourceDiagnostic: {
+        observedProtocol: 23,
+        supportedProtocols: [19, 20],
+        nextAction: "upgrade Herdr, then retry",
+      },
+      agents: [],
+    });
+    expect(store.snapshot()).toMatchObject({
+      mode: "demo",
+      sourceStatus: "unsupportedProtocol",
+    });
+    store.apply(snapshot());
+    expect(store.snapshot().mode).toBe("empty");
+  });
   it("keeps ended history FIFO-capped at 50 and releases agents", () => {
     const store = new AgentStore();
     for (let i = 0; i < 55; i++)

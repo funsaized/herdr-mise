@@ -12,10 +12,6 @@ impl Sprite {
     pub fn width(self) -> usize {
         self.rows.first().map_or(0, |row| row.len())
     }
-
-    pub fn height(self) -> usize {
-        self.rows.len()
-    }
 }
 
 pub const PREP_A: &[&str] = &[
@@ -109,24 +105,67 @@ pub const BLOCKED: &[&str] = &[
     "..BB...BB..",
 ];
 const ENDED: &[&str] = &[];
-pub const SPIRIT: &[&str] = &[
+pub const SPIRIT_A: &[&str] = &[
+    "...........",
+    "...........",
+    "HHH........",
+    "HhHoSSSSSC.",
+    "HHHSeXeXSC.",
+    "...SSSSSCC.",
+    "...aaaaaA..",
+    "...AAAAA...",
+    "..D.....D..",
+    "..BB...BB..",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+];
+pub const SPIRIT_B: &[&str] = &[
+    "...........",
+    "...........",
+    "........HHH",
+    ".CSSSSSoHhH",
+    ".CSXeXeSHHH",
+    ".CCSSSSS...",
+    "..Aaaaaa...",
+    "...AAAAA...",
+    "..D.....D..",
+    "..BB...BB..",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+];
+pub const SPIRIT_C: &[&str] = &[
+    "...........",
     "...HHHHH...",
     "..HHhHhHH..",
-    ".HHHHHHHHH.",
-    "..HhHhHhH..",
     "...ooooo...",
-    "..oSSSSSo..",
-    "...SXSXS...",
-    "...SSSSS...",
+    "CSSSXSXSSC.",
+    ".CSSSSSSC..",
     "..CaaaaaC..",
-    ".CCCCCCCCC.",
-    ".CCAAAAACC.",
-    "..CAAAAAC..",
     "...AAAAA...",
     "...D...D...",
-    "...D...D...",
     "..BB...BB..",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
 ];
+const SPIRIT_POSES: [&[&str]; 3] = [SPIRIT_A, SPIRIT_B, SPIRIT_C];
+
+pub fn spirit_sprite(pose: u8) -> Sprite {
+    Sprite {
+        rows: SPIRIT_POSES[usize::from(pose) % SPIRIT_POSES.len()],
+    }
+}
 
 pub fn cook_sprite(state: &AgentState, tick: u64) -> Sprite {
     let rows = match state {
@@ -186,8 +225,19 @@ mod tests {
     #[test]
     fn ended_has_no_active_cook_sprite() {
         assert!(cook_sprite(&AgentState::Ended, 0).rows.is_empty());
-        assert_eq!(SPIRIT.len(), SPRITE_HALF_ROWS);
-        assert!(SPIRIT.iter().all(|row| row.len() == SPRITE_WIDTH));
-        assert_eq!(SPIRIT[6].matches('X').count(), 2);
+        for rows in [SPIRIT_A, SPIRIT_B, SPIRIT_C] {
+            assert_eq!(rows.len(), SPRITE_HALF_ROWS);
+            assert!(rows.iter().all(|row| row.len() == SPRITE_WIDTH));
+        }
+        assert_eq!(
+            SPIRIT_A
+                .iter()
+                .map(|row| row.matches('X').count())
+                .sum::<usize>(),
+            2
+        );
+        assert_eq!(spirit_sprite(0).rows, SPIRIT_A);
+        assert_eq!(spirit_sprite(1).rows, SPIRIT_B);
+        assert_eq!(spirit_sprite(3).rows, SPIRIT_A);
     }
 }

@@ -532,6 +532,13 @@ test("parallel intake workflows stay metadata-only", () => {
   assert.deepEqual(auditIntakeWorkflowContract(intakeWorkflows), []);
 });
 
+test("nightshift-ship requires the candidate PR to close the work item", () => {
+  assert.match(
+    nightshiftWorkflows["workflow-nightshift-ship.yaml"],
+    /methodName: require_issue_link/,
+  );
+});
+
 test("Nightshift leaves GitHub board and issue lifecycle state external", () => {
   assert.deepEqual(
     auditNightshiftStateOwnership(

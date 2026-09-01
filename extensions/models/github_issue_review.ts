@@ -86,6 +86,18 @@ export function reviewComment(args: Arguments) {
   return `${marker}\n### Nightshift ${heading}\n\n${findings}`.slice(0, 60_000);
 }
 
+export function assignIssueArgs(repo: string, issueNumber: number) {
+  return [
+    "issue",
+    "edit",
+    String(issueNumber),
+    "--repo",
+    repo,
+    "--add-assignee",
+    "@me",
+  ];
+}
+
 export function planComment(args: PlanArguments) {
   const list = (items: string[]) =>
     items.length === 0 ? "- None" : items.map((item) => `- ${item}`).join("\n");
@@ -180,7 +192,8 @@ export const extension = {
   methods: [
     {
       publish_plan: {
-        description: "Publish one idempotent Nightshift plan to an issue",
+        description:
+          "Publish one idempotent Nightshift plan and assign the actor",
         arguments: PlanArguments,
         execute: async (args: PlanArguments, context: Context) => {
           const repo = z
@@ -195,6 +208,7 @@ export const extension = {
             planComment(args),
             context.signal,
           );
+          await gh(assignIssueArgs(repo, args.issue_number), context.signal);
           const handle = await context.writeResource(
             "published_plan",
             `published-plan-${args.issue_number}`,

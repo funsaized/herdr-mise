@@ -185,6 +185,17 @@ export function App() {
           ? event.target.closest<HTMLElement>(".stationA11yMirror")
           : null;
       if (isInteractiveKeyboardTarget(event.target) && !semanticNav) return;
+      if (event.key === "Tab" && semanticNav) {
+        event.preventDefault();
+        document
+          .querySelector<HTMLButtonElement>(
+            event.shiftKey
+              ? ".settingsTrigger.freezerTrigger"
+              : ".settingsTrigger:not(.freezerTrigger)",
+          )
+          ?.focus();
+        return;
+      }
       if (event.key.toLowerCase() === "s" && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         setStatsOpen((value) => !value);

@@ -511,13 +511,43 @@ mod tests {
         source_a.await.unwrap();
         std::fs::remove_file(&source_path).unwrap();
         tokio::time::timeout(Duration::from_secs(6), async {
+            loop {
+                if matches!(
+                    feed.snapshot().await,
+                    AgentStateEvent::Snapshot {
+                        mode: AppMode::Live,
+                        source_status: crate::protocol::SourceStatus::UnavailableSocket
+                            | crate::protocol::SourceStatus::Timeout,
+                        ..
+                    }
+                ) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .expect("live source loss publishes error status");
+        tokio::time::timeout(Duration::from_secs(6), async {
             let mut header = [0_u8; 2];
             loop {
                 first_client.read_exact(&mut header).await.unwrap();
                 if header[0] & 0x0f == 8 {
                     break;
                 }
-                let length = (header[1] & 0x7f) as usize;
+                let length = match header[1] & 0x7f {
+                    n @ 0..=125 => n as usize,
+                    126 => {
+                        let mut bytes = [0_u8; 2];
+                        first_client.read_exact(&mut bytes).await.unwrap();
+                        u16::from_be_bytes(bytes) as usize
+                    }
+                    _ => {
+                        let mut bytes = [0_u8; 8];
+                        first_client.read_exact(&mut bytes).await.unwrap();
+                        u64::from_be_bytes(bytes) as usize
+                    }
+                };
                 let mut payload = vec![0; length];
                 first_client.read_exact(&mut payload).await.unwrap();
             }
