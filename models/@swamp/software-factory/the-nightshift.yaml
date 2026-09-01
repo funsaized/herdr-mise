@@ -2,7 +2,7 @@ type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 6
+version: 7
 tags: {}
 globalArguments:
     stages:
@@ -55,7 +55,7 @@ globalArguments:
 
         - id: plan-review
           description: Run seven isolated reviewers against the current plan.
-          maxCycles: 5
+          maxCycles: 4
           work:
               mode: workflow
               workflow:
@@ -100,6 +100,19 @@ globalArguments:
                       config:
                           expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
                           message: Rework is available only for a failed plan review round.
+                    - type: max-cycles
+                      config: { stage: plan-review, limit: 4 }
+              - name: park
+                to: parked
+                gates:
+                    - type: artifact-fresh
+                      config: { artifact: plan-review, recordedThisCycle: true }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          message: Parking is available only for a failed plan review round.
+                    - type: max-cycles
+                      config: { stage: plan-review, limit: 4, invert: true }
               - name: retry
                 to: plan-review
                 gates:
@@ -203,7 +216,7 @@ globalArguments:
 
         - id: code-review
           description: Run seven isolated reviewers against the written code and tests.
-          maxCycles: 5
+          maxCycles: 4
           work:
               mode: workflow
               workflow:
@@ -246,6 +259,19 @@ globalArguments:
                       config:
                           expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
                           message: Rework is available only for a failed code review round.
+                    - type: max-cycles
+                      config: { stage: code-review, limit: 4 }
+              - name: park
+                to: parked
+                gates:
+                    - type: artifact-fresh
+                      config: { artifact: code-review, recordedThisCycle: true }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          message: Parking is available only for a failed code review round.
+                    - type: max-cycles
+                      config: { stage: code-review, limit: 4, invert: true }
               - name: retry
                 to: code-review
                 gates:
@@ -259,6 +285,22 @@ globalArguments:
                       config:
                           expr: 'evidence.code_review_run.outputs.failureKind in ["configuration", "infrastructure"]'
                           message: Only configuration or infrastructure failures retry code review.
+
+        - id: parked
+          description: Wait for explicit human approval before another planning or building attempt.
+          transitions:
+              - name: rework-plan
+                to: planning
+                gates:
+                    - type: human-approval
+                      config: { id: rework-parked }
+              - name: rework-build
+                to: building
+                gates:
+                    - type: human-approval
+                      config: { id: rework-parked-build }
+                    - type: artifact-exists
+                      config: { artifact: change-summary }
 
         - id: ship-prep
           description: A human creates and reviews the clean commit and pull request candidate.
