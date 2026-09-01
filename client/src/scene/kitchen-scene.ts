@@ -95,6 +95,11 @@ export interface SceneMetrics {
   endedEntries: number;
   view: "kitchen" | "freezer";
   visibleSpirits: number;
+  board: {
+    headers: string[];
+    rows: { id: string; text: string[] }[];
+    strokedIds: string[];
+  };
   motion: {
     reduced: boolean;
     activeParticles: number;
@@ -103,6 +108,15 @@ export interface SceneMetrics {
     continuous: boolean;
     preferenceChanges: number;
   };
+}
+export const BOARD_HEADERS = ["COOK", "RUNTIME   TICKETS"] as const;
+export function boardPaintStrings(
+  entry: Pick<BoardEntry, "name" | "runtimeMs" | "tickets">,
+) {
+  return [
+    entry.name.toUpperCase(),
+    `${entry.runtimeMs === 0 ? "—" : formatElapsed(entry.runtimeMs)}   ${entry.tickets > 0 ? entry.tickets : "—"}`,
+  ] as const;
 }
 interface StationView {
   node: Container;
@@ -237,6 +251,11 @@ export class KitchenScene {
   private focusedId: string | null = null;
   private lastTheme: ResolvedTheme | null = null;
   private boardSelection: string | null = null;
+  private boardMetrics: SceneMetrics["board"] = {
+    headers: [],
+    rows: [],
+    strokedIds: [],
+  };
   private layout!: SceneLayout;
   private freezerLayout: FreezerLayout | null = null;
   private view: "kitchen" | "freezer" = "kitchen";
@@ -360,6 +379,8 @@ export class KitchenScene {
     this.focusedId = id;
     if (this.layout && this.view === "kitchen") {
       this.drawStations(performance.now());
+      destroyChildren(this.boardLayer);
+      this.drawBoard(paletteIndex(this.resolvedTheme()));
       this.dirty = true;
     } else if (this.view === "freezer") {
       this.redraw();
@@ -397,6 +418,7 @@ export class KitchenScene {
       endedEntries: snapshot.board.length,
       view: this.view,
       visibleSpirits: this.freezerLayout?.spirits.length ?? 0,
+      board: this.boardMetrics,
       motion: {
         reduced: this.reducedMotion,
         activeParticles,
@@ -774,6 +796,7 @@ export class KitchenScene {
       x = (this.layout.wall.width - width) / 2,
       y = 4 * u,
       height = Math.max(22 * u, this.layout.wall.height - 15 * u);
+    this.boardMetrics = { headers: [], rows: [], strokedIds: [] };
     this.boardLayer.addChild(
       new Graphics()
         .rect(x - 2 * u, y - 2 * u, width + 4 * u, height + 4 * u)
@@ -788,7 +811,19 @@ export class KitchenScene {
       style: worldText(p.scene.chalk[index], Math.max(8, 4 * u)),
     });
     title.position.set(x + 3 * u, y + 1 * u);
-    this.boardLayer.addChild(title);
+    const cook = new Text({
+        text: BOARD_HEADERS[0],
+        style: worldText(p.scene.chalk[index], Math.max(8, 2.1 * u)),
+      }),
+      headings = new Text({
+        text: BOARD_HEADERS[1],
+        style: worldText(p.scene.chalk[index], Math.max(8, 2.1 * u)),
+      });
+    cook.position.set(title.x + title.width, y + 1 * u);
+    headings.anchor.set(1, 0);
+    headings.position.set(x + width - 3 * u, y + 1 * u);
+    this.boardLayer.addChild(title, cook, headings);
+    this.boardMetrics.headers = [cook.text, headings.text];
     this.hits = this.hits.filter((hit) => hit.kind !== "board");
     this.store
       .snapshot()
@@ -812,17 +847,19 @@ export class KitchenScene {
   ) {
     const p = getTheme().palette,
       u = this.layout.unit,
-      runtime = Math.max(1, Math.round(entry.runtimeMs / 60_000)),
-      tickets = entry.tickets > 0 ? entry.tickets : "—";
-    if (this.store.snapshot().selectedId === entry.id)
+      stroked =
+        this.store.snapshot().selectedId === entry.id ||
+        this.focusedId === entry.id;
+    if (stroked)
       this.boardLayer.addChild(
         new Graphics()
           .rect(x - u, y - u, width, 5 * u)
           .stroke({ color: p.scene.chalk[index], width: Math.max(1, u * 0.5) }),
       );
     const style = worldText(p.scene.chalk[index], Math.max(8, 2.1 * u)),
-      name = new Text({ text: entry.name.toUpperCase(), style }),
-      facts = new Text({ text: `${runtime}M   ${tickets}`, style });
+      [nameText, factsText] = boardPaintStrings(entry),
+      name = new Text({ text: nameText, style }),
+      facts = new Text({ text: factsText, style });
     name.position.set(x, y);
     facts.anchor.set(1, 0);
     facts.position.set(x + width, y);
@@ -830,6 +867,11 @@ export class KitchenScene {
     name.cursor = "pointer";
     name.on("pointertap", () => this.store.select(entry.id));
     this.boardLayer.addChild(name, facts);
+    this.boardMetrics.rows.push({
+      id: entry.id,
+      text: [name.text, facts.text],
+    });
+    if (stroked) this.boardMetrics.strokedIds.push(entry.id);
     this.hits.push({
       kind: "board",
       id: entry.id,
