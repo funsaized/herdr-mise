@@ -4,17 +4,14 @@ pub mod sprites;
 
 use chrono::{DateTime, Utc};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 
-use self::layout::{
-    compute_freezer_layout, compute_layout, split_orientation, LayoutDecision, PixelRect,
-    SplitOrientation,
-};
+use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, PixelRect};
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
     state::{AgentTable, BoardEntry, BOARD_CAP},
@@ -451,78 +448,18 @@ pub(crate) fn draw_view(
             color_mode,
             selected_id,
             reduced_motion,
-            true,
         ),
-        SceneView::Split => match split_orientation(
-            area.width,
-            area.height,
-            table
-                .agents()
-                .any(|agent| agent.state == AgentState::Blocked),
-        ) {
-            None => draw_kitchen(
-                frame,
-                area,
-                table,
-                warning,
-                now,
-                tick,
-                color_mode,
-                selected_id,
-                reduced_motion,
-            ),
-            Some(orientation) => {
-                let chunks = Layout::default()
-                    .direction(match orientation {
-                        SplitOrientation::Horizontal => Direction::Horizontal,
-                        SplitOrientation::Vertical => Direction::Vertical,
-                    })
-                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                    .split(area);
-                if compute_layout(
-                    chunks[0].width,
-                    chunks[0].height.saturating_mul(2),
-                    table.agents().count(),
-                ) == LayoutDecision::Fallback
-                {
-                    draw_kitchen(
-                        frame,
-                        area,
-                        table,
-                        warning,
-                        now,
-                        tick,
-                        color_mode,
-                        selected_id,
-                        reduced_motion,
-                    );
-                    return;
-                }
-                draw_kitchen(
-                    frame,
-                    chunks[0],
-                    table,
-                    warning,
-                    now,
-                    tick,
-                    color_mode,
-                    selected_id,
-                    reduced_motion,
-                );
-                draw_freezer(
-                    frame,
-                    chunks[1],
-                    table,
-                    warning,
-                    now,
-                    tick,
-                    color_mode,
-                    selected_id,
-                    reduced_motion,
-                    false,
-                );
-            }
-        },
+        SceneView::Kitchen => draw_kitchen(
+            frame,
+            area,
+            table,
+            warning,
+            now,
+            tick,
+            color_mode,
+            selected_id,
+            reduced_motion,
+        ),
     }
 }
 
@@ -923,7 +860,6 @@ fn draw_freezer(
     color_mode: ColorMode,
     selected_id: Option<&str>,
     reduced_motion: bool,
-    fullscreen: bool,
 ) {
     let ids = table
         .board()
@@ -1066,11 +1002,7 @@ fn draw_freezer(
             theme::COAT_LO,
         );
     }
-    let snow_tick = if fullscreen && !reduced_motion {
-        tick
-    } else {
-        0
-    };
+    let snow_tick = if !reduced_motion { tick } else { 0 };
     for particle in particles::snow_at_tick(
         snow_tick,
         area.width.min(i16::MAX as u16) as i16,
@@ -1086,7 +1018,7 @@ fn draw_freezer(
             },
         );
     }
-    if fullscreen && !reduced_motion {
+    if !reduced_motion {
         draw_snowman(&mut canvas, layout.floor);
         draw_gravestone(&mut canvas, layout.floor);
     }
@@ -1189,32 +1121,25 @@ fn draw_freezer(
             Style::default().fg(mapped(theme::TEXT, color_mode)),
         ),
     );
-    if fullscreen {
-        if let Some(agent) = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id))
-        {
-            for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
-                render_line(
-                    frame,
-                    area,
-                    2,
-                    area.height.saturating_sub(3) + row as u16,
-                    area.width.saturating_sub(4),
-                    Line::styled(
-                        facts,
-                        Style::default()
-                            .fg(mapped(theme::TEXT, color_mode))
-                            .bg(mapped(theme::PANEL2, color_mode))
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                );
-            }
+    if let Some(agent) = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id)) {
+        for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
+            render_line(
+                frame,
+                area,
+                2,
+                area.height.saturating_sub(3) + row as u16,
+                area.width.saturating_sub(4),
+                Line::styled(
+                    facts,
+                    Style::default()
+                        .fg(mapped(theme::TEXT, color_mode))
+                        .bg(mapped(theme::PANEL2, color_mode))
+                        .add_modifier(Modifier::BOLD),
+                ),
+            );
         }
     }
-    let keys = if fullscreen {
-        "f split · Esc split · q quit"
-    } else {
-        "f fullscreen · q quit"
-    };
+    let keys = "f kitchen · Esc kitchen · q quit";
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
     let connection = footer_connection(table, warning, connection_width);
     render_line(
@@ -1294,7 +1219,7 @@ pub(crate) mod tests {
             height,
             tick,
             selected_id,
-            SceneView::Split,
+            SceneView::Kitchen,
             false,
         )
     }
@@ -1554,7 +1479,7 @@ pub(crate) mod tests {
             23,
             9,
             None,
-            SceneView::Split,
+            SceneView::Kitchen,
             false,
         ));
         for newest in ["Cook extra-61", "Cook extra-60", "Cook extra-59"] {
@@ -1861,7 +1786,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn split_layout_and_reduced_motion_keep_both_scenes_stable() {
+    fn kitchen_and_freezer_stay_separate_and_respect_reduced_motion() {
         let event = serde_json::from_str::<AgentStateEvent>(include_str!(
             "../../../../protocol/fixtures/snapshot.v1.json"
         ))
@@ -1874,76 +1799,20 @@ pub(crate) mod tests {
         table.apply(event);
 
         for (width, height) in [(160, 24), (80, 48)] {
-            let buffer = render_view(&table, width, height, 9, None, SceneView::Split, false);
+            let buffer = render_view(&table, width, height, 9, None, SceneView::Kitchen, false);
             let output = text(&buffer);
             assert!(output.contains("MISE — LIVE"));
-            assert!(output.contains("WALK-IN FREEZER"));
-            let freezer_origin = if width == 160 { (81, 0) } else { (1, 24) };
-            assert_eq!(buffer.cell(freezer_origin).unwrap().symbol(), " ");
-            assert_eq!(
-                buffer
-                    .cell((freezer_origin.0 + 1, freezer_origin.1))
-                    .unwrap()
-                    .symbol(),
-                "W"
-            );
+            assert!(!output.contains("WALK-IN FREEZER"));
         }
-        let minimum = text(&render_view(
-            &table,
-            80,
-            24,
-            9,
-            None,
-            SceneView::Split,
-            false,
-        ));
-        assert!(minimum.contains("MISE — LIVE"));
-        assert!(!minimum.contains("WALK-IN FREEZER"));
 
-        let dense = live_table(
-            (0..19)
-                .map(|index| record(&index.to_string(), AgentState::Idle))
-                .collect(),
-        );
-        let dense = text(&render_view(
-            &dense,
-            160,
-            24,
-            9,
-            None,
-            SceneView::Split,
-            false,
-        ));
-        assert!(dense.contains("Kitchen status"));
-        assert!(!dense.contains("WALK-IN FREEZER"));
-
-        let kitchen_zero = render_view(&table, 80, 24, 0, None, SceneView::Split, true);
-        let kitchen_nine = render_view(&table, 80, 24, 9, None, SceneView::Split, true);
+        let kitchen_zero = render_view(&table, 80, 24, 0, None, SceneView::Kitchen, true);
+        let kitchen_nine = render_view(&table, 80, 24, 9, None, SceneView::Kitchen, true);
         assert_eq!(kitchen_zero, kitchen_nine);
         assert_eq!(
-            render_view(&table, 79, 23, 0, None, SceneView::Split, true),
-            render_view(&table, 79, 23, 9, None, SceneView::Split, true)
+            render_view(&table, 79, 23, 0, None, SceneView::Kitchen, true),
+            render_view(&table, 79, 23, 9, None, SceneView::Kitchen, true)
         );
 
-        let split_zero = render_view(&table, 160, 24, 0, None, SceneView::Split, false);
-        let split_nine = render_view(&table, 160, 24, 9, None, SceneView::Split, false);
-        for y in 0..24 {
-            for x in 80..160 {
-                assert_eq!(
-                    split_zero.cell((x, y)).unwrap(),
-                    split_nine.cell((x, y)).unwrap()
-                );
-            }
-        }
-        let reduced_freezer = render_view(&table, 80, 24, 0, None, SceneView::Freezer, true);
-        for y in 0..23 {
-            for x in 0..80 {
-                assert_eq!(
-                    split_zero.cell((80 + x, y)).unwrap(),
-                    reduced_freezer.cell((x, y)).unwrap()
-                );
-            }
-        }
         assert_ne!(
             render_view(&table, 80, 24, 0, None, SceneView::Freezer, false),
             render_view(&table, 80, 24, 9, None, SceneView::Freezer, false)
@@ -1962,7 +1831,7 @@ pub(crate) mod tests {
             48,
             9,
             Some("agent-01"),
-            SceneView::Split,
+            SceneView::Kitchen,
             false,
         ));
         assert!(output.contains("BLOCKED"));
@@ -2004,9 +1873,9 @@ pub(crate) mod tests {
         });
 
         for (width, height, scene_view) in [
-            (79, 23, SceneView::Split),
-            (80, 24, SceneView::Split),
-            (160, 24, SceneView::Split),
+            (79, 23, SceneView::Kitchen),
+            (80, 24, SceneView::Kitchen),
+            (160, 24, SceneView::Kitchen),
             (80, 24, SceneView::Freezer),
         ] {
             let buffer = render_view_with_warning(
