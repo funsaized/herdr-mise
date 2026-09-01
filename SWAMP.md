@@ -169,9 +169,13 @@ the issue context and starts the matching factory run. The lifecycle model's
 phase record is not delivery state and must not be used by factory gates.
 
 Nightshift's only GitHub writes after issue creation are implementation-plan
-and adversarial-review comments. Both use hidden publication markers and are
-idempotent per workflow run. Comment publication is fail-closed: the stage does
+comments, adversarial-review comments, and assigning the authenticated actor
+when a plan is published. Comments use hidden publication markers and are
+idempotent per workflow run. Publication is fail-closed: the stage does
 not record successful result evidence when GitHub publication fails.
+Plan publication assigns so the GitHub Project `Item assigned` workflow can
+move `Todo` to `in-progress`. Swamp still never writes the Project `Status`
+field.
 
 GitHub and factory state may diverge by design. For example, a project workflow
 may move an issue to `done` when its pull request merges while Nightshift remains
@@ -180,12 +184,12 @@ work and do not move the board backwards.
 
 Configure these GitHub Nightshift workflows outside Swamp:
 
-| GitHub event                                             | Project status |
-| -------------------------------------------------------- | -------------- |
-| Issue added to project                                   | `Todo`         |
-| Work starts, such as assignment or pull-request creation | `in-progress`  |
-| Pull request is ready and waiting for merge              | `await-merge`  |
-| Issue closes                                             | `done`         |
+| GitHub event                                                   | Project status |
+| -------------------------------------------------------------- | -------------- |
+| Issue added to project                                         | `Todo`         |
+| Work starts: plan publication assigns, or a pull request opens | `in-progress`  |
+| Pull request is ready and waiting for merge                    | `await-merge`  |
+| Issue closes                                                   | `done`         |
 
 The exact triggers are repository policy. Keep the four statuses coarse and do
 not recreate factory stages as board columns. GitHub's supported Projects API
@@ -307,7 +311,9 @@ GitHub Project workflows move board cards independently; there is no Swamp
 projection or repair workflow.
 
 The `nightshift-issues` model refreshes issue context without posting lifecycle
-comments or syncing lifecycle labels. Planning publishes the current plan.
+comments or syncing lifecycle labels. Planning publishes the current plan and
+assigns the authenticated actor. Ship-prep pull requests must close the work
+item (`Fixes #<issue>`). `nightshift-ship` fails unless that link exists.
 Plan-review and code-review workflows publish their seven-lane findings after
 recording the factory artifact.
 

@@ -18,11 +18,24 @@ inputs:
     subjectRoot:
       type: string
       minLength: 1
-  required: [workItem, commit, baseCommit, subjectRoot]
+    prUrl:
+      type: string
+      minLength: 1
+  required: [workItem, commit, baseCommit, subjectRoot, prUrl]
 jobs:
   - name: ship
     description: Verify the exact commit before human merge review.
     steps:
+      - name: require-issue-link
+        task:
+          type: model_method
+          modelIdOrName: nightshift-github
+          methodName: require_issue_link
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            repo: funsaized/herdr-mise
+            prUrl: ${{ inputs.prUrl }}
+        dependsOn: []
       - name: verify-candidate
         task:
           type: workflow
@@ -31,7 +44,8 @@ jobs:
             commit: ${{ inputs.commit }}
             baseCommit: ${{ inputs.baseCommit }}
             subjectRoot: ${{ inputs.subjectRoot }}
-        dependsOn: []
+        dependsOn:
+          - { step: require-issue-link, condition: { type: succeeded } }
       - name: record-shipping-run
         task:
           type: model_method
@@ -48,4 +62,4 @@ jobs:
         dependsOn:
           - { step: verify-candidate, condition: { type: succeeded } }
     dependsOn: []
-version: 4
+version: 5
