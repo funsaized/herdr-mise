@@ -2,7 +2,7 @@ type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 4
+version: 5
 tags: {}
 globalArguments:
     stages:
@@ -100,6 +100,19 @@ globalArguments:
                       config:
                           expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
                           message: Rework is available only for a failed plan review round.
+              - name: retry
+                to: plan-review
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: plan-review-run,
+                              requireField: { status: failed },
+                          }
+                    - type: cel
+                      config:
+                          expr: 'evidence.plan_review_run.outputs.failureKind in ["configuration", "infrastructure"]'
+                          message: Only configuration or infrastructure failures retry plan review.
               - name: request-rework
                 to: plan-feedback
                 manual: true
@@ -233,6 +246,19 @@ globalArguments:
                       config:
                           expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
                           message: Rework is available only for a failed code review round.
+              - name: retry
+                to: code-review
+                gates:
+                    - type: evidence-recorded
+                      config:
+                          {
+                              name: code-review-run,
+                              requireField: { status: failed },
+                          }
+                    - type: cel
+                      config:
+                          expr: 'evidence.code_review_run.outputs.failureKind in ["configuration", "infrastructure"]'
+                          message: Only configuration or infrastructure failures retry code review.
 
         - id: ship-prep
           description: A human creates and reviews the clean commit and pull request candidate.
