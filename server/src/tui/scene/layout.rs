@@ -2,45 +2,8 @@ use super::super::theme;
 
 pub const MIN_SCENE_WIDTH: u16 = 80;
 pub const MIN_SCENE_PIXEL_HEIGHT: u16 = 48;
-const MIN_SCENE_CELL_HEIGHT: u16 = MIN_SCENE_PIXEL_HEIGHT / 2;
 const MIN_STATION_PITCH: u16 = 4;
 const MAX_STATION_PITCH: u16 = 28;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SplitOrientation {
-    Horizontal,
-    Vertical,
-}
-
-pub fn split_orientation(width: u16, height: u16, blocked: bool) -> Option<SplitOrientation> {
-    let horizontal = width / 2 >= MIN_SCENE_WIDTH && height >= MIN_SCENE_CELL_HEIGHT;
-    let vertical = width >= MIN_SCENE_WIDTH && height / 2 >= MIN_SCENE_CELL_HEIGHT;
-    match (horizontal, vertical) {
-        (false, false) => None,
-        (true, false) => Some(SplitOrientation::Horizontal),
-        (false, true) => Some(SplitOrientation::Vertical),
-        (true, true) if blocked => {
-            let kitchen_horizontal = u32::from(width / 2) * u32::from(height);
-            let kitchen_vertical = u32::from(width) * u32::from(height / 2);
-            if kitchen_vertical > kitchen_horizontal {
-                Some(SplitOrientation::Vertical)
-            } else {
-                Some(SplitOrientation::Horizontal)
-            }
-        }
-        (true, true) => {
-            let leftover_horizontal =
-                u32::from(width.saturating_sub(MIN_SCENE_WIDTH * 2)) * u32::from(height);
-            let leftover_vertical =
-                u32::from(width) * u32::from(height.saturating_sub(MIN_SCENE_CELL_HEIGHT * 2));
-            if leftover_vertical > leftover_horizontal {
-                Some(SplitOrientation::Vertical)
-            } else {
-                Some(SplitOrientation::Horizontal)
-            }
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PixelRect {
@@ -352,19 +315,6 @@ mod tests {
             compute_layout(300, 160, usize::MAX),
             LayoutDecision::Fallback
         );
-    }
-
-    #[test]
-    fn split_prefers_leftover_space_unless_blocked_needs_more_kitchen() {
-        assert_eq!(
-            split_orientation(161, 49, false),
-            Some(SplitOrientation::Vertical)
-        );
-        assert_eq!(
-            split_orientation(161, 49, true),
-            Some(SplitOrientation::Horizontal)
-        );
-        assert_eq!(split_orientation(80, 24, false), None);
     }
 
     #[test]
