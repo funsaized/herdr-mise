@@ -82,7 +82,7 @@ type Policy = {
   steps: PolicyStep[];
 };
 
-async function command(args: string[], cwd: string, signal?: AbortSignal) {
+async function commandBytes(args: string[], cwd: string, signal?: AbortSignal) {
   const result = await new Deno.Command("git", {
     args: [
       "-c",
@@ -102,7 +102,11 @@ async function command(args: string[], cwd: string, signal?: AbortSignal) {
       new TextDecoder().decode(result.stderr).trim() || "git failed",
     );
   }
-  return new TextDecoder().decode(result.stdout).trim();
+  return result.stdout;
+}
+
+async function command(args: string[], cwd: string, signal?: AbortSignal) {
+  return new TextDecoder().decode(await commandBytes(args, cwd, signal)).trim();
 }
 
 function timing(name: string, value: Record<string, unknown>) {
@@ -249,7 +253,9 @@ async function collectManaged(
 
   const configuration: Record<string, string> = {};
   for (const path of [...policy.configurationFiles].sort()) {
-    configuration[path] = await sha256(await readRegularFile(control, path));
+    configuration[path] = await sha256(
+      await commandBytes(["show", `${controlCommit}:${path}`], control, context.signal),
+    );
   }
   let recordCount = 0;
   const steps = [];
