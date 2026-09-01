@@ -230,11 +230,7 @@ fn blocked_elapsed(agent: &AgentRecord, now: DateTime<Utc>) -> String {
 fn format_runtime(milliseconds: u64) -> String {
     let seconds = milliseconds / 1_000;
     let minutes = seconds / 60;
-    if minutes >= 60 {
-        format!("{}:{:02}", minutes / 60, minutes % 60)
-    } else {
-        format!("{:02}:{:02}", minutes, seconds % 60)
-    }
+    format!("{:02}:{:02}", minutes, seconds % 60)
 }
 
 fn split_line(text: &str, width: usize) -> (String, String) {
@@ -256,19 +252,38 @@ fn split_line(text: &str, width: usize) -> (String, String) {
 
 fn board_line(entry: &BoardEntry, width: usize) -> String {
     if width < 12 {
-        return entry.name.chars().take(width).collect();
+        return view::sanitize_display(&entry.name)
+            .chars()
+            .take(width)
+            .collect();
     }
-    let name_width = width.saturating_sub(12).max(4);
-    format!(
-        "{:<name_width$} {:>5} {:>3}T",
-        entry
-            .name
+    let runtime = if entry.runtime_ms == 0 {
+        "—".into()
+    } else {
+        format_runtime(entry.runtime_ms)
+    };
+    let tickets = if entry.tickets == 0 {
+        "—".into()
+    } else {
+        entry.tickets.to_string()
+    };
+    board_columns(
+        &view::sanitize_display(&entry.name)
             .to_uppercase()
             .chars()
-            .take(name_width)
+            .take(width.saturating_sub(theme::BOARD_FACTS_WIDTH).max(4))
             .collect::<String>(),
-        format_runtime(entry.runtime_ms),
-        entry.tickets,
+        &runtime,
+        &tickets,
+        width,
+    )
+}
+
+fn board_columns(name: &str, runtime: &str, tickets: &str, width: usize) -> String {
+    let name_width = width.saturating_sub(theme::BOARD_FACTS_WIDTH).max(4);
+    format!(
+        "{name:<name_width$} {runtime:>fact_width$} {tickets:>fact_width$}",
+        fact_width = theme::BOARD_FACT_WIDTH,
     )
 }
 
@@ -300,7 +315,15 @@ pub(crate) fn draw_view(
 ) {
     let area = frame.area();
     if scene_view == SceneView::Freezer {
-        draw_freezer(frame, table, warning, color_mode, scene_supported);
+        draw_freezer(
+            frame,
+            table,
+            warning,
+            now,
+            tick,
+            color_mode,
+            scene_supported,
+        );
         return;
     }
     let agents = table.agents().collect::<Vec<_>>();
@@ -442,20 +465,36 @@ pub(crate) fn draw_view(
             .border_style(Style::default().fg(mapped(theme::BRASS, color_mode))),
         board_area,
     );
-    for (row, entry) in table.board().iter().rev().take(4).enumerate() {
+    if !table.board().is_empty() {
+        let width = usize::from(board_area.width.saturating_sub(4));
         render_line(
             frame,
             area,
             board_area.x + 2,
-            board_area.y + 1 + row as u16,
+            board_area.y + 1,
             board_area.width.saturating_sub(4),
             Line::styled(
-                board_line(entry, usize::from(board_area.width.saturating_sub(4))),
+                board_columns("COOK", "RUNTIME", "TICKETS", width),
                 Style::default()
                     .fg(mapped(theme::CHALK, color_mode))
                     .bg(mapped(theme::BOARD, color_mode)),
             ),
         );
+        for (row, entry) in table.board().iter().rev().take(3).enumerate() {
+            render_line(
+                frame,
+                area,
+                board_area.x + 2,
+                board_area.y + 2 + row as u16,
+                board_area.width.saturating_sub(4),
+                Line::styled(
+                    board_line(entry, width),
+                    Style::default()
+                        .fg(mapped(theme::CHALK, color_mode))
+                        .bg(mapped(theme::BOARD, color_mode)),
+                ),
+            );
+        }
     }
 
     let blocked = agents
@@ -478,7 +517,7 @@ pub(crate) fn draw_view(
     } else {
         let names = blocked
             .iter()
-            .map(|agent| agent.name.as_str())
+            .map(|agent| view::sanitize_display(&agent.name))
             .collect::<Vec<_>>()
             .join(", ");
         let elapsed = blocked_elapsed(blocked[0], now);
@@ -574,7 +613,10 @@ pub(crate) fn draw_view(
         let maximum_name = usize::from(available)
             .saturating_sub(suffix.chars().count() + 2)
             .max(1);
-        let display_name = agent.name.chars().take(maximum_name).collect::<String>();
+        let display_name = view::sanitize_display(&agent.name)
+            .chars()
+            .take(maximum_name)
+            .collect::<String>();
         render_line(
             frame,
             area,
@@ -664,6 +706,8 @@ fn draw_freezer(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
+    now: DateTime<Utc>,
+    tick: u64,
     color_mode: ColorMode,
     scene_supported: bool,
 ) {
@@ -675,11 +719,11 @@ fn draw_freezer(
         .collect::<Vec<_>>();
     let Some(layout) = compute_freezer_layout(area.width, area.height.saturating_mul(2), &ids)
     else {
-        view::draw(frame, table, warning, Utc::now(), 0, None);
+        view::draw(frame, table, warning, now, tick, None);
         return;
     };
     if !scene_supported {
-        view::draw(frame, table, warning, Utc::now(), 0, None);
+        view::draw(frame, table, warning, now, tick, None);
         return;
     }
     let mut canvas = PixelCanvas::new(
@@ -803,8 +847,7 @@ fn draw_freezer(
     );
     for (id, slot) in &layout.spirits {
         if let Some(entry) = table.board().iter().find(|entry| &entry.id == id) {
-            let name = entry
-                .name
+            let name = view::sanitize_display(&entry.name)
                 .to_uppercase()
                 .chars()
                 .take(11)
@@ -1390,6 +1433,64 @@ pub(crate) mod tests {
         assert!(output.contains("COOK A"));
         assert!(output.contains("Waiting for agents"));
 
+        let fixture = serde_json::from_str::<AgentStateEvent>(include_str!(
+            "../../../../protocol/fixtures/snapshot.v1.json"
+        ))
+        .unwrap();
+        let mut fixture_agent = match &fixture {
+            AgentStateEvent::Snapshot { agents, .. } => agents[0].clone(),
+            _ => unreachable!(),
+        };
+        let mut fixture_table = AgentTable::default();
+        fixture_table.apply(fixture);
+        fixture_agent.state = AgentState::Ended;
+        fixture_table.apply(AgentStateEvent::Delta {
+            version: 1,
+            mode: AppMode::Live,
+            operation: DeltaOperation::Upsert,
+            agent: Some(fixture_agent.clone()),
+            agent_id: None,
+        });
+        let buffer = render(&fixture_table, 80, 24, 4);
+        let rows = buffer
+            .content
+            .chunks(80)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows[4].chars().skip(54).take(22).collect::<String>(),
+            "COOK   RUNTIME TICKETS"
+        );
+        assert_eq!(
+            rows[5].chars().skip(54).take(22).collect::<String>(),
+            "REFACT   15:01       4"
+        );
+
+        fixture_agent.id = "zero-runtime".into();
+        fixture_agent.name = "zero".into();
+        fixture_agent.session.runtime_ms = 0;
+        fixture_agent.session.tickets = 0;
+        fixture_table.apply(AgentStateEvent::Delta {
+            version: 1,
+            mode: AppMode::Live,
+            operation: DeltaOperation::Upsert,
+            agent: Some(fixture_agent),
+            agent_id: None,
+        });
+        let buffer = render(&fixture_table, 80, 24, 4);
+        let zero_row = buffer.content.chunks(80).nth(5).unwrap();
+        assert_eq!(
+            zero_row
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>()
+                .chars()
+                .skip(54)
+                .take(22)
+                .collect::<String>(),
+            "ZERO         —       —"
+        );
+
         let mut demo = AgentTable::default();
         demo.apply(AgentStateEvent::Snapshot {
             version: 1,
@@ -1406,5 +1507,63 @@ pub(crate) mod tests {
         assert!(output.contains("MISE — DEMO SERVICE"));
         assert!(output.contains("Mock feed"));
         assert!(output.contains("Nothing here is real"));
+    }
+
+    #[test]
+    fn scene_strips_c0_c1_del_from_herdr_strings() {
+        let mut fixture = serde_json::from_str::<AgentStateEvent>(include_str!(
+            "../../../../protocol/fixtures/snapshot.v1.json"
+        ))
+        .unwrap();
+        let tainted = "\x1b[31m\u{9b}\x7fSAFE";
+        let AgentStateEvent::Snapshot {
+            source_status,
+            source_diagnostic,
+            agents,
+            ..
+        } = &mut fixture
+        else {
+            unreachable!()
+        };
+        *source_status = SourceStatus::UnsupportedProtocol;
+        *source_diagnostic = Some(SourceDiagnostic {
+            observed_protocol: 23,
+            supported_protocols: vec![20],
+            next_action: tainted.into(),
+        });
+        agents[0].name = tainted.into();
+        agents[0].model = tainted.into();
+        agents[0].workspace = format!("/work/{tainted}");
+        agents[0].state = AgentState::Blocked;
+        let ended = agents[0].clone();
+        let mut table = AgentTable::default();
+        table.apply(fixture);
+
+        let output = text(&render_selected(&table, 110, 40, 0, Some("agent-01")));
+        assert!(output.contains("[31mSAFE"));
+        assert!(['\x1b', '\u{9b}', '\x7f']
+            .into_iter()
+            .all(|character| !output.contains(character)));
+
+        let mut ended = ended;
+        ended.state = AgentState::Ended;
+        table.apply(AgentStateEvent::Delta {
+            version: 1,
+            mode: AppMode::Live,
+            operation: DeltaOperation::Upsert,
+            agent: Some(ended),
+            agent_id: None,
+        });
+        let output = text(&render(&table, 80, 24, 0));
+        assert!(output.contains("[31MS"));
+        assert!(['\x1b', '\u{9b}', '\x7f']
+            .into_iter()
+            .all(|character| !output.contains(character)));
+
+        let output = text(&render_freezer(&table, 80, 24));
+        assert!(output.contains("[31MSAFE"));
+        assert!(['\x1b', '\u{9b}', '\x7f']
+            .into_iter()
+            .all(|character| !output.contains(character)));
     }
 }

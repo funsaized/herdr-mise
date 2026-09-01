@@ -142,6 +142,33 @@ export function App() {
     }, 1_000);
     return () => window.clearInterval(timer);
   }, [statsOpen]);
+  const boardEntries = clientStore.snapshot().board,
+    spiritAgents = hits
+      .filter((hit) => hit.kind === "spirit")
+      .flatMap((hit) => {
+        const entry = boardEntries.find((item) => item.id === hit.id);
+        return entry
+          ? [{ id: entry.id, name: entry.name, targetState: "ended" as const }]
+          : [];
+      }),
+    kitchenControls = [
+      ...agents,
+      ...hits
+        .filter((hit) => hit.kind === "board")
+        .flatMap((hit) => {
+          const entry = boardEntries.find((item) => item.id === hit.id);
+          return entry
+            ? [
+                {
+                  id: entry.id,
+                  name: entry.name,
+                  targetState: "ended" as const,
+                },
+              ]
+            : [];
+        }),
+    ],
+    controls = view === "freezer" ? spiritAgents : kitchenControls;
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (isGlobalEscape(event)) {
@@ -163,11 +190,7 @@ export function App() {
         setStatsOpen((value) => !value);
         return;
       }
-      const stationIds = hits
-        .filter(
-          (hit) => hit.kind === (view === "freezer" ? "spirit" : "station"),
-        )
-        .map((hit) => hit.id);
+      const stationIds = controls.map((agent) => agent.id);
       if (!stationIds.length) return;
       if (
         ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(
@@ -182,17 +205,21 @@ export function App() {
             event.shiftKey
               ? -1
               : 1,
-          buttons = semanticNav
-            ? [...semanticNav.querySelectorAll<HTMLButtonElement>("button")]
+          navigation =
+            semanticNav ??
+            document.querySelector<HTMLElement>(".stationA11yMirror"),
+          buttons = navigation
+            ? [...navigation.querySelectorAll<HTMLButtonElement>("button")]
             : [],
-          index = Math.max(
-            0,
-            semanticNav
-              ? buttons.indexOf(event.target as HTMLButtonElement)
-              : stationIds.indexOf(focusedId ?? ""),
-          ),
+          index = semanticNav
+            ? buttons.indexOf(event.target as HTMLButtonElement)
+            : stationIds.indexOf(focusedId ?? ""),
           nextIndex =
-            (index + direction + stationIds.length) % stationIds.length,
+            index < 0
+              ? direction > 0
+                ? 0
+                : stationIds.length - 1
+              : (index + direction + stationIds.length) % stationIds.length,
           next = stationIds[nextIndex]!;
         setFocusedId(next);
         sceneRef.current?.focus(next);
@@ -206,7 +233,7 @@ export function App() {
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
-  }, [coarse.selectedId, focusedId, hits, settingsOpen, view]);
+  }, [coarse.selectedId, controls, focusedId, settingsOpen, view]);
   useEffect(() => {
     if (coarse.selectedId === null && semanticRestoreRef.current) {
       semanticRestoreRef.current.focus();
@@ -248,16 +275,6 @@ export function App() {
     if (next === "kitchen") setAnnouncement("Kitchen");
   };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
-  const spiritAgents = hits
-    .filter((hit) => hit.kind === "spirit")
-    .flatMap((hit) => {
-      const entry = clientStore
-        .snapshot()
-        .board.find((item) => item.id === hit.id);
-      return entry
-        ? [{ id: entry.id, name: entry.name, targetState: "ended" as const }]
-        : [];
-    });
   return (
     <main className="appShell" style={cssTokens}>
       <div
@@ -271,7 +288,7 @@ export function App() {
         onPointerLeave={() => setHoveredId(null)}
       />
       <SemanticStationControls
-        agents={view === "freezer" ? spiritAgents : agents}
+        agents={controls}
         label={view === "freezer" ? "Ended chefs" : undefined}
         onSelect={(id, element) => {
           semanticRestoreRef.current = element;

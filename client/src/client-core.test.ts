@@ -3,6 +3,7 @@ import type {
   AgentRecord,
   AgentStateEvent,
 } from "../../protocol/generated/agent-state-event";
+import fixtureSnapshot from "../../protocol/fixtures/snapshot.v1.json";
 import {
   blockedPassGeometry,
   compactPixelText,
@@ -17,7 +18,9 @@ import {
 } from "./scene/geometry";
 import {
   BUSSER_SWEEP_MS,
+  BOARD_HEADERS,
   BusserSweepTimeline,
+  boardPaintStrings,
   busserSweepSample,
   sceneMotionPolicy,
   shouldDisposeRetainedStation,
@@ -111,6 +114,24 @@ const upsert = (record: AgentRecord): AgentStateEvent => ({
 });
 
 describe("agent store machines", () => {
+  it("paints fixture-backed 86 board columns with truthful runtime", () => {
+    const store = new AgentStore();
+    store.apply(fixtureSnapshot as AgentStateEvent);
+    const ended = { ...fixtureSnapshot.agents[0]!, state: "ended" as const };
+    store.apply(upsert(ended));
+
+    expect(BOARD_HEADERS).toEqual(["COOK", "RUNTIME   TICKETS"]);
+    expect(boardPaintStrings(store.snapshot().board[0]!)).toEqual([
+      "REFACTOR-AGENT",
+      "15:01   4",
+    ]);
+    expect(boardPaintStrings(store.snapshot().board[0]!)[1]).not.toContain(
+      "15M",
+    );
+    expect(
+      boardPaintStrings({ name: "zero", runtimeMs: 0, tickets: 0 }),
+    ).toEqual(["ZERO", "—   —"]);
+  });
   it("collapses rapid truth changes and converges within one second", () => {
     const clock = new FakeClock(),
       store = new AgentStore(clock);

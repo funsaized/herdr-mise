@@ -29,11 +29,19 @@ fn workspace_display_name(workspace: &str) -> &str {
         .unwrap_or("Unavailable")
 }
 
+pub(super) fn sanitize_display(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect()
+}
+
 pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
-    let model = if agent.model.trim().is_empty() {
+    let model = sanitize_display(&agent.model);
+    let model = if model.trim().is_empty() {
         "Unavailable"
     } else {
-        agent.model.trim()
+        model.trim()
     };
     let tickets = if agent.session.tickets == 0 {
         "Unavailable".into()
@@ -41,10 +49,14 @@ pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
         agent.session.tickets.to_string()
     };
     [
-        format!("{} · {}", agent.name, state_label(&agent.state)),
+        format!(
+            "{} · {}",
+            sanitize_display(&agent.name),
+            state_label(&agent.state)
+        ),
         format!(
             "Workspace: {} · Model: {model} · Tickets: {tickets}",
-            workspace_display_name(&agent.workspace),
+            sanitize_display(workspace_display_name(&agent.workspace)),
         ),
     ]
 }
@@ -110,7 +122,7 @@ pub(crate) fn status_lines(
                     .map(u64::to_string)
                     .collect::<Vec<_>>()
                     .join(", "),
-                diagnostic.next_action
+                sanitize_display(&diagnostic.next_action)
             )
         })
     } else {
@@ -213,16 +225,16 @@ pub fn draw(
         };
         Row::new(vec![
             Cell::from(if selected_row {
-                format!("> {}", agent.name)
+                format!("> {}", sanitize_display(&agent.name))
             } else {
-                agent.name.clone()
+                sanitize_display(&agent.name)
             })
             .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
             Cell::from(state_label(&agent.state))
                 .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
-            Cell::from(agent.model.clone()),
-            Cell::from(workspace_display_name(&agent.workspace)),
+            Cell::from(sanitize_display(&agent.model)),
+            Cell::from(sanitize_display(workspace_display_name(&agent.workspace))),
             Cell::from(agent.session.tickets.to_string()),
             Cell::from(format_duration(agent.session.runtime_ms)),
         ])
@@ -264,7 +276,7 @@ pub fn draw(
     let board_rows = table.board().iter().map(|entry| {
         Row::new([format!(
             "{} · {} · {} TICKETS · FINAL {}",
-            entry.name,
+            sanitize_display(&entry.name),
             format_duration(entry.runtime_ms),
             entry.tickets,
             state_label(&entry.final_state)
@@ -794,5 +806,46 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn compact_view_strips_c0_c1_del_from_herdr_strings() {
+        let mut event = fixture("snapshot.v1.json");
+        let tainted = "\x1b[31m\u{9b}\x7fSAFE";
+        let AgentStateEvent::Snapshot {
+            source_status,
+            source_diagnostic,
+            agents,
+            ..
+        } = &mut event
+        else {
+            unreachable!()
+        };
+        *source_status = SourceStatus::UnsupportedProtocol;
+        *source_diagnostic = Some(SourceDiagnostic {
+            observed_protocol: 23,
+            supported_protocols: vec![20],
+            next_action: tainted.into(),
+        });
+        for agent in agents.iter_mut() {
+            agent.name = tainted.into();
+            agent.model = tainted.into();
+            agent.workspace = format!("/work/{tainted}");
+        }
+        let mut ended = agents[0].clone();
+        ended.state = AgentState::Ended;
+        let mut table = AgentTable::default();
+        table.apply(event);
+        apply_upsert(&mut table, ended);
+
+        let mut terminal = Terminal::new(TestBackend::new(79, 23)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &table, None, Utc::now(), 0, Some("agent-02")))
+            .unwrap();
+        let output = buffer_text(&terminal);
+        assert!(output.contains("[31mSAFE"));
+        assert!(['\x1b', '\u{9b}', '\x7f']
+            .into_iter()
+            .all(|character| !output.contains(character)));
     }
 }
