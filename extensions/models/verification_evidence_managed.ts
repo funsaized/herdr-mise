@@ -254,7 +254,11 @@ async function collectManaged(
   const configuration: Record<string, string> = {};
   for (const path of [...policy.configurationFiles].sort()) {
     configuration[path] = await sha256(
-      await commandBytes(["show", `${controlCommit}:${path}`], control, context.signal),
+      await commandBytes(
+        ["show", `${controlCommit}:${path}`],
+        control,
+        context.signal,
+      ),
     );
   }
   let recordCount = 0;
