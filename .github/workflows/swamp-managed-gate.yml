@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Verify event-derived managed workflow identity
         id: identity
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const expectedPath = '.github/workflows/swamp-managed-verification.yml';
@@ -73,7 +73,7 @@ jobs:
           github-token: ${{ github.token }}
       - name: Correlate request with the current pull request
         id: correlate
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           EVENT_ACTOR: ${{ steps.identity.outputs.actor }}
           EVENT_ATTEMPT: ${{ steps.identity.outputs.attempt }}
@@ -211,7 +211,7 @@ jobs:
             --context "$RUNNER_TEMP/gate-context.json"
       - name: Set exact-SHA managed verification status
         if: always() && steps.correlate.outputs.safe == 'true'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           MANAGED_CONCLUSION: ${{ steps.identity.outputs.conclusion }}
           SOURCE_SHA: ${{ steps.correlate.outputs.head_sha }}
