@@ -248,7 +248,7 @@ globalArguments:
                       config: { artifact: code-review, blocking: [high] }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && (f.category in ["round:pass", "round:warn"] || f.?resolved.orValue(false)))'
                           message: The code review round must resolve to pass or warn.
               - name: rework
                 to: building
@@ -257,7 +257,7 @@ globalArguments:
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
                           message: Rework is available only for a failed code review round.
                     - type: max-cycles
                       config: { stage: code-review, limit: 4 }
@@ -268,7 +268,7 @@ globalArguments:
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
                           message: Parking is available only for a failed code review round.
                     - type: max-cycles
                       config: { stage: code-review, limit: 4, invert: true }
