@@ -11,8 +11,7 @@ servers. It is a window, not an office.
 ![Six AI agents sharing a calm kitchen service with idle, active, blocked, and plated stations](docs/assets/herdr-mise-demo.gif)
 
 The GIF and screens below are repeatable captures from the isolated visual
-playground's deterministic feed. Regenerate them with `npm run capture:readme`
-(Playwright Chromium and `ffmpeg` required).
+playground's deterministic feed; see [Visual playground](docs/operations.md#visual-playground).
 
 | Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -30,11 +29,7 @@ session available, it renders the truthful `MISE — DEMO SERVICE` shell:
 
 The live capture uses verifier workspace labels. The blocked and compact
 examples retain the persistent `MISE — DEMO SERVICE` treatment, so mock data is
-never presented as live state. Regenerate the GIF with
-`scripts/capture-tui-demo.sh` and the static screens with
-`scripts/capture-tui-states.sh`. The GIF wrapper requires `vhs`; the static
-wrapper also requires `ffmpeg`, ImageMagick's `identify`, `tesseract`, and
-macOS `sips`.
+never presented as live state; see [capture sources](docs/tui-scene-parity.md#cross-references).
 
 ## Quick start
 
