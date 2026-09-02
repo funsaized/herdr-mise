@@ -1,5 +1,4 @@
 import { AgentStore } from "./state/store";
-import type { SettingsStorage } from "./state/settings-storage";
 import { isVisualMode, parseVisualConfig } from "./visual-harness";
 function browserStorage() {
   try {
@@ -35,7 +34,7 @@ const motionQuery = () =>
 export function createRuntimeStore(
   mode: string,
   search: string,
-  storage: SettingsStorage | null,
+  storage: Pick<Storage, "getItem" | "setItem"> | null,
 ) {
   if (isVisualMode(mode)) {
     const config = parseVisualConfig(search);

@@ -53,6 +53,13 @@ export function SettingsPanel({
           onChange={toggleSound}
         />
       </SettingRow>
+      <SettingRow title="Atmosphere" note="Window, shelf, and pass decor">
+        <Toggle
+          label="Atmosphere"
+          on={settings.atmosphere}
+          onChange={() => onChange({ atmosphere: !settings.atmosphere })}
+        />
+      </SettingRow>
       <section className="settingBlock">
         <b>Theme</b>
         <div className="segments">

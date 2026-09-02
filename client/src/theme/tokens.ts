@@ -63,6 +63,41 @@ export const tokens = {
     ticketDone: "#cfc9b8",
     transparent: "rgba(0, 0, 0, 0)",
     blockedChip: "rgba(26, 22, 18, 0.82)",
+    atmosphere: {
+      window: {
+        moon: [20, 4, 2],
+        stars: [
+          [3, 4],
+          [8, 9],
+          [13, 3],
+          [6, 12],
+          [16, 10],
+        ],
+        starRadius: 0.35,
+        clouds: [
+          [7, 4, 5, 1.5],
+          [18, 10, 5, 1.5],
+        ],
+      },
+      shelf: {
+        pots: [
+          [6, 7, 5, 2],
+          [18, 7, 5, 2],
+        ],
+        strokeWidth: 1,
+      },
+      pass: {
+        lampCount: 3,
+        ambientPool: [22, 0.5, 11, 0.18],
+        poolAlpha: [0.18, 0.42],
+        stem: [-0.5, -14, 1, 6],
+        shadeTop: [-2, -8, 4, 1.6],
+        shade: [-3, -6.5, 6, 2.5],
+        rim: [-3, -4, 6, 1],
+        bulb: [-1.2, -3, 2.4, 1],
+        pool: [7, 9, 3],
+      },
+    },
     cook: {
       idleFrameMs: 700,
       toqueBobUnits: 0.25,
