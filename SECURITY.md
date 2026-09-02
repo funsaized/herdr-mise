@@ -10,10 +10,12 @@ rather than a public issue. Expect an acknowledgment within a week.
 
 herdr-mise is a localhost-only, read-only visualizer:
 
-- The server binds `127.0.0.1:8686` exclusively and never listens on external
-  interfaces.
-- WebSocket upgrades enforce an origin allowlist (same-origin or explicitly
-  configured `HERDR_MISE_EXTRA_ORIGINS`); foreign origins receive 403.
+- The server binds `127.0.0.1` exclusively and never listens on external
+  interfaces. `HERDR_MISE_PORT` is a port-only operator control; it defaults to
+  `8686` and fails closed on invalid or unavailable values.
+- WebSocket upgrades enforce an origin allowlist for the effective listener
+  port (or explicitly configured `HERDR_MISE_EXTRA_ORIGINS`); foreign origins
+  receive 403.
 - The binary reads one local Unix socket (herdr) and serves embedded static
   assets; it executes nothing, writes nothing outside its own process, and
   sends no telemetry.

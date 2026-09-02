@@ -423,10 +423,11 @@ embedded-bundle option.
 
 Three trust boundaries worth keeping in mind:
 
-1. **Loopback binding only.** The TCP listener is hardcoded to
-   `127.0.0.1:8686` (`server/src/main.rs`). The WebSocket accepts a
-   missing `Origin` for CLI and test clients; from a browser it
-   accepts only `http://localhost:8686` or `http://127.0.0.1:8686`.
+1. **Loopback binding only.** The TCP listener always uses `127.0.0.1`, with
+   `HERDR_MISE_PORT` as a port-only operator control (default `8686`;
+   `server/src/main.rs`). The WebSocket accepts a missing `Origin` for CLI and
+   test clients; from a browser it accepts only `http://localhost:<port>` or
+   `http://127.0.0.1:<port>` for the effective listener port.
    Anything else returns HTTP 403
    (`server/src/service.rs` `allowed_origin`).
 2. **Server keeps zero kitchen concepts.** The server
