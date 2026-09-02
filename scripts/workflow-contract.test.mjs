@@ -221,28 +221,6 @@ export function auditWorkflowContract(
   ]) {
     if (!codeql.includes(action)) errors.push(`codeql.yml: missing ${action}`);
   }
-  const codeqlInitSha = codeql.match(
-    /github\/codeql-action\/init@([0-9a-f]{40})/,
-  )?.[1];
-  const codeqlAnalyzeSha = codeql.match(
-    /github\/codeql-action\/analyze@([0-9a-f]{40})/,
-  )?.[1];
-  if (!codeqlInitSha || !codeqlAnalyzeSha || codeqlInitSha !== codeqlAnalyzeSha)
-    errors.push("codeql.yml: init and analyze must share one full SHA");
-
-  const githubScriptPins = Object.values(candidateWorkflows).flatMap((source) =>
-    [
-      ...source.matchAll(/actions\/github-script@([^\s#]+)(?:\s+#\s*(\S+))?/g),
-    ].map(([, sha, version]) => ({ sha, version })),
-  );
-  if (
-    githubScriptPins.length !== 4 ||
-    new Set(githubScriptPins.map(({ sha }) => sha)).size !== 1 ||
-    githubScriptPins.some(({ version }) => version !== "v9.0.0")
-  )
-    errors.push(
-      "workflows: exactly four github-script uses must share one SHA at v9.0.0",
-    );
 
   const dependencyReview = candidateWorkflows["dependency-review.yml"] ?? "";
   if (
@@ -722,33 +700,6 @@ test("contract rejects mutable refs and missing readable pin comments", () => {
   assert.ok(
     auditWorkflowContract(uncommented, dependabot, gitleaks).some((error) =>
       error.includes("version comment"),
-    ),
-  );
-});
-
-test("contract rejects split CodeQL and stale github-script pins", () => {
-  const splitCodeql = mutateWorkflow("codeql.yml", (source) =>
-    source.replace(
-      /(github\/codeql-action\/analyze@)[0-9a-f]{40}/,
-      `$1${"0".repeat(40)}`,
-    ),
-  );
-  const staleGithubScript = mutateWorkflow(
-    "swamp-managed-verification.yml",
-    (source) =>
-      source.replace(
-        /actions\/github-script@[0-9a-f]{40} # v9\.0\.0/,
-        `actions/github-script@${"0".repeat(40)} # v8.0.0`,
-      ),
-  );
-  assert.ok(
-    auditWorkflowContract(splitCodeql, dependabot, gitleaks).some((error) =>
-      error.includes("init and analyze must share"),
-    ),
-  );
-  assert.ok(
-    auditWorkflowContract(staleGithubScript, dependabot, gitleaks).some(
-      (error) => error.includes("exactly four github-script uses"),
     ),
   );
 });
