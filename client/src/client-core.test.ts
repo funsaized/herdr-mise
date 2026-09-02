@@ -114,6 +114,34 @@ const upsert = (record: AgentRecord): AgentStateEvent => ({
 });
 
 describe("agent store machines", () => {
+  it("keeps fixture feed identity and layout unchanged when atmosphere is off", () => {
+    const store = new AgentStore();
+    store.apply(fixtureSnapshot as AgentStateEvent);
+    const projection = () => {
+      const agents = [...store.snapshot().agents.values()],
+        layout = computeLayout(
+          1200,
+          740,
+          agents.map(({ id }) => id),
+        );
+      return {
+        feed: agents.map(({ id, name, workspace, targetState }) => ({
+          id,
+          name,
+          workspace,
+          targetState,
+        })),
+        labels: agents.map((agent) =>
+          stationIdentityLabels(agent, agent.targetState),
+        ),
+        stations: layout.stations,
+      };
+    };
+    const atmosphereOn = projection();
+    store.setSettings({ atmosphere: false });
+
+    expect(projection()).toEqual(atmosphereOn);
+  });
   it("paints fixture-backed 86 board columns with truthful runtime", () => {
     const store = new AgentStore();
     store.apply(fixtureSnapshot as AgentStateEvent);

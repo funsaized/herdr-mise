@@ -107,6 +107,11 @@ export interface SceneMetrics {
     rows: { id: string; text: string[] }[];
     strokedIds: string[];
   };
+  atmosphere: {
+    window: number;
+    shelf: number;
+    pass: number;
+  };
   motion: {
     reduced: boolean;
     activeParticles: number;
@@ -267,11 +272,17 @@ export class KitchenScene {
   private lastHitSignature = "";
   private focusedId: string | null = null;
   private lastTheme: ResolvedTheme | null = null;
+  private lastAtmosphere: boolean | null = null;
   private boardSelection: string | null = null;
   private boardMetrics: SceneMetrics["board"] = {
     headers: [],
     rows: [],
     strokedIds: [],
+  };
+  private atmosphereMetrics: SceneMetrics["atmosphere"] = {
+    window: 0,
+    shelf: 0,
+    pass: 0,
   };
   private layout!: SceneLayout;
   private freezerLayout: FreezerLayout | null = null;
@@ -438,6 +449,7 @@ export class KitchenScene {
       view: this.view,
       visibleSpirits: this.freezerLayout?.spirits.length ?? 0,
       board: this.boardMetrics,
+      atmosphere: this.atmosphereMetrics,
       motion: {
         reduced: this.reducedMotion,
         activeParticles,
@@ -478,7 +490,8 @@ export class KitchenScene {
       liveIds !== this.lastLiveIds ||
       boardIds !== this.lastBoardIds ||
       boardSelection !== this.boardSelection ||
-      this.lastTheme !== this.resolvedTheme()
+      this.lastTheme !== this.resolvedTheme() ||
+      this.lastAtmosphere !== snapshot.settings.atmosphere
     )
       this.redraw();
     else if (this.view === "kitchen") this.drawStations(now);
@@ -488,6 +501,7 @@ export class KitchenScene {
     if (!this.app.renderer) return;
     const snapshot = this.store.snapshot();
     this.lastTheme = this.resolvedTheme();
+    this.lastAtmosphere = snapshot.settings.atmosphere;
     this.lastLiveIds = [...snapshot.agents.keys()].join("|");
     this.lastBoardIds = snapshot.board.map((entry) => entry.id).join("|");
     this.boardSelection = snapshot.board.some(
@@ -504,6 +518,7 @@ export class KitchenScene {
     this.particleLayer.visible = kitchen;
     this.escalationLayer.visible = kitchen;
     this.busserLayer.visible = kitchen;
+    this.atmosphereMetrics = { window: 0, shelf: 0, pass: 0 };
     if (kitchen) {
       this.freezerLayout = null;
       this.drawRoom();
@@ -770,6 +785,7 @@ export class KitchenScene {
   }
   private drawWindow(index: number) {
     const p = getTheme().palette,
+      atmosphere = p.scene.atmosphere.window,
       u = this.layout.unit,
       dark = index === 1,
       x = 8 * u,
@@ -781,25 +797,24 @@ export class KitchenScene {
         .fill(p.scene.wood[index])
         .rect(x, y, w, h)
         .fill(p.scene.sky[index]);
-    if (dark) {
-      g.circle(x + 20 * u, y + 4 * u, 2 * u).fill(p.scene.cloud);
-      for (const point of [
-        [3, 4],
-        [8, 9],
-        [13, 3],
-        [6, 12],
-        [16, 10],
-      ] as const)
+    if (this.lastAtmosphere && dark) {
+      const [moonX, moonY, moonRadius] = atmosphere.moon;
+      g.circle(x + moonX * u, y + moonY * u, moonRadius * u).fill(
+        p.scene.cloud,
+      );
+      for (const point of atmosphere.stars)
         g.circle(
           x + point[0] * u,
           y + point[1] * u,
-          Math.max(1, 0.35 * u),
+          Math.max(1, atmosphere.starRadius * u),
         ).fill(p.scene.cloud);
-    } else {
-      g.ellipse(x + 7 * u, y + 4 * u, 5 * u, 1.5 * u)
-        .fill(p.scene.cloud)
-        .ellipse(x + 18 * u, y + 10 * u, 5 * u, 1.5 * u)
-        .fill(p.scene.cloud);
+      this.atmosphereMetrics.window = atmosphere.stars.length + 1;
+    } else if (this.lastAtmosphere) {
+      for (const [cloudX, cloudY, width, height] of atmosphere.clouds)
+        g.ellipse(x + cloudX * u, y + cloudY * u, width * u, height * u).fill(
+          p.scene.cloud,
+        );
+      this.atmosphereMetrics.window = atmosphere.clouds.length;
     }
     g.rect(x + w / 2 - u / 2, y, u, h)
       .fill(p.scene.wood[index])
@@ -902,17 +917,21 @@ export class KitchenScene {
   }
   private drawShelfAndDoor(index: number) {
     const p = getTheme().palette,
+      atmosphere = p.scene.atmosphere.shelf,
       u = this.layout.unit,
       x = this.layout.wall.width - 73 * u;
-    this.room.addChild(
-      new Graphics()
-        .rect(x, 9 * u, 30 * u, 2 * u)
-        .fill(p.scene.wood[index])
-        .ellipse(x + 6 * u, 7 * u, 5 * u, 2 * u)
-        .stroke({ color: p.scene.steel[2][index], width: u })
-        .ellipse(x + 18 * u, 7 * u, 5 * u, 2 * u)
-        .stroke({ color: p.scene.steel[2][index], width: u }),
-    );
+    const shelf = new Graphics()
+      .rect(x, 9 * u, 30 * u, 2 * u)
+      .fill(p.scene.wood[index]);
+    if (this.lastAtmosphere) {
+      for (const [potX, potY, width, height] of atmosphere.pots)
+        shelf.ellipse(x + potX * u, potY * u, width * u, height * u).stroke({
+          color: p.scene.stationName[index],
+          width: atmosphere.strokeWidth * u,
+        });
+      this.atmosphereMetrics.shelf = atmosphere.pots.length;
+    }
+    this.room.addChild(shelf);
     const door = doorGeometry(
       this.layout,
       this.store.snapshot().mode === "empty",
@@ -934,35 +953,59 @@ export class KitchenScene {
   }
   private drawPass(index: number) {
     const p = getTheme().palette,
+      atmosphereTokens = p.scene.atmosphere.pass,
       u = this.layout.unit,
       pass = this.layout.pass,
       g = new Graphics(),
-      poolAlpha = index === 1 ? 0.42 : 0.18;
-    if (index === 1)
+      poolAlpha = atmosphereTokens.poolAlpha[index];
+    const atmosphere = this.lastAtmosphere;
+    if (atmosphere && index === 1) {
+      const [poolY, poolWidth, poolHeight, poolOpacity] =
+        atmosphereTokens.ambientPool;
       g.ellipse(
         pass.x + pass.width / 2,
-        pass.y + 22 * u,
-        pass.width * 0.5,
-        11 * u,
-      ).fill({ color: p.semantic.tungstenDark, alpha: 0.18 });
-    for (let i = 1; i <= 3; i++) {
-      const x = pass.x + (pass.width * i) / 4;
-      g.rect(x - 0.5 * u, pass.y - 14 * u, u, 6 * u)
-        .fill(p.scene.ink)
-        .rect(x - 2 * u, pass.y - 8 * u, 4 * u, 1.6 * u)
-        .fill(p.scene.brass)
-        .rect(x - 3 * u, pass.y - 6.5 * u, 6 * u, 2.5 * u)
-        .fill(p.scene.brass)
-        .rect(x - 3 * u, pass.y - 4 * u, 6 * u, u)
-        .fill(p.scene.copper)
-        .rect(x - 1.2 * u, pass.y - 3 * u, 2.4 * u, u)
-        .fill(index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten)
-        .ellipse(x, pass.y + 7 * u, 9 * u, 3 * u)
-        .fill({
-          color: index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten,
-          alpha: poolAlpha,
-        });
+        pass.y + poolY * u,
+        pass.width * poolWidth,
+        poolHeight * u,
+      ).fill({ color: p.semantic.tungstenDark, alpha: poolOpacity });
+      this.atmosphereMetrics.pass++;
     }
+    if (atmosphere)
+      for (let i = 1; i <= atmosphereTokens.lampCount; i++) {
+        const x = pass.x + (pass.width * i) / (atmosphereTokens.lampCount + 1),
+          [stemX, stemY, stemWidth, stemHeight] = atmosphereTokens.stem,
+          [topX, topY, topWidth, topHeight] = atmosphereTokens.shadeTop,
+          [shadeX, shadeY, shadeWidth, shadeHeight] = atmosphereTokens.shade,
+          [rimX, rimY, rimWidth, rimHeight] = atmosphereTokens.rim,
+          [bulbX, bulbY, bulbWidth, bulbHeight] = atmosphereTokens.bulb,
+          [lightY, lightWidth, lightHeight] = atmosphereTokens.pool;
+        g.rect(x + stemX * u, pass.y + stemY * u, stemWidth * u, stemHeight * u)
+          .fill(p.scene.ink)
+          .rect(x + topX * u, pass.y + topY * u, topWidth * u, topHeight * u)
+          .fill(p.scene.brass)
+          .rect(
+            x + shadeX * u,
+            pass.y + shadeY * u,
+            shadeWidth * u,
+            shadeHeight * u,
+          )
+          .fill(p.scene.brass)
+          .rect(x + rimX * u, pass.y + rimY * u, rimWidth * u, rimHeight * u)
+          .fill(p.scene.copper)
+          .rect(
+            x + bulbX * u,
+            pass.y + bulbY * u,
+            bulbWidth * u,
+            bulbHeight * u,
+          )
+          .fill(index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten)
+          .ellipse(x, pass.y + lightY * u, lightWidth * u, lightHeight * u)
+          .fill({
+            color: index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten,
+            alpha: poolAlpha,
+          });
+        this.atmosphereMetrics.pass += 2;
+      }
     g.rect(pass.x, pass.y + 6 * u, pass.width, 3 * u)
       .fill(p.scene.steel[1][index])
       .rect(pass.x, pass.y + 9 * u, pass.width, 8 * u)
@@ -1236,7 +1279,7 @@ export class KitchenScene {
         counterY,
         Math.max(20 * u, rect.width - 6 * u),
         9 * u,
-      ).stroke({ color: p.semantic.blocked, width: Math.max(2, u) });
+      ).stroke({ color: p.semantic.blocked, width: Math.max(1, u * 0.5) });
     const bob =
         motion.cook && state === "blocked"
           ? Math.sin(

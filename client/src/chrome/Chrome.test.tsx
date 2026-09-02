@@ -142,6 +142,10 @@ describe("chrome interactions", () => {
     );
     fireEvent.click(screen.getByRole("switch", { name: "Service bell" }));
     expect(change).toHaveBeenCalledWith({ sound: true });
+    const atmosphere = screen.getByRole("switch", { name: "Atmosphere" });
+    expect(atmosphere.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(atmosphere);
+    expect(change).toHaveBeenCalledWith({ atmosphere: false });
     fireEvent.click(screen.getByRole("button", { name: "Dinner" }));
     expect(change).toHaveBeenCalledWith({ theme: "dark" });
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));

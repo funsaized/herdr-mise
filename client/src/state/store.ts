@@ -6,15 +6,12 @@ import type {
   SourceStatus,
 } from "../../../protocol/generated/agent-state-event";
 import type { ThemeChoice } from "../theme/theme";
-import {
-  loadSettings,
-  saveSettings,
-  type SettingsStorage,
-} from "./settings-storage";
+import { loadSettings, saveSettings } from "./settings-storage";
 
 export type AppMode = FeedMode | "empty" | "disconnected";
 export interface Settings {
   sound: boolean;
+  atmosphere: boolean;
   doneTimeoutMs: number;
   escalationFastMs: number;
   escalationVignetteMs: number;
@@ -85,6 +82,7 @@ const nativeScheduler: Scheduler = {
 };
 export const defaultSettings: Settings = {
   sound: false,
+  atmosphere: true,
   doneTimeoutMs: 600_000,
   escalationFastMs: 60_000,
   escalationVignetteMs: 300_000,
@@ -108,7 +106,7 @@ export class AgentStore {
   constructor(
     private scheduler: Scheduler = nativeScheduler,
     settings: Partial<Settings> = {},
-    private settingsStorage: SettingsStorage | null = null,
+    private settingsStorage: Pick<Storage, "getItem" | "setItem"> | null = null,
   ) {
     this.settings = {
       ...loadSettings(settingsStorage, defaultSettings),
