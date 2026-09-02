@@ -27,7 +27,7 @@ independent run proof.
 Independent run proof is one of:
 
 1. Factory `subject.invocationId`: `swamp data get nightshift-builder-<workItem>
-   invocation-<invocationId>` and its transcript show that exact command
+invocation-<invocationId>` and its transcript show that exact command
    succeeded.
 2. This reviewer ran that exact command in `subjectRoot` and saw it pass.
 
