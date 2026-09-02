@@ -169,9 +169,13 @@ the issue context and starts the matching factory run. The lifecycle model's
 phase record is not delivery state and must not be used by factory gates.
 
 Nightshift's only GitHub writes after issue creation are implementation-plan
-and adversarial-review comments. Both use hidden publication markers and are
-idempotent per workflow run. Comment publication is fail-closed: the stage does
+comments, adversarial-review comments, and assigning the authenticated actor
+when a plan is published. Comments use hidden publication markers and are
+idempotent per workflow run. Publication is fail-closed: the stage does
 not record successful result evidence when GitHub publication fails.
+Plan publication assigns so the GitHub Project `Item assigned` workflow can
+move `Todo` to `in-progress`. Swamp still never writes the Project `Status`
+field.
 
 GitHub and factory state may diverge by design. For example, a project workflow
 may move an issue to `done` when its pull request merges while Nightshift remains
@@ -180,12 +184,12 @@ work and do not move the board backwards.
 
 Configure these GitHub Nightshift workflows outside Swamp:
 
-| GitHub event                                             | Project status |
-| -------------------------------------------------------- | -------------- |
-| Issue added to project                                   | `Todo`         |
-| Work starts, such as assignment or pull-request creation | `in-progress`  |
-| Pull request is ready and waiting for merge              | `await-merge`  |
-| Issue closes                                             | `done`         |
+| GitHub event                                                   | Project status |
+| -------------------------------------------------------------- | -------------- |
+| Issue added to project                                         | `Todo`         |
+| Work starts: plan publication assigns, or a pull request opens | `in-progress`  |
+| Pull request is ready and waiting for merge                    | `await-merge`  |
+| Issue closes                                                   | `done`         |
 
 The exact triggers are repository policy. Keep the four statuses coarse and do
 not recreate factory stages as board columns. GitHub's supported Projects API
@@ -194,21 +198,23 @@ Nightshift project's Workflows UI, including `Item closed` to `done`.
 
 ### Operating Modes
 
-| Mode                  | Use                                                                   | Automation boundary                                                  |
-| --------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Single-feature drive  | Move one issue through planning, implementation, review, and delivery | Stops at plan, ship, and merge approvals                             |
-| Planning queue        | Plan and review several queued issues before implementation           | Planning is sequential because the planner has one shared model lock |
-| Parallel build batch  | Build approved, independent work items                                | Requires `nightshift-build-fanout`; allows two builders              |
-| Review swarm          | Review a plan or implementation through seven specialist lanes        | Produces findings and a deterministic worst verdict                  |
-| Plan-only advisory    | Produce a reviewed implementation plan without changing source        | Stops at plan approval                                               |
-| Pull-request closeout | Verify a merged change and clean its worktree                         | Requires explicit merge confirmation                                 |
-| Recovery              | Resume failed or interrupted work from persisted state                | Human input is required when failure classification is ambiguous     |
-| Canary delivery       | Exercise the complete factory with one low-risk change                | Use after changing factory definitions or controls                   |
+| Mode                  | Use                                                                   | Automation boundary                                              |
+| --------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Single-feature drive  | Move one issue through planning, implementation, review, and delivery | Stops at plan, ship, and merge approvals                         |
+| Planning queue        | Plan and review several queued issues before implementation           | Uses `nightshift-plan-fanout` with one planner at a time         |
+| Parallel build batch  | Build approved, independent work items                                | Requires `nightshift-build-fanout`; allows two builders          |
+| Review swarm          | Review a plan or implementation through seven specialist lanes        | Produces findings and a deterministic worst verdict              |
+| Plan-only advisory    | Produce a reviewed implementation plan without changing source        | Stops at plan approval                                           |
+| Pull-request closeout | Verify a merged change and clean its worktree                         | Requires explicit merge confirmation                             |
+| Recovery              | Resume failed or interrupted work from persisted state                | Human input is required when failure classification is ambiguous |
+| Rework-parked         | Return a cycle-capped item to planning or building                    | Requires explicit approval for the selected parked exit          |
+| Autonomous            | Select and propel actionable factory work by policy                   | Idles at human gates and parked items; stops on instruction      |
+| Canary delivery       | Exercise the complete factory with one low-risk change                | Use after changing factory definitions or controls               |
 
 The driver records dispatch, executes the resolved work specification, inspects
-gates, advances one unambiguous automatic transition, and stops for human
-approval. It must never grant plan, ship, merge, cycle-override, or abort
-approval on a human's behalf.
+gates, advances one unambiguous automatic transition, and selects other work at
+human gates or parked stages. It never calls `approve` or `reset` without
+explicit human instruction.
 
 ### Concurrency
 
@@ -216,23 +222,27 @@ approval on a human's behalf.
 - Metadata-only intake workflows may overlap factory work.
 - Keep planning, build, review, shipping, and verification workflows mutually
   exclusive in one checkout.
-- Internal fan-out is bounded at seven review lanes and two builders.
+- Internal fan-out is bounded at one planner, seven review lanes, and two
+  builders.
 - Intake is FIFO and idempotent. Replays do not duplicate issues or reset work.
 
 ### Current Limits
 
-- Queued planning items are not picked up automatically.
+- Autonomous planning is serialized through `nightshift-plan-fanout`.
 - Planning is serialized through the shared `nightshift-planner` model.
 - Planning and building cannot overlap in one checkout.
 - More than two concurrent builds are unsupported.
 - Shipping and verification remain mutually exclusive in one checkout.
+- A failed plan or code review parks automatically at cycle 4.
+- Parked work returns to planning only after `rework-parked` approval, or to
+  building after `rework-parked-build` approval when a change summary exists.
 - Work-item dependencies and epic-level gates are not modeled.
 - Merge and deployment approvals require a human.
 - Remote multi-host execution is not configured.
 
-A future resident driver can add `interactive`, `plan-only`, `nightly`,
-`build-ready`, `closeout`, and `recover` selection modes. It should reuse
-`the-nightshift`, not introduce another state machine.
+The resident driver reuses `the-nightshift` as the only delivery state machine.
+When no work is actionable, it reports fresh gate subjects for the human queue
+and idles without polling.
 
 ## Operations
 
@@ -307,7 +317,9 @@ GitHub Project workflows move board cards independently; there is no Swamp
 projection or repair workflow.
 
 The `nightshift-issues` model refreshes issue context without posting lifecycle
-comments or syncing lifecycle labels. Planning publishes the current plan.
+comments or syncing lifecycle labels. Planning publishes the current plan and
+assigns the authenticated actor. Ship-prep pull requests must close the work
+item (`Fixes #<issue>`). `nightshift-ship` fails unless that link exists.
 Plan-review and code-review workflows publish their seven-lane findings after
 recording the factory artifact.
 

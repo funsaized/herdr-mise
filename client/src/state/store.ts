@@ -23,6 +23,7 @@ export interface Settings {
 export interface BoardEntry {
   id: string;
   name: string;
+  accentIndex: number;
   runtimeMs: number;
   tickets: number;
   endedAt: number;
@@ -196,7 +197,12 @@ export class AgentStore {
       for (const agent of event.agents) this.upsert(agent);
     } else if (event.operation === "upsert") this.upsert(event.agent);
     else this.remove(event.agentId);
-    this.mode = this.agents.size ? event.mode : "empty";
+    this.mode =
+      this.agents.size === 0 &&
+      event.mode === "live" &&
+      this.sourceStatus === "connected"
+        ? "empty"
+        : event.mode;
     this.emitChange();
     if (!sameCoarse(before, this.coarse())) this.emitCoarse();
   }
@@ -280,22 +286,20 @@ export class AgentStore {
   }
   private end(agent: AgentRecord, now: number) {
     const prior = this.agents.get(agent.id),
-      existingIndex = this.board.findIndex((entry) => entry.id === agent.id),
+      existingIndex = lastBoardIndex(this.board, agent.id),
       existing = existingIndex >= 0 ? this.board[existingIndex] : undefined;
     this.remove(agent.id);
     const entry: BoardEntry = {
-      id: agent.id,
+      id: prior && existing ? `${agent.id}:${now}` : (existing?.id ?? agent.id),
       name: agent.name,
+      accentIndex: agent.accentIndex,
       runtimeMs: agent.session.runtimeMs,
       tickets: agent.session.tickets,
       endedAt: prior ? now : (existing?.endedAt ?? now),
       finalState: prior?.targetState ?? existing?.finalState ?? "ended",
     };
     if (existingIndex >= 0 && !prior) this.board[existingIndex] = entry;
-    else {
-      if (existingIndex >= 0) this.board.splice(existingIndex, 1);
-      this.board.push(entry);
-    }
+    else this.board.push(entry);
     if (this.board.length > 50) this.board.splice(0, this.board.length - 50);
     this.emitEvent({ type: "ended", entry });
   }
@@ -319,6 +323,14 @@ export class AgentStore {
   private emitEvent(event: StoreEvent) {
     for (const listener of this.eventListeners) listener(event);
   }
+}
+function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
+  const prefix = `${paneId}:`;
+  for (let index = board.length - 1; index >= 0; index--) {
+    const id = board[index]?.id;
+    if (id === paneId || id?.startsWith(prefix)) return index;
+  }
+  return -1;
 }
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (

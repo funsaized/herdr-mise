@@ -2,7 +2,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentRecord } from "../../../protocol/generated/agent-state-event";
+import unsupported from "../../../protocol/fixtures/snapshot-demo-unsupported.v1.json";
 import { AgentStore, defaultSettings } from "../state/store";
+import { AgentWebSocketClient, type SocketLike } from "../state/ws-client";
 import {
   Chrome,
   DetailCard,
@@ -231,6 +233,7 @@ describe("chrome interactions", () => {
           entry={{
             id: "a",
             name: "agent",
+            accentIndex: 0,
             runtimeMs: 1_000,
             tickets: 0,
             endedAt: Date.now(),
@@ -240,7 +243,7 @@ describe("chrome interactions", () => {
         />,
       );
       expect(screen.getByText(label)).toBeTruthy();
-      expect(screen.getByText("Runtime")).toBeTruthy();
+      expect(screen.getByText("Mise time")).toBeTruthy();
       expect(screen.getByText("Tickets served")).toBeTruthy();
       expect(screen.getByText("Ended at")).toBeTruthy();
       expect(screen.getByText("Final state")).toBeTruthy();
@@ -277,7 +280,6 @@ describe("chrome interactions", () => {
     );
     expect(screen.getByRole("heading", { name: "refactor-auth" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "app" })).toBeNull();
-    expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("/work/app")).toBeTruthy();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
     const history = screen.getByLabelText("Session history");
@@ -289,7 +291,7 @@ describe("chrome interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
     expect(close).toHaveBeenCalledOnce();
   });
-  it("marks absent live model, workspace, and ticket facts unavailable", () => {
+  it("marks absent live workspace and ticket facts unavailable", () => {
     render(
       <DetailCard
         agent={{
@@ -308,6 +310,45 @@ describe("chrome interactions", () => {
         onClose={() => {}}
       />,
     );
-    expect(screen.getAllByText("Unavailable")).toHaveLength(3);
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+  });
+  it("shows DEMO SERVICE for an empty unsupported websocket snapshot", () => {
+    const store = new AgentStore(),
+      socket = new FakeSocket(),
+      client = new AgentWebSocketClient("ws://test", store, () => socket);
+    client.start();
+    socket.open();
+    socket.message(unsupported);
+    const coarse = store.coarse();
+    render(
+      <ModeTreatment
+        mode={coarse.mode}
+        sourceStatus={coarse.sourceStatus}
+        sourceDiagnostic={coarse.sourceDiagnostic}
+        lastUpdateSeconds={0}
+      />,
+    );
+    expect(screen.getByText("DEMO SERVICE")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("observed 23");
+    expect(
+      screen.queryByText("Waiting for agents — start one in herdr"),
+    ).toBeNull();
+    client.stop();
   });
 });
+
+class FakeSocket implements SocketLike {
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  close() {}
+  open() {
+    this.readyState = 1;
+    this.onopen?.();
+  }
+  message(event: unknown) {
+    this.onmessage?.({ data: JSON.stringify(event) });
+  }
+}

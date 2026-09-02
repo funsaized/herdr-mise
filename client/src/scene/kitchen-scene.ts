@@ -21,7 +21,6 @@ import type {
 } from "../state/store";
 import { BellController } from "../sound/bell";
 import {
-  accentIndexForId,
   getTheme,
   paletteIndex,
   resolveTheme,
@@ -40,10 +39,13 @@ import { TransitionEngine } from "./transition";
 import {
   assignedIdlePose,
   drawIdlePose,
+  drawPrepPose,
   idleAnimationFrame,
   IdlePoseAssignments,
+  prepFrameInterval,
   reducedIdlePoseSample,
   sampleIdlePose,
+  samplePrepPose,
   type IdlePose,
 } from "./idle-poses";
 import {
@@ -90,11 +92,21 @@ export interface SceneMetrics {
   stationRebuilds: number;
   stationDisposals: number;
   idlePoses: Record<string, IdlePose>;
+  stationVisuals: Record<
+    string,
+    { accent: string; idlePose: IdlePose | null; prepStep: 0 | 1 | null }
+  >;
+  spiritAccents: Record<string, string>;
   blockedIndicators: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
   view: "kitchen" | "freezer";
   visibleSpirits: number;
+  board: {
+    headers: string[];
+    rows: { id: string; text: string[] }[];
+    strokedIds: string[];
+  };
   motion: {
     reduced: boolean;
     activeParticles: number;
@@ -103,6 +115,15 @@ export interface SceneMetrics {
     continuous: boolean;
     preferenceChanges: number;
   };
+}
+export const BOARD_HEADERS = ["COOK", "MISE TIME"] as const;
+export function boardPaintStrings(
+  entry: Pick<BoardEntry, "name" | "runtimeMs" | "tickets">,
+) {
+  return [
+    entry.name.toUpperCase(),
+    entry.runtimeMs === 0 ? "—" : formatElapsed(entry.runtimeMs),
+  ] as const;
 }
 interface StationView {
   node: Container;
@@ -163,6 +184,14 @@ export function sceneMotionPolicy(reduced: boolean) {
     busser: enabled,
     transitions: enabled,
   };
+}
+export function sceneContinuousMotion(
+  reduced: boolean,
+  agents: Iterable<Pick<AgentMachine, "targetState">>,
+) {
+  return (
+    !reduced && [...agents].some((agent) => agent.targetState === "working")
+  );
 }
 export class BusserSweepTimeline {
   private sweeps = new Map<string, { rect: Rect; startedAt: number }>();
@@ -232,11 +261,18 @@ export class KitchenScene {
   private stationRebuilds = 0;
   private stationDisposals = 0;
   private readonly idlePoses = new IdlePoseAssignments();
+  private readonly stationVisuals: SceneMetrics["stationVisuals"] = {};
+  private readonly spiritAccents: SceneMetrics["spiritAccents"] = {};
   private hits: SceneHit[] = [];
   private lastHitSignature = "";
   private focusedId: string | null = null;
   private lastTheme: ResolvedTheme | null = null;
   private boardSelection: string | null = null;
+  private boardMetrics: SceneMetrics["board"] = {
+    headers: [],
+    rows: [],
+    strokedIds: [],
+  };
   private layout!: SceneLayout;
   private freezerLayout: FreezerLayout | null = null;
   private view: "kitchen" | "freezer" = "kitchen";
@@ -248,7 +284,7 @@ export class KitchenScene {
   private resizeObserver: ResizeObserver | null = null;
   private visibleHandler = () => this.onVisibility();
   private themeHandler = () => this.redraw();
-  private lastSteam = 0;
+  private lastSteam = new Map<string, number>();
   private lastVisualUpdate = 0;
   private destroyed = false;
   private currentDrawCalls = 0;
@@ -360,6 +396,8 @@ export class KitchenScene {
     this.focusedId = id;
     if (this.layout && this.view === "kitchen") {
       this.drawStations(performance.now());
+      destroyChildren(this.boardLayer);
+      this.drawBoard(paletteIndex(this.resolvedTheme()));
       this.dirty = true;
     } else if (this.view === "freezer") {
       this.redraw();
@@ -392,27 +430,20 @@ export class KitchenScene {
       stationRebuilds: this.stationRebuilds,
       stationDisposals: this.stationDisposals,
       idlePoses,
+      stationVisuals: { ...this.stationVisuals },
+      spiritAccents: { ...this.spiritAccents },
       blockedIndicators,
       stateIndicators,
       endedEntries: snapshot.board.length,
       view: this.view,
       visibleSpirits: this.freezerLayout?.spirits.length ?? 0,
+      board: this.boardMetrics,
       motion: {
         reduced: this.reducedMotion,
         activeParticles,
         activeTransitions,
         activeBusserSweeps,
-        continuous:
-          !this.reducedMotion &&
-          (activeParticles > 0 ||
-            activeTransitions > 0 ||
-            activeBusserSweeps > 0 ||
-            agents.some(
-              (agent) =>
-                agent.targetState === "idle" ||
-                agent.targetState === "working" ||
-                agent.targetState === "blocked",
-            )),
+        continuous: sceneContinuousMotion(this.reducedMotion, agents),
         preferenceChanges: this.preferenceChanges,
       },
     };
@@ -492,6 +523,8 @@ export class KitchenScene {
   private drawFreezer() {
     const layout = this.freezerLayout;
     if (!layout) return;
+    for (const id of Object.keys(this.spiritAccents))
+      delete this.spiritAccents[id];
     const p = getTheme().palette,
       index = paletteIndex(this.resolvedTheme()),
       g = new Graphics();
@@ -504,38 +537,39 @@ export class KitchenScene {
         layout.inner.width,
         layout.inner.height,
       )
-      .fill(p.scene.steel[0][index]);
-    const tile = Math.max(
-      tokens.freezer.tile.min,
-      Math.min(
-        tokens.freezer.tile.max,
-        layout.room.width / tokens.freezer.tile.columns,
-      ),
-    );
-    for (
-      let x = layout.inner.x;
-      x < layout.inner.x + layout.inner.width;
-      x += tile
-    )
-      g.moveTo(x, layout.floor.y)
-        .lineTo(x, layout.inner.y + layout.inner.height)
-        .stroke({
-          color: p.scene.steel[2][index],
-          width: 1,
-          alpha: tokens.freezer.tile.alpha,
-        });
-    for (
-      let y = layout.floor.y;
-      y < layout.inner.y + layout.inner.height;
-      y += tile
-    )
-      g.moveTo(layout.inner.x, y)
-        .lineTo(layout.inner.x + layout.inner.width, y)
-        .stroke({
-          color: p.scene.steel[2][index],
-          width: 1,
-          alpha: tokens.freezer.tile.alpha,
-        });
+      .fill(p.scene.steel[0][index])
+      .rect(
+        layout.floor.x,
+        layout.floor.y,
+        layout.floor.width,
+        layout.floor.height,
+      )
+      .fill(tokens.freezer.floor[index]);
+    const stockFill = {
+      meat: tokens.freezer.meat,
+      crate: tokens.freezer.crate,
+      produce: tokens.freezer.produce,
+      sack: p.scene.coat[index],
+    } as const;
+    const cube = tokens.freezer.cubes,
+      cubeSize = cube.size,
+      cubeGap = cube.gap;
+    for (const stack of cube.stacks) {
+      const originX = layout.floor.x + stack.x * layout.floor.width,
+        originY = layout.floor.y + stack.y * layout.floor.height;
+      stack.cols.forEach((height, col) => {
+        for (let level = 0; level < height; level++)
+          g.rect(
+            originX + col * (cubeSize + cubeGap),
+            originY - (level + 1) * (cubeSize + cubeGap),
+            cubeSize,
+            cubeSize,
+          ).fill({
+            color: tokens.freezer.ice[index],
+            alpha: level % 2 ? 0.7 : 0.95,
+          });
+      });
+    }
     g.rect(
       layout.door.x - tokens.freezer.door.frame,
       layout.door.y - tokens.freezer.door.frame,
@@ -576,7 +610,7 @@ export class KitchenScene {
         tokens.freezer.door.latch.height,
       )
       .fill(p.scene.ink);
-    for (const [rackIndex, rack] of layout.racks.entries()) {
+    for (const rack of layout.racks) {
       g.rect(rack.x, rack.y, rack.width, rack.height).stroke({
         color: p.scene.ink,
         width: tokens.freezer.rack.borderWidth,
@@ -584,22 +618,27 @@ export class KitchenScene {
       for (let shelf = 1; shelf <= tokens.freezer.rack.shelfCount; shelf++) {
         const y =
           rack.y + (rack.height * shelf) / (tokens.freezer.rack.shelfCount + 1);
-        g.rect(rack.x, y, rack.width, tokens.freezer.rack.shelfWidth)
-          .fill(p.scene.ink)
-          .rect(
-            rack.x + tokens.freezer.rack.paper.x,
-            y - tokens.freezer.rack.paper.y,
-            rack.width * tokens.freezer.rack.paper.widthRatio,
-            tokens.freezer.rack.paper.height,
-          )
-          .fill(shelf % 2 ? p.scene.coat[index] : p.accents[4]!)
-          .rect(
-            rack.x + rack.width * tokens.freezer.rack.crate.xRatio,
-            y - tokens.freezer.rack.crate.y,
-            rack.width * tokens.freezer.rack.crate.widthRatio,
-            tokens.freezer.rack.crate.height,
-          )
-          .fill(p.accents[rackIndex ? 6 : 0]!);
+        g.rect(rack.x, y, rack.width, tokens.freezer.rack.shelfWidth).fill(
+          p.scene.ink,
+        );
+        for (const item of tokens.freezer.rack.stock[shelf - 1] ??
+          tokens.freezer.rack.stock[0]!) {
+          const lift = item.h * 0.55;
+          for (let layer = 0; layer < item.stack; layer++)
+            drawShelfFood(
+              g,
+              rack.x + item.x * rack.width + layer,
+              y - item.h - layer * lift,
+              item.w * rack.width,
+              item.h,
+              item.fill,
+              stockFill[item.fill],
+              p.scene.ink,
+              tokens.freezer.ice[index],
+              tokens.freezer.rack.fat,
+              tokens.freezer.rack.crateRim,
+            );
+        }
       }
     }
     for (const frost of layout.frost)
@@ -634,16 +673,21 @@ export class KitchenScene {
           ),
         ),
         base = slot.y + slot.height - tokens.freezer.spirit.baseInset;
-      drawCookSilhouette(
+      const spiritAccent = tokens.accents[entry.accentIndex]!;
+      this.spiritAccents[entry.id] = spiritAccent;
+      drawFrozenCook(
         spirit,
         slot.x + slot.width / 2,
-        base,
+        base - 4 * u,
         u,
-        p.scene.coat[index],
-        p.scene.steel[1][index],
-        p.scene.ink,
-        p.accents[accentIndexForId(entry.id)]!,
-        "ended",
+        {
+          coat: p.scene.coat[index],
+          skin: p.scene.skin,
+          ink: p.scene.ink,
+          boot: p.scene.boot[index],
+          tongue: tokens.freezer.tongue,
+        },
+        slot.x > layout.floor.x + layout.floor.width / 2 ? -1 : 1,
       );
       if (snapshot.selectedId === entry.id || this.focusedId === entry.id)
         spirit
@@ -774,6 +818,7 @@ export class KitchenScene {
       x = (this.layout.wall.width - width) / 2,
       y = 4 * u,
       height = Math.max(22 * u, this.layout.wall.height - 15 * u);
+    this.boardMetrics = { headers: [], rows: [], strokedIds: [] };
     this.boardLayer.addChild(
       new Graphics()
         .rect(x - 2 * u, y - 2 * u, width + 4 * u, height + 4 * u)
@@ -788,7 +833,19 @@ export class KitchenScene {
       style: worldText(p.scene.chalk[index], Math.max(8, 4 * u)),
     });
     title.position.set(x + 3 * u, y + 1 * u);
-    this.boardLayer.addChild(title);
+    const cook = new Text({
+        text: BOARD_HEADERS[0],
+        style: worldText(p.scene.chalk[index], Math.max(8, 2.1 * u)),
+      }),
+      headings = new Text({
+        text: BOARD_HEADERS[1],
+        style: worldText(p.scene.chalk[index], Math.max(8, 2.1 * u)),
+      });
+    cook.position.set(title.x + title.width, y + 1 * u);
+    headings.anchor.set(1, 0);
+    headings.position.set(x + width - 3 * u, y + 1 * u);
+    this.boardLayer.addChild(title, cook, headings);
+    this.boardMetrics.headers = [cook.text, headings.text];
     this.hits = this.hits.filter((hit) => hit.kind !== "board");
     this.store
       .snapshot()
@@ -812,17 +869,19 @@ export class KitchenScene {
   ) {
     const p = getTheme().palette,
       u = this.layout.unit,
-      runtime = Math.max(1, Math.round(entry.runtimeMs / 60_000)),
-      tickets = entry.tickets > 0 ? entry.tickets : "—";
-    if (this.store.snapshot().selectedId === entry.id)
+      stroked =
+        this.store.snapshot().selectedId === entry.id ||
+        this.focusedId === entry.id;
+    if (stroked)
       this.boardLayer.addChild(
         new Graphics()
           .rect(x - u, y - u, width, 5 * u)
           .stroke({ color: p.scene.chalk[index], width: Math.max(1, u * 0.5) }),
       );
     const style = worldText(p.scene.chalk[index], Math.max(8, 2.1 * u)),
-      name = new Text({ text: entry.name.toUpperCase(), style }),
-      facts = new Text({ text: `${runtime}M   ${tickets}`, style });
+      [nameText, factsText] = boardPaintStrings(entry),
+      name = new Text({ text: nameText, style }),
+      facts = new Text({ text: factsText, style });
     name.position.set(x, y);
     facts.anchor.set(1, 0);
     facts.position.set(x + width, y);
@@ -830,6 +889,11 @@ export class KitchenScene {
     name.cursor = "pointer";
     name.on("pointertap", () => this.store.select(entry.id));
     this.boardLayer.addChild(name, facts);
+    this.boardMetrics.rows.push({
+      id: entry.id,
+      text: [name.text, facts.text],
+    });
+    if (stroked) this.boardMetrics.strokedIds.push(entry.id);
     this.hits.push({
       kind: "board",
       id: entry.id,
@@ -1048,11 +1112,11 @@ export class KitchenScene {
       cookY = home.y + (slot.y - home.y) * eased - rect.y,
       passX = slot.x - rect.x,
       passY = slot.y - rect.y,
-      geometrySignature = `${index}:${u}:${rect.width}:${rect.height}:${accentIndexForId(agent.id)}`;
+      geometrySignature = `${index}:${u}:${rect.width}:${rect.height}:${agent.accentIndex}`;
     if (view.staticSignature !== geometrySignature) {
       const counterWidth = Math.max(20 * u, rect.width - 9 * u),
         left = 4.5 * u,
-        accent = p.accents[accentIndexForId(agent.id)]!;
+        accent = tokens.accents[agent.accentIndex]!;
       view.staticSignature = geometrySignature;
       staticBody
         .clear()
@@ -1087,12 +1151,30 @@ export class KitchenScene {
       elapsedText = state === "blocked" ? formatElapsed(elapsed) : "",
       selected = snapshot.selectedId === agent.id,
       focused = this.focusedId === agent.id,
+      blockedStage =
+        elapsed >= snapshot.settings.escalationVignetteMs
+          ? 2
+          : elapsed >= snapshot.settings.escalationFastMs
+            ? 1
+            : 0,
+      prepSample = samplePrepPose(motion.cook ? now : 0, agent.progress),
+      doneElapsed = Math.max(0, wallNow - Date.parse(agent.stateEnteredAt)),
+      doneFlourish =
+        motion.cook &&
+        state === "done" &&
+        doneElapsed < tokens.scene.cook.done.flourishMs,
       animationFrame =
         motion.idle && idlePose
           ? idleAnimationFrame(idlePose, now)
-          : motion.cook && (state === "working" || state === "blocked")
-            ? Math.floor(now / 125)
-            : 0,
+          : motion.cook && state === "working"
+            ? prepSample.prepStep
+            : motion.cook && state === "blocked"
+              ? Math.floor(
+                  now / tokens.scene.cook.blocked.frameMs[blockedStage ? 1 : 0],
+                )
+              : doneFlourish
+                ? Math.floor(doneElapsed / tokens.scene.cook.done.frameMs)
+                : 0,
       transitionFrame =
         transition && transition.progress < 1
           ? Math.round(transition.progress * 1000)
@@ -1155,15 +1237,19 @@ export class KitchenScene {
         Math.max(20 * u, rect.width - 6 * u),
         9 * u,
       ).stroke({ color: p.semantic.blocked, width: Math.max(2, u) });
-    const bob = motion.cook
-        ? Math.sin((now + (sceneIdentityHash(agent.id) % 700)) / 140) * u * 0.35
-        : 0,
-      accent = p.accents[accentIndexForId(agent.id)]!;
-    if (idlePose) {
-      const sample = motion.idle
-        ? sampleIdlePose(idlePose, now)
-        : reducedIdlePoseSample(idlePose);
-      drawIdlePose(g, idlePose, sample, cookX, cookY, u, {
+    const bob =
+        motion.cook && state === "blocked"
+          ? Math.sin(
+              (now +
+                (sceneIdentityHash(agent.id) %
+                  tokens.scene.cook.blocked.identitySpreadMs)) /
+                tokens.scene.cook.blocked.bobPeriodMs[blockedStage ? 1 : 0],
+            ) *
+            u *
+            tokens.scene.cook.blocked.bobUnits[blockedStage]
+          : 0,
+      accent = tokens.accents[agent.accentIndex]!,
+      poseColors = {
         coat: p.scene.coat[index],
         skin: p.scene.skin,
         ink: p.scene.ink,
@@ -1171,11 +1257,20 @@ export class KitchenScene {
         wood: p.scene.wood[index],
         boot: p.scene.boot,
         chair: p.scene.chair,
-        cigarette: p.scene.cigarette,
-        smoke: [p.scene.smoke[0][index], p.scene.smoke[1][index]],
-        green: p.semantic.done,
-      });
-    } else
+      };
+    this.stationVisuals[agent.id] = {
+      accent,
+      idlePose,
+      prepStep: state === "working" ? prepSample.prepStep : null,
+    };
+    if (idlePose) {
+      const sample = motion.idle
+        ? sampleIdlePose(idlePose, now)
+        : reducedIdlePoseSample(idlePose);
+      drawIdlePose(g, idlePose, sample, cookX, cookY, u, poseColors);
+    } else if (state === "working")
+      drawPrepPose(g, prepSample, cookX, cookY, u, poseColors);
+    else
       drawCookSilhouette(
         g,
         cookX,
@@ -1188,7 +1283,7 @@ export class KitchenScene {
         state,
       );
     if (state === "working") {
-      const flicker = motion.cook ? Math.floor(now / 120) % 2 : 0,
+      const flicker = prepSample.prepStep,
         potX = rect.width / 2 + 5 * u;
       g.rect(potX - 5 * u, counterY - 4 * u, 10 * u, 4 * u)
         .fill(p.scene.ink)
@@ -1225,7 +1320,7 @@ export class KitchenScene {
         )
         .fill(p.scene.ticket)
         .rect(timerX, timerY, timerChip.width, timerChip.height)
-        .fill({ color: p.scene.ink, alpha: 0.82 });
+        .fill(p.scene.blockedChip);
       timer.text = elapsedText;
       timer.style.fill = p.semantic.blockedText;
       timer.style.fontSize = Math.max(8, 1.6 * u);
@@ -1235,8 +1330,9 @@ export class KitchenScene {
     if (state === "done") {
       const plate = donePlateGeometry(rect.width, u, counterY),
         emphasis = index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten;
-      for (const ray of plate.rays)
-        g.rect(ray.x, ray.y, ray.width, ray.height).fill(emphasis);
+      if (doneFlourish)
+        for (const ray of plate.rays)
+          g.rect(ray.x, ray.y, ray.width, ray.height).fill(emphasis);
       g.ellipse(plate.center.x, plate.center.y, plate.radius.x, plate.radius.y)
         .fill(p.scene.ticket)
         .ellipse(
@@ -1302,20 +1398,29 @@ export class KitchenScene {
       this.store.reconcileRendered();
       const motion = sceneMotionPolicy(this.reducedMotion);
       if (motion.steam) {
-        for (const agent of snapshot.agents.values())
-          if (agent.targetState === "working" && now - this.lastSteam > 220) {
+        for (const agent of snapshot.agents.values()) {
+          if (agent.targetState === "working") {
+            const lastSteam = this.lastSteam.get(agent.id) ?? 0;
+            if (now - lastSteam < prepFrameInterval(agent.progress)) continue;
             const rect = this.layout.stations.find(
               (item) => item.id === agent.id,
             );
-            if (rect)
+            if (rect) {
               this.particles.acquire(
                 rect.x + rect.width / 2,
                 rect.y + rect.height * 0.35,
               );
+              this.lastSteam.set(agent.id, now);
+            }
           }
-        if (now - this.lastSteam > 220) this.lastSteam = now;
+        }
+        for (const id of this.lastSteam.keys())
+          if (!snapshot.agents.has(id)) this.lastSteam.delete(id);
         this.particles.update(visualDelta);
-      } else this.particles.releaseAll();
+      } else {
+        this.lastSteam.clear();
+        this.particles.releaseAll();
+      }
       this.drawParticles();
       this.drawStations(now);
       this.drawEscalation(now);
@@ -1394,6 +1499,7 @@ export class KitchenScene {
   private disposeStation(id: string, view: StationView) {
     this.stationViews.delete(id);
     this.stationNodes.delete(id);
+    delete this.stationVisuals[id];
     this.stationLayer.removeChild(view.node);
     view.node.destroy(true);
     this.stationDisposals++;
@@ -1427,7 +1533,7 @@ export class KitchenScene {
       bell = passBellGeometry(this.layout).center;
     g.clear();
     if (blocked.length) {
-      const period = stage >= 1 ? 280 : 560;
+      const period = tokens.scene.cook.blocked.visualBellMs[stage >= 1 ? 1 : 0];
       if (!motion.escalation || now % period < period / 2)
         for (const radius of stage >= 1 ? [3.5, 5.5, 7.5] : [3.5, 5.5])
           g.arc(
@@ -1588,6 +1694,79 @@ function drawCookSilhouette(
     .fill(coat);
   if (state === "done")
     g.rect(cx - 7 * u, base - 11 * u, 4 * u, 2 * u).fill(coat);
+}
+function drawShelfFood(
+  g: Graphics,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  kind: "meat" | "crate" | "produce" | "sack",
+  fill: string,
+  ink: string,
+  ice: string,
+  fat: string,
+  crateRim: string,
+) {
+  if (kind === "meat") {
+    g.rect(x, y, width, height).fill(fill);
+    g.rect(x + width * 0.12, y + height * 0.28, width * 0.76, height * 0.16)
+      .fill(fat)
+      .rect(x + width * 0.18, y + height * 0.58, width * 0.5, height * 0.12)
+      .fill(ice);
+    g.rect(x + 1, y + 1, width - 2, height - 2).stroke({
+      color: ink,
+      width: 1,
+      alpha: 0.35,
+    });
+    return;
+  }
+  if (kind === "sack") {
+    g.rect(x + width * 0.28, y, width * 0.44, height * 0.28)
+      .fill(fill)
+      .rect(x, y + height * 0.18, width, height * 0.82)
+      .fill(fill)
+      .rect(x + width * 0.12, y + height * 0.4, width * 0.76, 2)
+      .fill({ color: ink, alpha: 0.2 });
+    return;
+  }
+  g.rect(x, y, width, height).fill(fill).stroke({ color: crateRim, width: 2 });
+  g.rect(x + 4, y + 4, width * 0.32, height * 0.38)
+    .fill(ice)
+    .rect(x + width * 0.42, y + height * 0.32, width * 0.4, height * 0.42)
+    .fill(kind === "produce" ? ice : fat);
+}
+function drawFrozenCook(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  u: number,
+  colors: {
+    coat: string;
+    skin: string;
+    ink: string;
+    boot: string;
+    tongue: string;
+  },
+  flip: number,
+) {
+  const cook = tokens.freezer.cook;
+  for (const part of cook.parts) {
+    const [x, y, width, height] = part.geometry,
+      sx = flip < 0 ? -x - width : x;
+    g.rect(cx + sx * u, cy + y * u, width * u, height * u).fill(
+      colors[part.color],
+    );
+  }
+  const eye = cook.eye;
+  for (const ex of cook.eyes) {
+    const x = cx + (flip < 0 ? -ex : ex) * u;
+    g.moveTo(x - eye.size * u, cy + eye.y0 * u)
+      .lineTo(x + eye.size * u, cy + eye.y1 * u)
+      .moveTo(x + eye.size * u, cy + eye.y0 * u)
+      .lineTo(x - eye.size * u, cy + eye.y1 * u)
+      .stroke({ color: colors.ink, width: Math.max(1, u * eye.width) });
+  }
 }
 function formatElapsed(elapsed: number) {
   const seconds = Math.floor(elapsed / 1000),

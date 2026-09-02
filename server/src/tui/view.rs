@@ -7,8 +7,18 @@ use ratatui::{
     Frame,
 };
 
-use super::{state::AgentTable, theme};
+use super::{
+    state::{AgentTable, BOARD_CAP},
+    theme,
+};
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceDiagnostic, SourceStatus};
+
+pub(super) fn sanitize_external(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect()
+}
 
 #[cfg(test)]
 use ratatui::buffer::CellDiffOption;
@@ -30,21 +40,20 @@ fn workspace_display_name(workspace: &str) -> &str {
 }
 
 pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
-    let model = if agent.model.trim().is_empty() {
-        "Unavailable"
-    } else {
-        agent.model.trim()
-    };
     let tickets = if agent.session.tickets == 0 {
         "Unavailable".into()
     } else {
         agent.session.tickets.to_string()
     };
     [
-        format!("{} · {}", agent.name, state_label(&agent.state)),
         format!(
-            "Workspace: {} · Model: {model} · Tickets: {tickets}",
-            workspace_display_name(&agent.workspace),
+            "{} · {}",
+            sanitize_external(&agent.name),
+            state_label(&agent.state)
+        ),
+        format!(
+            "Workspace: {} · Tickets: {tickets}",
+            sanitize_external(workspace_display_name(&agent.workspace)),
         ),
     ]
 }
@@ -110,7 +119,7 @@ pub(crate) fn status_lines(
                     .map(u64::to_string)
                     .collect::<Vec<_>>()
                     .join(", "),
-                diagnostic.next_action
+                sanitize_external(&diagnostic.next_action)
             )
         })
     } else {
@@ -196,16 +205,15 @@ pub fn draw(
         };
         Row::new(vec![
             Cell::from(if selected_row {
-                format!("> {}", agent.name)
+                format!("> {}", sanitize_external(&agent.name))
             } else {
-                agent.name.clone()
+                sanitize_external(&agent.name)
             })
             .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
             Cell::from(state_label(&agent.state))
                 .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
-            Cell::from(agent.model.clone()),
-            Cell::from(workspace_display_name(&agent.workspace)),
+            Cell::from(sanitize_external(workspace_display_name(&agent.workspace))),
             Cell::from(agent.session.tickets.to_string()),
             Cell::from(format_duration(agent.session.runtime_ms)),
         ])
@@ -218,7 +226,6 @@ pub fn draw(
                 Constraint::Length(16),
                 Constraint::Length(22),
                 Constraint::Length(9),
-                Constraint::Length(14),
                 Constraint::Length(16),
                 Constraint::Length(7),
                 Constraint::Min(9),
@@ -229,7 +236,6 @@ pub fn draw(
                 "AGENT",
                 "STATE",
                 "ELAPSED",
-                "MODEL",
                 "WORKSPACE",
                 "TICKETS",
                 "RUNTIME",
@@ -244,12 +250,11 @@ pub fn draw(
         ),
         areas[1],
     );
-    let board_rows = table.board().iter().map(|entry| {
+    let board_rows = table.board().iter().rev().take(3).map(|entry| {
         Row::new([format!(
-            "{} · {} · {} TICKETS · FINAL {}",
-            entry.name,
+            "{} · mise {} · FINAL {}",
+            sanitize_external(&entry.name),
             format_duration(entry.runtime_ms),
-            entry.tickets,
             state_label(&entry.final_state)
         )])
     });
@@ -277,9 +282,15 @@ pub fn draw(
     } else {
         "q / Esc quit"
     };
+    let board = format!("86 {}/{BOARD_CAP}", table.board().len());
     let status = warning.map_or_else(
-        || format!("{keys} · tick {tick}"),
-        |warning| format!("{warning} · {keys} · tick {tick}"),
+        || format!("{keys} · tick {tick} · {board}"),
+        |warning| {
+            format!(
+                "{} · {keys} · tick {tick} · {board}",
+                sanitize_external(warning)
+            )
+        },
     );
     frame.render_widget(Paragraph::new(Line::from(status)), status_area);
 }
@@ -360,6 +371,7 @@ mod tests {
                     selected_id,
                     scene_view,
                     help_open,
+                    false,
                 )
             })
             .unwrap();
@@ -492,7 +504,7 @@ mod tests {
         let shutdown = CancellationToken::new();
         let mut selected = None;
         assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
-        assert_eq!(selected.as_deref(), Some("fictional-session-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -511,6 +523,7 @@ mod tests {
                     true,
                     selected.as_deref(),
                     SceneView::Kitchen,
+                    false,
                     false,
                 )
             })
@@ -531,7 +544,7 @@ mod tests {
                 "missing {expected:?} in {strip:?}"
             );
         }
-        assert_eq!(strip.matches("Unavailable").count(), 2);
+        assert_eq!(strip.matches("Unavailable").count(), 1);
         assert!(!terminal
             .backend()
             .buffer()
@@ -563,6 +576,7 @@ mod tests {
                     selected.as_deref(),
                     SceneView::Kitchen,
                     false,
+                    false,
                 )
             })
             .unwrap();
@@ -577,7 +591,7 @@ mod tests {
             mode: AppMode::Live,
             operation: DeltaOperation::Remove,
             agent: None,
-            agent_id: Some("fictional-session-20".into()),
+            agent_id: Some("fictional-pane-20".into()),
         });
         retain_selection(&mut selected, &table);
         assert_eq!(selected, None);
@@ -655,7 +669,7 @@ mod tests {
             &mut help_open,
             &shutdown,
         ));
-        assert_eq!(selected.as_deref(), Some("fictional-session-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
         assert!(!handle_key_with_view(
             KeyCode::Char('?'),
             &table,
@@ -700,7 +714,7 @@ mod tests {
                 &shutdown,
             ));
         }
-        assert_eq!(selected.as_deref(), Some("fictional-session-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
         assert_eq!(scene_view, SceneView::Freezer);
 
         let freezer = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
@@ -856,14 +870,12 @@ mod tests {
             "AGENT",
             "STATE",
             "ELAPSED",
-            "MODEL",
             "WORKSPACE",
             "TICKETS",
             "RUNTIME",
             "Cook blocked",
             "BLOCKED / AT THE PASS",
             "2m 5s",
-            "gpt-5.6-sol",
             "customer-api",
             "1h 1m",
             "86 BOARD",
@@ -1008,5 +1020,46 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn compact_view_strips_c0_c1_del_from_herdr_strings() {
+        let mut event = fixture("snapshot.v1.json");
+        let tainted = "\x1b[31m\u{9b}\x7fSAFE";
+        let AgentStateEvent::Snapshot {
+            source_status,
+            source_diagnostic,
+            agents,
+            ..
+        } = &mut event
+        else {
+            unreachable!()
+        };
+        *source_status = SourceStatus::UnsupportedProtocol;
+        *source_diagnostic = Some(SourceDiagnostic {
+            observed_protocol: 23,
+            supported_protocols: vec![20],
+            next_action: tainted.into(),
+        });
+        for agent in agents.iter_mut() {
+            agent.name = tainted.into();
+            agent.model = tainted.into();
+            agent.workspace = format!("/work/{tainted}");
+        }
+        let mut ended = agents[0].clone();
+        ended.state = AgentState::Ended;
+        let mut table = AgentTable::default();
+        table.apply(event);
+        apply_upsert(&mut table, ended);
+
+        let mut terminal = Terminal::new(TestBackend::new(79, 23)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &table, None, Utc::now(), 0, Some("agent-02")))
+            .unwrap();
+        let output = buffer_text(&terminal);
+        assert!(output.contains("[31mSAFE"));
+        assert!(['\x1b', '\u{9b}', '\x7f']
+            .into_iter()
+            .all(|character| !output.contains(character)));
     }
 }

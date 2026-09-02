@@ -1,4 +1,20 @@
-import { planComment, reviewComment } from "../models/github_issue_review.ts";
+import {
+  assignIssueArgs,
+  planComment,
+  reviewComment,
+} from "../models/github_issue_review.ts";
+
+Deno.test("plan publication assigns the authenticated actor", () => {
+  const args = assignIssueArgs("funsaized/herdr-mise", 106);
+  if (
+    args.join(" ") !==
+    "issue edit 106 --repo funsaized/herdr-mise --add-assignee @me"
+  ) {
+    throw new Error(
+      "plan publication must assign @me so board workflows can move in-progress",
+    );
+  }
+});
 
 Deno.test("plan comments include an idempotency marker and plan sections", () => {
   const comment = planComment({

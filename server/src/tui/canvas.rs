@@ -324,8 +324,16 @@ mod tests {
             (theme::STEAM_HI, 253),
         ]
         .into_iter()
-        .chain(theme::ACCENTS.into_iter().zip([66, 96, 67, 101, 131, 137]))
-        .chain(theme::ACCENT_DIMS.into_iter().zip([23, 53, 24, 58, 95, 94]))
+        .chain(
+            theme::ACCENTS
+                .into_iter()
+                .zip([66, 96, 67, 101, 138, 137, 66, 101, 103, 101, 96, 66]),
+        )
+        .chain(
+            theme::ACCENT_DIMS
+                .into_iter()
+                .zip([23, 53, 24, 58, 95, 94, 23, 58, 60, 58, 53, 23]),
+        )
         .collect::<Vec<_>>();
         let mut canvas = PixelCanvas::new(tokens.len() as u16, 2, theme::BG, ColorMode::Xterm256);
         for (x, (color, _)) in tokens.iter().enumerate() {

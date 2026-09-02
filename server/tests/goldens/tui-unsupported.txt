@@ -5,7 +5,7 @@ TEXT 01 "Mock feed — Herdr protocol is unsupported — observed 23; supported:
 TEXT 02 "a tested release, then retry. Nothing here is real.                                                           "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 04 "┌Kitchen status──────────────────────────────────────────────────────────────────────────────────────────────┐"
-TEXT 05 "│AGENT            STATE                  ELAPSED   MODEL          WORKSPACE        TICKETS RUNTIME           │"
+TEXT 05 "│AGENT            STATE                  ELAPSED   WORKSPACE        TICKETS RUNTIME                          │"
 STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 06 "│                                                                                                            │"
 TEXT 07 "│                                                                                                            │"
@@ -29,5 +29,5 @@ TEXT 20 "│                                                                    
 STYLE 20 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
 TEXT 21 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
 STYLE 21 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
-TEXT 22 "q / Esc quit · tick 9                                                                                         "
+TEXT 22 "q / Esc quit · tick 9 · 86 0/64                                                                               "
 TEXT 23 "                                                                                                              "

@@ -5,9 +5,9 @@ TEXT 01 "Connected to Herdr                                                     
 TEXT 02 "                                                                                                              "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 04 "┌Kitchen status──────────────────────────────────────────────────────────────────────────────────────────────┐"
-TEXT 05 "│AGENT            STATE                  ELAPSED   MODEL          WORKSPACE        TICKETS RUNTIME           │"
+TEXT 05 "│AGENT            STATE                  ELAPSED   WORKSPACE        TICKETS RUNTIME                          │"
 STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
-TEXT 06 "│Cook blocked     BLOCKED / AT THE PASS  2m 5s     gpt-5.6-sol    customer-api     7       1h 1m             │"
+TEXT 06 "│Cook blocked     BLOCKED / AT THE PASS  2m 5s     customer-api     7       1h 1m                            │"
 STYLE 06 001..017 fg=Rgb(102, 122, 158) bg=Reset mod=BOLD | REVERSED skip=false
 STYLE 06 017..018 fg=Reset bg=Reset mod=BOLD | REVERSED skip=false
 STYLE 06 018..040 fg=Rgb(216, 52, 44) bg=Reset mod=BOLD | REVERSED skip=false
@@ -33,5 +33,5 @@ TEXT 20 "│                                                                    
 STYLE 20 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
 TEXT 21 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
 STYLE 21 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
-TEXT 22 "q / Esc quit · tick 9                                                                                         "
+TEXT 22 "q / Esc quit · tick 9 · 86 0/64                                                                               "
 TEXT 23 "                                                                                                              "

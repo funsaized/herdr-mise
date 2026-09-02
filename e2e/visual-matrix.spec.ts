@@ -56,8 +56,18 @@ type MotionMetrics = {
   blockedIndicators: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
+  stationVisuals: Record<
+    string,
+    { accent: string; idlePose: string | null; prepStep: 0 | 1 | null }
+  >;
+  spiritAccents: Record<string, string>;
   view: "kitchen" | "freezer";
   visibleSpirits: number;
+  board: {
+    headers: string[];
+    rows: { id: string; text: string[] }[];
+    strokedIds: string[];
+  };
 };
 const sceneMetrics = (page: Page) =>
   page.evaluate(() =>
@@ -79,6 +89,15 @@ function boxesIntersect(
     first.y + first.height <= second.y ||
     second.y + second.height <= first.y
   );
+}
+
+function boardRowPoint(width: number, height: number) {
+  const layout = computeLayout(width, height, []),
+    boardWidth = Math.min(layout.unit * 92, layout.wall.width * 0.36);
+  return {
+    x: (layout.wall.width - boardWidth) / 2 + layout.unit * 3 + 16,
+    y: layout.unit * (4 + 12) + 4,
+  };
 }
 
 test("reduced motion is static before blocked-scene startup in light and dinner themes", async ({
@@ -176,9 +195,7 @@ test("reduced startup preserves idle working blocked waiting and ended state ind
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=ended&agents=1&stats");
-  await expect(
-    page.getByRole("status").filter({ hasText: "Waiting for agents" }),
-  ).toBeVisible();
+  await expect(placard(page)).toBeVisible();
   await expect
     .poll(async () => sceneMetrics(page))
     .toMatchObject({
@@ -239,7 +256,7 @@ test("native freezer control renders only visible board spirits and preserves Es
   expect(errors).toEqual([]);
 });
 
-test("authoritative fixture disappearance reaches browser freezer spirits", async ({
+test("authoritative fixture drives rendered feed accents poses prep and freezer spirits", async ({
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "herdr-mise-freezer-")),
@@ -247,7 +264,10 @@ test("authoritative fixture disappearance reaches browser freezer spirits", asyn
     working = JSON.stringify(
       JSON.parse(
         await readFile(
-          join(process.cwd(), "server/tests/fixtures/snapshot-working.json"),
+          join(
+            process.cwd(),
+            "server/tests/fixtures/snapshot-working-idle-accents.json",
+          ),
           "utf8",
         ),
       ),
@@ -298,22 +318,82 @@ test("authoritative fixture disappearance reaches browser freezer spirits", asyn
     await page.goto("http://127.0.0.1:8686/?stats");
     await expect(
       page.getByRole("button", {
-        name: "Codex, Working — on the fire, open details",
+        name: "fixture-working, Working — on the fire, open details",
       }),
     ).toBeAttached();
+    await expect(
+      page.getByRole("button", {
+        name: "fixture-idle, Idle — prepping, open details",
+      }),
+    ).toBeAttached();
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.stationVisuals["p-11"])
+      .toMatchObject({ accent: "#667a9e", idlePose: null });
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.stationVisuals["p-8"])
+      .toMatchObject({ accent: "#997f5e", prepStep: null });
+    expect(
+      (await sceneMetrics(page))?.stationVisuals["p-8"]?.idlePose,
+    ).not.toMatch(/prep|smoke/i);
+    const firstPrepStep = (await sceneMetrics(page))?.stationVisuals["p-11"]
+      ?.prepStep;
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.stationVisuals["p-11"]?.prepStep !==
+          firstPrepStep,
+      )
+      .toBe(true);
     snapshot = empty;
     await expect(
       page.getByRole("button", {
-        name: "Codex, Working — on the fire, open details",
+        name: "fixture-working, Working — on the fire, open details",
       }),
     ).toHaveCount(0);
+    const boardButton = page
+      .getByRole("navigation", { name: "Agent stations" })
+      .getByRole("button", { name: /fixture-working, Ended/i });
+    await expect(boardButton).toBeAttached();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        board: {
+          headers: ["COOK", "MISE TIME"],
+        },
+      });
+    expect(
+      (await sceneMetrics(page))?.board.rows
+        .map((row) => row.text)
+        .sort(([left], [right]) => left!.localeCompare(right!)),
+    ).toEqual([
+      ["FIXTURE-IDLE", "—"],
+      ["FIXTURE-WORKING", "—"],
+    ]);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await page.keyboard.press("Tab");
+    await expect(boardButton).toBeFocused();
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.board.strokedIds)
+      .toHaveLength(1);
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator('aside[aria-label$="session summary" i]'),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Freezer" }).click();
     await expect(
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
-    ).toHaveCount(1);
+    ).toHaveCount(2);
     await expect
       .poll(async () => sceneMetrics(page))
-      .toMatchObject({ view: "freezer", endedEntries: 1, visibleSpirits: 1 });
+      .toMatchObject({
+        view: "freezer",
+        endedEntries: 2,
+        visibleSpirits: 2,
+        spiritAccents: { "p-11": "#667a9e", "p-8": "#997f5e" },
+      });
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();
@@ -368,24 +448,59 @@ for (const count of COUNTS) {
     page,
   }) => {
     const errors = watchErrors(page);
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto(`/?preset=ended&agents=${count}`);
-    // All records are 86'd, so the truthful mode treatment is the empty pill.
-    await expect(
-      page.getByRole("status").filter({ hasText: "Waiting for agents" }),
-    ).toBeVisible();
-    // Ended records pass through the store before the first frame, so no
-    // active station exists to focus.
-    await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
-    // The 86 board draws the last three entries; the first drawn row's name
-    // text position follows the scene layout math at 1280x720 (unit=4,
-    // board x=(1280-368)/2, first row y=(4+12)*unit).
-    await page.mouse.click((1280 - 368) / 2 + 3 * 4 + 16, (4 + 12) * 4 + 4);
-    const summary = page.locator('aside[aria-label$="session summary"]');
-    await expect(summary).toBeVisible();
-    await expect(summary).toContainText("86'D — SESSION ENDED");
-    await expect(summary).toContainText("Done — plated");
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 800, height: 500 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`/?preset=ended&agents=${count}&stats`);
+      // Visual playground is demo: the emptied kitchen keeps the DEMO placard.
+      await expect(placard(page)).toBeVisible();
+
+      const navigation = page.getByRole("navigation", {
+          name: "Agent stations",
+        }),
+        buttons = navigation.getByRole("button");
+      await expect(buttons).toHaveCount(Math.min(3, count));
+      await expect(buttons.first()).toHaveAttribute("tabindex", "-1");
+      await expect
+        .poll(async () => sceneMetrics(page))
+        .toMatchObject({
+          board: { headers: ["COOK", "MISE TIME"] },
+        });
+      const painted = await sceneMetrics(page);
+      expect(painted?.board.rows).toHaveLength(Math.min(3, count));
+      for (const row of painted?.board.rows ?? []) {
+        expect(row.text[1]).toMatch(/^(?:\d+:\d{2}|—)$/);
+        expect(row.text[1]).not.toMatch(/\d+M/);
+      }
+
+      // Chrome tooltips remain station-only; board keyboard focus is the
+      // chalk row stroke recorded by the Pixi draw branch.
+      await page.keyboard.press("ArrowRight");
+      await expect(page.getByRole("tooltip")).toHaveCount(0);
+      await expect
+        .poll(async () => (await sceneMetrics(page))?.board.strokedIds.length)
+        .toBe(1);
+      const focused = await sceneMetrics(page),
+        focusedId = focused!.board.strokedIds[0]!,
+        focusedName = focused!.board.rows.find((row) => row.id === focusedId)!
+          .text[0];
+      await page.keyboard.press("Enter");
+      const summary = page.locator('aside[aria-label$="session summary"]');
+      await expect(summary).toBeVisible();
+      await expect(summary).toHaveAttribute(
+        "aria-label",
+        new RegExp(`^${focusedName} session summary$`, "i"),
+      );
+      await page.keyboard.press("Escape");
+
+      const point = boardRowPoint(viewport.width, viewport.height);
+      await page.mouse.click(point.x, point.y);
+      await expect(summary).toBeVisible();
+      await expect(summary).toContainText("86'D — SESSION ENDED");
+      await expect(summary).toContainText("Done — plated");
+    }
     expect(errors).toEqual([]);
   });
 }
@@ -422,7 +537,9 @@ for (const theme of ["light", "dinner"] as const) {
   }
 }
 
-test("idle cooks expose all four stable decorative poses", async ({ page }) => {
+test("idle cooks expose all five stable decorative poses without continuous motion", async ({
+  page,
+}) => {
   await page.goto("/?preset=idle&agents=6&stats");
   await expect(placard(page)).toBeVisible();
   const readPoses = () =>
@@ -437,10 +554,27 @@ test("idle cooks expose all four stable decorative poses", async ({ page }) => {
   await expect.poll(async () => Object.keys(await readPoses()).length).toBe(6);
   const first = await readPoses();
   expect(new Set(Object.values(first))).toEqual(
-    new Set(["smoke", "recline", "sleep", "prep"]),
+    new Set([
+      "coffeeBreak",
+      "lean",
+      "sleep",
+      "toqueAdjust",
+      "ticketRailGlance",
+    ]),
   );
+  await expect
+    .poll(async () => (await sceneMetrics(page))?.motion.continuous)
+    .toBe(false);
   await page.waitForTimeout(500);
   expect(await readPoses()).toEqual(first);
+});
+
+test("working cooks drive continuous scene motion", async ({ page }) => {
+  await page.goto("/?preset=working&agents=1&stats");
+  await expect(placard(page)).toBeVisible();
+  await expect
+    .poll(async () => (await sceneMetrics(page))?.motion.continuous)
+    .toBe(true);
 });
 
 test("invalid preset and count fall back to mixed x 6", async ({ page }) => {

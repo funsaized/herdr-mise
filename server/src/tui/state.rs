@@ -3,6 +3,8 @@ use crate::protocol::{
     SourceStatus,
 };
 
+pub(crate) const BOARD_CAP: usize = 64;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoardEntry {
     pub id: String,
@@ -118,33 +120,49 @@ impl AgentTable {
     }
 
     fn end(&mut self, agent: AgentRecord, prior_final_state: Option<AgentState>) {
-        if let Some(index) = self.board.iter().position(|entry| entry.id == agent.id) {
-            let mut existing = self.board.remove(index);
-            existing.name = agent.name;
-            existing.runtime_ms = agent.session.runtime_ms;
-            existing.tickets = agent.session.tickets;
-            if let Some(final_state) = prior_final_state {
-                existing.final_state = final_state;
-                self.board.push(existing);
-                if self.board.len() > 3 {
-                    self.board.remove(0);
-                }
-            } else {
+        if prior_final_state.is_none() {
+            if let Some(index) = self
+                .board
+                .iter()
+                .rposition(|entry| same_pane(&entry.id, &agent.id))
+            {
+                let mut existing = self.board.remove(index);
+                existing.name = agent.name;
+                existing.runtime_ms = agent.session.runtime_ms;
+                existing.tickets = agent.session.tickets;
                 self.board.insert(index, existing);
+                return;
             }
-            return;
         }
+        let id = if prior_final_state.is_some()
+            && self
+                .board
+                .iter()
+                .any(|entry| same_pane(&entry.id, &agent.id))
+        {
+            format!("{}:{}", agent.id, self.board.len())
+        } else {
+            agent.id.clone()
+        };
         self.board.push(BoardEntry {
-            id: agent.id,
+            id,
             name: agent.name,
             runtime_ms: agent.session.runtime_ms,
             tickets: agent.session.tickets,
             final_state: prior_final_state.unwrap_or(AgentState::Ended),
         });
-        if self.board.len() > 3 {
+        self.trim_board();
+    }
+
+    fn trim_board(&mut self) {
+        while self.board.len() > BOARD_CAP {
             self.board.remove(0);
         }
     }
+}
+
+fn same_pane(entry_id: &str, pane_id: &str) -> bool {
+    entry_id == pane_id || entry_id.starts_with(&format!("{pane_id}:"))
 }
 
 #[cfg(test)]
@@ -291,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn ended_records_leave_roster_and_board_deduplicates_last_three() {
+    fn ended_records_leave_roster_and_board_deduplicates_to_cap() {
         let mut table = AgentTable::default();
         let mut prior = record("a", AgentState::Blocked, 10, 1);
         prior.name = "prior-a".into();
@@ -313,7 +331,7 @@ mod tests {
                 .iter()
                 .map(|entry| entry.id.as_str())
                 .collect::<Vec<_>>(),
-            ["b", "c", "d"]
+            ["a", "b", "c", "d"]
         );
 
         let mut duplicate = record("c", AgentState::Ended, 333, 33);
@@ -325,42 +343,55 @@ mod tests {
                 .iter()
                 .map(|entry| entry.id.as_str())
                 .collect::<Vec<_>>(),
-            ["b", "c", "d"]
+            ["a", "b", "c", "d"]
         );
-        assert_eq!(table.board()[1].name, "updated-c");
-        assert_eq!(table.board()[1].final_state, AgentState::Ended);
+        assert_eq!(table.board()[2].name, "updated-c");
+        assert_eq!(table.board()[2].final_state, AgentState::Ended);
         assert_eq!(
-            (table.board()[1].runtime_ms, table.board()[1].tickets),
+            (table.board()[2].runtime_ms, table.board()[2].tickets),
             (333, 33)
         );
+
+        for index in 0..=BOARD_CAP {
+            table.apply(upsert(record(
+                &format!("cap-{index}"),
+                AgentState::Ended,
+                index as u64,
+                1,
+            )));
+        }
+        assert_eq!(table.board().len(), BOARD_CAP);
+        assert_eq!(table.board()[0].id, "cap-1");
+        assert_eq!(table.board()[BOARD_CAP - 1].id, format!("cap-{BOARD_CAP}"));
     }
 
     #[test]
-    fn active_agent_ending_again_moves_to_newest_before_board_cap() {
+    fn reused_pane_keeps_each_death_on_the_board() {
         let mut table = AgentTable::default();
-        for id in ["a", "b", "c"] {
-            table.apply(upsert(record(id, AgentState::Working, 1, 1)));
-            table.apply(upsert(record(id, AgentState::Ended, 10, 1)));
-        }
-
+        table.apply(upsert(record("a", AgentState::Working, 1, 1)));
+        table.apply(upsert(record("a", AgentState::Ended, 10, 1)));
         table.apply(upsert(record("a", AgentState::Blocked, 20, 2)));
         table.apply(upsert(record("a", AgentState::Ended, 50, 5)));
-        table.apply(upsert(record("d", AgentState::Working, 30, 3)));
-        table.apply(upsert(record("d", AgentState::Ended, 40, 4)));
-
         assert_eq!(
             table
                 .board()
                 .iter()
                 .map(|entry| entry.id.as_str())
                 .collect::<Vec<_>>(),
-            ["c", "a", "d"]
+            ["a", "a:1"]
         );
         assert_eq!(table.board()[1].final_state, AgentState::Blocked);
         assert_eq!(
             (table.board()[1].runtime_ms, table.board()[1].tickets),
             (50, 5)
         );
+
+        let mut replay = record("a", AgentState::Ended, 99, 9);
+        replay.name = "replay-a".into();
+        table.apply(upsert(replay));
+        assert_eq!(table.board().len(), 2);
+        assert_eq!(table.board()[1].name, "replay-a");
+        assert_eq!(table.board()[1].final_state, AgentState::Blocked);
     }
 
     #[test]

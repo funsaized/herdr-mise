@@ -1,3 +1,5 @@
+use super::super::theme;
+
 pub const MIN_SCENE_WIDTH: u16 = 80;
 pub const MIN_SCENE_PIXEL_HEIGHT: u16 = 48;
 const MIN_STATION_PITCH: u16 = 4;
@@ -49,7 +51,19 @@ pub struct FreezerLayout {
     pub racks: [PixelRect; 2],
     pub frost: Vec<PixelRect>,
     pub floor: PixelRect,
-    pub spirits: Vec<(String, PixelRect)>,
+    pub spirits: Vec<(PixelRect, u8)>,
+}
+
+const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+const FNV_PRIME: u64 = 0x100000001b3;
+
+pub(super) fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut hash = FNV_OFFSET;
+    for &byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
 }
 
 pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> LayoutDecision {
@@ -119,7 +133,7 @@ pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> Layo
 pub fn compute_freezer_layout(
     width: u16,
     pixel_height: u16,
-    board_ids: &[String],
+    board_ids: &[&str],
 ) -> Option<FreezerLayout> {
     if width < MIN_SCENE_WIDTH || pixel_height < MIN_SCENE_PIXEL_HEIGHT {
         return None;
@@ -130,82 +144,72 @@ pub fn compute_freezer_layout(
         width,
         height: pixel_height,
     };
-    let rack_width = 12;
+    let rack_width = theme::FREEZER_RACK_WIDTH;
     let racks = [
         PixelRect {
-            x: 3,
-            y: 8,
+            x: theme::FREEZER_RACK_MARGIN_X,
+            y: theme::FREEZER_RACK_MARGIN_Y,
             width: rack_width,
-            height: pixel_height - 16,
+            height: pixel_height - theme::FREEZER_RACK_VERTICAL_INSET,
         },
         PixelRect {
-            x: width - rack_width - 3,
-            y: 8,
+            x: width - rack_width - theme::FREEZER_RACK_MARGIN_X,
+            y: theme::FREEZER_RACK_MARGIN_Y,
             width: rack_width,
-            height: pixel_height - 16,
+            height: pixel_height - theme::FREEZER_RACK_VERTICAL_INSET,
         },
     ];
     let door = PixelRect {
-        x: width / 2 - 9,
-        y: 4,
-        width: 18,
-        height: 12,
+        x: width / 2 - theme::FREEZER_DOOR_HALF,
+        y: theme::FREEZER_DOOR_Y,
+        width: theme::FREEZER_DOOR_WIDTH,
+        height: theme::FREEZER_DOOR_HEIGHT,
     };
     let frost = vec![
         PixelRect {
-            x: 2,
-            y: 2,
-            width: width - 4,
-            height: 2,
+            x: theme::FREEZER_FROST_MARGIN,
+            y: theme::FREEZER_FROST_MARGIN,
+            width: width - theme::FREEZER_FROST_MARGIN * 2,
+            height: theme::FREEZER_FROST_TOP_HEIGHT,
         },
         PixelRect {
-            x: 2,
-            y: pixel_height - 8,
-            width: width - 4,
-            height: 3,
+            x: theme::FREEZER_FROST_MARGIN,
+            y: pixel_height - theme::FREEZER_FROST_BOTTOM_Y,
+            width: width - theme::FREEZER_FROST_MARGIN * 2,
+            height: theme::FREEZER_FROST_BOTTOM_HEIGHT,
         },
         PixelRect {
-            x: door.x - 2,
-            y: door.bottom() - 2,
-            width: door.width + 4,
-            height: 3,
+            x: door.x - theme::FREEZER_FROST_DOOR_PAD,
+            y: door.bottom() - theme::FREEZER_FROST_DOOR_PAD,
+            width: door.width + theme::FREEZER_FROST_DOOR_PAD * 2,
+            height: theme::FREEZER_FROST_DOOR_HEIGHT,
         },
     ];
     let floor = PixelRect {
-        x: racks[0].right() + 2,
-        y: door.bottom() + 2,
-        width: racks[1].x - racks[0].right() - 4,
-        height: pixel_height.saturating_sub(door.bottom() + 9),
+        x: racks[0].right() + theme::FREEZER_FLOOR_GAP,
+        y: door.bottom() + theme::FREEZER_FLOOR_GAP,
+        width: racks[1].x - racks[0].right() - theme::FREEZER_FLOOR_WIDTH_GAP,
+        height: pixel_height.saturating_sub(door.bottom() + theme::FREEZER_FLOOR_BOTTOM_INSET),
     };
-    let slot_width = 13_u16;
-    let slot_height = 22_u16;
-    let columns = usize::from(floor.width / slot_width);
-    let rows = usize::from(floor.height / slot_height);
-    let capacity = columns.saturating_mul(rows);
-    let visible = &board_ids[board_ids.len().saturating_sub(capacity)..];
-    let used_columns = columns.min(visible.len().max(1));
-    let mut spirits = Vec::with_capacity(visible.len());
-    for (index, id) in visible.iter().enumerate() {
-        let row = index / used_columns;
-        let count = used_columns.min(visible.len() - row * used_columns);
-        let column = index % used_columns;
-        let count = u16::try_from(count).ok()?;
-        let extra_gap = if row % 2 == 1 && count > 1 {
-            (floor.width.saturating_sub(count.saturating_mul(slot_width)) / (count - 1)).min(12)
-        } else {
-            0
-        };
-        let pitch = slot_width.saturating_add(extra_gap);
-        let row_width = slot_width.saturating_add((count - 1).saturating_mul(pitch));
-        let rect = PixelRect {
-            x: floor.x
-                + floor.width.saturating_sub(row_width) / 2
-                + u16::try_from(column).ok()?.saturating_mul(pitch),
-            y: floor.y + u16::try_from(row).ok()?.saturating_mul(slot_height),
-            width: slot_width,
-            height: slot_height,
-        };
-        spirits.push((id.clone(), rect));
+    let spirit_w = super::sprites::SPRITE_WIDTH as u16;
+    let spirit_h = super::sprites::SPRITE_HALF_ROWS as u16;
+    let mut spirits = Vec::with_capacity(board_ids.len());
+    for id in board_ids {
+        let hash = fnv1a(id.as_bytes());
+        let pose = (hash % 3) as u8;
+        let width = spirit_w.min(floor.width).max(1);
+        let height = spirit_h.min(floor.height).max(1);
+        let max_dx = u64::from(floor.width.saturating_sub(width).saturating_add(1).max(1));
+        let max_dy = u64::from(floor.height.saturating_sub(height).saturating_add(1).max(1));
+        spirits.push((
+            PixelRect {
+                x: floor.x + ((hash >> 2) % max_dx) as u16,
+                y: floor.y + ((hash >> 33) % max_dy) as u16,
+                width,
+                height,
+            },
+            pose,
+        ));
     }
     Some(FreezerLayout {
         room,
@@ -314,38 +318,41 @@ mod tests {
     }
 
     #[test]
-    fn freezer_slots_are_deterministic_bounded_and_newest_first_when_truncated() {
-        let ids = (0..8).map(|index| format!("p-{index}")).collect::<Vec<_>>();
+    fn freezer_slots_are_deterministic_bounded_and_preserve_board_order() {
+        let owned = (0..8).map(|index| format!("p-{index}")).collect::<Vec<_>>();
+        let ids = owned.iter().map(String::as_str).collect::<Vec<_>>();
         let layout = compute_freezer_layout(80, 48, &ids).unwrap();
-        let visible = layout
-            .spirits
-            .iter()
-            .map(|(id, _)| id.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(visible, ["p-5", "p-6", "p-7"]);
-        for (index, (_, slot)) in layout.spirits.iter().enumerate() {
+        assert_eq!(layout.spirits.len(), ids.len());
+        for (slot, pose) in &layout.spirits {
             assert!(slot.x >= layout.floor.x && slot.right() <= layout.floor.right());
             assert!(slot.y >= layout.floor.y && slot.bottom() <= layout.floor.bottom());
-            assert!(!slot.intersects(layout.door));
-            assert!(layout.racks.iter().all(|rack| !slot.intersects(*rack)));
-            assert!(layout.frost.iter().all(|frost| !slot.intersects(*frost)));
-            assert!(layout.spirits[index + 1..]
-                .iter()
-                .all(|(_, other)| !slot.intersects(*other)));
+            assert!(*pose < 3);
         }
         assert_eq!(layout, compute_freezer_layout(80, 48, &ids).unwrap());
+        assert_eq!(
+            layout.spirits[0],
+            compute_freezer_layout(80, 48, &["p-0"]).unwrap().spirits[0]
+        );
+        let reversed_ids = ids.iter().rev().copied().collect::<Vec<_>>();
+        let mut reversed_spirits = layout.spirits.clone();
+        reversed_spirits.reverse();
+        assert_eq!(
+            compute_freezer_layout(80, 48, &reversed_ids)
+                .unwrap()
+                .spirits,
+            reversed_spirits
+        );
 
-        let wide_ids = (0..12)
+        let wide_owned = (0..12)
             .map(|index| format!("p-{index}"))
             .collect::<Vec<_>>();
+        let wide_ids = wide_owned.iter().map(String::as_str).collect::<Vec<_>>();
         let wide = compute_freezer_layout(110, 80, &wide_ids).unwrap();
-        assert_ne!(wide.spirits[0].1.x, wide.spirits[5].1.x);
-        for (index, (_, slot)) in wide.spirits.iter().enumerate() {
+        assert_eq!(wide.spirits.len(), wide_ids.len());
+        for (slot, _) in &wide.spirits {
             assert!(slot.x >= wide.floor.x && slot.right() <= wide.floor.right());
             assert!(slot.y >= wide.floor.y && slot.bottom() <= wide.floor.bottom());
-            assert!(wide.spirits[index + 1..]
-                .iter()
-                .all(|(_, other)| !slot.intersects(*other)));
         }
+        assert_eq!(wide, compute_freezer_layout(110, 80, &wide_ids).unwrap());
     }
 }

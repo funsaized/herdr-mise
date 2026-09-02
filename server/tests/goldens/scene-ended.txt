@@ -95,7 +95,7 @@ CELL 03 063..077 symbol="─" fg=Indexed(136) bg=Indexed(22) mod=NONE diff=None
 CELL 03 077..078 symbol="┐" fg=Indexed(136) bg=Indexed(22) mod=NONE diff=None
 CELL 03 078..079 symbol="▀" fg=Indexed(233) bg=Indexed(233) mod=NONE diff=None
 CELL 03 079..080 symbol="│" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
-TEXT 04 "│▀▀▀— all stations clear —▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│▀COOK ENDED 01:01   7T▀▀│▀│"
+TEXT 04 "│▀▀▀— all stations clear —▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│▀COOK         MISE TIME▀│▀│"
 CELL 04 000..001 symbol="│" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
 CELL 04 001..004 symbol="▀" fg=Indexed(233) bg=Indexed(233) mod=NONE diff=None
 CELL 04 004..005 symbol="—" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
@@ -125,30 +125,41 @@ CELL 04 053..054 symbol="▀" fg=Indexed(22) bg=Indexed(22) mod=NONE diff=None
 CELL 04 054..055 symbol="C" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
 CELL 04 055..057 symbol="O" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
 CELL 04 057..058 symbol="K" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 058..059 symbol=" " fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 059..060 symbol="E" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 060..061 symbol="N" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 061..062 symbol="D" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 062..063 symbol="E" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 063..064 symbol="D" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 064..065 symbol=" " fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 065..066 symbol="0" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 066..067 symbol="1" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 067..068 symbol=":" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 068..069 symbol="0" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 069..070 symbol="1" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 070..073 symbol=" " fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 073..074 symbol="7" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 074..075 symbol="T" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
-CELL 04 075..077 symbol="▀" fg=Indexed(22) bg=Indexed(22) mod=NONE diff=None
+CELL 04 058..067 symbol=" " fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 067..068 symbol="M" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 068..069 symbol="I" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 069..070 symbol="S" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 070..071 symbol="E" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 071..072 symbol=" " fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 072..073 symbol="T" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 073..074 symbol="I" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 074..075 symbol="M" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 075..076 symbol="E" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 04 076..077 symbol="▀" fg=Indexed(22) bg=Indexed(22) mod=NONE diff=None
 CELL 04 077..078 symbol="│" fg=Indexed(136) bg=Indexed(22) mod=NONE diff=None
 CELL 04 078..079 symbol="▀" fg=Indexed(233) bg=Indexed(233) mod=NONE diff=None
 CELL 04 079..080 symbol="│" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
-TEXT 05 "│▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│▀│"
+TEXT 05 "│▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│▀COOK ENDED       01:01▀│▀│"
 CELL 05 000..001 symbol="│" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
 CELL 05 001..052 symbol="▀" fg=Indexed(233) bg=Indexed(233) mod=NONE diff=None
 CELL 05 052..053 symbol="│" fg=Indexed(136) bg=Indexed(22) mod=NONE diff=None
-CELL 05 053..077 symbol="▀" fg=Indexed(22) bg=Indexed(22) mod=NONE diff=None
+CELL 05 053..054 symbol="▀" fg=Indexed(22) bg=Indexed(22) mod=NONE diff=None
+CELL 05 054..055 symbol="C" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 055..057 symbol="O" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 057..058 symbol="K" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 058..059 symbol=" " fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 059..060 symbol="E" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 060..061 symbol="N" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 061..062 symbol="D" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 062..063 symbol="E" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 063..064 symbol="D" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 064..071 symbol=" " fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 071..072 symbol="0" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 072..073 symbol="1" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 073..074 symbol=":" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 074..075 symbol="0" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 075..076 symbol="1" fg=Indexed(187) bg=Indexed(22) mod=NONE diff=None
+CELL 05 076..077 symbol="▀" fg=Indexed(22) bg=Indexed(22) mod=NONE diff=None
 CELL 05 077..078 symbol="│" fg=Indexed(136) bg=Indexed(22) mod=NONE diff=None
 CELL 05 078..079 symbol="▀" fg=Indexed(233) bg=Indexed(233) mod=NONE diff=None
 CELL 05 079..080 symbol="│" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
@@ -276,7 +287,7 @@ TEXT 22 "│▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀�
 CELL 22 000..001 symbol="│" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
 CELL 22 001..079 symbol="▀" fg=Indexed(233) bg=Indexed(233) mod=NONE diff=None
 CELL 22 079..080 symbol="│" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
-TEXT 23 "└─connected · bind warning───────────────────f freezer · q / Esc quit · ? help─┘"
+TEXT 23 "└─connected · bind warning · 86 1/64─────────f freezer · q / Esc quit · ? help─┘"
 CELL 23 000..001 symbol="└" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
 CELL 23 001..002 symbol="─" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
 CELL 23 002..003 symbol="c" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
@@ -302,7 +313,17 @@ CELL 23 022..023 symbol="n" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
 CELL 23 023..024 symbol="i" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
 CELL 23 024..025 symbol="n" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
 CELL 23 025..026 symbol="g" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
-CELL 23 026..045 symbol="─" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
+CELL 23 026..027 symbol=" " fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 027..028 symbol="·" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 028..029 symbol=" " fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 029..030 symbol="8" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 030..031 symbol="6" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 031..032 symbol=" " fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 032..033 symbol="1" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 033..034 symbol="/" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 034..035 symbol="6" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 035..036 symbol="4" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
+CELL 23 036..045 symbol="─" fg=Indexed(242) bg=Indexed(233) mod=NONE diff=None
 CELL 23 045..046 symbol="f" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
 CELL 23 046..047 symbol=" " fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
 CELL 23 047..048 symbol="f" fg=Indexed(246) bg=Indexed(233) mod=NONE diff=None
