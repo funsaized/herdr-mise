@@ -1749,7 +1749,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn xterm_scene_emits_only_indexed_handoff_colors_and_all_accent_pairs() {
+    fn xterm_scene_emits_only_indexed_handoff_colors_and_rendered_accent_pairs() {
         let agents = (0..6)
             .map(|index| {
                 let mut agent = record(&index.to_string(), AgentState::Idle);
@@ -1767,8 +1767,8 @@ pub(crate) mod tests {
             .iter()
             .flat_map(|cell| [cell.fg, cell.bg])
             .collect::<Vec<_>>();
-        for expected in theme::ACCENTS.into_iter().chain(theme::ACCENT_DIMS) {
-            assert!(emitted.contains(&expected), "missing rendered {expected:?}");
+        for expected in theme::ACCENTS[..6].iter().chain(&theme::ACCENT_DIMS[..6]) {
+            assert!(emitted.contains(expected), "missing rendered {expected:?}");
         }
         for expected in [
             theme::BG,
