@@ -539,6 +539,16 @@ test("nightshift-ship requires the candidate PR to close the work item", () => {
   );
 });
 
+test("assigned Nightshift issues move Todo to in-progress outside the factory", () => {
+  const board = workflows["nightshift-board.yml"] ?? "";
+  assert.match(board, /^  issues:\n    types: \[assigned\]$/m);
+  assert.match(board, /secrets\.NIGHTSHIFT_PROJECT_TOKEN/);
+  assert.match(board, /gh project item-edit 2 --owner funsaized/);
+  assert.match(board, /--value in-progress/);
+  assert.match(board, /\[ "\$status" != "Todo" \]/);
+  assert.doesNotMatch(board, /the-nightshift|nightshift-plan|swamp /);
+});
+
 test("Nightshift leaves GitHub board and issue lifecycle state external", () => {
   assert.deepEqual(
     auditNightshiftStateOwnership(

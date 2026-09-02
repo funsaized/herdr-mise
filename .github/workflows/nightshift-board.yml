@@ -1,0 +1,39 @@
+name: Nightshift board
+
+on:
+  issues:
+    types: [assigned]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightshift-board-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  todo-to-in-progress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Move Todo to in-progress
+        env:
+          GH_TOKEN: ${{ secrets.NIGHTSHIFT_PROJECT_TOKEN }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          set -eu
+          if [ -z "$GH_TOKEN" ]; then
+            echo "NIGHTSHIFT_PROJECT_TOKEN is missing"
+            exit 1
+          fi
+          status="$(
+            gh project item-list 2 --owner funsaized --format json --limit 200 \
+              | jq -r --arg url "$ISSUE_URL" \
+                '.items[] | select(.content.url == $url) | .status // empty'
+          )"
+          if [ "$status" != "Todo" ]; then
+            echo "status is '${status:-missing}'; leaving it"
+            exit 0
+          fi
+          gh project item-edit 2 --owner funsaized --url "$ISSUE_URL" \
+            --field Status --value in-progress
