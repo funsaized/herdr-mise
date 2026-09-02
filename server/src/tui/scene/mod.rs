@@ -297,10 +297,17 @@ fn draw_help(frame: &mut Frame<'_>, color_mode: ColorMode) {
         .saturating_add(4)
         .min(area.width);
     let line_width = width.saturating_sub(2).max(1);
-    let height = HELP_LINES
-        .iter()
-        .map(|line| (line.chars().count() as u16).div_ceil(line_width))
-        .sum::<u16>()
+    let paragraph = Paragraph::new(HELP_LINES.map(Line::from).to_vec())
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default().borders(Borders::ALL).style(
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .bg(mapped(theme::PANEL2, color_mode)),
+            ),
+        );
+    let height = u16::try_from(paragraph.line_count(line_width))
+        .unwrap_or(u16::MAX)
         .saturating_add(2)
         .min(area.height);
     let overlay = Rect::new(
@@ -309,18 +316,7 @@ fn draw_help(frame: &mut Frame<'_>, color_mode: ColorMode) {
         width,
         height,
     );
-    frame.render_widget(
-        Paragraph::new(HELP_LINES.map(Line::from).to_vec())
-            .wrap(Wrap { trim: false })
-            .block(
-                Block::default().borders(Borders::ALL).style(
-                    Style::default()
-                        .fg(mapped(theme::TEXT, color_mode))
-                        .bg(mapped(theme::PANEL2, color_mode)),
-                ),
-            ),
-        overlay,
-    );
+    frame.render_widget(paragraph, overlay);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -903,11 +899,12 @@ fn draw_freezer(
     }
     for (id, slot) in &layout.spirits {
         if let Some(entry) = table.board().iter().find(|entry| &entry.id == id) {
+            let name_width = usize::from(slot.width.saturating_sub(2));
             let name = entry
                 .name
                 .to_uppercase()
                 .chars()
-                .take(11)
+                .take(name_width)
                 .collect::<String>();
             render_line(
                 frame,

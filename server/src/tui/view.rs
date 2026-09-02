@@ -125,23 +125,6 @@ pub(crate) fn status_lines(
     (title.into(), status)
 }
 
-fn wrapped_line_count(text: &str, width: u16) -> u16 {
-    let width = usize::from(width.max(1));
-    let mut lines = 1_u16;
-    let mut used = 0_usize;
-    for word in text.split_whitespace() {
-        let word_width = word.chars().count();
-        let needed = word_width + usize::from(used > 0);
-        if used > 0 && used + needed > width {
-            lines += 1;
-            used = word_width;
-        } else {
-            used += needed;
-        }
-    }
-    lines
-}
-
 pub fn draw(
     frame: &mut Frame<'_>,
     table: &AgentTable,
@@ -158,7 +141,6 @@ pub fn draw(
         table.source_diagnostic(),
         agent_count,
     );
-    let content_height = 1 + wrapped_line_count(&source_copy, frame.area().width);
     let mut header = Paragraph::new(vec![
         Line::from(Span::styled(
             title,
@@ -167,6 +149,7 @@ pub fn draw(
         Line::from(source_copy),
     ])
     .wrap(Wrap { trim: true });
+    let content_height = u16::try_from(header.line_count(frame.area().width)).unwrap_or(u16::MAX);
     let baseline_height = if compact { 2 } else { 4 };
     let header_height = baseline_height.max(content_height + u16::from(!compact));
     if !compact {
@@ -647,6 +630,14 @@ mod tests {
         assert_eq!(scene_view, SceneView::Kitchen);
 
         let compact = render_scene(&table, 79, 23, None, scene_view, help_open);
+        let narrow = render_scene(&table, 20, 12, None, scene_view, help_open);
+        assert!(!narrow.contains(HELP_LINES[1]));
+        for wrapped in ["Shift+Tab", "inspect", "leave", "q quit"] {
+            assert!(
+                narrow.contains(wrapped),
+                "missing wrapped help text {wrapped:?} in {narrow:?}"
+            );
+        }
 
         assert!(!handle_key_with_view(
             KeyCode::Char('?'),
