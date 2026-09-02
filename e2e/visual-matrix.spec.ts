@@ -366,8 +366,8 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
         .map((row) => row.text)
         .sort(([left], [right]) => left!.localeCompare(right!)),
     ).toEqual([
-      ["FIXTURE-IDLE", "—"],
-      ["FIXTURE-WORKING", "—"],
+      ["FIXTURE-IDLE", "0:01"],
+      ["FIXTURE-WORKING", "0:01"],
     ]);
     await page.evaluate(() =>
       (document.activeElement as HTMLElement | null)?.blur(),

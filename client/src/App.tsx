@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Chrome, type DebugMetrics } from "./chrome/Chrome";
 import { KitchenScene, type SceneHit } from "./scene/kitchen-scene";
 import type { CoarseSlice } from "./state/store";
@@ -169,7 +175,7 @@ export function App() {
         }),
     ],
     controls = view === "freezer" ? spiritAgents : kitchenControls;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (isGlobalEscape(event)) {
         if (settingsOpen) setSettingsOpen(false);
