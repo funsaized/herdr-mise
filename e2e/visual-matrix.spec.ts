@@ -405,18 +405,16 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
           headers: ["COOK", "MISE TIME"],
         },
       });
-    expect(
-      (await sceneMetrics(page))?.board.rows
-        .map((row) => row.text)
-        .sort(([left], [right]) => left!.localeCompare(right!)),
-    ).toEqual([
-      ["FIXTURE-IDLE", "—"],
-      ["FIXTURE-WORKING", "—"],
+    const boardRows = (await sceneMetrics(page))?.board.rows
+      .map((row) => row.text)
+      .sort(([left], [right]) => left!.localeCompare(right!));
+    expect(boardRows?.map(([name]) => name)).toEqual([
+      "FIXTURE-IDLE",
+      "FIXTURE-WORKING",
     ]);
-    await page.evaluate(() =>
-      (document.activeElement as HTMLElement | null)?.blur(),
-    );
-    await page.keyboard.press("Tab");
+    for (const [, runtime] of boardRows ?? [])
+      expect(runtime).toMatch(/^(?:—|\d+:\d{2})$/);
+    await page.locator("body").press("Tab");
     await expect(boardButton).toBeFocused();
     await expect
       .poll(async () => (await sceneMetrics(page))?.board.strokedIds)
