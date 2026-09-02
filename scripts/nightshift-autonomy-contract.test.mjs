@@ -76,3 +76,29 @@ test("Nightshift parks fresh failed review rounds at cycle four", () => {
     /name: abort\n\s+to: abort-cleanup[\s\S]+id: abort-confirmation/,
   );
 });
+
+test("Nightshift sends ship-prep feedback through build and code review", () => {
+  const building = factory.slice(
+    factory.indexOf("        - id: building\n"),
+    factory.indexOf("        - id: code-review\n"),
+  );
+  const shipPrep = factory.slice(
+    factory.indexOf("        - id: ship-prep\n"),
+    factory.indexOf("        - id: shipping\n"),
+  );
+
+  assert.match(building, /artifact-ship-feedback/);
+  assert.match(building, /subjectVersion/);
+  assert.match(shipPrep, /name: ship-feedback/);
+  assert.match(shipPrep, /name: release-candidate\n\s+reviews: change-summary/);
+  assert.match(shipPrep, /reviews: release-candidate/);
+  assert.match(
+    shipPrep,
+    /name: request-rework\n\s+to: building\n\s+manual: true/,
+  );
+  assert.match(shipPrep, /artifact: ship-feedback, recordedThisCycle: true/);
+  assert.match(
+    shipPrep,
+    /artifact: release-candidate,[\s\S]+recordedThisCycle: true/,
+  );
+});

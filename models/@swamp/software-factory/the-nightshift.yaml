@@ -2,7 +2,7 @@ type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 7
+version: 8
 tags: {}
 globalArguments:
     stages:
@@ -173,7 +173,7 @@ globalArguments:
                   inputs:
                       workItem: "${{ self.workItem }}"
                       plan: '${{ data.latest(self.name, "artifact-plan").payload }}'
-                      reviewFeedback: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) }}'
+                      reviewFeedback: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) + (data.latest(self.name, "artifact-ship-feedback").?subjectVersion.orValue(0) == data.latest(self.name, "artifact-release-candidate").?version.orValue(-1) ? [{"id": "SHIP-REVIEW", "severity": "high", "category": "human-review", "description": data.latest(self.name, "artifact-ship-feedback").payload.feedback}] : []) }}'
               resultEvidence: build-run
           artifacts:
               - name: workspace
@@ -310,6 +310,7 @@ globalArguments:
               constraints: agent-constraints/ship-prep.md
           artifacts:
               - name: release-candidate
+                reviews: change-summary
                 schema:
                     type: object
                     required: [commit, baseCommit, subjectRoot, prUrl, branch]
@@ -319,14 +320,31 @@ globalArguments:
                         subjectRoot: { type: string, minLength: 1 }
                         prUrl: { type: string, minLength: 1 }
                         branch: { type: string, minLength: 1 }
+              - name: ship-feedback
+                reviews: release-candidate
+                schema:
+                    type: object
+                    required: [feedback]
+                    properties:
+                        feedback: { type: string, minLength: 1 }
           transitions:
               - name: ship
                 to: shipping
                 gates:
-                    - type: artifact-exists
-                      config: { artifact: release-candidate }
+                    - type: artifact-fresh
+                      config:
+                          {
+                              artifact: release-candidate,
+                              recordedThisCycle: true,
+                          }
                     - type: human-approval
                       config: { id: ship-approval }
+              - name: request-rework
+                to: building
+                manual: true
+                gates:
+                    - type: artifact-fresh
+                      config: { artifact: ship-feedback, recordedThisCycle: true }
 
         - id: shipping
           description: Verify the exact commit before human merge review.
