@@ -61,6 +61,9 @@ mode never grants `plan-approval`, `ship-approval`, `merge-confirmation`,
 `cycle-override:*` approval. A parked item returns through `rework-plan` or
 `rework-build`, never through a cycle override.
 
+Do not add parked to ship-prep. Do not edit factory `maxCycles` to unpark a
+run.
+
 Ship preparation follows `agent-constraints/ship-prep.md`. The driver may open
 and record the candidate pull request, then leaves the item at `ship-approval`.
 If the human requests changes, record `ship-feedback` verbatim and take the
