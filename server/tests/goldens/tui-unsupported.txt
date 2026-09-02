@@ -5,7 +5,7 @@ TEXT 01 "Mock feed — Herdr protocol is unsupported — observed 23; supported:
 TEXT 02 "a tested release, then retry. Nothing here is real.                                                           "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 04 "┌Kitchen status──────────────────────────────────────────────────────────────────────────────────────────────┐"
-TEXT 05 "│AGENT            STATE                  ELAPSED   MODEL          WORKSPACE        TICKETS RUNTIME           │"
+TEXT 05 "│AGENT            STATE                  ELAPSED   WORKSPACE        TICKETS RUNTIME                          │"
 STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 06 "│                                                                                                            │"
 TEXT 07 "│                                                                                                            │"

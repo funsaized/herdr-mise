@@ -120,17 +120,17 @@ describe("agent store machines", () => {
     const ended = { ...fixtureSnapshot.agents[0]!, state: "ended" as const };
     store.apply(upsert(ended));
 
-    expect(BOARD_HEADERS).toEqual(["COOK", "RUNTIME   TICKETS"]);
+    expect(BOARD_HEADERS).toEqual(["COOK", "MISE TIME"]);
     expect(boardPaintStrings(store.snapshot().board[0]!)).toEqual([
       "REFACTOR-AGENT",
-      "15:01   4",
+      "15:01",
     ]);
     expect(boardPaintStrings(store.snapshot().board[0]!)[1]).not.toContain(
       "15M",
     );
     expect(
       boardPaintStrings({ name: "zero", runtimeMs: 0, tickets: 0 }),
-    ).toEqual(["ZERO", "—   —"]);
+    ).toEqual(["ZERO", "—"]);
   });
   it("collapses rapid truth changes and converges within one second", () => {
     const clock = new FakeClock(),
@@ -271,6 +271,20 @@ describe("agent store machines", () => {
       finalState: "blocked",
       endedAt,
     });
+  });
+  it("keeps each death of a reused pane on the 86 board", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock);
+    store.apply(snapshot(agent("working", "p-1")));
+    store.apply(upsert(agent("ended", "p-1")));
+    clock.advance(1_000);
+    store.apply(upsert(agent("idle", "p-1")));
+    store.apply(upsert(agent("ended", "p-1")));
+    const board = store.snapshot().board;
+    expect(board).toHaveLength(2);
+    expect(board[0]?.id).toBe("p-1");
+    expect(board[1]?.id.startsWith("p-1:")).toBe(true);
+    expect(board.map((entry) => entry.finalState)).toEqual(["working", "idle"]);
   });
 });
 
@@ -599,26 +613,24 @@ describe("layout, transitions and resources", () => {
     expect(after).toEqual({ text: "PAYMENTS", signature: "/work/payments" });
     expect(after.signature).not.toBe(before.signature);
   });
-  it("makes agent, model, workspace, and state legible on station surfaces", () => {
+  it("makes agent, workspace, and state legible on station surfaces", () => {
     expect(
       stationIdentityLabels(
         {
           name: "Claude",
-          model: "claude-sonnet-4",
           workspace: "/work/payments",
         },
         "blocked",
       ),
     ).toEqual({
       name: "CLAUDE · PAYMENTS",
-      status: "CLAUDE-SONNET-4 · AT THE PASS",
-      signature: "Claude:claude-sonnet-4:/work/payments",
+      status: "AT THE PASS",
+      signature: "Claude:/work/payments",
     });
   });
   it("keeps every banquet status suffix intact within the 18-character bound", () => {
     const base = {
         name: "Claude",
-        model: "claude-sonnet-4",
         workspace: "/service/very-long-workspace",
       },
       now = Date.now(),
@@ -652,7 +664,6 @@ describe("layout, transitions and resources", () => {
         stationIdentityLabels(
           {
             name: `Agent-${index + 1}`,
-            model: "claude-sonnet-4",
             workspace: `/service/very-long-workspace-${index + 1}`,
           },
           "working",

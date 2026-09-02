@@ -26,15 +26,8 @@ export function compactPixelText(value: string, maxCharacters = 30) {
   return `${text.slice(0, maxCharacters - 3)}...`;
 }
 
-function compactStatus(model: string, suffix: string, maxCharacters: number) {
-  if (suffix.length >= maxCharacters) return suffix.slice(0, maxCharacters);
-  const prefixBudget = Math.max(1, maxCharacters - suffix.length - 3),
-    prefix = compactPixelText(model, prefixBudget);
-  return `${prefix} · ${suffix}`;
-}
-
 export function stationIdentityLabels(
-  agent: Pick<AgentMachine, "name" | "model" | "workspace"> &
+  agent: Pick<AgentMachine, "name" | "workspace"> &
     Partial<Pick<AgentMachine, "answerReceivedUntil">>,
   state: AgentMachine["targetState"],
   now = Date.now(),
@@ -49,16 +42,14 @@ export function stationIdentityLabels(
       ended: "86'D",
     } as const,
     answered = state === "working" && (agent.answerReceivedUntil ?? 0) > now,
-    status = answered
-      ? "ANSWER RECEIVED"
-      : compactStatus(agent.model.toUpperCase(), labels[state], maxCharacters);
+    status = answered ? "ANSWER RECEIVED" : labels[state];
   return {
     name: compactPixelText(
       `${agent.name.toUpperCase()} · ${workspace}`,
       maxCharacters,
     ),
     status,
-    signature: `${agent.name}:${agent.model}:${agent.workspace}`,
+    signature: `${agent.name}:${agent.workspace}`,
   };
 }
 

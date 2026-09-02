@@ -116,13 +116,13 @@ export interface SceneMetrics {
     preferenceChanges: number;
   };
 }
-export const BOARD_HEADERS = ["COOK", "RUNTIME   TICKETS"] as const;
+export const BOARD_HEADERS = ["COOK", "MISE TIME"] as const;
 export function boardPaintStrings(
   entry: Pick<BoardEntry, "name" | "runtimeMs" | "tickets">,
 ) {
   return [
     entry.name.toUpperCase(),
-    `${entry.runtimeMs === 0 ? "—" : formatElapsed(entry.runtimeMs)}   ${entry.tickets > 0 ? entry.tickets : "—"}`,
+    entry.runtimeMs === 0 ? "—" : formatElapsed(entry.runtimeMs),
   ] as const;
 }
 interface StationView {
@@ -537,38 +537,39 @@ export class KitchenScene {
         layout.inner.width,
         layout.inner.height,
       )
-      .fill(p.scene.steel[0][index]);
-    const tile = Math.max(
-      tokens.freezer.tile.min,
-      Math.min(
-        tokens.freezer.tile.max,
-        layout.room.width / tokens.freezer.tile.columns,
-      ),
-    );
-    for (
-      let x = layout.inner.x;
-      x < layout.inner.x + layout.inner.width;
-      x += tile
-    )
-      g.moveTo(x, layout.floor.y)
-        .lineTo(x, layout.inner.y + layout.inner.height)
-        .stroke({
-          color: p.scene.steel[2][index],
-          width: 1,
-          alpha: tokens.freezer.tile.alpha,
-        });
-    for (
-      let y = layout.floor.y;
-      y < layout.inner.y + layout.inner.height;
-      y += tile
-    )
-      g.moveTo(layout.inner.x, y)
-        .lineTo(layout.inner.x + layout.inner.width, y)
-        .stroke({
-          color: p.scene.steel[2][index],
-          width: 1,
-          alpha: tokens.freezer.tile.alpha,
-        });
+      .fill(p.scene.steel[0][index])
+      .rect(
+        layout.floor.x,
+        layout.floor.y,
+        layout.floor.width,
+        layout.floor.height,
+      )
+      .fill(tokens.freezer.floor[index]);
+    const stockFill = {
+      meat: tokens.freezer.meat,
+      crate: tokens.freezer.crate,
+      produce: tokens.freezer.produce,
+      sack: p.scene.coat[index],
+    } as const;
+    const cube = tokens.freezer.cubes,
+      cubeSize = cube.size,
+      cubeGap = cube.gap;
+    for (const stack of cube.stacks) {
+      const originX = layout.floor.x + stack.x * layout.floor.width,
+        originY = layout.floor.y + stack.y * layout.floor.height;
+      stack.cols.forEach((height, col) => {
+        for (let level = 0; level < height; level++)
+          g.rect(
+            originX + col * (cubeSize + cubeGap),
+            originY - (level + 1) * (cubeSize + cubeGap),
+            cubeSize,
+            cubeSize,
+          ).fill({
+            color: tokens.freezer.ice[index],
+            alpha: level % 2 ? 0.7 : 0.95,
+          });
+      });
+    }
     g.rect(
       layout.door.x - tokens.freezer.door.frame,
       layout.door.y - tokens.freezer.door.frame,
@@ -609,7 +610,7 @@ export class KitchenScene {
         tokens.freezer.door.latch.height,
       )
       .fill(p.scene.ink);
-    for (const [rackIndex, rack] of layout.racks.entries()) {
+    for (const rack of layout.racks) {
       g.rect(rack.x, rack.y, rack.width, rack.height).stroke({
         color: p.scene.ink,
         width: tokens.freezer.rack.borderWidth,
@@ -617,22 +618,27 @@ export class KitchenScene {
       for (let shelf = 1; shelf <= tokens.freezer.rack.shelfCount; shelf++) {
         const y =
           rack.y + (rack.height * shelf) / (tokens.freezer.rack.shelfCount + 1);
-        g.rect(rack.x, y, rack.width, tokens.freezer.rack.shelfWidth)
-          .fill(p.scene.ink)
-          .rect(
-            rack.x + tokens.freezer.rack.paper.x,
-            y - tokens.freezer.rack.paper.y,
-            rack.width * tokens.freezer.rack.paper.widthRatio,
-            tokens.freezer.rack.paper.height,
-          )
-          .fill(shelf % 2 ? p.scene.coat[index] : p.accents[4]!)
-          .rect(
-            rack.x + rack.width * tokens.freezer.rack.crate.xRatio,
-            y - tokens.freezer.rack.crate.y,
-            rack.width * tokens.freezer.rack.crate.widthRatio,
-            tokens.freezer.rack.crate.height,
-          )
-          .fill(p.accents[rackIndex ? 6 : 0]!);
+        g.rect(rack.x, y, rack.width, tokens.freezer.rack.shelfWidth).fill(
+          p.scene.ink,
+        );
+        for (const item of tokens.freezer.rack.stock[shelf - 1] ??
+          tokens.freezer.rack.stock[0]!) {
+          const lift = item.h * 0.55;
+          for (let layer = 0; layer < item.stack; layer++)
+            drawShelfFood(
+              g,
+              rack.x + item.x * rack.width + layer,
+              y - item.h - layer * lift,
+              item.w * rack.width,
+              item.h,
+              item.fill,
+              stockFill[item.fill],
+              p.scene.ink,
+              tokens.freezer.ice[index],
+              tokens.freezer.rack.fat,
+              tokens.freezer.rack.crateRim,
+            );
+        }
       }
     }
     for (const frost of layout.frost)
@@ -669,16 +675,19 @@ export class KitchenScene {
         base = slot.y + slot.height - tokens.freezer.spirit.baseInset;
       const spiritAccent = tokens.accents[entry.accentIndex]!;
       this.spiritAccents[entry.id] = spiritAccent;
-      drawCookSilhouette(
+      drawFrozenCook(
         spirit,
         slot.x + slot.width / 2,
-        base,
+        base - 4 * u,
         u,
-        p.scene.coat[index],
-        p.scene.steel[1][index],
-        p.scene.ink,
-        spiritAccent,
-        "ended",
+        {
+          coat: p.scene.coat[index],
+          skin: p.scene.skin,
+          ink: p.scene.ink,
+          boot: p.scene.boot[index],
+          tongue: tokens.freezer.tongue,
+        },
+        slot.x > layout.floor.x + layout.floor.width / 2 ? -1 : 1,
       );
       if (snapshot.selectedId === entry.id || this.focusedId === entry.id)
         spirit
@@ -1685,6 +1694,79 @@ function drawCookSilhouette(
     .fill(coat);
   if (state === "done")
     g.rect(cx - 7 * u, base - 11 * u, 4 * u, 2 * u).fill(coat);
+}
+function drawShelfFood(
+  g: Graphics,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  kind: "meat" | "crate" | "produce" | "sack",
+  fill: string,
+  ink: string,
+  ice: string,
+  fat: string,
+  crateRim: string,
+) {
+  if (kind === "meat") {
+    g.rect(x, y, width, height).fill(fill);
+    g.rect(x + width * 0.12, y + height * 0.28, width * 0.76, height * 0.16)
+      .fill(fat)
+      .rect(x + width * 0.18, y + height * 0.58, width * 0.5, height * 0.12)
+      .fill(ice);
+    g.rect(x + 1, y + 1, width - 2, height - 2).stroke({
+      color: ink,
+      width: 1,
+      alpha: 0.35,
+    });
+    return;
+  }
+  if (kind === "sack") {
+    g.rect(x + width * 0.28, y, width * 0.44, height * 0.28)
+      .fill(fill)
+      .rect(x, y + height * 0.18, width, height * 0.82)
+      .fill(fill)
+      .rect(x + width * 0.12, y + height * 0.4, width * 0.76, 2)
+      .fill({ color: ink, alpha: 0.2 });
+    return;
+  }
+  g.rect(x, y, width, height).fill(fill).stroke({ color: crateRim, width: 2 });
+  g.rect(x + 4, y + 4, width * 0.32, height * 0.38)
+    .fill(ice)
+    .rect(x + width * 0.42, y + height * 0.32, width * 0.4, height * 0.42)
+    .fill(kind === "produce" ? ice : fat);
+}
+function drawFrozenCook(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  u: number,
+  colors: {
+    coat: string;
+    skin: string;
+    ink: string;
+    boot: string;
+    tongue: string;
+  },
+  flip: number,
+) {
+  const cook = tokens.freezer.cook;
+  for (const part of cook.parts) {
+    const [x, y, width, height] = part.geometry,
+      sx = flip < 0 ? -x - width : x;
+    g.rect(cx + sx * u, cy + y * u, width * u, height * u).fill(
+      colors[part.color],
+    );
+  }
+  const eye = cook.eye;
+  for (const ex of cook.eyes) {
+    const x = cx + (flip < 0 ? -ex : ex) * u;
+    g.moveTo(x - eye.size * u, cy + eye.y0 * u)
+      .lineTo(x + eye.size * u, cy + eye.y1 * u)
+      .moveTo(x + eye.size * u, cy + eye.y0 * u)
+      .lineTo(x - eye.size * u, cy + eye.y1 * u)
+      .stroke({ color: colors.ink, width: Math.max(1, u * eye.width) });
+  }
 }
 function formatElapsed(elapsed: number) {
   const seconds = Math.floor(elapsed / 1000),

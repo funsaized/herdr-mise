@@ -143,59 +143,25 @@ pub const BLOCKED: &[&str] = &[
 ];
 const ENDED: &[&str] = &[];
 pub const SPIRIT_A: &[&str] = &[
-    "...........",
-    "...........",
-    "HHH........",
-    "HhHoSSSSSC.",
-    "HHHSeXeXSC.",
-    "...SSSSSCC.",
-    "...aaaaaA..",
-    "...AAAAA...",
-    "..D.....D..",
-    "..BB...BB..",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
-pub const SPIRIT_B: &[&str] = &[
-    "...........",
-    "...........",
-    "........HHH",
-    ".CSSSSSoHhH",
-    ".CSXeXeSHHH",
-    ".CCSSSSS...",
-    "..Aaaaaa...",
-    "...AAAAA...",
-    "..D.....D..",
-    "..BB...BB..",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
-pub const SPIRIT_C: &[&str] = &[
-    "...........",
     "...HHHHH...",
     "..HHhHhHH..",
+    ".HHHHHHHHH.",
+    "..HhHhHhH..",
     "...ooooo...",
-    "CSSSXSXSSC.",
-    ".CSSSSSSC..",
+    "..oSSSSSo..",
+    "...SeSeS...",
+    "...SSSSS...",
     "..CaaaaaC..",
+    ".CCCCCCCCC.",
+    ".CCAAAAACC.",
+    ".KCAAAAACK.",
     "...AAAAA...",
     "...D...D...",
+    "...D...D...",
     "..BB...BB..",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
 ];
+pub const SPIRIT_B: &[&str] = SPIRIT_A;
+pub const SPIRIT_C: &[&str] = SPIRIT_A;
 const SPIRIT_POSES: [&[&str]; 3] = [SPIRIT_A, SPIRIT_B, SPIRIT_C];
 
 pub fn spirit_sprite(pose: u8) -> Sprite {
@@ -277,7 +243,7 @@ mod tests {
         assert_eq!(
             SPIRIT_A
                 .iter()
-                .map(|row| row.matches('X').count())
+                .map(|row| row.matches('e').count())
                 .sum::<usize>(),
             2
         );

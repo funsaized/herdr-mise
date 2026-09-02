@@ -358,7 +358,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         board: {
-          headers: ["COOK", "RUNTIME   TICKETS"],
+          headers: ["COOK", "MISE TIME"],
         },
       });
     expect(
@@ -366,8 +366,8 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
         .map((row) => row.text)
         .sort(([left], [right]) => left!.localeCompare(right!)),
     ).toEqual([
-      ["FIXTURE-IDLE", "—   —"],
-      ["FIXTURE-WORKING", "—   —"],
+      ["FIXTURE-IDLE", "—"],
+      ["FIXTURE-WORKING", "—"],
     ]);
     await page.evaluate(() =>
       (document.activeElement as HTMLElement | null)?.blur(),
@@ -466,12 +466,12 @@ for (const count of COUNTS) {
       await expect
         .poll(async () => sceneMetrics(page))
         .toMatchObject({
-          board: { headers: ["COOK", "RUNTIME   TICKETS"] },
+          board: { headers: ["COOK", "MISE TIME"] },
         });
       const painted = await sceneMetrics(page);
       expect(painted?.board.rows).toHaveLength(Math.min(3, count));
       for (const row of painted?.board.rows ?? []) {
-        expect(row.text[1]).toMatch(/(?:\d+:\d{2}|—)\s+(?:\d+|—)$/);
+        expect(row.text[1]).toMatch(/^(?:\d+:\d{2}|—)$/);
         expect(row.text[1]).not.toMatch(/\d+M/);
       }
 

@@ -120,22 +120,32 @@ impl AgentTable {
     }
 
     fn end(&mut self, agent: AgentRecord, prior_final_state: Option<AgentState>) {
-        if let Some(index) = self.board.iter().position(|entry| entry.id == agent.id) {
-            let mut existing = self.board.remove(index);
-            existing.name = agent.name;
-            existing.runtime_ms = agent.session.runtime_ms;
-            existing.tickets = agent.session.tickets;
-            if let Some(final_state) = prior_final_state {
-                existing.final_state = final_state;
-                self.board.push(existing);
-                self.trim_board();
-            } else {
+        if prior_final_state.is_none() {
+            if let Some(index) = self
+                .board
+                .iter()
+                .rposition(|entry| same_pane(&entry.id, &agent.id))
+            {
+                let mut existing = self.board.remove(index);
+                existing.name = agent.name;
+                existing.runtime_ms = agent.session.runtime_ms;
+                existing.tickets = agent.session.tickets;
                 self.board.insert(index, existing);
+                return;
             }
-            return;
         }
+        let id = if prior_final_state.is_some()
+            && self
+                .board
+                .iter()
+                .any(|entry| same_pane(&entry.id, &agent.id))
+        {
+            format!("{}:{}", agent.id, self.board.len())
+        } else {
+            agent.id.clone()
+        };
         self.board.push(BoardEntry {
-            id: agent.id,
+            id,
             name: agent.name,
             runtime_ms: agent.session.runtime_ms,
             tickets: agent.session.tickets,
@@ -149,6 +159,10 @@ impl AgentTable {
             self.board.remove(0);
         }
     }
+}
+
+fn same_pane(entry_id: &str, pane_id: &str) -> bool {
+    entry_id == pane_id || entry_id.starts_with(&format!("{pane_id}:"))
 }
 
 #[cfg(test)]
@@ -352,34 +366,32 @@ mod tests {
     }
 
     #[test]
-    fn active_agent_ending_again_moves_to_newest_before_board_cap() {
+    fn reused_pane_keeps_each_death_on_the_board() {
         let mut table = AgentTable::default();
-        for index in 0..BOARD_CAP {
-            let id = format!("id-{index}");
-            table.apply(upsert(record(&id, AgentState::Working, 1, 1)));
-            table.apply(upsert(record(&id, AgentState::Ended, 10, 1)));
-        }
-
-        table.apply(upsert(record("id-0", AgentState::Blocked, 20, 2)));
-        table.apply(upsert(record("id-0", AgentState::Ended, 50, 5)));
-        table.apply(upsert(record("new", AgentState::Working, 30, 3)));
-        table.apply(upsert(record("new", AgentState::Ended, 40, 4)));
-
-        assert_eq!(table.board().len(), BOARD_CAP);
-        assert_eq!(table.board()[0].id, "id-2");
-        assert_eq!(table.board()[BOARD_CAP - 2].id, "id-0");
-        assert_eq!(table.board()[BOARD_CAP - 1].id, "new");
+        table.apply(upsert(record("a", AgentState::Working, 1, 1)));
+        table.apply(upsert(record("a", AgentState::Ended, 10, 1)));
+        table.apply(upsert(record("a", AgentState::Blocked, 20, 2)));
+        table.apply(upsert(record("a", AgentState::Ended, 50, 5)));
         assert_eq!(
-            table.board()[BOARD_CAP - 2].final_state,
-            AgentState::Blocked
+            table
+                .board()
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "a:1"]
         );
+        assert_eq!(table.board()[1].final_state, AgentState::Blocked);
         assert_eq!(
-            (
-                table.board()[BOARD_CAP - 2].runtime_ms,
-                table.board()[BOARD_CAP - 2].tickets
-            ),
+            (table.board()[1].runtime_ms, table.board()[1].tickets),
             (50, 5)
         );
+
+        let mut replay = record("a", AgentState::Ended, 99, 9);
+        replay.name = "replay-a".into();
+        table.apply(upsert(replay));
+        assert_eq!(table.board().len(), 2);
+        assert_eq!(table.board()[1].name, "replay-a");
+        assert_eq!(table.board()[1].final_state, AgentState::Blocked);
     }
 
     #[test]

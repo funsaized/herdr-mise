@@ -40,12 +40,6 @@ fn workspace_display_name(workspace: &str) -> &str {
 }
 
 pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
-    let model = sanitize_external(&agent.model);
-    let model = if model.trim().is_empty() {
-        "Unavailable"
-    } else {
-        model.trim()
-    };
     let tickets = if agent.session.tickets == 0 {
         "Unavailable".into()
     } else {
@@ -58,7 +52,7 @@ pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
             state_label(&agent.state)
         ),
         format!(
-            "Workspace: {} · Model: {model} · Tickets: {tickets}",
+            "Workspace: {} · Tickets: {tickets}",
             sanitize_external(workspace_display_name(&agent.workspace)),
         ),
     ]
@@ -236,7 +230,6 @@ pub fn draw(
             Cell::from(state_label(&agent.state))
                 .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
-            Cell::from(sanitize_external(&agent.model)),
             Cell::from(sanitize_external(workspace_display_name(&agent.workspace))),
             Cell::from(agent.session.tickets.to_string()),
             Cell::from(format_duration(agent.session.runtime_ms)),
@@ -250,7 +243,6 @@ pub fn draw(
                 Constraint::Length(16),
                 Constraint::Length(22),
                 Constraint::Length(9),
-                Constraint::Length(14),
                 Constraint::Length(16),
                 Constraint::Length(7),
                 Constraint::Min(9),
@@ -261,7 +253,6 @@ pub fn draw(
                 "AGENT",
                 "STATE",
                 "ELAPSED",
-                "MODEL",
                 "WORKSPACE",
                 "TICKETS",
                 "RUNTIME",
@@ -278,10 +269,9 @@ pub fn draw(
     );
     let board_rows = table.board().iter().rev().take(3).map(|entry| {
         Row::new([format!(
-            "{} · {} · {} TICKETS · FINAL {}",
+            "{} · mise {} · FINAL {}",
             sanitize_external(&entry.name),
             format_duration(entry.runtime_ms),
-            entry.tickets,
             state_label(&entry.final_state)
         )])
     });
@@ -536,7 +526,7 @@ mod tests {
                 "missing {expected:?} in {strip:?}"
             );
         }
-        assert_eq!(strip.matches("Unavailable").count(), 2);
+        assert_eq!(strip.matches("Unavailable").count(), 1);
         assert!(!terminal
             .backend()
             .buffer()
@@ -665,14 +655,12 @@ mod tests {
             "AGENT",
             "STATE",
             "ELAPSED",
-            "MODEL",
             "WORKSPACE",
             "TICKETS",
             "RUNTIME",
             "Cook blocked",
             "BLOCKED / AT THE PASS",
             "2m 5s",
-            "gpt-5.6-sol",
             "customer-api",
             "1h 1m",
             "86 BOARD",
