@@ -265,7 +265,7 @@ export async function checkCorrelatedWorkflowRun(
     const artifact = gate.config.artifact;
     if (typeof artifact !== "string") continue;
     const outputs = await query(
-      `workflowRunId == ${JSON.stringify(runId)} && name == ${JSON.stringify(`artifact-${slug}-${artifact}`)} && modelName == ${JSON.stringify(context.definition?.name ?? "")}`,
+      `workflowRunId == ${JSON.stringify(runId)} && name == ${JSON.stringify(`artifact-${slug}-${artifact}`)} && modelName == ${JSON.stringify(context.definition?.name ?? "")} && version > 0`,
     );
     if (outputs.length === 0) {
       return fail(
