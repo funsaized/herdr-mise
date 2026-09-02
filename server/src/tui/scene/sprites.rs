@@ -1,4 +1,5 @@
 use crate::protocol::AgentState;
+use crate::tui::theme;
 
 pub const SPRITE_WIDTH: usize = 11;
 pub const SPRITE_HALF_ROWS: usize = 16;
@@ -169,9 +170,9 @@ pub fn spirit_sprite(pose: u8) -> Sprite {
 
 pub fn cook_sprite(state: &AgentState, tick: u64) -> Sprite {
     let rows = match state {
-        AgentState::Idle if (tick / 4).is_multiple_of(2) => PREP_B,
-        AgentState::Idle => PREP_A,
-        AgentState::Working => WORK,
+        AgentState::Idle => WORK,
+        AgentState::Working if (tick / theme::WORKING_FRAME_TICKS).is_multiple_of(2) => PREP_B,
+        AgentState::Working => PREP_A,
         AgentState::Blocked => BLOCKED,
         AgentState::Done => PLATED,
         AgentState::Ended => ENDED,
@@ -211,13 +212,13 @@ mod tests {
     }
 
     #[test]
-    fn idle_swaps_only_at_four_tick_boundaries_and_other_poses_are_static() {
-        assert_eq!(cook_sprite(&AgentState::Idle, 0).rows, PREP_B);
-        assert_eq!(cook_sprite(&AgentState::Idle, 3).rows, PREP_B);
-        assert_eq!(cook_sprite(&AgentState::Idle, 4).rows, PREP_A);
-        assert_eq!(cook_sprite(&AgentState::Idle, 7).rows, PREP_A);
-        assert_eq!(cook_sprite(&AgentState::Idle, 8).rows, PREP_B);
-        for state in [AgentState::Working, AgentState::Blocked, AgentState::Done] {
+    fn working_swaps_at_four_tick_boundaries_and_idle_is_static() {
+        assert_eq!(cook_sprite(&AgentState::Working, 0).rows, PREP_B);
+        assert_eq!(cook_sprite(&AgentState::Working, 3).rows, PREP_B);
+        assert_eq!(cook_sprite(&AgentState::Working, 4).rows, PREP_A);
+        assert_eq!(cook_sprite(&AgentState::Working, 7).rows, PREP_A);
+        assert_eq!(cook_sprite(&AgentState::Working, 8).rows, PREP_B);
+        for state in [AgentState::Idle, AgentState::Blocked, AgentState::Done] {
             assert_eq!(cook_sprite(&state, 0), cook_sprite(&state, 999));
         }
     }

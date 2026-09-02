@@ -23,6 +23,7 @@ export interface Settings {
 export interface BoardEntry {
   id: string;
   name: string;
+  accentIndex: number;
   runtimeMs: number;
   tickets: number;
   endedAt: number;
@@ -291,6 +292,7 @@ export class AgentStore {
     const entry: BoardEntry = {
       id: agent.id,
       name: agent.name,
+      accentIndex: agent.accentIndex,
       runtimeMs: agent.session.runtimeMs,
       tickets: agent.session.tickets,
       endedAt: prior ? now : (existing?.endedAt ?? now),

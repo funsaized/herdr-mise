@@ -1,17 +1,15 @@
 import type { Graphics } from "pixi.js";
+import { tokens } from "../theme/tokens";
 
-export const IDLE_POSES = ["smoke", "recline", "sleep", "prep"] as const;
+export const IDLE_POSES = [
+  "coffeeBreak",
+  "lean",
+  "sleep",
+  "toqueAdjust",
+  "ticketRailGlance",
+] as const;
 export type IdlePose = (typeof IDLE_POSES)[number];
-export const IDLE_FRAME_MS = 140;
-export const SMOKE_LIFT_CYCLE_MS = 30 * IDLE_FRAME_MS;
-
-export function smokeLiftUnits(elapsedMs: number) {
-  const frame = Math.floor(Math.max(0, elapsedMs) / IDLE_FRAME_MS) % 30;
-  if (frame < 10) return 0;
-  if (frame < 17) return frame - 9;
-  if (frame < 23) return 7;
-  return 29 - frame;
-}
+export const IDLE_FRAME_MS = tokens.scene.cook.idleFrameMs;
 
 export interface IdleParticleSample {
   age: number;
@@ -24,9 +22,6 @@ export interface IdlePoseSample {
   frame: number;
   prepStep: 0 | 1;
   bobUnits: number;
-  handRaised: boolean;
-  handLiftUnits: number;
-  billows: IdleParticleSample[];
   zs: IdleParticleSample[];
 }
 
@@ -84,36 +79,35 @@ export function sampleIdlePose(
   elapsedMs: number,
 ): IdlePoseSample {
   const frame = Math.floor(Math.max(0, elapsedMs) / IDLE_FRAME_MS);
-  const handLiftUnits = pose === "smoke" ? smokeLiftUnits(elapsedMs) : 0;
   return {
     frame,
     prepStep: (frame % 2) as 0 | 1,
-    bobUnits: pose === "prep" && frame % 2 ? 0.4 : 0,
-    handRaised: handLiftUnits === 7,
-    handLiftUnits,
-    billows:
-      pose === "smoke"
-        ? [
-            loopParticle(frame, 0, 14, 0.6, 0.12),
-            loopParticle(frame, 7, 14, 0.6, 0.12),
-          ]
-        : [],
+    bobUnits:
+      pose === "toqueAdjust" && frame % 2 ? tokens.scene.cook.toqueBobUnits : 0,
     zs:
       pose === "sleep"
-        ? [
-            loopParticle(frame, 0, 6, 0.7, 0.12, true),
-            loopParticle(frame, 3, 6, 0.7, 0.12, true),
-          ]
+        ? tokens.scene.cook.sleep.offsets.map((offset) =>
+            loopParticle(
+              frame,
+              offset,
+              tokens.scene.cook.sleep.loopFrames,
+              tokens.scene.cook.sleep.risePerFrame,
+              tokens.scene.cook.sleep.scalePerFrame,
+              true,
+            ),
+          )
         : [],
   };
 }
 
 export function reducedIdlePoseSample(pose: IdlePose): IdlePoseSample {
-  return { ...sampleIdlePose(pose, 0), billows: [], zs: [] };
+  return { ...sampleIdlePose(pose, 0), zs: [] };
 }
 
 export function idlePoseIsAnimated(pose: IdlePose) {
-  return pose !== "recline";
+  return (
+    pose === "sleep" || pose === "toqueAdjust" || pose === "ticketRailGlance"
+  );
 }
 
 export function idleAnimationFrame(pose: IdlePose, elapsedMs: number) {
@@ -130,20 +124,8 @@ export interface IdlePoseColors {
   wood: string;
   boot: readonly [string, string];
   chair: readonly [string, string];
-  cigarette: readonly [string, string];
-  smoke: readonly [string, string];
   green: string;
 }
-
-const RECLINE = {
-  eye: [-2, -17, 1, 1],
-  rearThigh: [-1, -8, 5, 3],
-  rearShin: [3, -6, 2, 4],
-  rearBoot: [2, -2, 4, 2],
-  frontThigh: [0, -6, 8, 2],
-  frontShin: [7, -4, 2, 2],
-  frontBoot: [7, -2, 5, 2],
-} as const;
 
 function relativeRect(
   g: Graphics,
@@ -166,32 +148,8 @@ function standingCook(
   bob = 0,
 ) {
   const y = base + bob * u;
-  g.rect(cx - 5 * u, y - 2 * u, 3 * u, 2 * u)
-    .fill(colors.ink)
-    .rect(cx + 2 * u, y - 2 * u, 3 * u, 2 * u)
-    .fill(colors.ink)
-    .rect(cx - 4 * u, y - 6 * u, 3 * u, 5 * u)
-    .fill(colors.ink)
-    .rect(cx + u, y - 6 * u, 3 * u, 5 * u)
-    .fill(colors.ink)
-    .rect(cx - 6 * u, y - 15 * u, 12 * u, 10 * u)
-    .fill(colors.ink)
-    .rect(cx - 5 * u, y - 14 * u, 10 * u, 9 * u)
-    .fill(colors.coat)
-    .rect(cx - 4 * u, y - 12 * u, 8 * u, 2 * u)
-    .fill(colors.accent)
-    .rect(cx - 4 * u, y - 19 * u, 8 * u, 5 * u)
-    .fill(colors.ink)
-    .rect(cx - 3 * u, y - 18 * u, 6 * u, 4 * u)
-    .fill(colors.skin)
-    .rect(cx - 2 * u, y - 17 * u, u, u)
-    .fill(colors.ink)
-    .rect(cx - 6 * u, y - 22 * u, 12 * u, 3 * u)
-    .fill(colors.ink)
-    .rect(cx - 5 * u, y - 23 * u, 10 * u, 3 * u)
-    .fill(colors.coat)
-    .rect(cx - 3 * u, y - 25 * u, 6 * u, 3 * u)
-    .fill(colors.coat);
+  for (const part of tokens.scene.cook.standing)
+    relativeRect(g, cx, y, u, part.geometry, colors[part.color]);
   return y;
 }
 
@@ -204,70 +162,61 @@ export function drawIdlePose(
   u: number,
   colors: IdlePoseColors,
 ) {
-  if (pose === "recline") {
-    g.rect(cx - 10 * u, base - 12 * u, 2 * u, 13 * u)
-      .fill(colors.chair[0])
-      .rect(cx - 9 * u, base - 2 * u, 10 * u, 2 * u)
-      .fill(colors.chair[1])
-      .rect(cx - 8 * u, base - 14 * u, 9 * u, 8 * u)
-      .fill(colors.ink)
-      .rect(cx - 7 * u, base - 13 * u, 8 * u, 7 * u)
-      .fill(colors.coat)
-      .rect(cx - 7 * u, base - 19 * u, 6 * u, 5 * u)
-      .fill(colors.ink)
-      .rect(cx - 6 * u, base - 18 * u, 5 * u, 4 * u)
-      .fill(colors.skin)
-      .rect(cx - 8 * u, base - 22 * u, 9 * u, 3 * u)
-      .fill(colors.coat)
-      .rect(cx - 6 * u, base - 24 * u, 5 * u, 2 * u)
-      .fill(colors.coat)
-      .rect(cx - 3 * u, base - 11 * u, 3 * u, 2 * u)
-      .fill(colors.skin);
-    relativeRect(g, cx, base, u, RECLINE.eye, colors.ink);
-    relativeRect(g, cx, base, u, RECLINE.rearThigh, colors.ink);
-    relativeRect(g, cx, base, u, RECLINE.rearShin, colors.ink);
-    relativeRect(g, cx, base, u, RECLINE.frontThigh, colors.ink);
-    relativeRect(g, cx, base, u, RECLINE.frontShin, colors.ink);
-    relativeRect(g, cx, base, u, RECLINE.rearBoot, colors.boot[0]);
-    relativeRect(g, cx, base, u, RECLINE.frontBoot, colors.boot[1]);
+  if (pose === "lean") {
+    const leanColors = {
+      chair0: colors.chair[0],
+      chair1: colors.chair[1],
+      ink: colors.ink,
+      coat: colors.coat,
+      skin: colors.skin,
+      boot0: colors.boot[0],
+      boot1: colors.boot[1],
+    };
+    for (const part of tokens.scene.cook.lean.parts)
+      relativeRect(g, cx, base, u, part.geometry, leanColors[part.color]);
     return;
   }
   const y = standingCook(g, cx, base, u, colors, sample.bobUnits);
-  if (pose === "prep") {
-    const handY = y - (sample.prepStep ? 10 : 8) * u;
-    g.rect(cx + 4 * u, handY, 3 * u, 2 * u)
-      .fill(colors.skin)
-      .rect(cx + 6 * u, handY - u, 5 * u, u)
-      .fill(colors.ink)
-      .rect(cx + 2 * u, base - u, 8 * u, u)
-      .fill(colors.wood)
-      .rect(cx + 3 * u, base - 2 * u, 2 * u, u)
-      .fill(colors.green);
-  } else if (pose === "smoke") {
-    const handY = y - (9 + sample.handLiftUnits) * u;
-    g.rect(cx + 4 * u, handY, 3 * u, 2 * u)
-      .fill(colors.skin)
-      .rect(cx + 7 * u, handY, 3 * u, Math.max(1, 0.7 * u))
-      .fill(colors.cigarette[0])
-      .rect(cx + 9 * u, handY, Math.max(1, 0.8 * u), u)
-      .fill(colors.cigarette[1]);
-    sample.billows.forEach((billow, index) =>
-      g
-        .circle(
-          cx + (5 + index * 2) * u,
-          y - (14 + billow.riseUnits) * u,
-          (1.4 + billow.scale) * u,
-        )
-        .fill({ color: colors.smoke[index]!, alpha: billow.alpha * 0.75 }),
+  if (pose === "coffeeBreak") {
+    relativeRect(
+      g,
+      cx,
+      base,
+      u,
+      tokens.scene.cook.coffeeBreak.cup,
+      colors.coat,
     );
-    g.ellipse(cx + 5 * u, base - 0.5 * u, 3 * u, u).fill(colors.smoke[0]);
+    const [x, y, width, height] = tokens.scene.cook.coffeeBreak.handle;
+    g.rect(cx + x * u, base + y * u, width * u, height * u).stroke({
+      color: colors.ink,
+      width: Math.max(1, u),
+    });
+  } else if (pose === "toqueAdjust") {
+    const hand = tokens.scene.cook.toqueAdjust,
+      handY = y - hand.handY[sample.prepStep] * u;
+    g.rect(cx + hand.handX * u, handY, hand.width * u, hand.height * u).fill(
+      colors.skin,
+    );
+  } else if (pose === "ticketRailGlance") {
+    const glance = tokens.scene.cook.ticketRailGlance,
+      [eyeX, eyeY, eyeWidth, eyeHeight] = glance.eye;
+    relativeRect(
+      g,
+      cx,
+      y,
+      u,
+      [eyeX + sample.prepStep * glance.glanceUnits, eyeY, eyeWidth, eyeHeight],
+      colors.ink,
+    );
+    relativeRect(g, cx, base, u, glance.ticket, colors.coat);
   } else {
-    g.rect(cx - 2 * u, y - 17 * u, 4 * u, u).fill(colors.ink);
+    const sleep = tokens.scene.cook.sleep;
+    relativeRect(g, cx, y, u, sleep.eye, colors.ink);
     sample.zs.forEach((z, index) => {
       if (z.visible) {
-        const x = cx + (6 + index * 3) * u,
-          zy = y - (20 + z.riseUnits) * u,
-          size = (1.2 + z.scale * 0.35) * u;
+        const x = cx + (sleep.markX + index * sleep.markGap) * u,
+          zy = y + (sleep.markY - z.riseUnits) * u,
+          size = (sleep.markSize + z.scale * sleep.markScale) * u;
         g.moveTo(x, zy)
           .lineTo(x + size, zy)
           .lineTo(x, zy + size)
@@ -276,4 +225,58 @@ export function drawIdlePose(
       }
     });
   }
+}
+
+export function prepFrameInterval(progress: number | null) {
+  return (
+    tokens.scene.cook.prep.slowFrameMs -
+    Math.max(0, Math.min(1, progress ?? 0)) *
+      tokens.scene.cook.prep.accelerationMs
+  );
+}
+
+export function samplePrepPose(elapsedMs: number, progress: number | null) {
+  const frame = Math.floor(
+    Math.max(0, elapsedMs) / prepFrameInterval(progress),
+  );
+  return {
+    prepStep: (frame % 2) as 0 | 1,
+    bobUnits: frame % 2 ? tokens.scene.cook.prep.bobUnits : 0,
+  };
+}
+
+export function drawPrepPose(
+  g: Graphics,
+  sample: ReturnType<typeof samplePrepPose>,
+  cx: number,
+  base: number,
+  u: number,
+  colors: IdlePoseColors,
+) {
+  const prep = tokens.scene.cook.prep,
+    y = standingCook(g, cx, base, u, colors, sample.bobUnits),
+    handY = y - prep.handY[sample.prepStep] * u;
+  g.rect(cx + prep.handX * u, handY, prep.handWidth * u, prep.handHeight * u)
+    .fill(colors.skin)
+    .rect(
+      cx + prep.knife[0] * u,
+      handY + prep.knife[1] * u,
+      prep.knife[2] * u,
+      prep.knife[3] * u,
+    )
+    .fill(colors.ink)
+    .rect(
+      cx + prep.board[0] * u,
+      base + prep.board[1] * u,
+      prep.board[2] * u,
+      prep.board[3] * u,
+    )
+    .fill(colors.wood)
+    .rect(
+      cx + prep.garnish[0] * u,
+      base + prep.garnish[1] * u,
+      prep.garnish[2] * u,
+      prep.garnish[3] * u,
+    )
+    .fill(colors.green);
 }

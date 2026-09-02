@@ -5,11 +5,12 @@ import {
   drawIdlePose,
   idleAnimationFrame,
   idlePoseIsAnimated,
+  IDLE_POSES,
   IdlePoseAssignments,
+  prepFrameInterval,
   reducedIdlePoseSample,
   sampleIdlePose,
-  SMOKE_LIFT_CYCLE_MS,
-  smokeLiftUnits,
+  samplePrepPose,
   type IdlePose,
 } from "./idle-poses";
 
@@ -72,8 +73,6 @@ const colors = {
   wood: "wood",
   boot: ["boot-0", "boot-1"],
   chair: ["chair-0", "chair-1"],
-  cigarette: ["cigarette-0", "cigarette-1"],
-  smoke: ["smoke-0", "smoke-1"],
   green: "green",
 } as const;
 
@@ -105,20 +104,21 @@ const horizontalBounds = (graphics: RecordingGraphics) => [
 ];
 
 describe("idle pose assignment", () => {
-  it("cycles SMOKE, RECLINE, SLEEP, PREP and keeps an agent stable for the session", () => {
+  it("cycles every sparse idle pose and keeps an agent stable for the session", () => {
     const assignments = new IdlePoseAssignments(() => 0);
-    const ids = ["a", "b", "c", "d", "e"];
+    const ids = ["a", "b", "c", "d", "e", "f"];
 
     expect(ids.map((id) => assignments.for(id))).toEqual([
-      "smoke",
-      "recline",
+      "coffeeBreak",
+      "lean",
       "sleep",
-      "prep",
-      "smoke",
+      "toqueAdjust",
+      "ticketRailGlance",
+      "coffeeBreak",
     ]);
     expect(assignments.for("c")).toBe("sleep");
-    expect(new Set(ids.slice(0, 4).map((id) => assignments.for(id)))).toEqual(
-      new Set(["smoke", "recline", "sleep", "prep"]),
+    expect(new Set(ids.slice(0, 5).map((id) => assignments.for(id)))).toEqual(
+      new Set(IDLE_POSES),
     );
   });
 
@@ -126,16 +126,16 @@ describe("idle pose assignment", () => {
     const assignments = new IdlePoseAssignments(() => 0.5);
     expect(["a", "b", "c", "d", "e"].map((id) => assignments.for(id))).toEqual([
       "sleep",
-      "prep",
-      "smoke",
-      "recline",
-      "sleep",
+      "toqueAdjust",
+      "ticketRailGlance",
+      "coffeeBreak",
+      "lean",
     ]);
   });
 
   it("assigns decoration only to operationally idle agents", () => {
     const assignments = new IdlePoseAssignments(() => 0);
-    expect(assignedIdlePose("idle", "a", assignments)).toBe("smoke");
+    expect(assignedIdlePose("idle", "a", assignments)).toBe("coffeeBreak");
     for (const state of ["working", "blocked", "done", "ended"] as const) {
       expect(assignedIdlePose(state, state, assignments)).toBeNull();
     }
@@ -143,15 +143,9 @@ describe("idle pose assignment", () => {
 });
 
 describe("idle pose rendering geometry", () => {
-  it("emits smoke and sleep particles above the cook and clear of the label band", () => {
+  it("emits sleep marks above the cook and clear of the label band", () => {
     const u = 4;
-    const smoke = draw("smoke", 40, 6 * 140, u);
-    expect(smoke.circles).toHaveLength(2);
-    expect(smoke.circles.every((mark) => mark.y + mark.radius < 19 * u)).toBe(
-      true,
-    );
-
-    const sleep = draw("sleep", 40, 3 * 140, u);
+    const sleep = draw("sleep", 40, 3 * 700, u);
     expect(sleep.paths).toHaveLength(2);
     expect(sleep.paths.flat().every((point) => point.y < 30 * u)).toBe(true);
   });
@@ -159,8 +153,8 @@ describe("idle pose rendering geometry", () => {
   it.each([28, 40, 48])(
     "keeps actual emitted art inside a %i-unit station",
     (stationWidth) => {
-      for (const pose of ["smoke", "recline", "sleep", "prep"] as const) {
-        const bounds = horizontalBounds(draw(pose, stationWidth, 6 * 140, 1));
+      for (const pose of IDLE_POSES) {
+        const bounds = horizontalBounds(draw(pose, stationWidth, 6 * 700, 1));
         expect(Math.min(...bounds)).toBeGreaterThanOrEqual(0);
         expect(Math.max(...bounds)).toBeLessThanOrEqual(stationWidth);
       }
@@ -171,7 +165,7 @@ describe("idle pose rendering geometry", () => {
     const u = 4,
       cx = 14 * u,
       base = 19 * u;
-    const graphics = draw("recline", 28, 0, u);
+    const graphics = draw("lean", 28, 0, u);
     expect(graphics.rects).toContainEqual({
       x: cx - 2 * u,
       y: base - 17 * u,
@@ -234,97 +228,57 @@ describe("idle pose rendering geometry", () => {
     expect(boots.map((boot) => boot.y + boot.height)).toEqual([base, base]);
   });
 
-  it("keeps peak smoke and Z marks in the row-safe gap for 6/12-row spacing", () => {
+  it("keeps peak Z marks in the row-safe gap for 6/12-row spacing", () => {
     const u = 4;
-    const smoke = draw("smoke", 28, 6 * 140, u);
-    expect(
-      Math.min(...smoke.circles.map((mark) => mark.y / u)),
-    ).toBeGreaterThanOrEqual(-3);
-    expect(
-      Math.max(...smoke.circles.map((mark) => mark.y / u)),
-    ).toBeLessThanOrEqual(5);
-    expect(new Set(smoke.circles.map((mark) => mark.y))).toHaveLength(2);
-
-    const sleep = draw("sleep", 28, 3 * 140, u);
+    const sleep = draw("sleep", 28, 3 * 700, u);
     const zYs = sleep.paths.flatMap((path) => path.map((point) => point.y / u));
     expect(Math.min(...zYs)).toBeGreaterThanOrEqual(-4);
     expect(Math.max(...zYs)).toBeLessThanOrEqual(2);
   });
 
-  it("invalidates animated poses at 140ms without invalidating RECLINE", () => {
-    expect(idleAnimationFrame("prep", 139)).toBe(0);
-    expect(idleAnimationFrame("prep", 140)).toBe(1);
-    expect(idleAnimationFrame("smoke", 1_400)).toBe(10);
-    expect(idleAnimationFrame("recline", 0)).toBe(
-      idleAnimationFrame("recline", 10_000),
+  it("invalidates sparse poses at 700ms without invalidating LEAN", () => {
+    expect(idleAnimationFrame("toqueAdjust", 699)).toBe(0);
+    expect(idleAnimationFrame("toqueAdjust", 700)).toBe(1);
+    expect(idleAnimationFrame("lean", 0)).toBe(
+      idleAnimationFrame("lean", 10_000),
     );
   });
 });
 
 describe("idle pose animation", () => {
   it("uses a decoration-free fixed sample for every reduced-motion idle pose", () => {
-    for (const pose of ["smoke", "recline", "sleep", "prep"] as const) {
+    for (const pose of IDLE_POSES) {
       const sample = reducedIdlePoseSample(pose);
       expect(sample).toMatchObject({
         frame: 0,
         prepStep: 0,
         bobUnits: 0,
-        handRaised: false,
-        handLiftUnits: 0,
-        billows: [],
         zs: [],
       });
     }
   });
-  it("uses a calm 4.2-second lift cycle with long stable holds and pixel-unit steps", () => {
-    expect(SMOKE_LIFT_CYCLE_MS).toBe(4_200);
-    expect(
-      Array.from({ length: 10 }, (_, frame) => smokeLiftUnits(frame * 140)),
-    ).toEqual(Array(10).fill(0));
-    expect(
-      Array.from({ length: 7 }, (_, step) => smokeLiftUnits((10 + step) * 140)),
-    ).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(
-      Array.from({ length: 6 }, (_, step) => smokeLiftUnits((17 + step) * 140)),
-    ).toEqual(Array(6).fill(7));
-    expect(
-      Array.from({ length: 7 }, (_, step) => smokeLiftUnits((23 + step) * 140)),
-    ).toEqual([6, 5, 4, 3, 2, 1, 0]);
-    expect(smokeLiftUnits(SMOKE_LIFT_CYCLE_MS)).toBe(smokeLiftUnits(0));
-  });
-
-  it("samples every 140ms with the specified staggered loops", () => {
-    expect(sampleIdlePose("prep", 0)).toMatchObject({
-      frame: 0,
+  it("paces working prep from progress and keeps idle motion sparse", () => {
+    expect(samplePrepPose(0, 0)).toMatchObject({
       prepStep: 0,
       bobUnits: 0,
     });
-    expect(sampleIdlePose("prep", 140)).toMatchObject({
-      frame: 1,
+    expect(samplePrepPose(220, 0)).toMatchObject({
       prepStep: 1,
       bobUnits: 0.4,
     });
-
-    expect(sampleIdlePose("smoke", 5 * 140)).toMatchObject({
-      handRaised: false,
-      handLiftUnits: 0,
-    });
-    expect(sampleIdlePose("smoke", 17 * 140)).toMatchObject({
-      handRaised: true,
-      handLiftUnits: 7,
-    });
-    const smoke = sampleIdlePose("smoke", 6 * 140);
-    expect(smoke.handRaised).toBe(false);
-    expect(smoke.billows.map((billow) => billow.age)).toEqual([6, 13]);
-    expect(smoke.billows[0]).toMatchObject({ riseUnits: 3.6, scale: 1.72 });
-
-    const sleep = sampleIdlePose("sleep", 3 * 140);
+    expect(samplePrepPose(100, 1).prepStep).toBe(1);
+    expect(prepFrameInterval(0)).toBe(220);
+    expect(prepFrameInterval(1)).toBe(100);
+    const sleep = sampleIdlePose("sleep", 3 * 700);
     expect(sleep.zs.map((z) => z.age)).toEqual([3, 0]);
-    expect(sampleIdlePose("sleep", 5 * 140).zs[0]?.visible).toBe(false);
-    expect(idlePoseIsAnimated("recline")).toBe(false);
+    expect(sampleIdlePose("sleep", 5 * 700).zs[0]?.visible).toBe(false);
+    expect(idlePoseIsAnimated("lean")).toBe(false);
+    expect(draw("ticketRailGlance", 28, 700).rects).not.toEqual(
+      draw("ticketRailGlance", 28, 0).rects,
+    );
     expect(
-      ["prep", "smoke", "sleep"].every((pose) =>
-        idlePoseIsAnimated(pose as "prep"),
+      ["sleep", "toqueAdjust", "ticketRailGlance"].every((pose) =>
+        idlePoseIsAnimated(pose as IdlePose),
       ),
     ).toBe(true);
   });

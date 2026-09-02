@@ -44,21 +44,33 @@ pub const POT_HI: Color = Color::Indexed(245);
 pub const STEAM: Color = Color::Indexed(247);
 pub const STEAM_HI: Color = Color::Indexed(253);
 
-pub const ACCENTS: [Color; 6] = [
+pub const ACCENTS: [Color; 12] = [
     Color::Indexed(66),
     Color::Indexed(96),
     Color::Indexed(67),
     Color::Indexed(101),
-    Color::Indexed(131),
+    Color::Indexed(138),
     Color::Indexed(137),
+    Color::Indexed(66),
+    Color::Indexed(101),
+    Color::Indexed(103),
+    Color::Indexed(101),
+    Color::Indexed(96),
+    Color::Indexed(66),
 ];
-pub const ACCENT_DIMS: [Color; 6] = [
+pub const ACCENT_DIMS: [Color; 12] = [
     Color::Indexed(23),
     Color::Indexed(53),
     Color::Indexed(24),
     Color::Indexed(58),
     Color::Indexed(95),
     Color::Indexed(94),
+    Color::Indexed(23),
+    Color::Indexed(58),
+    Color::Indexed(60),
+    Color::Indexed(58),
+    Color::Indexed(53),
+    Color::Indexed(23),
 ];
 pub const SPIRIT: Color = ACCENTS[4];
 pub const SPIRIT_DIM: Color = ACCENT_DIMS[4];
@@ -104,6 +116,7 @@ pub const SNOW_SLOT_Y: u64 = 3;
 pub const PARTICLE_SHADE_AGE: u64 = 4;
 pub const TICKET_MIN_STATION_WIDTH: u16 = 24;
 pub const WORKING_SHIFT: u16 = 3;
+pub const WORKING_FRAME_TICKS: u64 = 4;
 pub const SPRITE_Y_PAD: u16 = 4;
 pub const TICKET_X_INSET: i32 = 2;
 pub const TICKET_Y_INSET: i32 = 3;
@@ -228,15 +241,21 @@ mod tests {
             [POT, POT_HI, STEAM, STEAM_HI],
             [238, 245, 247, 253].map(Color::Indexed)
         );
-        assert_eq!(ACCENTS, [66, 96, 67, 101, 131, 137].map(Color::Indexed));
-        assert_eq!(ACCENT_DIMS, [23, 53, 24, 58, 95, 94].map(Color::Indexed));
+        assert_eq!(
+            ACCENTS,
+            [66, 96, 67, 101, 138, 137, 66, 101, 103, 101, 96, 66].map(Color::Indexed)
+        );
+        assert_eq!(
+            ACCENT_DIMS,
+            [23, 53, 24, 58, 95, 94, 23, 58, 60, 58, 53, 23].map(Color::Indexed)
+        );
     }
 
     #[test]
     fn accent_pairs_wrap_together() {
         for index in 0..18 {
-            assert_eq!(accent(index), ACCENTS[usize::from(index) % 6]);
-            assert_eq!(accent_dim(index), ACCENT_DIMS[usize::from(index) % 6]);
+            assert_eq!(accent(index), ACCENTS[usize::from(index) % 12]);
+            assert_eq!(accent_dim(index), ACCENT_DIMS[usize::from(index) % 12]);
         }
     }
 }

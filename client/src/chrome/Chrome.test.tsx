@@ -233,6 +233,7 @@ describe("chrome interactions", () => {
           entry={{
             id: "a",
             name: "agent",
+            accentIndex: 0,
             runtimeMs: 1_000,
             tickets: 0,
             endedAt: Date.now(),

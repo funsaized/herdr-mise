@@ -21,7 +21,6 @@ import type {
 } from "../state/store";
 import { BellController } from "../sound/bell";
 import {
-  accentIndexForId,
   getTheme,
   paletteIndex,
   resolveTheme,
@@ -40,10 +39,13 @@ import { TransitionEngine } from "./transition";
 import {
   assignedIdlePose,
   drawIdlePose,
+  drawPrepPose,
   idleAnimationFrame,
   IdlePoseAssignments,
+  prepFrameInterval,
   reducedIdlePoseSample,
   sampleIdlePose,
+  samplePrepPose,
   type IdlePose,
 } from "./idle-poses";
 import {
@@ -90,6 +92,11 @@ export interface SceneMetrics {
   stationRebuilds: number;
   stationDisposals: number;
   idlePoses: Record<string, IdlePose>;
+  stationVisuals: Record<
+    string,
+    { accent: string; idlePose: IdlePose | null; prepStep: 0 | 1 | null }
+  >;
+  spiritAccents: Record<string, string>;
   blockedIndicators: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
@@ -178,6 +185,14 @@ export function sceneMotionPolicy(reduced: boolean) {
     transitions: enabled,
   };
 }
+export function sceneContinuousMotion(
+  reduced: boolean,
+  agents: Iterable<Pick<AgentMachine, "targetState">>,
+) {
+  return (
+    !reduced && [...agents].some((agent) => agent.targetState === "working")
+  );
+}
 export class BusserSweepTimeline {
   private sweeps = new Map<string, { rect: Rect; startedAt: number }>();
   start(id: string, rect: Rect, now: number) {
@@ -246,6 +261,8 @@ export class KitchenScene {
   private stationRebuilds = 0;
   private stationDisposals = 0;
   private readonly idlePoses = new IdlePoseAssignments();
+  private readonly stationVisuals: SceneMetrics["stationVisuals"] = {};
+  private readonly spiritAccents: SceneMetrics["spiritAccents"] = {};
   private hits: SceneHit[] = [];
   private lastHitSignature = "";
   private focusedId: string | null = null;
@@ -267,7 +284,7 @@ export class KitchenScene {
   private resizeObserver: ResizeObserver | null = null;
   private visibleHandler = () => this.onVisibility();
   private themeHandler = () => this.redraw();
-  private lastSteam = 0;
+  private lastSteam = new Map<string, number>();
   private lastVisualUpdate = 0;
   private destroyed = false;
   private currentDrawCalls = 0;
@@ -413,6 +430,8 @@ export class KitchenScene {
       stationRebuilds: this.stationRebuilds,
       stationDisposals: this.stationDisposals,
       idlePoses,
+      stationVisuals: { ...this.stationVisuals },
+      spiritAccents: { ...this.spiritAccents },
       blockedIndicators,
       stateIndicators,
       endedEntries: snapshot.board.length,
@@ -424,17 +443,7 @@ export class KitchenScene {
         activeParticles,
         activeTransitions,
         activeBusserSweeps,
-        continuous:
-          !this.reducedMotion &&
-          (activeParticles > 0 ||
-            activeTransitions > 0 ||
-            activeBusserSweeps > 0 ||
-            agents.some(
-              (agent) =>
-                agent.targetState === "idle" ||
-                agent.targetState === "working" ||
-                agent.targetState === "blocked",
-            )),
+        continuous: sceneContinuousMotion(this.reducedMotion, agents),
         preferenceChanges: this.preferenceChanges,
       },
     };
@@ -514,6 +523,8 @@ export class KitchenScene {
   private drawFreezer() {
     const layout = this.freezerLayout;
     if (!layout) return;
+    for (const id of Object.keys(this.spiritAccents))
+      delete this.spiritAccents[id];
     const p = getTheme().palette,
       index = paletteIndex(this.resolvedTheme()),
       g = new Graphics();
@@ -656,6 +667,8 @@ export class KitchenScene {
           ),
         ),
         base = slot.y + slot.height - tokens.freezer.spirit.baseInset;
+      const spiritAccent = tokens.accents[entry.accentIndex]!;
+      this.spiritAccents[entry.id] = spiritAccent;
       drawCookSilhouette(
         spirit,
         slot.x + slot.width / 2,
@@ -664,7 +677,7 @@ export class KitchenScene {
         p.scene.coat[index],
         p.scene.steel[1][index],
         p.scene.ink,
-        p.accents[accentIndexForId(entry.id)]!,
+        spiritAccent,
         "ended",
       );
       if (snapshot.selectedId === entry.id || this.focusedId === entry.id)
@@ -1090,11 +1103,11 @@ export class KitchenScene {
       cookY = home.y + (slot.y - home.y) * eased - rect.y,
       passX = slot.x - rect.x,
       passY = slot.y - rect.y,
-      geometrySignature = `${index}:${u}:${rect.width}:${rect.height}:${accentIndexForId(agent.id)}`;
+      geometrySignature = `${index}:${u}:${rect.width}:${rect.height}:${agent.accentIndex}`;
     if (view.staticSignature !== geometrySignature) {
       const counterWidth = Math.max(20 * u, rect.width - 9 * u),
         left = 4.5 * u,
-        accent = p.accents[accentIndexForId(agent.id)]!;
+        accent = tokens.accents[agent.accentIndex]!;
       view.staticSignature = geometrySignature;
       staticBody
         .clear()
@@ -1129,12 +1142,30 @@ export class KitchenScene {
       elapsedText = state === "blocked" ? formatElapsed(elapsed) : "",
       selected = snapshot.selectedId === agent.id,
       focused = this.focusedId === agent.id,
+      blockedStage =
+        elapsed >= snapshot.settings.escalationVignetteMs
+          ? 2
+          : elapsed >= snapshot.settings.escalationFastMs
+            ? 1
+            : 0,
+      prepSample = samplePrepPose(motion.cook ? now : 0, agent.progress),
+      doneElapsed = Math.max(0, wallNow - Date.parse(agent.stateEnteredAt)),
+      doneFlourish =
+        motion.cook &&
+        state === "done" &&
+        doneElapsed < tokens.scene.cook.done.flourishMs,
       animationFrame =
         motion.idle && idlePose
           ? idleAnimationFrame(idlePose, now)
-          : motion.cook && (state === "working" || state === "blocked")
-            ? Math.floor(now / 125)
-            : 0,
+          : motion.cook && state === "working"
+            ? prepSample.prepStep
+            : motion.cook && state === "blocked"
+              ? Math.floor(
+                  now / tokens.scene.cook.blocked.frameMs[blockedStage ? 1 : 0],
+                )
+              : doneFlourish
+                ? Math.floor(doneElapsed / tokens.scene.cook.done.frameMs)
+                : 0,
       transitionFrame =
         transition && transition.progress < 1
           ? Math.round(transition.progress * 1000)
@@ -1197,15 +1228,19 @@ export class KitchenScene {
         Math.max(20 * u, rect.width - 6 * u),
         9 * u,
       ).stroke({ color: p.semantic.blocked, width: Math.max(2, u) });
-    const bob = motion.cook
-        ? Math.sin((now + (sceneIdentityHash(agent.id) % 700)) / 140) * u * 0.35
-        : 0,
-      accent = p.accents[accentIndexForId(agent.id)]!;
-    if (idlePose) {
-      const sample = motion.idle
-        ? sampleIdlePose(idlePose, now)
-        : reducedIdlePoseSample(idlePose);
-      drawIdlePose(g, idlePose, sample, cookX, cookY, u, {
+    const bob =
+        motion.cook && state === "blocked"
+          ? Math.sin(
+              (now +
+                (sceneIdentityHash(agent.id) %
+                  tokens.scene.cook.blocked.identitySpreadMs)) /
+                tokens.scene.cook.blocked.bobPeriodMs[blockedStage ? 1 : 0],
+            ) *
+            u *
+            tokens.scene.cook.blocked.bobUnits[blockedStage]
+          : 0,
+      accent = tokens.accents[agent.accentIndex]!,
+      poseColors = {
         coat: p.scene.coat[index],
         skin: p.scene.skin,
         ink: p.scene.ink,
@@ -1213,11 +1248,21 @@ export class KitchenScene {
         wood: p.scene.wood[index],
         boot: p.scene.boot,
         chair: p.scene.chair,
-        cigarette: p.scene.cigarette,
-        smoke: [p.scene.smoke[0][index], p.scene.smoke[1][index]],
         green: p.semantic.done,
-      });
-    } else
+      };
+    this.stationVisuals[agent.id] = {
+      accent,
+      idlePose,
+      prepStep: state === "working" ? prepSample.prepStep : null,
+    };
+    if (idlePose) {
+      const sample = motion.idle
+        ? sampleIdlePose(idlePose, now)
+        : reducedIdlePoseSample(idlePose);
+      drawIdlePose(g, idlePose, sample, cookX, cookY, u, poseColors);
+    } else if (state === "working")
+      drawPrepPose(g, prepSample, cookX, cookY, u, poseColors);
+    else
       drawCookSilhouette(
         g,
         cookX,
@@ -1230,7 +1275,7 @@ export class KitchenScene {
         state,
       );
     if (state === "working") {
-      const flicker = motion.cook ? Math.floor(now / 120) % 2 : 0,
+      const flicker = prepSample.prepStep,
         potX = rect.width / 2 + 5 * u;
       g.rect(potX - 5 * u, counterY - 4 * u, 10 * u, 4 * u)
         .fill(p.scene.ink)
@@ -1267,7 +1312,7 @@ export class KitchenScene {
         )
         .fill(p.scene.ticket)
         .rect(timerX, timerY, timerChip.width, timerChip.height)
-        .fill({ color: p.scene.ink, alpha: 0.82 });
+        .fill(p.scene.blockedChip);
       timer.text = elapsedText;
       timer.style.fill = p.semantic.blockedText;
       timer.style.fontSize = Math.max(8, 1.6 * u);
@@ -1277,8 +1322,9 @@ export class KitchenScene {
     if (state === "done") {
       const plate = donePlateGeometry(rect.width, u, counterY),
         emphasis = index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten;
-      for (const ray of plate.rays)
-        g.rect(ray.x, ray.y, ray.width, ray.height).fill(emphasis);
+      if (doneFlourish)
+        for (const ray of plate.rays)
+          g.rect(ray.x, ray.y, ray.width, ray.height).fill(emphasis);
       g.ellipse(plate.center.x, plate.center.y, plate.radius.x, plate.radius.y)
         .fill(p.scene.ticket)
         .ellipse(
@@ -1344,20 +1390,29 @@ export class KitchenScene {
       this.store.reconcileRendered();
       const motion = sceneMotionPolicy(this.reducedMotion);
       if (motion.steam) {
-        for (const agent of snapshot.agents.values())
-          if (agent.targetState === "working" && now - this.lastSteam > 220) {
+        for (const agent of snapshot.agents.values()) {
+          if (agent.targetState === "working") {
+            const lastSteam = this.lastSteam.get(agent.id) ?? 0;
+            if (now - lastSteam < prepFrameInterval(agent.progress)) continue;
             const rect = this.layout.stations.find(
               (item) => item.id === agent.id,
             );
-            if (rect)
+            if (rect) {
               this.particles.acquire(
                 rect.x + rect.width / 2,
                 rect.y + rect.height * 0.35,
               );
+              this.lastSteam.set(agent.id, now);
+            }
           }
-        if (now - this.lastSteam > 220) this.lastSteam = now;
+        }
+        for (const id of this.lastSteam.keys())
+          if (!snapshot.agents.has(id)) this.lastSteam.delete(id);
         this.particles.update(visualDelta);
-      } else this.particles.releaseAll();
+      } else {
+        this.lastSteam.clear();
+        this.particles.releaseAll();
+      }
       this.drawParticles();
       this.drawStations(now);
       this.drawEscalation(now);
@@ -1436,6 +1491,7 @@ export class KitchenScene {
   private disposeStation(id: string, view: StationView) {
     this.stationViews.delete(id);
     this.stationNodes.delete(id);
+    delete this.stationVisuals[id];
     this.stationLayer.removeChild(view.node);
     view.node.destroy(true);
     this.stationDisposals++;
@@ -1469,7 +1525,7 @@ export class KitchenScene {
       bell = passBellGeometry(this.layout).center;
     g.clear();
     if (blocked.length) {
-      const period = stage >= 1 ? 280 : 560;
+      const period = tokens.scene.cook.blocked.visualBellMs[stage >= 1 ? 1 : 0];
       if (!motion.escalation || now % period < period / 2)
         for (const radius of stage >= 1 ? [3.5, 5.5, 7.5] : [3.5, 5.5])
           g.arc(
