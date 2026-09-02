@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  copyFileSync,
   lstatSync,
   mkdtempSync,
   mkdirSync,
@@ -18,7 +19,7 @@ function makeArtifact(root, version) {
   mkdirSync(stage);
   writeFileSync(join(stage, "herdr-mise"), `#!/bin/sh\necho ${version}\n`);
   chmodSync(join(stage, "herdr-mise"), 0o755);
-  writeFileSync(join(stage, "LICENSE"), "test license\n");
+  copyFileSync("LICENSE", join(stage, "LICENSE"));
   writeFileSync(
     join(stage, "THIRD_PARTY_NOTICES.txt"),
     "## Rust dependencies\n## JavaScript dependencies\nInstrument Sans Project Authors\nSilkscreen Project Authors\n",
@@ -51,7 +52,7 @@ function installArtifact(root, installRoot, version) {
     [
       "scripts/verify-public-artifact.sh",
       `file://${archive}`,
-      `file://${checksum}`,
+      checksum,
       version,
       installRoot,
     ],
@@ -83,7 +84,7 @@ test("rejects non-HTTPS public URLs before download", () => {
   assert.match(result.stderr, /HTTPS/);
 });
 
-test("downloads, verifies, and installs into an exact versioned path", () => {
+test("uses a local sidecar to verify and install into an exact versioned path", () => {
   const root = mkdtempSync(join(tmpdir(), "mise-public-test-"));
   const installRoot = join(root, "install");
   const digest = installArtifact(root, installRoot, "0.1.0-rc.1");
@@ -105,6 +106,32 @@ test("downloads, verifies, and installs into an exact versioned path", () => {
     ).trim(),
     digest,
   );
+});
+
+test("rejects an archive that does not match its local sidecar", () => {
+  const root = mkdtempSync(join(tmpdir(), "mise-checksum-test-"));
+  const { archive, checksum } = makeArtifact(root, "0.1.0");
+  writeFileSync(checksum, `${"0".repeat(64)}  ${basename(archive)}\n`);
+  const result = spawnSync(
+    "sh",
+    [
+      "scripts/verify-public-artifact.sh",
+      `file://${archive}`,
+      checksum,
+      "0.1.0",
+      join(root, "install"),
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ACCEPTANCE_ALLOW_FILE_URLS: "1",
+        ACCEPTANCE_SKIP_SMOKE: "1",
+      },
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /checksum mismatch/);
 });
 
 test("second install switches current without leaving current.next litter", () => {
@@ -178,6 +205,7 @@ test("curl disables default curlrc before every option", () => {
   const source = readFileSync("scripts/verify-public-artifact.sh", "utf8");
   const downloads = source
     .split("\n")
+    .map((line) => line.trimStart())
     .filter((line) => line.startsWith("curl "));
   assert.ok(downloads.length >= 2);
   assert.ok(downloads.every((line) => line.startsWith("curl -q ")));

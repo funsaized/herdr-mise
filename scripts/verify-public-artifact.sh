@@ -3,9 +3,9 @@
 # versioned user-path install. Defaults to a new temporary install root.
 set -eu
 
-archive_url=${1:?usage: verify-public-artifact.sh ARCHIVE_URL CHECKSUM_URL VERSION [INSTALL_ROOT]}
-checksum_url=${2:?usage: verify-public-artifact.sh ARCHIVE_URL CHECKSUM_URL VERSION [INSTALL_ROOT]}
-version=${3:?usage: verify-public-artifact.sh ARCHIVE_URL CHECKSUM_URL VERSION [INSTALL_ROOT]}
+archive_url=${1:?usage: verify-public-artifact.sh ARCHIVE_URL CHECKSUM_SOURCE VERSION [INSTALL_ROOT]}
+checksum_source=${2:?usage: verify-public-artifact.sh ARCHIVE_URL CHECKSUM_SOURCE VERSION [INSTALL_ROOT]}
+version=${3:?usage: verify-public-artifact.sh ARCHIVE_URL CHECKSUM_SOURCE VERSION [INSTALL_ROOT]}
 install_root=${4:-$(mktemp -d "${TMPDIR:-/tmp}/herdr-mise-install.XXXXXX")}
 
 case "$version" in *[!0-9A-Za-z.-]*|'') echo "invalid version: $version" >&2; exit 1 ;; esac
@@ -15,7 +15,11 @@ else
   allowed='https://'
 fi
 case "$archive_url" in https://*) ;; file://*) [ "$allowed" = 'https://|file://' ] || { echo "public artifact URL must use HTTPS" >&2; exit 1; } ;; *) echo "public artifact URL must use HTTPS" >&2; exit 1 ;; esac
-case "$checksum_url" in https://*) ;; file://*) [ "$allowed" = 'https://|file://' ] || { echo "public checksum URL must use HTTPS" >&2; exit 1; } ;; *) echo "public checksum URL must use HTTPS" >&2; exit 1 ;; esac
+case "$checksum_source" in
+  https://*) ;;
+  file://*) [ "$allowed" = 'https://|file://' ] || { echo "public checksum URL must use HTTPS" >&2; exit 1; } ;;
+  *) [ -f "$checksum_source" ] || { echo "checksum file not found: $checksum_source" >&2; exit 1; } ;;
+esac
 
 download=$(mktemp -d "${TMPDIR:-/tmp}/herdr-mise-download.XXXXXX")
 stage=$(mktemp -d "${TMPDIR:-/tmp}/herdr-mise-stage.XXXXXX")
@@ -24,10 +28,15 @@ archive_name=${archive_url%%\?*}
 archive_name=${archive_name##*/}
 [ -n "$archive_name" ] || { echo "artifact URL has no filename" >&2; exit 1; }
 archive="$download/$archive_name"
-checksum="$archive.sha256"
 
 curl -q --fail --silent --show-error --location --retry 3 --retry-all-errors --netrc-file /dev/null "$archive_url" -o "$archive"
-curl -q --fail --silent --show-error --location --retry 3 --retry-all-errors --netrc-file /dev/null "$checksum_url" -o "$checksum"
+case "$checksum_source" in
+  https://*|file://*)
+    checksum="$archive.sha256"
+    curl -q --fail --silent --show-error --location --retry 3 --retry-all-errors --netrc-file /dev/null "$checksum_source" -o "$checksum"
+    ;;
+  *) checksum=$checksum_source ;;
+esac
 
 expected=$(awk 'NF == 2 { print $1; exit }' "$checksum")
 recorded=$(awk 'NF == 2 { print $2; exit }' "$checksum")

@@ -56,8 +56,8 @@ herdr
 
 ### Download, verify, and run herdr-mise
 
-In a second terminal, download the archive and its `.sha256` sidecar, verify the
-checksum, then extract and run. See
+In a second terminal, download the archive and verify it against the matching
+sidecar in this git checkout, then extract and run. See
 [Operations — run the release archive](docs/operations.md#run-the-release-archive)
 for platform and codesign details.
 
@@ -66,13 +66,14 @@ TAG=v0.1.0
 TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
+SIDECAR=docs/releases/${TAG}/$BASE.tar.gz.sha256
 
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
+curl -fsSL -O "$URL/$BASE.tar.gz" \
   && {
     if command -v shasum >/dev/null 2>&1; then
-      shasum -a 256 -c "$BASE.tar.gz.sha256"
+      shasum -a 256 -c "$SIDECAR"
     else
-      sha256sum -c "$BASE.tar.gz.sha256"
+      sha256sum -c "$SIDECAR"
     fi
   } \
   && tar -xzf "$BASE.tar.gz" \
@@ -142,6 +143,45 @@ all-day use. The detailed browser/TUI representation audit is in
 - **Empty:** a live source with no agents shows `Waiting for agents — start one
 in herdr.`
 
+## Install
+
+Homebrew on macOS or Linuxbrew installs the prebuilt `v0.1.0` archive, which is
+Developer ID-signed on macOS. It does not rebuild from source or start a
+service during installation:
+
+```sh
+brew tap funsaized/herdr-mise https://github.com/funsaized/herdr-mise.git
+brew install herdr-mise
+# From a checkout, instead: brew install ./Formula/herdr-mise.rb
+brew upgrade herdr-mise
+
+brew services start herdr-mise # explicitly enable launch on login
+tail -f "$(brew --prefix)/var/log/herdr-mise.log" \
+  "$(brew --prefix)/var/log/herdr-mise.error.log"
+brew services stop herdr-mise
+brew uninstall herdr-mise
+```
+
+The service runs HTTP mode on `127.0.0.1:8686`. Stop any foreground
+`herdr-mise` first: an occupied port makes service startup fail, with the bind
+error in `herdr-mise.error.log`. These logs cover startup and bind status only;
+open the loopback UI and check its `DEMO SERVICE` placard for Herdr feed health.
+
+On Linux x86_64 without Homebrew, use the repository-authenticated sidecar,
+`docs/releases/v0.1.0/herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256`,
+not a checksum downloaded beside the archive:
+
+```sh
+ASSET=herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+curl -fSLO "https://github.com/funsaized/herdr-mise/releases/download/v0.1.0/$ASSET"
+sha256sum -c docs/releases/v0.1.0/$ASSET.sha256
+tar -xzf "$ASSET"
+./herdr-mise
+```
+
+See [Operations](docs/operations.md#homebrew) for verifier installation and
+uninstall details.
+
 ## Local development
 
 Use the deterministic client-only playground for visual work:
@@ -194,8 +234,9 @@ The browser service continues alongside the TUI when its loopback port is free
   proxy, which owns its transport and access control.
 - The binary sends no telemetry and performs no outbound product network
   requests. Live mode reads only the local Herdr Unix socket.
-- Release archives support macOS arm64, macOS x86_64, and Linux x86_64. There is
-  no Homebrew package, background service, installer, or auto-update.
+- Release archives and the Homebrew formula support macOS arm64, macOS x86_64,
+  and Linux x86_64. Homebrew service startup is always explicit; there is no
+  auto-update.
 - Browser settings are local site data. Reduced motion is honored; the manual
   VoiceOver listening pass remains post-release work.
 

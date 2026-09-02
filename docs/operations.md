@@ -67,7 +67,8 @@ Targets:
 | macOS Intel         | `x86_64-apple-darwin`      |
 | Linux x86_64        | `x86_64-unknown-linux-gnu` |
 
-Download, verify, extract, and run from the upstream release:
+Download the archive and verify it against the git-authenticated sidecar in this
+repository. Do not download the `.sha256` beside the archive as the trust root:
 
 ```sh
 TAG=v0.1.0
@@ -75,12 +76,14 @@ TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gn
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
 
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
+SIDECAR=docs/releases/v0.1.0/$BASE.tar.gz.sha256
+
+curl -fsSL -O "$URL/$BASE.tar.gz" \
   && {
     if command -v shasum >/dev/null 2>&1; then
-      shasum -a 256 -c "$BASE.tar.gz.sha256"
+      shasum -a 256 -c "$SIDECAR"
     else
-      sha256sum -c "$BASE.tar.gz.sha256"
+      sha256sum -c "$SIDECAR"
     fi
   } \
   && tar -xzf "$BASE.tar.gz" \
@@ -95,6 +98,18 @@ explicit `&&` chain prevents checksum verification, extraction, or execution
 after any preceding failure; it does not rely on interactive-shell error
 handling or exit the user's shell.
 
+On macOS, release validation also checks the Developer ID signature, hardened
+runtime, and signing timestamp. Put the checked-in sidecar beside the archive
+for the verifier, then enable its host-bound signature path:
+
+```sh
+cp "$SIDECAR" "$BASE.tar.gz.sha256"
+VERIFY_CODESIGN=1 sh scripts/verify-release-artifact.sh "$BASE.tar.gz"
+```
+
+This is the signed/notarized release verification path; it requires macOS and
+does not apply to Linux artifacts.
+
 The archive contains three top-level files (no nested directory): the
 `herdr-mise` executable, the project `LICENSE`, and generated
 `THIRD_PARTY_NOTICES.txt` covering the locked production dependency trees and
@@ -102,14 +117,71 @@ bundled font licenses. The binary serves the embedded client, opens the
 WebSocket, and tails the herdr socket (or runs the demo feed). It binds only to
 `127.0.0.1`, on port `8686` by default (`server/src/main.rs`).
 
-### Upgrade and uninstall
+### Homebrew
 
-There is no installer or package manager entry. Upgrade by stopping the
-process, verifying a newer archive's checksum, extracting it, and replacing
-the old binary. Uninstall by stopping the process and deleting the binary
-(and any leftover archives). Browser settings under
-`localStorage["herdr-mise:settings"]` and the `mise-bell-hint` key are
-optional cleanup.
+The repository is not named `homebrew-*`, so tap it with its explicit URL or
+install the formula directly from a checkout. Installation consumes the
+published three-file archive and does not start the service:
+
+```sh
+brew tap funsaized/herdr-mise https://github.com/funsaized/herdr-mise.git
+brew install herdr-mise
+# From a checkout, instead: brew install ./Formula/herdr-mise.rb
+brew upgrade herdr-mise
+```
+
+Run in the foreground with `herdr-mise`, or explicitly register the background
+service for launch on login:
+
+```sh
+brew services start herdr-mise
+tail -f "$(brew --prefix)/var/log/herdr-mise.log" \
+  "$(brew --prefix)/var/log/herdr-mise.error.log"
+brew services stop herdr-mise
+brew uninstall herdr-mise
+```
+
+The same commands apply to Linuxbrew, which uses its user service manager.
+Stopping the service before uninstall lets Homebrew remove the user LaunchAgent
+or Linux service registration. `brew install` alone never enables it.
+
+The service runs `herdr-mise` in HTTP mode with no `--tui` or extra origins and
+listens only on `127.0.0.1:8686`. A foreground process on that address causes
+service startup to fail; the HTTP bind error is written to
+`herdr-mise.error.log`. The logs contain only listening/startup and bind errors.
+They do not report Herdr socket or feed health: open
+`http://127.0.0.1:8686` and use the `DEMO SERVICE` placard and the
+[Herdr socket unavailable](#herdr-socket-unavailable) guidance below.
+
+### Linux without Homebrew
+
+Only Linux x86_64 has a published archive. From a git-authenticated checkout,
+download the archive alone and verify it against
+`docs/releases/v0.1.0/herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256`:
+
+```sh
+ASSET=herdr-mise-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+ARCHIVE_URL=https://github.com/funsaized/herdr-mise/releases/download/v0.1.0/$ASSET
+SIDECAR=docs/releases/v0.1.0/$ASSET.sha256
+curl -fSLO "$ARCHIVE_URL"
+sha256sum -c "$SIDECAR" # or: shasum -a 256 -c "$SIDECAR"
+```
+
+To verify the same three-file layout and install into a versioned user root:
+
+```sh
+INSTALL_ROOT="$HOME/.local/lib"
+sh scripts/verify-public-artifact.sh \
+  "$ARCHIVE_URL" "$SIDECAR" 0.1.0 "$INSTALL_ROOT"
+"$INSTALL_ROOT/herdr-mise/current/bin/herdr-mise"
+```
+
+`scripts/uninstall-acceptance-artifact.sh "$INSTALL_ROOT" 0.1.0` removes an
+unselected version installed by that verifier. It intentionally refuses to
+remove the version selected by `current`; select another version or remove the
+verifier-owned install root after stopping the process. Browser settings under
+`localStorage["herdr-mise:settings"]` and the `mise-bell-hint` key are optional
+cleanup.
 
 ## Client development
 
