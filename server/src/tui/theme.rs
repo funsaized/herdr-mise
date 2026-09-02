@@ -117,6 +117,7 @@ pub const PARTICLE_SHADE_AGE: u64 = 4;
 pub const TICKET_MIN_STATION_WIDTH: u16 = 24;
 pub const WORKING_SHIFT: u16 = 3;
 pub const WORKING_FRAME_TICKS: u64 = 4;
+pub const IDLE_FRAME_TICKS: u64 = 16;
 pub const SPRITE_Y_PAD: u16 = 4;
 pub const TICKET_X_INSET: i32 = 2;
 pub const TICKET_Y_INSET: i32 = 3;

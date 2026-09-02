@@ -44,6 +44,8 @@ fn pixel_color(key: u8, agent: &AgentRecord) -> Option<Color> {
         b'R' => Some(theme::SKIN_MAD),
         b'b' => Some(theme::BROW_MAD),
         b'o' => Some(theme::BAND),
+        b'Z' => Some(theme::STEAM_HI),
+        b'z' => Some(theme::STEAM),
         _ => None,
     }
 }
