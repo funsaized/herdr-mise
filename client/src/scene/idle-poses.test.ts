@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Graphics } from "pixi.js";
+import { tokens } from "../theme/tokens";
 import {
   assignedIdlePose,
   drawIdlePose,
+  drawPrepPose,
   idleAnimationFrame,
   idlePoseIsAnimated,
   IDLE_POSES,
@@ -73,7 +75,6 @@ const colors = {
   wood: "wood",
   boot: ["boot-0", "boot-1"],
   chair: ["chair-0", "chair-1"],
-  green: "green",
 } as const;
 
 const draw = (pose: IdlePose, stationWidth: number, elapsedMs = 0, u = 4) => {
@@ -236,6 +237,49 @@ describe("idle pose rendering geometry", () => {
     expect(Math.max(...zYs)).toBeLessThanOrEqual(2);
   });
 
+  it("gives the toque pose two eyes", () => {
+    const u = 4,
+      cx = 14 * u,
+      base = 19 * u;
+    const eyes = draw("toqueAdjust", 28, 0, u).rects.filter(
+      (rect) =>
+        rect.fill === colors.ink &&
+        rect.width === u &&
+        rect.height === u &&
+        rect.y === base - 17 * u,
+    );
+    expect(eyes).toHaveLength(2);
+    expect(eyes.map((eye) => eye.x).sort((a, b) => a - b)).toEqual([
+      cx - 2 * u,
+      cx + u,
+    ]);
+  });
+
+  it("moves both ticket-rail eyes left and right in unison", () => {
+    const u = 4,
+      cx = 14 * u,
+      base = 19 * u;
+    const inkEyes = (elapsedMs: number) =>
+      draw("ticketRailGlance", 28, elapsedMs, u)
+        .rects.filter(
+          (rect) =>
+            rect.fill === colors.ink &&
+            rect.width === u &&
+            rect.height === u &&
+            rect.y === base - 17 * u,
+        )
+        .map((rect) => rect.x)
+        .sort((a, b) => a - b);
+    const left = inkEyes(0);
+    const right = inkEyes(700);
+    const rest = [cx - 2 * u, cx + u];
+    expect(left).toHaveLength(2);
+    expect(right).toHaveLength(2);
+    expect(left).toEqual(rest.map((x) => x - u));
+    expect(right).toEqual(rest.map((x) => x + u));
+    expect(right[0]! - left[0]!).toBe(right[1]! - left[1]!);
+  });
+
   it("invalidates sparse poses at 700ms without invalidating LEAN", () => {
     expect(idleAnimationFrame("toqueAdjust", 699)).toBe(0);
     expect(idleAnimationFrame("toqueAdjust", 700)).toBe(1);
@@ -281,5 +325,29 @@ describe("idle pose animation", () => {
         idlePoseIsAnimated(pose as IdlePose),
       ),
     ).toBe(true);
+  });
+
+  it("piles lettuce tomato and meat on the prep board", () => {
+    const graphics = new RecordingGraphics();
+    drawPrepPose(
+      graphics as unknown as Graphics,
+      samplePrepPose(0, 0),
+      14 * 4,
+      19 * 4,
+      4,
+      colors,
+    );
+    for (const food of tokens.scene.cook.prep.foods) {
+      expect(graphics.rects).toContainEqual({
+        x: 14 * 4 + food.geometry[0] * 4,
+        y: 19 * 4 + food.geometry[1] * 4,
+        width: food.geometry[2] * 4,
+        height: food.geometry[3] * 4,
+        fill: food.fill,
+      });
+    }
+    expect(
+      new Set(tokens.scene.cook.prep.foods.map((food) => food.fill)).size,
+    ).toBe(3);
   });
 });

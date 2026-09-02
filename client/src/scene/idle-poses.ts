@@ -124,7 +124,6 @@ export interface IdlePoseColors {
   wood: string;
   boot: readonly [string, string];
   chair: readonly [string, string];
-  green: string;
 }
 
 function relativeRect(
@@ -146,10 +145,14 @@ function standingCook(
   u: number,
   colors: IdlePoseColors,
   bob = 0,
+  drawEyes = true,
 ) {
   const y = base + bob * u;
   for (const part of tokens.scene.cook.standing)
     relativeRect(g, cx, y, u, part.geometry, colors[part.color]);
+  if (drawEyes)
+    for (const eye of tokens.scene.cook.eyes)
+      relativeRect(g, cx, y, u, eye, colors.ink);
   return y;
 }
 
@@ -176,7 +179,15 @@ export function drawIdlePose(
       relativeRect(g, cx, base, u, part.geometry, leanColors[part.color]);
     return;
   }
-  const y = standingCook(g, cx, base, u, colors, sample.bobUnits);
+  const y = standingCook(
+    g,
+    cx,
+    base,
+    u,
+    colors,
+    sample.bobUnits,
+    pose !== "sleep" && pose !== "ticketRailGlance",
+  );
   if (pose === "coffeeBreak") {
     relativeRect(
       g,
@@ -199,15 +210,16 @@ export function drawIdlePose(
     );
   } else if (pose === "ticketRailGlance") {
     const glance = tokens.scene.cook.ticketRailGlance,
-      [eyeX, eyeY, eyeWidth, eyeHeight] = glance.eye;
-    relativeRect(
-      g,
-      cx,
-      y,
-      u,
-      [eyeX + sample.prepStep * glance.glanceUnits, eyeY, eyeWidth, eyeHeight],
-      colors.ink,
-    );
+      shift = sample.prepStep ? glance.glanceUnits : -glance.glanceUnits;
+    for (const [eyeX, eyeY, eyeWidth, eyeHeight] of tokens.scene.cook.eyes)
+      relativeRect(
+        g,
+        cx,
+        y,
+        u,
+        [eyeX + shift, eyeY, eyeWidth, eyeHeight],
+        colors.ink,
+      );
     relativeRect(g, cx, base, u, glance.ticket, colors.coat);
   } else {
     const sleep = tokens.scene.cook.sleep;
@@ -271,12 +283,7 @@ export function drawPrepPose(
       prep.board[2] * u,
       prep.board[3] * u,
     )
-    .fill(colors.wood)
-    .rect(
-      cx + prep.garnish[0] * u,
-      base + prep.garnish[1] * u,
-      prep.garnish[2] * u,
-      prep.garnish[3] * u,
-    )
-    .fill(colors.green);
+    .fill(colors.wood);
+  for (const food of prep.foods)
+    relativeRect(g, cx, base, u, food.geometry, food.fill);
 }

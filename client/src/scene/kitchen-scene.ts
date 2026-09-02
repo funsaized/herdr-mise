@@ -1248,7 +1248,6 @@ export class KitchenScene {
         wood: p.scene.wood[index],
         boot: p.scene.boot,
         chair: p.scene.chair,
-        green: p.semantic.done,
       };
     this.stationVisuals[agent.id] = {
       accent,

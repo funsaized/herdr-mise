@@ -108,10 +108,13 @@ export const tokens = {
         { geometry: [-4, -12, 8, 2], color: "accent" },
         { geometry: [-4, -19, 8, 5], color: "ink" },
         { geometry: [-3, -18, 6, 4], color: "skin" },
-        { geometry: [-2, -17, 1, 1], color: "ink" },
         { geometry: [-6, -22, 12, 3], color: "ink" },
         { geometry: [-5, -23, 10, 3], color: "coat" },
         { geometry: [-3, -25, 6, 3], color: "coat" },
+      ],
+      eyes: [
+        [-2, -17, 1, 1],
+        [1, -17, 1, 1],
       ],
       coffeeBreak: {
         cup: [6, -3, 3, 3],
@@ -119,7 +122,6 @@ export const tokens = {
       },
       toqueAdjust: { handX: 5, handY: [23, 22], width: 2, height: 3 },
       ticketRailGlance: {
-        eye: [2, -17, 1, 1],
         glanceUnits: 1,
         ticket: [8, -18, 4, 6],
       },
@@ -132,8 +134,12 @@ export const tokens = {
         handWidth: 3,
         handHeight: 2,
         knife: [6, -1, 5, 1],
-        board: [2, -1, 8, 1],
-        garnish: [3, -2, 2, 1],
+        board: [1, -1, 10, 1],
+        foods: [
+          { geometry: [2, -4, 3, 3], fill: "#5d8a3a" },
+          { geometry: [5, -3, 2, 2], fill: "#c44b32" },
+          { geometry: [7.5, -3.5, 3, 2.5], fill: "#8a4330" },
+        ],
       },
       blocked: {
         frameMs: [500, 250],
