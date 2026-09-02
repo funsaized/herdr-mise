@@ -537,6 +537,10 @@ test("nightshift-ship requires the candidate PR to close the work item", () => {
     nightshiftWorkflows["workflow-nightshift-ship.yaml"],
     /methodName: require_issue_link/,
   );
+  assert.match(
+    nightshiftWorkflows["workflow-nightshift-ship.yaml"],
+    /methodName: require_issue_link[\s\S]*?commit: \$\{{\s*inputs\.commit\s*}}/,
+  );
 });
 
 test("Nightshift leaves GitHub board and issue lifecycle state external", () => {

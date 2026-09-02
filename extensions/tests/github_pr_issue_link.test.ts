@@ -1,4 +1,9 @@
-import { issueLinkedInPullRequest } from "../models/github_pr_issue_link.ts";
+import {
+  assertCandidateHead,
+  issueLinkedInPullRequest,
+} from "../models/github_pr_issue_link.ts";
+
+const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 function rejects(operation: () => unknown) {
   try {
@@ -46,4 +51,18 @@ Deno.test("rejects a pull request that does not close the work item", () => {
       "106",
     ),
   );
+});
+
+Deno.test("accepts a matching candidate head", () => {
+  assertCandidateHead(COMMIT, COMMIT);
+});
+
+Deno.test("rejects a mismatched candidate head", () => {
+  rejects(() =>
+    assertCandidateHead("ffffffffffffffffffffffffffffffffffffffff", COMMIT),
+  );
+});
+
+Deno.test("rejects a missing candidate head", () => {
+  rejects(() => assertCandidateHead(undefined, COMMIT));
 });
