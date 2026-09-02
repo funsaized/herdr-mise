@@ -233,6 +233,7 @@ describe("chrome interactions", () => {
           entry={{
             id: "a",
             name: "agent",
+            accentIndex: 0,
             runtimeMs: 1_000,
             tickets: 0,
             endedAt: Date.now(),
@@ -242,7 +243,7 @@ describe("chrome interactions", () => {
         />,
       );
       expect(screen.getByText(label)).toBeTruthy();
-      expect(screen.getByText("Runtime")).toBeTruthy();
+      expect(screen.getByText("Mise time")).toBeTruthy();
       expect(screen.getByText("Tickets served")).toBeTruthy();
       expect(screen.getByText("Ended at")).toBeTruthy();
       expect(screen.getByText("Final state")).toBeTruthy();
@@ -279,7 +280,6 @@ describe("chrome interactions", () => {
     );
     expect(screen.getByRole("heading", { name: "refactor-auth" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "app" })).toBeNull();
-    expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("/work/app")).toBeTruthy();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
     const history = screen.getByLabelText("Session history");
@@ -291,7 +291,7 @@ describe("chrome interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
     expect(close).toHaveBeenCalledOnce();
   });
-  it("marks absent live model, workspace, and ticket facts unavailable", () => {
+  it("marks absent live workspace and ticket facts unavailable", () => {
     render(
       <DetailCard
         agent={{
@@ -310,7 +310,7 @@ describe("chrome interactions", () => {
         onClose={() => {}}
       />,
     );
-    expect(screen.getAllByText("Unavailable")).toHaveLength(3);
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
   });
   it("shows DEMO SERVICE for an empty unsupported websocket snapshot", () => {
     const store = new AgentStore(),

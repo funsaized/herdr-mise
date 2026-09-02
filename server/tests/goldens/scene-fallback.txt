@@ -53,44 +53,38 @@ CELL 04 013..014 symbol="u" fg=Reset bg=Reset mod=NONE diff=None
 CELL 04 014..015 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
 CELL 04 015..078 symbol="─" fg=Reset bg=Reset mod=NONE diff=None
 CELL 04 078..079 symbol="┐" fg=Reset bg=Reset mod=NONE diff=None
-TEXT 05 "│AGENT          STATE          ELAPSED   MODEL     WORKSPACE TICKETS RUNTIME  │"
+TEXT 05 "│AGENT            STATE            ELAPSED   WORKSPACE       TICKETS RUNTIME  │"
 CELL 05 000..001 symbol="│" fg=Reset bg=Reset mod=NONE diff=None
 CELL 05 001..002 symbol="A" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 002..003 symbol="G" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 003..004 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 004..005 symbol="N" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 005..006 symbol="T" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 006..016 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 016..017 symbol="S" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 017..018 symbol="T" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 018..019 symbol="A" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 006..018 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 018..019 symbol="S" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 019..020 symbol="T" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 020..021 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 021..031 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 031..032 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 032..033 symbol="L" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 033..034 symbol="A" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 034..035 symbol="P" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 035..036 symbol="S" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 036..037 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 037..038 symbol="D" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 038..041 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 041..042 symbol="M" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 042..043 symbol="O" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 043..044 symbol="D" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 044..045 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 045..046 symbol="L" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 046..051 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 051..052 symbol="W" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 052..053 symbol="O" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 053..054 symbol="R" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 054..055 symbol="K" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 055..056 symbol="S" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 056..057 symbol="P" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 057..058 symbol="A" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 058..059 symbol="C" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 059..060 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
-CELL 05 060..061 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 020..021 symbol="A" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 021..022 symbol="T" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 022..023 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 023..035 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 035..036 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 036..037 symbol="L" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 037..038 symbol="A" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 038..039 symbol="P" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 039..040 symbol="S" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 040..041 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 041..042 symbol="D" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 042..045 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 045..046 symbol="W" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 046..047 symbol="O" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 047..048 symbol="R" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 048..049 symbol="K" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 049..050 symbol="S" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 050..051 symbol="P" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 051..052 symbol="A" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 052..053 symbol="C" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 053..054 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
+CELL 05 054..061 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 061..062 symbol="T" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 062..063 symbol="I" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 063..064 symbol="C" fg=Reset bg=Reset mod=BOLD diff=None
@@ -108,7 +102,7 @@ CELL 05 074..075 symbol="M" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 075..076 symbol="E" fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 076..078 symbol=" " fg=Reset bg=Reset mod=BOLD diff=None
 CELL 05 078..079 symbol="│" fg=Reset bg=Reset mod=NONE diff=None
-TEXT 06 "│Cook small     IDLE / PREPPIN 0s        gpt-5.6-s customer- 7       1m 1s    │"
+TEXT 06 "│Cook small       IDLE / PREPPING  0s        customer-api    7       1m 1s    │"
 CELL 06 000..001 symbol="│" fg=Reset bg=Reset mod=NONE diff=None
 CELL 06 001..002 symbol="C" fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
 CELL 06 002..004 symbol="o" fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
@@ -118,45 +112,40 @@ CELL 06 006..007 symbol="s" fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
 CELL 06 007..008 symbol="m" fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
 CELL 06 008..009 symbol="a" fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
 CELL 06 009..011 symbol="l" fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
-CELL 06 011..015 symbol=" " fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
-CELL 06 015..016 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 016..017 symbol="I" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 017..018 symbol="D" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 018..019 symbol="L" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 019..020 symbol="E" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 020..021 symbol=" " fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 021..022 symbol="/" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 011..017 symbol=" " fg=Rgb(102, 122, 158) bg=Reset mod=NONE diff=None
+CELL 06 017..018 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 018..019 symbol="I" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 019..020 symbol="D" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 020..021 symbol="L" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 021..022 symbol="E" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
 CELL 06 022..023 symbol=" " fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 023..024 symbol="P" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 024..025 symbol="R" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 025..026 symbol="E" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 026..028 symbol="P" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 028..029 symbol="I" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 029..030 symbol="N" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
-CELL 06 030..031 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 031..032 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 032..033 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 033..041 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 041..042 symbol="g" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 042..043 symbol="p" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 043..044 symbol="t" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 044..045 symbol="-" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 045..046 symbol="5" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 046..047 symbol="." fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 047..048 symbol="6" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 048..049 symbol="-" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 049..050 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 050..051 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 051..052 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 052..053 symbol="u" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 053..054 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 054..055 symbol="t" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 055..056 symbol="o" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 056..057 symbol="m" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 057..058 symbol="e" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 058..059 symbol="r" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 059..060 symbol="-" fg=Reset bg=Reset mod=NONE diff=None
-CELL 06 060..061 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 023..024 symbol="/" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 024..025 symbol=" " fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 025..026 symbol="P" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 026..027 symbol="R" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 027..028 symbol="E" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 028..030 symbol="P" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 030..031 symbol="I" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 031..032 symbol="N" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 032..033 symbol="G" fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 033..034 symbol=" " fg=Rgb(138, 130, 114) bg=Reset mod=NONE diff=None
+CELL 06 034..035 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 035..036 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 036..037 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 037..045 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 045..046 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 046..047 symbol="u" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 047..048 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 048..049 symbol="t" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 049..050 symbol="o" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 050..051 symbol="m" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 051..052 symbol="e" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 052..053 symbol="r" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 053..054 symbol="-" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 054..055 symbol="a" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 055..056 symbol="p" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 056..057 symbol="i" fg=Reset bg=Reset mod=NONE diff=None
+CELL 06 057..061 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 CELL 06 061..062 symbol="7" fg=Reset bg=Reset mod=NONE diff=None
 CELL 06 062..069 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 CELL 06 069..070 symbol="1" fg=Reset bg=Reset mod=NONE diff=None

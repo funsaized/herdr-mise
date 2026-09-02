@@ -5,9 +5,9 @@ TEXT 01 "Mock feed — Herdr socket unavailable. Nothing here is real.          
 TEXT 02 "                                                                                                              "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 04 "┌Kitchen status──────────────────────────────────────────────────────────────────────────────────────────────┐"
-TEXT 05 "│AGENT            STATE                  ELAPSED   MODEL          WORKSPACE        TICKETS RUNTIME           │"
+TEXT 05 "│AGENT            STATE                  ELAPSED   WORKSPACE        TICKETS RUNTIME                          │"
 STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
-TEXT 06 "│Cook demo        WORKING / ON THE FIRE  2m 5s     gpt-5.6-sol    customer-api     7       1h 1m             │"
+TEXT 06 "│Cook demo        WORKING / ON THE FIRE  2m 5s     customer-api     7       1h 1m                            │"
 STYLE 06 001..017 fg=Rgb(102, 122, 158) bg=Reset mod=NONE skip=false
 STYLE 06 018..040 fg=Rgb(240, 136, 42) bg=Reset mod=NONE skip=false
 TEXT 07 "│                                                                                                            │"
@@ -21,7 +21,7 @@ TEXT 14 "│                                                                    
 TEXT 15 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
 TEXT 16 "┌86 BOARD────────────────────────────────────────────────────────────────────────────────────────────────────┐"
 STYLE 16 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
-TEXT 17 "│Cook finished · 1h 1m · 7 TICKETS · FINAL 86'D / SESSION ENDED                                              │"
+TEXT 17 "│Cook finished · mise 1h 1m · FINAL 86'D / SESSION ENDED                                                     │"
 STYLE 17 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
 TEXT 18 "│                                                                                                            │"
 STYLE 18 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false

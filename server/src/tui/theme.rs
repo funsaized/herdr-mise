@@ -18,6 +18,7 @@ pub const COAT: Color = Color::Indexed(230);
 pub const COAT_LO: Color = Color::Indexed(187);
 pub const ICE: Color = Color::Indexed(159);
 pub const ICE_LO: Color = Color::Indexed(24);
+pub const FREEZER_FLOOR: Color = Color::Indexed(251);
 pub const BAND: Color = Color::Indexed(235);
 pub const SKIN: Color = Color::Indexed(180);
 pub const EYE: Color = Color::Indexed(234);
@@ -37,28 +38,40 @@ pub const GREEN_HI: Color = Color::Indexed(114);
 pub const BOARD: Color = Color::Indexed(22);
 pub const BRASS: Color = Color::Indexed(136);
 pub const CHALK: Color = Color::Indexed(187);
-pub const BOARD_FACT_WIDTH: usize = 7;
-pub const BOARD_FACTS_WIDTH: usize = 16;
+pub const BOARD_FACT_WIDTH: usize = 9;
+pub const BOARD_FACTS_WIDTH: usize = 10;
 pub const POT: Color = Color::Indexed(238);
 pub const POT_HI: Color = Color::Indexed(245);
 pub const STEAM: Color = Color::Indexed(247);
 pub const STEAM_HI: Color = Color::Indexed(253);
 
-pub const ACCENTS: [Color; 6] = [
+pub const ACCENTS: [Color; 12] = [
     Color::Indexed(66),
     Color::Indexed(96),
     Color::Indexed(67),
     Color::Indexed(101),
-    Color::Indexed(131),
+    Color::Indexed(138),
     Color::Indexed(137),
+    Color::Indexed(66),
+    Color::Indexed(101),
+    Color::Indexed(103),
+    Color::Indexed(101),
+    Color::Indexed(96),
+    Color::Indexed(66),
 ];
-pub const ACCENT_DIMS: [Color; 6] = [
+pub const ACCENT_DIMS: [Color; 12] = [
     Color::Indexed(23),
     Color::Indexed(53),
     Color::Indexed(24),
     Color::Indexed(58),
     Color::Indexed(95),
     Color::Indexed(94),
+    Color::Indexed(23),
+    Color::Indexed(58),
+    Color::Indexed(60),
+    Color::Indexed(58),
+    Color::Indexed(53),
+    Color::Indexed(23),
 ];
 pub const SPIRIT: Color = ACCENTS[4];
 pub const SPIRIT_DIM: Color = ACCENT_DIMS[4];
@@ -84,14 +97,13 @@ pub const FREEZER_FROST_DOOR_HEIGHT: u16 = 3;
 pub const FREEZER_FLOOR_GAP: u16 = 2;
 pub const FREEZER_FLOOR_WIDTH_GAP: u16 = 4;
 pub const FREEZER_FLOOR_BOTTOM_INSET: u16 = 9;
-pub const FREEZER_TILE: u16 = 4;
+
 pub const FREEZER_SHELF_DIVISIONS: u16 = 4;
 pub const FREEZER_SHELF_THICKNESS: u16 = 2;
 pub const FREEZER_BIN_X_INSET: u16 = 2;
-pub const FREEZER_BIN_Y_LIFT: u16 = 4;
 pub const FREEZER_BIN_HEIGHT: u16 = 3;
-pub const FREEZER_PLATE_Y_LIFT: u16 = 7;
-pub const FREEZER_PLATE_HEIGHT: u16 = 2;
+pub const FREEZER_BIN_STACK: u16 = 3;
+pub const FREEZER_BIN_STACK_LIFT: u16 = 2;
 pub const FREEZER_DOOR_FRAME: u16 = 2;
 pub const FREEZER_HANDLE_WIDTH: u16 = 3;
 pub const FREEZER_HANDLE_HEIGHT: u16 = 2;
@@ -104,6 +116,8 @@ pub const SNOW_SLOT_Y: u64 = 3;
 pub const PARTICLE_SHADE_AGE: u64 = 4;
 pub const TICKET_MIN_STATION_WIDTH: u16 = 24;
 pub const WORKING_SHIFT: u16 = 3;
+pub const WORKING_FRAME_TICKS: u64 = 4;
+pub const IDLE_FRAME_TICKS: u64 = 16;
 pub const SPRITE_Y_PAD: u16 = 4;
 pub const TICKET_X_INSET: i32 = 2;
 pub const TICKET_Y_INSET: i32 = 3;
@@ -126,19 +140,12 @@ pub const TICKET_MARK_Y1: i32 = 1;
 pub const TICKET_MARK_Y2: i32 = 3;
 pub const TICKET_MARK_Y3: i32 = 5;
 pub const TICKET_MARK3_W: i32 = 2;
-pub const SNOWMAN_STACK_X: i32 = 1;
-pub const SNOWMAN_EYE_X: i32 = 2;
-pub const SNOWMAN_EYE_Y: i32 = 1;
 pub const GRAVE_BODY_Y: i32 = 1;
 pub const GRAVE_CAP_X: i32 = 1;
-pub const SNOWMAN_X_INSET: u16 = 3;
-pub const SNOWMAN_Y_INSET: u16 = 8;
-pub const SNOWMAN_BASE_W: i32 = 5;
-pub const SNOWMAN_BASE_H: i32 = 3;
-pub const SNOWMAN_MID_W: i32 = 3;
-pub const SNOWMAN_MID_H: i32 = 3;
-pub const SNOWMAN_HEAD_W: i32 = 3;
-pub const SNOWMAN_HEAD_H: i32 = 2;
+pub const ICE_CUBE_SIZE: i32 = 2;
+pub const ICE_CUBE_X_INSET: u16 = 2;
+pub const ICE_CUBE_Y_INSET: u16 = 4;
+pub const ICE_CUBE_STACKS: [(i32, i32); 4] = [(0, 3), (3, 2), (6, 1), (9, 2)];
 pub const GRAVE_X_INSET: u16 = 8;
 pub const GRAVE_Y_INSET: u16 = 7;
 pub const GRAVE_W: i32 = 5;
@@ -228,15 +235,21 @@ mod tests {
             [POT, POT_HI, STEAM, STEAM_HI],
             [238, 245, 247, 253].map(Color::Indexed)
         );
-        assert_eq!(ACCENTS, [66, 96, 67, 101, 131, 137].map(Color::Indexed));
-        assert_eq!(ACCENT_DIMS, [23, 53, 24, 58, 95, 94].map(Color::Indexed));
+        assert_eq!(
+            ACCENTS,
+            [66, 96, 67, 101, 138, 137, 66, 101, 103, 101, 96, 66].map(Color::Indexed)
+        );
+        assert_eq!(
+            ACCENT_DIMS,
+            [23, 53, 24, 58, 95, 94, 23, 58, 60, 58, 53, 23].map(Color::Indexed)
+        );
     }
 
     #[test]
     fn accent_pairs_wrap_together() {
         for index in 0..18 {
-            assert_eq!(accent(index), ACCENTS[usize::from(index) % 6]);
-            assert_eq!(accent_dim(index), ACCENT_DIMS[usize::from(index) % 6]);
+            assert_eq!(accent(index), ACCENTS[usize::from(index) % 12]);
+            assert_eq!(accent_dim(index), ACCENT_DIMS[usize::from(index) % 12]);
         }
     }
 }

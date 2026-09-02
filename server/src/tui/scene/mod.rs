@@ -44,6 +44,8 @@ fn pixel_color(key: u8, agent: &AgentRecord) -> Option<Color> {
         b'R' => Some(theme::SKIN_MAD),
         b'b' => Some(theme::BROW_MAD),
         b'o' => Some(theme::BAND),
+        b'Z' => Some(theme::STEAM_HI),
+        b'z' => Some(theme::STEAM),
         _ => None,
     }
 }
@@ -78,14 +80,20 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
     let sprite = sprites::cook_sprite(&agent.state, tick);
     if sprite.rows.is_empty()
         || station.width < sprites::SPRITE_WIDTH as u16 + 2
-        || station.height < sprites::SPRITE_HALF_ROWS as u16 + 6
+        || station.height < 8
     {
         return;
     }
     let working = agent.state == AgentState::Working;
-    let centered = station.x + station.width.saturating_sub(sprite.width() as u16) / 2;
+    let avail_h = station.height.saturating_sub(2).max(1);
+    let avail_w = station.width.saturating_sub(2).max(1);
+    let row_step = (sprites::SPRITE_HALF_ROWS as u16).div_ceil(avail_h).max(1);
+    let col_step = (sprites::SPRITE_WIDTH as u16).div_ceil(avail_w).max(1);
+    let drawn_h = (sprites::SPRITE_HALF_ROWS as u16).div_ceil(row_step);
+    let drawn_w = (sprites::SPRITE_WIDTH as u16).div_ceil(col_step);
+    let centered = station.x + station.width.saturating_sub(drawn_w) / 2;
     let sprite_x = i32::from(centered.saturating_sub(u16::from(working) * theme::WORKING_SHIFT));
-    let sprite_y = i32::from(station.y + theme::SPRITE_Y_PAD);
+    let sprite_y = i32::from(station.y + station.height.saturating_sub(drawn_h) / 2);
     if working && station.width >= theme::TICKET_MIN_STATION_WIDTH {
         let ticket_x = i32::from(station.x) + theme::TICKET_X_INSET;
         let ticket_y = i32::from(station.y) + theme::TICKET_Y_INSET;
@@ -137,13 +145,20 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
     }
 
     for (row_index, row) in sprite.rows.iter().enumerate() {
+        if row_index as u16 % row_step != 0 {
+            continue;
+        }
+        let dy = row_index as u16 / row_step;
         for (column, key) in row.bytes().enumerate() {
+            if column as u16 % col_step != 0 {
+                continue;
+            }
             if let Some(color) = pixel_color(key, agent) {
                 put_inside(
                     canvas,
                     station,
-                    sprite_x + column as i32,
-                    sprite_y + row_index as i32,
+                    sprite_x + i32::from(column as u16 / col_step),
+                    sprite_y + i32::from(dy),
                     color,
                 );
             }
@@ -216,10 +231,11 @@ fn draw_spirit(canvas: &mut PixelCanvas, slot: PixelRect, pose: u8) {
     for (row, pixels) in sprite.rows.iter().enumerate() {
         for (column, key) in pixels.bytes().enumerate() {
             let color = match key {
-                b'H' | b'C' => Some(theme::ICE),
-                b'h' | b'c' => Some(theme::ICE_LO),
-                b'S' | b'K' => Some(theme::STEEL),
+                b'H' | b'C' => Some(theme::COAT),
+                b'h' | b'c' => Some(theme::COAT_LO),
+                b'S' | b'K' => Some(theme::ICE),
                 b'X' | b'e' => Some(theme::EYE),
+                b't' => Some(theme::SKIN_MAD),
                 b'a' => Some(theme::SPIRIT),
                 b'A' => Some(theme::SPIRIT_DIM),
                 b'D' => Some(theme::PANTS),
@@ -238,35 +254,25 @@ fn draw_spirit(canvas: &mut PixelCanvas, slot: PixelRect, pose: u8) {
     }
 }
 
-fn draw_snowman(canvas: &mut PixelCanvas, floor: PixelRect) {
-    let x = i32::from(floor.x.saturating_add(theme::SNOWMAN_X_INSET));
-    let y = i32::from(floor.bottom().saturating_sub(theme::SNOWMAN_Y_INSET));
-    canvas.fill_rect(
-        x,
-        y + theme::SNOWMAN_MID_H + theme::SNOWMAN_HEAD_H,
-        theme::SNOWMAN_BASE_W,
-        theme::SNOWMAN_BASE_H,
-        theme::ICE,
-    );
-    canvas.fill_rect(
-        x + theme::SNOWMAN_STACK_X,
-        y + theme::SNOWMAN_HEAD_H,
-        theme::SNOWMAN_MID_W,
-        theme::SNOWMAN_MID_H,
-        theme::ICE,
-    );
-    canvas.fill_rect(
-        x + theme::SNOWMAN_STACK_X,
-        y,
-        theme::SNOWMAN_HEAD_W,
-        theme::SNOWMAN_HEAD_H,
-        theme::ICE,
-    );
-    canvas.put(
-        x + theme::SNOWMAN_EYE_X,
-        y + theme::SNOWMAN_EYE_Y,
-        theme::EYE,
-    );
+fn draw_ice_cubes(canvas: &mut PixelCanvas, floor: PixelRect) {
+    let size = theme::ICE_CUBE_SIZE;
+    let origin_x = i32::from(floor.x.saturating_add(theme::ICE_CUBE_X_INSET));
+    let origin_y = i32::from(floor.bottom().saturating_sub(theme::ICE_CUBE_Y_INSET));
+    for (col, height) in theme::ICE_CUBE_STACKS {
+        for level in 0..height {
+            canvas.fill_rect(
+                origin_x + col * (size + 1),
+                origin_y - level * (size + 1),
+                size,
+                size,
+                if level % 2 == 0 {
+                    theme::STEAM_HI
+                } else {
+                    theme::ICE
+                },
+            );
+        }
+    }
 }
 
 fn draw_gravestone(canvas: &mut PixelCanvas, floor: PixelRect) {
@@ -305,7 +311,7 @@ fn draw_icicles_and_puddles(canvas: &mut PixelCanvas, area: Rect, floor: PixelRe
         i32::from(floor.bottom().saturating_sub(theme::PUDDLE_NEAR_Y)),
         theme::PUDDLE_NEAR_W,
         theme::PUDDLE_NEAR_H,
-        theme::ICE_LO,
+        theme::STEAM_HI,
     );
     canvas.fill_rect(
         i32::from(floor.x.saturating_add(theme::PUDDLE_FAR_X)),
@@ -373,11 +379,6 @@ fn board_line(entry: &BoardEntry, width: usize) -> String {
     } else {
         format_runtime(entry.runtime_ms)
     };
-    let tickets = if entry.tickets == 0 {
-        "—".into()
-    } else {
-        entry.tickets.to_string()
-    };
     board_columns(
         &view::sanitize_external(&entry.name)
             .to_uppercase()
@@ -385,15 +386,14 @@ fn board_line(entry: &BoardEntry, width: usize) -> String {
             .take(width.saturating_sub(theme::BOARD_FACTS_WIDTH).max(4))
             .collect::<String>(),
         &runtime,
-        &tickets,
         width,
     )
 }
 
-fn board_columns(name: &str, runtime: &str, tickets: &str, width: usize) -> String {
+fn board_columns(name: &str, mise: &str, width: usize) -> String {
     let name_width = width.saturating_sub(theme::BOARD_FACTS_WIDTH).max(4);
     format!(
-        "{name:<name_width$} {runtime:>fact_width$} {tickets:>fact_width$}",
+        "{name:<name_width$} {mise:>fact_width$}",
         fact_width = theme::BOARD_FACT_WIDTH,
     )
 }
@@ -649,7 +649,7 @@ fn draw_kitchen(
             board_area.y + 1,
             board_area.width.saturating_sub(4),
             Line::styled(
-                board_columns("COOK", "RUNTIME", "TICKETS", width),
+                board_columns("COOK", "MISE TIME", width),
                 Style::default()
                     .fg(mapped(theme::CHALK, color_mode))
                     .bg(mapped(theme::BOARD, color_mode)),
@@ -926,24 +926,13 @@ fn draw_freezer(
         i32::from(area.height.saturating_mul(2)) - theme::FREEZER_SHELL_INSET * 2,
         theme::STEEL,
     );
-    for x in (layout.floor.x..layout.floor.right()).step_by(theme::FREEZER_TILE.into()) {
-        canvas.fill_rect(
-            x.into(),
-            layout.floor.y.into(),
-            1,
-            layout.floor.height.into(),
-            theme::STEEL_LO,
-        );
-    }
-    for y in (layout.floor.y..layout.floor.bottom()).step_by(theme::FREEZER_TILE.into()) {
-        canvas.fill_rect(
-            layout.floor.x.into(),
-            y.into(),
-            layout.floor.width.into(),
-            1,
-            theme::STEEL_LO,
-        );
-    }
+    canvas.fill_rect(
+        layout.floor.x.into(),
+        layout.floor.y.into(),
+        layout.floor.width.into(),
+        layout.floor.height.into(),
+        theme::FREEZER_FLOOR,
+    );
     for rack in layout.racks {
         canvas.fill_rect(
             rack.x.into(),
@@ -961,26 +950,42 @@ fn draw_freezer(
                 theme::FREEZER_SHELF_THICKNESS.into(),
                 theme::COAT_LO,
             );
-            canvas.fill_rect(
-                i32::from(rack.x + theme::FREEZER_BIN_X_INSET),
-                i32::from(y.saturating_sub(theme::FREEZER_BIN_Y_LIFT)),
-                i32::from(rack.width / theme::FREEZER_BIN_FRACTION),
-                i32::from(theme::FREEZER_BIN_HEIGHT),
-                if shelf.is_multiple_of(2) {
-                    theme::SPIRIT
-                } else {
-                    theme::COAT
-                },
-            );
-            canvas.fill_rect(
-                i32::from(rack.right().saturating_sub(
-                    rack.width / theme::FREEZER_BIN_FRACTION + theme::FREEZER_BIN_X_INSET,
-                )),
-                i32::from(y.saturating_sub(theme::FREEZER_PLATE_Y_LIFT)),
-                i32::from(rack.width / theme::FREEZER_BIN_FRACTION),
-                i32::from(theme::FREEZER_PLATE_HEIGHT),
-                theme::PLATE,
-            );
+            let bin_w = i32::from(rack.width / theme::FREEZER_BIN_FRACTION);
+            let bins = [
+                (
+                    i32::from(rack.x + theme::FREEZER_BIN_X_INSET),
+                    if shelf.is_multiple_of(2) {
+                        theme::SKIN_MAD
+                    } else {
+                        theme::GREEN
+                    },
+                ),
+                (i32::from(rack.x) + bin_w + 1, theme::COAT),
+                (
+                    i32::from(
+                        rack.right()
+                            .saturating_sub(bin_w as u16 + theme::FREEZER_BIN_X_INSET),
+                    ),
+                    if shelf.is_multiple_of(2) {
+                        theme::ICE
+                    } else {
+                        theme::SKIN_MAD
+                    },
+                ),
+            ];
+            for (x, color) in bins {
+                for layer in 0..theme::FREEZER_BIN_STACK {
+                    canvas.fill_rect(
+                        x + i32::from(layer),
+                        i32::from(y)
+                            - i32::from(theme::FREEZER_BIN_HEIGHT)
+                            - i32::from(layer * theme::FREEZER_BIN_STACK_LIFT),
+                        bin_w,
+                        i32::from(theme::FREEZER_BIN_HEIGHT),
+                        color,
+                    );
+                }
+            }
         }
     }
     canvas.fill_rect(
@@ -1026,6 +1031,7 @@ fn draw_freezer(
         );
     }
     draw_icicles_and_puddles(&mut canvas, area, layout.floor);
+    draw_ice_cubes(&mut canvas, layout.floor);
     for x in (2..area.width.saturating_sub(2)).step_by(theme::FREEZER_RIVET_STEP.into()) {
         canvas.put(i32::from(x), 1, theme::COAT_LO);
         canvas.put(
@@ -1051,7 +1057,6 @@ fn draw_freezer(
         );
     }
     if !reduced_motion {
-        draw_snowman(&mut canvas, layout.floor);
         draw_gravestone(&mut canvas, layout.floor);
     }
     for (_, (slot, pose)) in table.board().iter().zip(&layout.spirits) {
@@ -1744,7 +1749,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn xterm_scene_emits_only_indexed_handoff_colors_and_all_accent_pairs() {
+    fn xterm_scene_emits_only_indexed_handoff_colors_and_rendered_accent_pairs() {
         let agents = (0..6)
             .map(|index| {
                 let mut agent = record(&index.to_string(), AgentState::Idle);
@@ -1762,8 +1767,8 @@ pub(crate) mod tests {
             .iter()
             .flat_map(|cell| [cell.fg, cell.bg])
             .collect::<Vec<_>>();
-        for expected in theme::ACCENTS.into_iter().chain(theme::ACCENT_DIMS) {
-            assert!(emitted.contains(&expected), "missing rendered {expected:?}");
+        for expected in theme::ACCENTS[..6].iter().chain(&theme::ACCENT_DIMS[..6]) {
+            assert!(emitted.contains(expected), "missing rendered {expected:?}");
         }
         for expected in [
             theme::BG,
@@ -1825,11 +1830,11 @@ pub(crate) mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             rows[4].chars().skip(54).take(22).collect::<String>(),
-            "COOK   RUNTIME TICKETS"
+            "COOK         MISE TIME"
         );
         assert_eq!(
             rows[5].chars().skip(54).take(22).collect::<String>(),
-            "REFACT   15:01       4"
+            "REFACTOR-AGE     15:01"
         );
 
         fixture_agent.id = "zero-runtime".into();
@@ -1854,7 +1859,7 @@ pub(crate) mod tests {
                 .skip(54)
                 .take(22)
                 .collect::<String>(),
-            "ZERO         —       —"
+            "ZERO                 —"
         );
 
         let mut demo = AgentTable::default();

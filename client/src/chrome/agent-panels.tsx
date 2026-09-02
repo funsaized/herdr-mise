@@ -157,7 +157,6 @@ export function DetailCard({
         onClose={onClose}
       />
       <div className="facts">
-        <Fact label="Model">{availableText(agent.model)}</Fact>
         <Fact label="Workspace" mono>
           {availableText(agent.workspace)}
         </Fact>
@@ -198,7 +197,7 @@ export function SessionSummary({
         onClose={onClose}
       />
       <div className="facts">
-        <Fact label="Runtime">{duration(entry.runtimeMs)}</Fact>
+        <Fact label="Mise time">{duration(entry.runtimeMs)}</Fact>
         <Fact label="Tickets served">{availableTickets(entry.tickets)}</Fact>
         <Fact label="Ended at">
           {ended.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

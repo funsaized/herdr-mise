@@ -1,4 +1,5 @@
 use crate::protocol::AgentState;
+use crate::tui::theme;
 
 pub const SPRITE_WIDTH: usize = 11;
 pub const SPRITE_HALF_ROWS: usize = 16;
@@ -68,6 +69,42 @@ pub const WORK: &[&str] = &[
     "...D...D...",
     "..BB...BB..",
 ];
+pub const SLEEP_A: &[&str] = &[
+    "...HHHHH...",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
+    "..HhHhHhH..",
+    "...ooooo...",
+    "..oSSSSSo..",
+    "...SeeeS.Z.",
+    "...SSSSS...",
+    "..CaaaaaC..",
+    ".CCCCCCCCC.",
+    ".CCAAAAACC.",
+    ".KCAAAAACK.",
+    "...AAAAA...",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
+];
+pub const SLEEP_B: &[&str] = &[
+    "...HHHHH...",
+    "..HHhHhHH..",
+    ".HHHHHHHHH.",
+    "..HhHhHhH..",
+    "...ooooo...",
+    "..oSSSSSo.Z",
+    "...SeeeSz..",
+    "...SSSSS...",
+    "..CaaaaaC..",
+    ".CCCCCCCCC.",
+    ".CCAAAAACC.",
+    ".KCAAAAACK.",
+    "...AAAAA...",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
+];
 pub const PLATED: &[&str] = &[
     "...HHHHH...",
     "..HHhHhHH..",
@@ -106,59 +143,25 @@ pub const BLOCKED: &[&str] = &[
 ];
 const ENDED: &[&str] = &[];
 pub const SPIRIT_A: &[&str] = &[
-    "...........",
-    "...........",
-    "HHH........",
-    "HhHoSSSSSC.",
-    "HHHSeXeXSC.",
-    "...SSSSSCC.",
-    "...aaaaaA..",
-    "...AAAAA...",
-    "..D.....D..",
-    "..BB...BB..",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
-pub const SPIRIT_B: &[&str] = &[
-    "...........",
-    "...........",
-    "........HHH",
-    ".CSSSSSoHhH",
-    ".CSXeXeSHHH",
-    ".CCSSSSS...",
-    "..Aaaaaa...",
-    "...AAAAA...",
-    "..D.....D..",
-    "..BB...BB..",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
-pub const SPIRIT_C: &[&str] = &[
-    "...........",
     "...HHHHH...",
     "..HHhHhHH..",
+    ".HHHHHHHHH.",
+    "..HhHhHhH..",
     "...ooooo...",
-    "CSSSXSXSSC.",
-    ".CSSSSSSC..",
+    "..oSSSSSo..",
+    "...SeSeS...",
+    "...SSSSS...",
     "..CaaaaaC..",
+    ".CCCCCCCCC.",
+    ".CCAAAAACC.",
+    ".KCAAAAACK.",
     "...AAAAA...",
     "...D...D...",
+    "...D...D...",
     "..BB...BB..",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
 ];
+pub const SPIRIT_B: &[&str] = SPIRIT_A;
+pub const SPIRIT_C: &[&str] = SPIRIT_A;
 const SPIRIT_POSES: [&[&str]; 3] = [SPIRIT_A, SPIRIT_B, SPIRIT_C];
 
 pub fn spirit_sprite(pose: u8) -> Sprite {
@@ -169,9 +172,10 @@ pub fn spirit_sprite(pose: u8) -> Sprite {
 
 pub fn cook_sprite(state: &AgentState, tick: u64) -> Sprite {
     let rows = match state {
-        AgentState::Idle if (tick / 4).is_multiple_of(2) => PREP_B,
-        AgentState::Idle => PREP_A,
-        AgentState::Working => WORK,
+        AgentState::Idle if (tick / theme::IDLE_FRAME_TICKS).is_multiple_of(2) => SLEEP_B,
+        AgentState::Idle => SLEEP_A,
+        AgentState::Working if (tick / theme::WORKING_FRAME_TICKS).is_multiple_of(2) => PREP_B,
+        AgentState::Working => PREP_A,
         AgentState::Blocked => BLOCKED,
         AgentState::Done => PLATED,
         AgentState::Ended => ENDED,
@@ -185,7 +189,7 @@ mod tests {
 
     #[test]
     fn active_grids_are_exact_handoff_dimensions_with_shared_baseline() {
-        for rows in [PREP_A, PREP_B, WORK, BLOCKED, PLATED] {
+        for rows in [PREP_A, PREP_B, WORK, SLEEP_A, SLEEP_B, BLOCKED, PLATED] {
             assert_eq!(rows.len(), SPRITE_HALF_ROWS);
             assert!(rows.iter().all(|row| row.len() == SPRITE_WIDTH));
             assert!(rows[14].contains('D'));
@@ -198,7 +202,7 @@ mod tests {
 
     #[test]
     fn hats_have_a_narrow_puff_over_a_shared_wider_brim() {
-        for rows in [PREP_A, PREP_B, WORK, BLOCKED, PLATED] {
+        for rows in [PREP_A, PREP_B, WORK, SLEEP_A, SLEEP_B, BLOCKED, PLATED] {
             let coat_width =
                 |row: &str| row.bytes().filter(|key| matches!(key, b'H' | b'h')).count();
             assert_eq!(&rows[..4], &PREP_A[..4]);
@@ -211,13 +215,20 @@ mod tests {
     }
 
     #[test]
-    fn idle_swaps_only_at_four_tick_boundaries_and_other_poses_are_static() {
-        assert_eq!(cook_sprite(&AgentState::Idle, 0).rows, PREP_B);
-        assert_eq!(cook_sprite(&AgentState::Idle, 3).rows, PREP_B);
-        assert_eq!(cook_sprite(&AgentState::Idle, 4).rows, PREP_A);
-        assert_eq!(cook_sprite(&AgentState::Idle, 7).rows, PREP_A);
-        assert_eq!(cook_sprite(&AgentState::Idle, 8).rows, PREP_B);
-        for state in [AgentState::Working, AgentState::Blocked, AgentState::Done] {
+    fn idle_sleeps_slowly_and_working_chops_at_four_tick_boundaries() {
+        assert_eq!(cook_sprite(&AgentState::Idle, 0).rows, SLEEP_B);
+        assert_eq!(cook_sprite(&AgentState::Idle, 15).rows, SLEEP_B);
+        assert_eq!(cook_sprite(&AgentState::Idle, 16).rows, SLEEP_A);
+        assert_eq!(cook_sprite(&AgentState::Idle, 32).rows, SLEEP_B);
+        assert!(SLEEP_A[6].contains("eee"));
+        assert!(SLEEP_A.iter().any(|row| row.contains('Z')));
+        assert_ne!(SLEEP_A, SLEEP_B);
+        assert_eq!(cook_sprite(&AgentState::Working, 0).rows, PREP_B);
+        assert_eq!(cook_sprite(&AgentState::Working, 3).rows, PREP_B);
+        assert_eq!(cook_sprite(&AgentState::Working, 4).rows, PREP_A);
+        assert_eq!(cook_sprite(&AgentState::Working, 7).rows, PREP_A);
+        assert_eq!(cook_sprite(&AgentState::Working, 8).rows, PREP_B);
+        for state in [AgentState::Blocked, AgentState::Done] {
             assert_eq!(cook_sprite(&state, 0), cook_sprite(&state, 999));
         }
     }
@@ -232,7 +243,7 @@ mod tests {
         assert_eq!(
             SPIRIT_A
                 .iter()
-                .map(|row| row.matches('X').count())
+                .map(|row| row.matches('e').count())
                 .sum::<usize>(),
             2
         );
