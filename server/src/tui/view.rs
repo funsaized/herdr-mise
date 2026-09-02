@@ -134,23 +134,6 @@ pub(crate) fn status_lines(
     (title.into(), status)
 }
 
-fn wrapped_line_count(text: &str, width: u16) -> u16 {
-    let width = usize::from(width.max(1));
-    let mut lines = 1_u16;
-    let mut used = 0_usize;
-    for word in text.split_whitespace() {
-        let word_width = word.chars().count();
-        let needed = word_width + usize::from(used > 0);
-        if used > 0 && used + needed > width {
-            lines += 1;
-            used = word_width;
-        } else {
-            used += needed;
-        }
-    }
-    lines
-}
-
 pub fn draw(
     frame: &mut Frame<'_>,
     table: &AgentTable,
@@ -167,7 +150,6 @@ pub fn draw(
         table.source_diagnostic(),
         agent_count,
     );
-    let content_height = 1 + wrapped_line_count(&source_copy, frame.area().width);
     let mut header = Paragraph::new(vec![
         Line::from(Span::styled(
             title,
@@ -176,6 +158,7 @@ pub fn draw(
         Line::from(source_copy),
     ])
     .wrap(Wrap { trim: true });
+    let content_height = u16::try_from(header.line_count(frame.area().width)).unwrap_or(u16::MAX);
     let baseline_height = if compact { 2 } else { 4 };
     let header_height = baseline_height.max(content_height + u16::from(!compact));
     if !compact {
@@ -314,7 +297,9 @@ pub fn draw(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{handle_key, retain_selection, scene, SceneView};
+    use super::super::{
+        handle_key, handle_key_with_view, retain_selection, scene, SceneView, HELP_LINES,
+    };
     use super::*;
     use crate::adapter::Normalizer;
     use crate::protocol::{
@@ -359,6 +344,38 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect()
+    }
+
+    fn render_scene(
+        table: &AgentTable,
+        width: u16,
+        height: u16,
+        selected_id: Option<&str>,
+        scene_view: SceneView,
+        help_open: bool,
+    ) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        terminal
+            .draw(|frame| {
+                scene::draw_view(
+                    frame,
+                    table,
+                    None,
+                    now,
+                    0,
+                    super::super::canvas::ColorMode::Xterm256,
+                    true,
+                    selected_id,
+                    scene_view,
+                    help_open,
+                    false,
+                )
+            })
+            .unwrap();
+        buffer_text(&terminal)
     }
 
     fn fixture(name: &str) -> AgentStateEvent {
@@ -507,6 +524,7 @@ mod tests {
                     selected.as_deref(),
                     SceneView::Kitchen,
                     false,
+                    false,
                 )
             })
             .unwrap();
@@ -558,6 +576,7 @@ mod tests {
                     selected.as_deref(),
                     SceneView::Kitchen,
                     false,
+                    false,
                 )
             })
             .unwrap();
@@ -578,6 +597,202 @@ mod tests {
         assert_eq!(selected, None);
         assert!(handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn real_herdr_snapshot_drives_scene_help_lifecycle() {
+        let raw = serde_json::from_str(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ))
+        .unwrap();
+        let normalized = Normalizer::default()
+            .normalize_snapshot_value(raw, "2026-08-13T12:00:00Z")
+            .unwrap();
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: normalized.agents,
+        });
+        let shutdown = CancellationToken::new();
+        let mut selected = None;
+        let mut scene_view = SceneView::Kitchen;
+        let mut help_open = false;
+
+        assert!(!handle_key_with_view(
+            KeyCode::Char('?'),
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert!(help_open);
+        for code in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Char('f')] {
+            assert!(!handle_key_with_view(
+                code,
+                &table,
+                &mut selected,
+                &mut scene_view,
+                &mut help_open,
+                &shutdown,
+            ));
+        }
+        assert_eq!(selected, None);
+        assert_eq!(scene_view, SceneView::Kitchen);
+
+        let compact = render_scene(&table, 79, 23, None, scene_view, help_open);
+        let narrow = render_scene(&table, 20, 12, None, scene_view, help_open);
+        assert!(!narrow.contains(HELP_LINES[1]));
+        for wrapped in ["Shift+Tab", "inspect", "leave", "q quit"] {
+            assert!(
+                narrow.contains(wrapped),
+                "missing wrapped help text {wrapped:?} in {narrow:?}"
+            );
+        }
+
+        assert!(!handle_key_with_view(
+            KeyCode::Char('?'),
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert!(!handle_key_with_view(
+            KeyCode::Tab,
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
+        assert!(!handle_key_with_view(
+            KeyCode::Char('?'),
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        let kitchen = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
+        assert!(!handle_key_with_view(
+            KeyCode::Char('?'),
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert!(!handle_key_with_view(
+            KeyCode::Char('f'),
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert_eq!(scene_view, SceneView::Freezer);
+        assert!(!handle_key_with_view(
+            KeyCode::Char('?'),
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        for code in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Char('f')] {
+            assert!(!handle_key_with_view(
+                code,
+                &table,
+                &mut selected,
+                &mut scene_view,
+                &mut help_open,
+                &shutdown,
+            ));
+        }
+        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
+        assert_eq!(scene_view, SceneView::Freezer);
+
+        let freezer = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
+        let freezer_fallback = render_scene(&table, 79, 23, selected.as_deref(), scene_view, false);
+        assert!(freezer_fallback.contains("> example-cook"));
+        assert!(freezer_fallback.contains("tick 0"));
+        for output in [&kitchen, &freezer, &compact] {
+            for line in HELP_LINES {
+                assert!(output.contains(line), "missing {line:?} in {output:?}");
+            }
+            let lower = output.to_ascii_lowercase();
+            for absent in ["approve", "kill", "prompt"] {
+                assert!(
+                    !lower.contains(absent),
+                    "unexpected {absent:?} in {output:?}"
+                );
+            }
+        }
+        for expected in ["example-cook", "WORKING / ON THE FIRE"] {
+            assert!(
+                kitchen.contains(expected),
+                "missing {expected:?} in {kitchen:?}"
+            );
+        }
+
+        assert!(!handle_key_with_view(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert!(!help_open);
+        assert!(selected.is_some());
+        assert_eq!(scene_view, SceneView::Freezer);
+        assert!(!shutdown.is_cancelled());
+        assert!(!handle_key_with_view(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert_eq!(selected, None);
+        assert_eq!(scene_view, SceneView::Freezer);
+        assert!(!handle_key_with_view(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert_eq!(scene_view, SceneView::Kitchen);
+        assert!(handle_key_with_view(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &shutdown,
+        ));
+        assert!(shutdown.is_cancelled());
+
+        let quit = CancellationToken::new();
+        help_open = true;
+        assert!(handle_key_with_view(
+            KeyCode::Char('q'),
+            &table,
+            &mut selected,
+            &mut scene_view,
+            &mut help_open,
+            &quit,
+        ));
+        assert!(quit.is_cancelled());
+        assert!(help_open);
     }
 
     #[test]

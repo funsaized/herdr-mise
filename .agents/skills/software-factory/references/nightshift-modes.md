@@ -63,6 +63,9 @@ mode never grants `plan-approval`, `ship-approval`, `merge-confirmation`,
 
 Ship preparation follows `agent-constraints/ship-prep.md`. The driver may open
 and record the candidate pull request, then leaves the item at `ship-approval`.
+If the human requests changes, record `ship-feedback` verbatim and take the
+manual `request-rework` transition; the item returns through building and code
+review before ship prep.
 
 ## Checkout exclusions
 

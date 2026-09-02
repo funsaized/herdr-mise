@@ -7,7 +7,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
     Frame,
 };
 
@@ -15,7 +15,8 @@ use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, Pixel
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
     state::{AgentTable, BoardEntry, BOARD_CAP},
-    theme, view, SceneView,
+    theme, view, SceneView, HELP_LINES, KEY_ESC_CLOSE, KEY_ESC_KITCHEN, KEY_FREEZER, KEY_HELP,
+    KEY_INSPECT, KEY_KITCHEN, KEY_QUIT, KEY_QUIT_ESC,
 };
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceStatus};
 
@@ -428,6 +429,38 @@ fn footer_connection(table: &AgentTable, warning: Option<&str>, width: u16) -> S
     )
 }
 
+fn draw_help(frame: &mut Frame<'_>, color_mode: ColorMode) {
+    let area = frame.area();
+    let width = HELP_LINES
+        .iter()
+        .map(|line| line.chars().count() as u16)
+        .max()
+        .unwrap_or_default()
+        .saturating_add(4)
+        .min(area.width);
+    let line_width = width.saturating_sub(2).max(1);
+    let paragraph = Paragraph::new(HELP_LINES.map(Line::from).to_vec())
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default().borders(Borders::ALL).style(
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .bg(mapped(theme::PANEL2, color_mode)),
+            ),
+        );
+    let height = u16::try_from(paragraph.line_count(line_width))
+        .unwrap_or(u16::MAX)
+        .saturating_add(2)
+        .min(area.height);
+    let overlay = Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(paragraph, overlay);
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_view(
     frame: &mut Frame<'_>,
@@ -439,6 +472,7 @@ pub(crate) fn draw_view(
     scene_supported: bool,
     selected_id: Option<&str>,
     scene_view: SceneView,
+    help_open: bool,
     reduced_motion: bool,
 ) {
     if !scene_supported {
@@ -450,6 +484,9 @@ pub(crate) fn draw_view(
             motion_tick(tick, reduced_motion),
             selected_id,
         );
+        if help_open {
+            draw_help(frame, color_mode);
+        }
         return;
     }
     let area = frame.area();
@@ -476,6 +513,9 @@ pub(crate) fn draw_view(
             selected_id,
             reduced_motion,
         ),
+    }
+    if help_open {
+        draw_help(frame, color_mode);
     }
 }
 
@@ -854,9 +894,9 @@ fn draw_kitchen(
     }
 
     let keys = if selected_id.is_some() {
-        "Tab / Shift+Tab inspect · f freezer · Esc close · q quit"
+        format!("{KEY_INSPECT} · {KEY_FREEZER} · {KEY_ESC_CLOSE} · {KEY_QUIT}")
     } else {
-        "f freezer · q / Esc quit · ? help"
+        format!("{KEY_FREEZER} · {KEY_QUIT_ESC} · {KEY_HELP}")
     };
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
     let connection = footer_connection(table, warning, connection_width);
@@ -1176,7 +1216,7 @@ fn draw_freezer(
             );
         }
     }
-    let keys = "f kitchen · Esc kitchen · q quit";
+    let keys = format!("{KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}");
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
     let connection = footer_connection(table, warning, connection_width);
     render_line(
@@ -1306,6 +1346,7 @@ pub(crate) mod tests {
                     true,
                     selected_id,
                     scene_view,
+                    false,
                     reduced_motion,
                 )
             })
@@ -1524,6 +1565,30 @@ pub(crate) mod tests {
         }
         assert!(!compact.contains("Cook extra-58"));
         assert!(compact.contains("86 64/64"));
+
+        let mut unsupported = AgentTable::default();
+        unsupported.apply(
+            serde_json::from_str(include_str!(
+                "../../../../protocol/fixtures/snapshot-demo-unsupported.v1.json"
+            ))
+            .unwrap(),
+        );
+        let output = text(&render_freezer(&unsupported, 80, 24))
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        for expected in [
+            "MISE — DEMO SERVICE",
+            "Mock feed",
+            "observed 23",
+            "upgrade or downgrade Herdr",
+            "Nothing here",
+        ] {
+            assert!(
+                output.contains(expected),
+                "missing {expected:?} in {output:?}"
+            );
+        }
     }
 
     #[test]

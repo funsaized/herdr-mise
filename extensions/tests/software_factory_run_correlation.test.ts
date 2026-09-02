@@ -69,7 +69,12 @@ function context(
       },
     },
     queryData: async (predicate: string) => {
-      if (predicate.includes('name == "artifact-67-plan"')) return [{}];
+      if (predicate.includes('name == "artifact-67-plan"')) {
+        if (!predicate.includes("version > 0")) {
+          throw new Error("artifact query did not request history");
+        }
+        return [{}];
+      }
       if (!predicate.includes("version > 0")) {
         throw new Error("workflow summary query did not request history");
       }
