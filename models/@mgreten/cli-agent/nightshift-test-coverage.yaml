@@ -1,8 +1,8 @@
 type: '@mgreten/cli-agent'
-typeVersion: 2026.08.26.1
+typeVersion: 2026.09.03.2
 id: 426aee3d-ce89-4e07-88eb-592b57435fdf
 name: nightshift-test-coverage
-version: 1
+version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode

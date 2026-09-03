@@ -44,6 +44,7 @@ jobs:
           modelIdOrName: nightshift-planner
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: plan
             invocationId: ${{ "nightshift-" + inputs.workItem + "-plan-" + run.id }}
             tags:
               factory: nightshift

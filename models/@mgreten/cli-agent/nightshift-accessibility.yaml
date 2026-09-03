@@ -1,8 +1,8 @@
 type: '@mgreten/cli-agent'
-typeVersion: 2026.08.26.1
+typeVersion: 2026.09.03.2
 id: b070fe2f-d5e0-4a8a-baca-6ec624859477
 name: nightshift-accessibility
-version: 1
+version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
@@ -11,7 +11,7 @@ globalArguments:
   commandsDir: .claude/commands
   commandSubdirs: []
   claudePath: claude
-  opencodePath: scripts/opencode-thinking
+  opencodePath: opencode
   ampPath: amp
   geminiPath: gemini
   codexPath: codex

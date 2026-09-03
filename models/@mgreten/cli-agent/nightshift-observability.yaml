@@ -1,8 +1,8 @@
 type: '@mgreten/cli-agent'
-typeVersion: 2026.08.26.1
+typeVersion: 2026.09.03.2
 id: 81222895-9f18-449b-b7a8-8282f1fb089f
 name: nightshift-observability
-version: 1
+version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
@@ -11,7 +11,7 @@ globalArguments:
   commandsDir: .claude/commands
   commandSubdirs: []
   claudePath: claude
-  opencodePath: scripts/opencode-thinking
+  opencodePath: opencode
   ampPath: amp
   geminiPath: gemini
   codexPath: codex

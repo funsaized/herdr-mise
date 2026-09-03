@@ -154,6 +154,22 @@ propels work; `swamp serve` does not poll queued work.
 - Dirty source is preserved for inspection.
 - Planning and adversarial review results are published to the GitHub issue.
 
+### OpenCode Host Contract
+
+Nightshift delegates execution to the machine-global OpenCode agents named
+`build`, `plan`, and `reviewer`. Their configured model, variant, prompt,
+permissions, and tools are authoritative: planning selects `plan`, all seven
+review lanes select `reviewer`, and implementation selects `build`. The host
+must expose those agents through `opencode debug agent <name>`; a missing agent
+fails the invocation rather than falling back to a synthetic profile.
+
+The `plan` and `reviewer` agents must permit the `skill` tool so they can load
+the repo-local Nightshift skills under `.agents/skills/`. Keep source mutation
+denied for `reviewer` and suitably restricted for `plan`, because issue and
+review text is untrusted. Prompts beginning with an explicit OpenCode slash
+command use the matching machine-global command and its configured agent.
+Ordinary Nightshift prompts keep their workflow-selected agent.
+
 ### State Ownership
 
 State has three deliberately independent owners:

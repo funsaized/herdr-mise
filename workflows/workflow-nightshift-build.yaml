@@ -70,7 +70,7 @@ jobs:
             commandsDir: .claude/commands
             commandSubdirs: []
             claudePath: claude
-            opencodePath: scripts/opencode-medium
+            opencodePath: opencode
             ampPath: amp
             geminiPath: gemini
             codexPath: codex
@@ -84,6 +84,7 @@ jobs:
             sandboxNetwork: allow
             sandboxCredentialAccess: provider
           inputs:
+            opencodeAgent: build
             invocationId: ${{ "nightshift-" + inputs.workItem + "-build-" + run.id }}
             cwd: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-workspace").attributes.payload.subjectRoot }}
             tags:

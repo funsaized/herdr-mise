@@ -1,8 +1,8 @@
 type: '@mgreten/cli-agent'
-typeVersion: 2026.08.26.1
+typeVersion: 2026.09.03.2
 id: 7a44eae9-3852-4245-b38c-34e2ebe942cd
 name: nightshift-security
-version: 1
+version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
