@@ -33,23 +33,6 @@
     "filesChecksum": "1e59ff0450a15da68626ae20b8abd6518f0e854a9010f34082f149b7b6746a7c",
     "serverUrl": "https://swamp-club.com"
   },
-  "@mgreten/cli-agent": {
-    "version": "2026.08.26.1",
-    "pulledAt": "2026-08-29T19:39:26.461Z",
-    "files": [
-      ".swamp/bundles/da06fc84/cli_agent.js",
-      ".swamp/pulled-extensions/@mgreten/cli-agent/files/LICENSE.txt",
-      ".swamp/pulled-extensions/@mgreten/cli-agent/files/README.md",
-      ".swamp/pulled-extensions/@mgreten/cli-agent/files/cli_agent.sandbox.sb",
-      ".swamp/pulled-extensions/@mgreten/cli-agent/files/cli_agent.sandbox.strict.sb",
-      ".swamp/pulled-extensions/@mgreten/cli-agent/manifest.yaml",
-      ".swamp/pulled-extensions/@mgreten/cli-agent/models/cli_agent.ts",
-      ".swamp/pulled-extensions/@mgreten/cli-agent/models/cli_agent_orb.ts"
-    ],
-    "checksum": "b0762086f2a0c1ded6026acd1f85c4eb807b9a4be405d553156f56d640968f10",
-    "filesChecksum": "06a1956f2eb48e66c1f2d43177e4ebbc9fc7396d08ab42ce4e2687485ba97fd7",
-    "serverUrl": "https://swamp-club.com"
-  },
   "@mgreten/software-factory-flow-metrics": {
     "version": "2026.08.02.1",
     "pulledAt": "2026-08-29T19:40:12.211Z",
@@ -119,6 +102,23 @@
     ],
     "checksum": "bdc2cba9c068248d9d1f237526c2f96b5fc989fba939b6f1fbaeb321a69b804f",
     "filesChecksum": "053e1e6baa09e771ad93f54d81fde92f26fe9052dc59c9fe86ed49e411c93215",
+    "serverUrl": "https://swamp-club.com"
+  },
+  "@funsaized/cli-agent": {
+    "version": "2026.09.03.2",
+    "pulledAt": "2026-09-03T14:35:25.721Z",
+    "files": [
+      ".swamp/bundles/06407ef9/cli_agent.js",
+      ".swamp/pulled-extensions/@funsaized/cli-agent/files/LICENSE.txt",
+      ".swamp/pulled-extensions/@funsaized/cli-agent/files/README.md",
+      ".swamp/pulled-extensions/@funsaized/cli-agent/files/cli_agent.sandbox.sb",
+      ".swamp/pulled-extensions/@funsaized/cli-agent/files/cli_agent.sandbox.strict.sb",
+      ".swamp/pulled-extensions/@funsaized/cli-agent/manifest.yaml",
+      ".swamp/pulled-extensions/@funsaized/cli-agent/models/cli_agent.ts",
+      ".swamp/pulled-extensions/@funsaized/cli-agent/models/cli_agent_orb.ts"
+    ],
+    "checksum": "f78eff9f820fdc547cc27f8ea6cf07cbcf7c15c7ce2ddd44f68bda976866a442",
+    "filesChecksum": "d4a2ce5f9d75f38b1a908e7b7cb083131b1ff0245bf2bce525884ac2771adb24",
     "serverUrl": "https://swamp-club.com"
   }
 }

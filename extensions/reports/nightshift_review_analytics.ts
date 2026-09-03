@@ -1,7 +1,7 @@
 /** Deterministic review, token, and provider-reported cost analytics for Nightshift. */
 
 const FACTORY_TYPE = "@swamp/software-factory";
-const CLI_AGENT_TYPE = "@mgreten/cli-agent";
+const CLI_AGENT_TYPES = ["@mgreten/cli-agent", "@funsaized/cli-agent"];
 const LANES = [
   "accessibility",
   "clean-code",
@@ -404,13 +404,21 @@ async function loadFactoryInput(
       .map((round) => [round.workflowRunId!, round]),
   );
   const invocations: Invocation[] = [];
-  for (const { data, modelId } of await repository.findAllForType(
-    CLI_AGENT_TYPE,
-  )) {
+  const cliAgentResources = (
+    await Promise.all(
+      CLI_AGENT_TYPES.map(async (type) =>
+        (await repository.findAllForType(type)).map((resource) => ({
+          ...resource,
+          type,
+        })),
+      ),
+    )
+  ).flat();
+  for (const { data, modelId, type } of cliAgentResources) {
     if (data.tags.specName !== "invocation") continue;
     const content = await readJson(
       repository,
-      CLI_AGENT_TYPE,
+      type,
       modelId,
       data.name,
       data.version,
@@ -1484,7 +1492,7 @@ export function renderMarkdown(
   const lines = [
     "# Nightshift Factory Analytics",
     "",
-    "Static analysis of factory review history joined to `@mgreten/cli-agent` invocations by work item and workflow run ID.",
+    "Static analysis of factory review history joined to CLI-agent invocations by work item and workflow run ID.",
     "",
     "## Coverage",
     "",

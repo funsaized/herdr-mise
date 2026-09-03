@@ -170,6 +170,11 @@ review text is untrusted. Prompts beginning with an explicit OpenCode slash
 command use the matching machine-global command and its configured agent.
 Ordinary Nightshift prompts keep their workflow-selected agent.
 
+Nightshift currently uses the temporary `@funsaized/cli-agent` fork while
+[`@mgreten/cli-agent` PR #20](https://github.com/meagerfindings/swamp-cli-agent/pull/20)
+is pending. Pull the upstream release and migrate the model type back after
+that release includes global OpenCode routing.
+
 ### State Ownership
 
 State has three deliberately independent owners:

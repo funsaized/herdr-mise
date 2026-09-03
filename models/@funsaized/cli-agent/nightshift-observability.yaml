@@ -1,12 +1,12 @@
-type: '@mgreten/cli-agent'
+type: '@funsaized/cli-agent'
 typeVersion: 2026.09.03.2
-id: feda62ec-9e88-4efd-9d35-727f19675029
-name: nightshift-ddd
+id: 81222895-9f18-449b-b7a8-8282f1fb089f
+name: nightshift-observability
 version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
-  defaultModel: xai/grok-4.6
+  defaultModel: openai/gpt-5.6-luna
   defaultToolProfile: readonly
   commandsDir: .claude/commands
   commandSubdirs: []

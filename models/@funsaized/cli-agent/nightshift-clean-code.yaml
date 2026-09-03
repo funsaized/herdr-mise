@@ -1,12 +1,12 @@
-type: '@mgreten/cli-agent'
+type: '@funsaized/cli-agent'
 typeVersion: 2026.09.03.2
-id: 426aee3d-ce89-4e07-88eb-592b57435fdf
-name: nightshift-test-coverage
+id: 4b08159c-bf36-4397-8bbc-5bb9393d0fa6
+name: nightshift-clean-code
 version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
-  defaultModel: openai/gpt-5.6-terra
+  defaultModel: openai/gpt-5.6-sol
   defaultToolProfile: readonly
   commandsDir: .claude/commands
   commandSubdirs: []

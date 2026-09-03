@@ -1,12 +1,12 @@
-type: '@mgreten/cli-agent'
+type: '@funsaized/cli-agent'
 typeVersion: 2026.09.03.2
-id: 4b08159c-bf36-4397-8bbc-5bb9393d0fa6
-name: nightshift-clean-code
+id: d9c5da1b-0e21-46c4-b20e-64eb45bd9a8d
+name: nightshift-planner
 version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
-  defaultModel: openai/gpt-5.6-sol
+  defaultModel: xai/grok-4.6
   defaultToolProfile: readonly
   commandsDir: .claude/commands
   commandSubdirs: []

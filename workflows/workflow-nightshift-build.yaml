@@ -60,7 +60,7 @@ jobs:
       - name: implement-plan
         task:
           type: model_method
-          modelType: '@mgreten/cli-agent'
+          modelType: '@funsaized/cli-agent'
           modelName: ${{ "nightshift-builder-" + inputs.workItem }}
           methodName: invokeAndParse
           globalArgs:

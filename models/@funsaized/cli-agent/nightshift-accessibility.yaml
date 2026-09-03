@@ -1,12 +1,12 @@
-type: '@mgreten/cli-agent'
+type: '@funsaized/cli-agent'
 typeVersion: 2026.09.03.2
-id: d9c5da1b-0e21-46c4-b20e-64eb45bd9a8d
-name: nightshift-planner
+id: b070fe2f-d5e0-4a8a-baca-6ec624859477
+name: nightshift-accessibility
 version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
-  defaultModel: xai/grok-4.6
+  defaultModel: openai/gpt-5.6-luna
   defaultToolProfile: readonly
   commandsDir: .claude/commands
   commandSubdirs: []
