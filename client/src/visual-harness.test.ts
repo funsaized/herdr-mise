@@ -284,6 +284,23 @@ describe("visual WebSocket boundary", () => {
     expect(heroEvents()).toEqual(["working", "blocked", "working"]);
     await vi.advanceTimersByTimeAsync(1);
     expect(heroEvents()).toEqual(["working", "blocked", "working", "done"]);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(heroEvents()).toEqual(["working", "blocked", "working", "done"]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(heroEvents()).toEqual([
+      "working",
+      "blocked",
+      "working",
+      "done",
+      "working",
+    ]);
+    await vi.advanceTimersByTimeAsync(3_000);
+    const endedEvents = messages.flatMap((event) => {
+      if (!event || typeof event !== "object") return [];
+      const message = event as { agent?: { id: string; state: string } };
+      return message.agent?.state === "ended" ? [message.agent.id] : [];
+    });
+    expect(endedEvents).toEqual(["visual-agent-4", "visual-agent-5"]);
     const heroRecords = messages.flatMap((event) => {
       if (!event || typeof event !== "object") return [];
       const message = event as {
@@ -297,7 +314,7 @@ describe("visual WebSocket boundary", () => {
         );
       return message.agent?.id === "visual-agent-1" ? [message.agent] : [];
     });
-    expect(heroRecords).toHaveLength(4);
+    expect(heroRecords).toHaveLength(5);
     expect(
       heroRecords.every(
         (record) =>

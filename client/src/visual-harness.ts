@@ -223,24 +223,54 @@ export function installVisualWebSocket(
     private scheduleMixedLifecycle() {
       if (config.preset !== "mixed") return;
       const snapshot = feed[0],
-        hero = snapshot?.type === "snapshot" ? snapshot.agents[0] : undefined;
+        agents = snapshot?.type === "snapshot" ? snapshot.agents : [],
+        hero = agents[0];
       if (!hero) return;
       const phases = [
-        { delay: 5_000, state: "blocked" as const, progress: null },
-        { delay: 7_000, state: "working" as const, progress: 0.78 },
-        { delay: 9_500, state: "done" as const, progress: null },
+        {
+          delay: 5_000,
+          agent: hero,
+          state: "blocked" as const,
+          progress: null,
+        },
+        {
+          delay: 7_000,
+          agent: hero,
+          state: "working" as const,
+          progress: 0.78,
+        },
+        { delay: 9_500, agent: hero, state: "done" as const, progress: null },
+        {
+          delay: 11_500,
+          agent: hero,
+          state: "working" as const,
+          progress: 0.92,
+        },
+        {
+          delay: 14_500,
+          agent: agents[3],
+          state: "ended" as const,
+          progress: null,
+        },
+        {
+          delay: 14_500,
+          agent: agents[4],
+          state: "ended" as const,
+          progress: null,
+        },
       ];
       for (const phase of phases)
         this.lifecycleTimers.push(
           globalThis.setTimeout(() => {
-            if (this.readyState !== VisualWebSocket.OPEN) return;
+            if (this.readyState !== VisualWebSocket.OPEN || !phase.agent)
+              return;
             const event: AgentStateEvent = {
               version: PROTOCOL_VERSION,
               type: "delta",
               mode: "demo",
               operation: "upsert",
               agent: {
-                ...hero,
+                ...phase.agent,
                 state: phase.state,
                 progress: phase.progress,
                 stateEnteredAt: new Date().toISOString(),

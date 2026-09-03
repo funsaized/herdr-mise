@@ -1,5 +1,5 @@
 export const gifFrameRate = 20;
-export const captureDurationMs = 10_000;
+export const captureDurationMs = 18_000;
 export const captureIntervalMs = 1_000 / gifFrameRate;
 export const captureFrameCount = captureDurationMs / captureIntervalMs;
 
