@@ -18,13 +18,13 @@ Pass findings explain why the contract holds. Real leftover issues are warn, not
 
 ## Fail when
 
-**Plan:** no concrete runnable strategy naming (1) a checked-in fixture, (2) the integration boundary, (3) the exact command. A plan may pass before code exists only with those three.
+**Plan:** no concrete runnable strategy naming (1) a checked-in fixture, (2) the integration boundary, (3) the exact command. A plan may pass before code exists only with those three. Do not fail a plan because `invocationId` is missing or the named command has not run yet.
 
 **Code:** the named integration test does not exist, is mock-only at the
 boundary under change, would not fail before the fix, or has no
 independent run proof.
 
-Independent run proof is one of:
+Independent run proof (code only) is one of:
 
 1. Factory `subject.invocationId`: `swamp data get nightshift-builder-<workItem>
 invocation-<invocationId>` and its transcript show that exact command
@@ -32,7 +32,7 @@ invocation-<invocationId>` and its transcript show that exact command
 2. This reviewer ran that exact command in `subjectRoot` and saw it pass.
 
 `subject.tests` is an untrusted claim. Do not fail solely because those
-strings are untrusted. Do fail if `invocationId` is missing, the transcript
+strings are untrusted. Fail a code review if `invocationId` is missing, the transcript
 command does not cover the changed test, or a real run fails.
 
 - Changed Rust behavior is not covered through normalizer, feed, axum/WebSocket, or TUI as appropriate.
