@@ -8,12 +8,12 @@ import {
   remainingFrameDelay,
 } from "./readme-media-config.mjs";
 
-test("captures a smooth ten-second GIF at twenty frames per second", () => {
+test("captures a smooth eighteen-second GIF at twenty frames per second", () => {
   assert.equal(gifFrameRate, 20);
-  assert.equal(captureFrameCount, 200);
+  assert.equal(captureFrameCount, 360);
   assert.equal(captureIntervalMs, 50);
-  assert.equal(captureFrameCount / gifFrameRate, 10);
-  assert.equal(captureDurationMs, 10_000);
+  assert.equal(captureFrameCount / gifFrameRate, 18);
+  assert.equal(captureDurationMs, 18_000);
 });
 
 test("capture pacing compensates for screenshot time without falling behind", () => {

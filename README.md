@@ -8,7 +8,12 @@ skin over a small, versioned JSON feed.
 herdr-mise does not control agents, render their output, or aggregate remote
 servers. It is a window, not an office.
 
-![Six AI agents sharing a calm kitchen service with idle, active, blocked, and plated stations](docs/assets/herdr-mise-demo.gif)
+<details>
+<summary>Play the 18-second kitchen demo (collapse to hide the motion)</summary>
+
+![Seven AI cooks under dinner lighting move through idle, working, blocked, and plated stations, open and dismiss details, then visit two ended cooks in the freezer](docs/assets/herdr-mise-demo.gif)
+
+</details>
 
 The GIF and screens below are repeatable captures from the isolated visual
 playground's deterministic feed; see [Visual playground](docs/operations.md#visual-playground).

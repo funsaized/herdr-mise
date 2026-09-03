@@ -162,23 +162,65 @@ try {
   await settings.waitFor({ state: "visible" });
   await page.screenshot({ path: join(output, "settings-1280x720.png") });
 
-  // Hero station center from computeLayout(1280, 720, 6 agents); the waitFor
-  // fails the capture loudly if a layout change moves the click off the agent.
-  const heroDetail = page.getByRole("complementary", { name: "Codex details" });
+  const claude = page.getByRole("button", {
+      name: "Claude, Blocked — at the pass, open details",
+    }),
+    claudeDetail = page.getByRole("complementary", { name: "Claude details" }),
+    codex = page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+    codexDetail = page.getByRole("complementary", { name: "Codex details" }),
+    freezer = page.getByRole("button", { name: "Freezer" });
   await captureFrames(
     page,
-    "preset=mixed&agents=6&theme=light",
+    "preset=mixed&agents=7&theme=dinner",
     captureFrameCount,
     0,
     {
-      [Math.round(gifFrameRate * 0.5)]: async () => {
-        await page.mouse.click(448, 406);
-        await heroDetail.waitFor({ state: "visible" });
-        await page.mouse.move(20, 700);
+      0: async () => {
+        await page.locator(".visualTuiFigure").evaluate((element) => {
+          element.style.display = "none";
+        });
       },
-      [Math.round(gifFrameRate * 3)]: async () => {
+      [Math.round(gifFrameRate * 5)]: async () => {
+        await claude.evaluate((element) => element.click());
+        await claudeDetail.waitFor({ state: "visible" });
+      },
+      [Math.round(gifFrameRate * 6.5)]: async () => {
         await page.keyboard.press("Escape");
-        await heroDetail.waitFor({ state: "hidden" });
+        await claudeDetail.waitFor({ state: "hidden" });
+      },
+      [Math.round(gifFrameRate * 11.5)]: async () => {
+        await codex.evaluate((element) => element.click());
+        await codexDetail.waitFor({ state: "visible" });
+      },
+      [Math.round(gifFrameRate * 13.5)]: async () => {
+        await page.keyboard.press("Escape");
+        await codexDetail.waitFor({ state: "hidden" });
+      },
+      [Math.round(gifFrameRate * 15.5)]: async () => {
+        await page
+          .getByRole("navigation", { name: "Agent stations" })
+          .getByRole("button", { name: /OpenClaw, Ended/ })
+          .waitFor();
+        await page
+          .getByRole("navigation", { name: "Agent stations" })
+          .getByRole("button", { name: /Gemini, Ended/ })
+          .waitFor();
+        await freezer.click();
+        await page.locator('.freezerTrigger[aria-pressed="true"]').waitFor();
+        await page.waitForFunction(
+          () =>
+            document
+              .querySelector('[aria-label="Ended chefs"]')
+              ?.querySelectorAll("button").length === 2,
+        );
+        await page.evaluate(
+          () =>
+            new Promise((resolveFrame) =>
+              requestAnimationFrame(() => requestAnimationFrame(resolveFrame)),
+            ),
+        );
       },
     },
   );

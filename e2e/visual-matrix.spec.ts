@@ -84,6 +84,19 @@ const sceneMetrics = (page: Page) =>
 const placard = (page: Page) =>
   page.getByRole("status").filter({ hasText: "DEMO SERVICE" });
 
+async function availablePort() {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new Error("failed to reserve a browser fixture port");
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return address.port;
+}
+
 function boxesIntersect(
   first: { x: number; y: number; width: number; height: number },
   second: { x: number; y: number; width: number; height: number },
@@ -180,7 +193,7 @@ test("runtime preference changes preserve mixed lifecycle truth in both directio
     hero = (state: string) =>
       page.getByRole("button", { name: `Codex, ${state}, open details` });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/?preset=mixed&agents=6&stats");
+  await page.goto("/?preset=mixed&agents=7&stats");
   await expect(hero("Working — on the fire")).toHaveCount(1);
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect
@@ -212,6 +225,22 @@ test("runtime preference changes preserve mixed lifecycle truth in both directio
     timeout: 5_000,
   });
   await expect(hero("Done — plated")).toHaveCount(1, { timeout: 5_000 });
+  await expect(hero("Working — on the fire")).toHaveCount(1, {
+    timeout: 5_000,
+  });
+  const stations = page.getByRole("navigation", { name: "Agent stations" });
+  await expect(
+    stations.getByRole("button", { name: /OpenClaw, Ended/ }),
+  ).toBeAttached({ timeout: 5_000 });
+  await expect(
+    stations.getByRole("button", { name: /Gemini, Ended/ }),
+  ).toBeAttached();
+  const freezer = page.getByRole("button", { name: "Freezer" });
+  await freezer.click();
+  await expect(freezer).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({ view: "freezer", endedEntries: 2, visibleSpirits: 2 });
   expect(errors).toEqual([]);
 });
 
@@ -304,6 +333,8 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "herdr-mise-freezer-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
     socketPath = join(directory, "herdr.sock"),
     working = JSON.stringify(
       JSON.parse(
@@ -346,20 +377,24 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     fixtureServer.listen(socketPath, resolve);
   });
   const app = spawn("target/debug/herdr-mise", [], {
-    env: { ...process.env, HERDR_SOCKET_PATH: socketPath },
+    env: {
+      ...process.env,
+      HERDR_MISE_PORT: String(port),
+      HERDR_SOCKET_PATH: socketPath,
+    },
     stdio: "ignore",
   });
   try {
     await expect
       .poll(async () => {
         try {
-          return (await fetch("http://127.0.0.1:8686/")).status;
+          return (await fetch(appUrl)).status;
         } catch {
           return 0;
         }
       })
       .toBe(200);
-    await page.goto("http://127.0.0.1:8686/?stats");
+    await page.goto(`${appUrl}/?stats`);
     await expect(
       page.getByRole("button", {
         name: "fixture-working, Working — on the fire, open details",
@@ -445,19 +480,25 @@ test("atmosphere persists across the production fixture runtime", async ({
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "herdr-mise-atmosphere-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
     fixture = await readFile(
       join(process.cwd(), "protocol/fixtures/snapshot.v1.json"),
       "utf8",
     ),
     app = spawn("target/debug/herdr-mise", [], {
-      env: { ...process.env, HERDR_SOCKET_PATH: join(directory, "herdr.sock") },
+      env: {
+        ...process.env,
+        HERDR_MISE_PORT: String(port),
+        HERDR_SOCKET_PATH: join(directory, "herdr.sock"),
+      },
       stdio: "ignore",
     });
   try {
     await expect
       .poll(async () => {
         try {
-          return (await fetch("http://127.0.0.1:8686/")).status;
+          return (await fetch(appUrl)).status;
         } catch {
           return 0;
         }
@@ -466,7 +507,7 @@ test("atmosphere persists across the production fixture runtime", async ({
     await page.routeWebSocket("**/ws", (webSocket) => {
       webSocket.send(fixture);
     });
-    await page.goto("http://127.0.0.1:8686/?stats");
+    await page.goto(`${appUrl}/?stats`);
     await expect(
       page.getByRole("button", {
         name: "refactor-agent, Working — on the fire, open details",
