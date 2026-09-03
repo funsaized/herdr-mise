@@ -6,7 +6,8 @@ mkdir -p "$artifact_dir"
 log="$artifact_dir/server-resource.log"
 sample="$artifact_dir/server-resource.txt"
 isolated=$(mktemp -d)
-HOME="$isolated/home" XDG_RUNTIME_DIR="$isolated/xdg" HERDR_SOCKET_PATH="$isolated/missing.sock" HERDR_MISE_DEMO_COUNT=12 "$binary" >"$log" 2>&1 &
+port=$(node -e 'const net=require("node:net"),server=net.createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close()})')
+HOME="$isolated/home" XDG_RUNTIME_DIR="$isolated/xdg" HERDR_SOCKET_PATH="$isolated/missing.sock" HERDR_MISE_DEMO_COUNT=12 HERDR_MISE_PORT="$port" "$binary" >"$log" 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true; rm -rf "$isolated"' EXIT INT TERM
 sleep 3

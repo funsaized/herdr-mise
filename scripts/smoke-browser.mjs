@@ -7,7 +7,12 @@ try {
     console.error(`browser_pageerror=${error.message}`),
   );
   const started = performance.now();
-  await page.goto("http://127.0.0.1:8686/", { waitUntil: "domcontentloaded" });
+  await page.goto(
+    `http://127.0.0.1:${process.env.HERDR_MISE_PORT ?? "8686"}/`,
+    {
+      waitUntil: "domcontentloaded",
+    },
+  );
   await page.locator("canvas").waitFor({ state: "visible", timeout: 1500 });
   try {
     await page
