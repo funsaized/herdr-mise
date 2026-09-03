@@ -68,6 +68,11 @@ type MotionMetrics = {
     rows: { id: string; text: string[] }[];
     strokedIds: string[];
   };
+  atmosphere: {
+    window: number;
+    shelf: number;
+    pass: number;
+  };
 };
 const sceneMetrics = (page: Page) =>
   page.evaluate(() =>
@@ -124,6 +129,45 @@ test("reduced motion is static before blocked-scene startup in light and dinner 
           continuous: false,
         },
         blockedIndicators: 1,
+      });
+  }
+  expect(errors).toEqual([]);
+});
+
+test("atmosphere switches off room extras without changing blocked truth", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const theme of ["light", "dinner"]) {
+    await page.goto(`/?preset=blocked&agents=1&theme=${theme}&stats`);
+    await expect(placard(page)).toBeVisible();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        atmosphere: { shelf: 2 },
+        blockedIndicators: 1,
+        board: { headers: ["COOK", "MISE TIME"] },
+      });
+    const initial = await sceneMetrics(page);
+    expect(initial?.atmosphere.window).toBeGreaterThan(0);
+    expect(initial?.atmosphere.pass).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("switch", { name: "Atmosphere" }).click();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        atmosphere: { window: 0, shelf: 0, pass: 0 },
+        blockedIndicators: 1,
+        board: { headers: ["COOK", "MISE TIME"] },
+        motion: {
+          reduced: true,
+          activeParticles: 0,
+          activeTransitions: 0,
+          activeBusserSweeps: 0,
+          continuous: false,
+        },
       });
   }
   expect(errors).toEqual([]);
@@ -393,6 +437,77 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("atmosphere persists across the production fixture runtime", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-atmosphere-")),
+    fixture = await readFile(
+      join(process.cwd(), "protocol/fixtures/snapshot.v1.json"),
+      "utf8",
+    ),
+    app = spawn("target/debug/herdr-mise", [], {
+      env: { ...process.env, HERDR_SOCKET_PATH: join(directory, "herdr.sock") },
+      stdio: "ignore",
+    });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch("http://127.0.0.1:8686/")).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.routeWebSocket("**/ws", (webSocket) => {
+      webSocket.send(fixture);
+    });
+    await page.goto("http://127.0.0.1:8686/?stats");
+    await expect(
+      page.getByRole("button", {
+        name: "refactor-agent, Working — on the fire, open details",
+      }),
+    ).toBeAttached();
+    await expect(
+      page.getByRole("button", {
+        name: "review-agent, Idle — prepping, open details",
+      }),
+    ).toBeAttached();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        atmosphere: { shelf: 2 },
+        board: { headers: ["COOK", "MISE TIME"] },
+      });
+
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("switch", { name: "Atmosphere" }).click();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({ atmosphere: { window: 0, shelf: 0, pass: 0 } });
+
+    await page.reload();
+    await expect(
+      page.getByRole("button", {
+        name: "refactor-agent, Working — on the fire, open details",
+      }),
+    ).toBeAttached();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        atmosphere: { window: 0, shelf: 0, pass: 0 },
+        board: { headers: ["COOK", "MISE TIME"] },
+      });
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Atmosphere" }),
+    ).toHaveAttribute("aria-checked", "false");
+  } finally {
+    app.kill("SIGTERM");
     await rm(directory, { recursive: true, force: true });
   }
 });

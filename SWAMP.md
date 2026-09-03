@@ -192,9 +192,11 @@ Configure these GitHub Nightshift workflows outside Swamp:
 | Issue closes                                                   | `done`         |
 
 The exact triggers are repository policy. Keep the four statuses coarse and do
-not recreate factory stages as board columns. GitHub's supported Projects API
-does not update workflow rules, so configure and verify these mappings in the
-Nightshift project's Workflows UI, including `Item closed` to `done`.
+not recreate factory stages as board columns. Assignment of a `Todo` item is
+moved to `in-progress` by `.github/workflows/nightshift-board.yml` using a
+`project`-scoped `NIGHTSHIFT_PROJECT_TOKEN`. Configure the remaining mappings
+in the Nightshift project's Workflows UI, including `Item closed` to `done`.
+GitHub's supported Projects API does not update those workflow rules.
 
 ### Operating Modes
 

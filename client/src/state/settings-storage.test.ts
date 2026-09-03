@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AgentStore, defaultSettings } from "./store";
-import {
-  loadSettings,
-  SETTINGS_STORAGE_KEY,
-  type SettingsStorage,
-} from "./settings-storage";
+import { loadSettings, SETTINGS_STORAGE_KEY } from "./settings-storage";
 
-class MemoryStorage implements SettingsStorage {
+class MemoryStorage {
   value: string | null = null;
   getItem(key: string) {
     return key === SETTINGS_STORAGE_KEY ? this.value : null;
@@ -22,6 +18,7 @@ describe("versioned settings persistence", () => {
       store = new AgentStore(undefined, {}, storage),
       expected = {
         sound: true,
+        atmosphere: false,
         theme: "dark" as const,
         doneTimeoutMs: 300_000,
         escalationFastMs: 30_000,
@@ -32,6 +29,17 @@ describe("versioned settings persistence", () => {
       expected,
     );
   });
+  it.each([undefined, "yes"])(
+    "defaults a missing or invalid atmosphere value to on",
+    (atmosphere) => {
+      const storage = new MemoryStorage();
+      storage.value = JSON.stringify({
+        version: 1,
+        settings: { ...defaultSettings, atmosphere },
+      });
+      expect(loadSettings(storage, defaultSettings).atmosphere).toBe(true);
+    },
+  );
   it.each([
     "not json",
     JSON.stringify({ version: 99, settings: { sound: true } }),
@@ -80,6 +88,7 @@ describe("versioned settings persistence", () => {
     const settings = loadSettings(storage, defaultSettings);
     expect(settings).toEqual({
       sound: true,
+      atmosphere: true,
       theme: "dark",
       doneTimeoutMs: 300_000,
       escalationFastMs: 30_000,

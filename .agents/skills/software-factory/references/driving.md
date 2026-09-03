@@ -320,6 +320,13 @@ failed Nightshift workflow, inspect `@swamp/workflow-summary`, then run
 and `failureKind=candidate|configuration|infrastructure`. This preserves the
 attempt and lets the factory distinguish code rework from an operational retry.
 
+Do not raise stage `maxCycles` to recover a failed workflow. Record failure
+evidence first. Dispatch exhaustion is not a cycle-limit problem.
+
+Classify shipping preflight failures (invalid SHA, dirty tree, or missing
+worktree) as `configuration`. Classify verification test failures as
+`candidate`.
+
 ## Propulsion rules
 
 - Exactly one transition `satisfied`, no pending human gate, no

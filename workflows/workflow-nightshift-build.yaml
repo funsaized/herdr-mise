@@ -97,7 +97,11 @@ jobs:
               callers before changing shared behavior, make the smallest
               root-cause change, and run the narrowest real-fixture integration
               check that proves it. Do not commit, push, open a pull request, or
-              alter unrelated user work. Approved plan: ${{ inputs.plan }}
+              alter unrelated user work. Do not restore files deleted on this
+              branch unless a recorded finding explicitly requires restoring
+              them. Each tests[] entry must be the exact command that covers the
+              changed behavior. For Playwright, use --grep with the changed test
+              title, not a nearby file:line. Approved plan: ${{ inputs.plan }}
               Unresolved prior code-review findings: ${{ inputs.reviewFeedback }}
               After editing and testing, return only JSON with this exact shape:
               {"summary":"string","files":["repo-relative path"],"tests":["command: result"],"branch":"string","baseCommit":"40 lowercase hex characters"}
@@ -118,6 +122,7 @@ jobs:
               tests: ${{ data.latest("nightshift-builder-" + inputs.workItem, "invocation-nightshift-" + inputs.workItem + "-build-" + run.id).attributes.parsedResponse.tests }}
               branch: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-workspace").attributes.payload.branch }}
               baseCommit: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-workspace").attributes.payload.baseCommit }}
+              invocationId: ${{ "nightshift-" + inputs.workItem + "-build-" + run.id }}
         dependsOn:
           - step: implement-plan
             condition: { type: succeeded }
@@ -135,4 +140,4 @@ jobs:
         dependsOn:
           - { step: record-change-summary, condition: { type: succeeded } }
     dependsOn: []
-version: 5
+version: 6

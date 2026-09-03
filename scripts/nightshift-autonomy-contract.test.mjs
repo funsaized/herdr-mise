@@ -67,6 +67,8 @@ test("Nightshift parks fresh failed review rounds at cycle four", () => {
   assert.match(parked, /id: rework-parked/);
   assert.match(parked, /id: rework-parked-build/);
   assert.match(parked, /artifact: change-summary/);
+  assert.doesNotMatch(parked, /override-ship/);
+  assert.doesNotMatch(parked, /to: ship-prep/);
 
   const globalTransitions = factory.slice(
     factory.indexOf("    globalTransitions:\n"),
@@ -75,6 +77,19 @@ test("Nightshift parks fresh failed review rounds at cycle four", () => {
     globalTransitions,
     /name: abort\n\s+to: abort-cleanup[\s\S]+id: abort-confirmation/,
   );
+});
+
+test("Nightshift ships from an isolated clean worktree", () => {
+  const ship = readFileSync("workflows/workflow-nightshift-ship.yaml", "utf8");
+  assert.match(ship, /methodName: prepare_workspace/);
+  assert.match(ship, /herdr-mise-ship-/);
+  assert.match(ship, /nightshift\/ship-/);
+  assert.match(
+    ship,
+    /methodName: require_issue_link[\s\S]*?commit: \$\{{\s*inputs\.commit\s*}}/,
+  );
+  assert.doesNotMatch(ship, /artifact-release-candidate/);
+  assert.doesNotMatch(ship, /subjectRoot: \$\{{\s*inputs\.subjectRoot\s*}}/);
 });
 
 test("Nightshift sends ship-prep feedback through build and code review", () => {

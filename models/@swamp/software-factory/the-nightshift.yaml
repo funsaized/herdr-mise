@@ -2,7 +2,7 @@ type: "@swamp/software-factory"
 typeVersion: 2026.06.24.1
 id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
 name: the-nightshift
-version: 8
+version: 9
 tags: {}
 globalArguments:
     stages:
@@ -188,7 +188,7 @@ globalArguments:
               - name: change-summary
                 schema:
                     type: object
-                    required: [summary, files, tests, branch, baseCommit]
+                    required: [summary, files, tests, branch, baseCommit, invocationId]
                     properties:
                         summary: { type: string, minLength: 1 }
                         files:
@@ -201,6 +201,7 @@ globalArguments:
                             items: { type: string, minLength: 1 }
                         branch: { type: string, minLength: 1 }
                         baseCommit: { type: string, pattern: "^[0-9a-f]{40}$" }
+                        invocationId: { type: string, minLength: 1 }
           transitions:
               - name: submit
                 to: code-review

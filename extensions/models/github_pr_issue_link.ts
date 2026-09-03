@@ -18,10 +18,12 @@ const PullRequestUrl = z.url().refine((value) => {
     /^[1-9]\d*$/.test(segments[3])
   );
 });
+const Sha = z.string().regex(/^[0-9a-f]{40}$/);
 const Arguments = z.object({
   workItem: z.string().regex(/^[1-9][0-9]{0,15}$/),
   repo: Repository,
   prUrl: PullRequestUrl,
+  commit: Sha,
 });
 const PullRequest = z.object({
   title: z.string(),
@@ -37,6 +39,14 @@ type Context = {
     data: Record<string, unknown>,
   ) => Promise<{ name: string }>;
 };
+
+export function assertCandidateHead(headRefOid: unknown, commit: string) {
+  if (headRefOid !== commit) {
+    throw new Error(
+      `pull request head ${headRefOid} does not match candidate commit ${commit}`,
+    );
+  }
+}
 
 export function issueLinkedInPullRequest(output: string, workItem: string) {
   const pullRequest = PullRequest.parse(JSON.parse(output));
@@ -101,6 +111,7 @@ export const extension = {
         workItem: z.string(),
         prUrl: PullRequestUrl,
         issueNumber: z.number().int().positive(),
+        headRefOid: Sha,
       }),
       lifetime: "infinite",
       garbageCollection: 20,
@@ -112,19 +123,19 @@ export const extension = {
         description: "Fail unless the pull request closes the work-item issue",
         arguments: Arguments,
         execute: async (args: z.infer<typeof Arguments>, context: Context) => {
-          const linked = issueLinkedInPullRequest(
-            await gh(
-              [
-                "pr",
-                "view",
-                args.prUrl,
-                "--json",
-                "title,body,closingIssuesReferences",
-              ],
-              context.signal,
-            ),
-            args.workItem,
+          const output = await gh(
+            [
+              "pr",
+              "view",
+              args.prUrl,
+              "--json",
+              "title,body,closingIssuesReferences,headRefOid",
+            ],
+            context.signal,
           );
+          const parsed: { headRefOid?: unknown } = JSON.parse(output);
+          assertCandidateHead(parsed.headRefOid, args.commit);
+          const linked = issueLinkedInPullRequest(output, args.workItem);
           const handle = await context.writeResource(
             "linked_pull_request",
             `linked-pr-${args.workItem}`,
@@ -132,6 +143,7 @@ export const extension = {
               workItem: args.workItem,
               prUrl: args.prUrl,
               issueNumber: linked.issueNumber,
+              headRefOid: args.commit,
             },
           );
           return { dataHandles: [handle] };

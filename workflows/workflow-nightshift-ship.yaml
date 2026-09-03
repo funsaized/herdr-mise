@@ -35,7 +35,22 @@ jobs:
             workItem: ${{ inputs.workItem }}
             repo: funsaized/herdr-mise
             prUrl: ${{ inputs.prUrl }}
+            commit: ${{ inputs.commit }}
         dependsOn: []
+      - name: prepare-ship-workspace
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: prepare_workspace
+          inputs:
+            workItem: ${{ "ship-" + inputs.workItem }}
+            directoryName: ${{ "herdr-mise-ship-" + inputs.workItem }}
+            repositoryUrl: https://github.com/funsaized/herdr-mise.git
+            workspaceRoot: ..
+            baseRef: ${{ inputs.commit }}
+            branch: ${{ "nightshift/ship-" + inputs.workItem }}
+        dependsOn:
+          - { step: require-issue-link, condition: { type: succeeded } }
       - name: verify-candidate
         task:
           type: workflow
@@ -43,9 +58,24 @@ jobs:
           inputs:
             commit: ${{ inputs.commit }}
             baseCommit: ${{ inputs.baseCommit }}
-            subjectRoot: ${{ inputs.subjectRoot }}
+            subjectRoot: ${{ data.latest("verification-source-git", "workspace-ship-" + inputs.workItem).attributes.subjectRoot }}
         dependsOn:
-          - { step: require-issue-link, condition: { type: succeeded } }
+          - { step: prepare-ship-workspace, condition: { type: succeeded } }
+      - name: cleanup-ship-workspace
+        task:
+          type: model_method
+          modelIdOrName: verification-source-git
+          methodName: cleanup_workspace
+          inputs:
+            workItem: ${{ "ship-" + inputs.workItem }}
+            subjectRoot: ${{ data.latest("verification-source-git", "workspace-ship-" + inputs.workItem).attributes.subjectRoot }}
+        dependsOn:
+          - step: verify-candidate
+            condition:
+              type: or
+              conditions:
+                - { type: completed }
+                - { type: skipped }
       - name: record-shipping-run
         task:
           type: model_method
@@ -61,5 +91,6 @@ jobs:
                 failureKind: none
         dependsOn:
           - { step: verify-candidate, condition: { type: succeeded } }
+          - { step: cleanup-ship-workspace, condition: { type: succeeded } }
     dependsOn: []
-version: 5
+version: 6
