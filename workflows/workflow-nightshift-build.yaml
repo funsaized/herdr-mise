@@ -60,7 +60,7 @@ jobs:
       - name: implement-plan
         task:
           type: model_method
-          modelType: '@mgreten/cli-agent'
+          modelType: '@funsaized/cli-agent'
           modelName: ${{ "nightshift-builder-" + inputs.workItem }}
           methodName: invokeAndParse
           globalArgs:
@@ -70,7 +70,7 @@ jobs:
             commandsDir: .claude/commands
             commandSubdirs: []
             claudePath: claude
-            opencodePath: scripts/opencode-medium
+            opencodePath: opencode
             ampPath: amp
             geminiPath: gemini
             codexPath: codex
@@ -84,6 +84,7 @@ jobs:
             sandboxNetwork: allow
             sandboxCredentialAccess: provider
           inputs:
+            opencodeAgent: build
             invocationId: ${{ "nightshift-" + inputs.workItem + "-build-" + run.id }}
             cwd: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-workspace").attributes.payload.subjectRoot }}
             tags:

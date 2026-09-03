@@ -1,17 +1,17 @@
-type: '@mgreten/cli-agent'
-typeVersion: 2026.08.26.1
-id: 4b08159c-bf36-4397-8bbc-5bb9393d0fa6
-name: nightshift-clean-code
-version: 1
+type: '@funsaized/cli-agent'
+typeVersion: 2026.09.03.2
+id: 4f7e88b3-e8f1-4c37-8b0f-f4267e37386e
+name: nightshift-frontend
+version: 2
 tags: {}
 globalArguments:
   defaultProvider: opencode
-  defaultModel: openai/gpt-5.6-sol
+  defaultModel: xai/grok-4.6
   defaultToolProfile: readonly
   commandsDir: .claude/commands
   commandSubdirs: []
   claudePath: claude
-  opencodePath: scripts/opencode-high
+  opencodePath: opencode
   ampPath: amp
   geminiPath: gemini
   codexPath: codex

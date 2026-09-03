@@ -33,6 +33,7 @@ jobs:
           modelIdOrName: nightshift-test-coverage
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-test-coverage-" + run.id }}
             tags: { factory: nightshift, lane: test-coverage, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
@@ -68,6 +69,7 @@ jobs:
           modelIdOrName: nightshift-clean-code
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-clean-code-" + run.id }}
             tags: { factory: nightshift, lane: clean-code, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
@@ -89,6 +91,7 @@ jobs:
           modelIdOrName: nightshift-frontend
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-frontend-" + run.id }}
             tags: { factory: nightshift, lane: frontend, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
@@ -110,6 +113,7 @@ jobs:
           modelIdOrName: nightshift-ddd
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-ddd-" + run.id }}
             tags: { factory: nightshift, lane: ddd, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
@@ -131,6 +135,7 @@ jobs:
           modelIdOrName: nightshift-security
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-security-" + run.id }}
             tags: { factory: nightshift, lane: security, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
@@ -152,6 +157,7 @@ jobs:
           modelIdOrName: nightshift-accessibility
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-accessibility-" + run.id }}
             tags: { factory: nightshift, lane: accessibility, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
@@ -173,6 +179,7 @@ jobs:
           modelIdOrName: nightshift-observability
           methodName: invokeAndParse
           inputs:
+            opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
             invocationId: ${{ "nightshift-" + inputs.workItem + "-" + inputs.phase + "-observability-" + run.id }}
             tags: { factory: nightshift, lane: observability, phase: '${{ inputs.phase }}', workItem: '${{ inputs.workItem }}' }
