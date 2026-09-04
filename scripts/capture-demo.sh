@@ -9,6 +9,7 @@ OUTPUT="$ASSETS/herdr-mise-tui-demo.gif"
 POSTER="$ASSETS/herdr-mise-tui-demo-poster.png"
 METADATA="$ROOT/scripts/tui-demo.capture.json"
 FPS=15
+CROP="620:480:0:0"
 MAX_BYTES=1572864
 STAGING=""
 RECORDER_PID=""
@@ -82,9 +83,9 @@ ghostty_action toggle_fullscreen >/dev/null
 GHOSTTY_ADJUSTED=0
 [[ -s "$MOV" ]] || die "recording failed; see $STAGING/record.log"
 
-FILTER="fps=$FPS,scale=1100:-2:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3"
+FILTER="crop=$CROP,fps=$FPS,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3"
 ffmpeg -hide_banner -loglevel error -y -i "$MOV" -vf "$FILTER" -loop 0 "$GIF"
-ffmpeg -hide_banner -loglevel error -y -ss 2 -i "$MOV" -vf "scale=1100:-2:flags=lanczos" -frames:v 1 "$POSTER_CANDIDATE"
+ffmpeg -hide_banner -loglevel error -y -ss 2 -i "$MOV" -vf "crop=$CROP" -frames:v 1 "$POSTER_CANDIDATE"
 ffmpeg -hide_banner -loglevel error -i "$GIF" -f null -
 
 total_bytes="$(python3 - "$GIF" "$POSTER_CANDIDATE" <<'PY'
