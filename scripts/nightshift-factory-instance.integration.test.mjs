@@ -387,9 +387,8 @@ test(
         ],
         ["phase0-partial", { globalTransitions: [] }, /stages/i],
       ]) {
-        const invalid = runRemote(
+        const invalid = run(
           repo,
-          serve.server,
           [
             "model",
             "@swamp/software-factory",
