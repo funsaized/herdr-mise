@@ -324,9 +324,8 @@ test(
 
       const changed = structuredClone(definition.globalArguments);
       changed.stages[0].description = "unsafe-overwrite";
-      const duplicate = runRemote(
+      const duplicate = run(
         repo,
-        serve.server,
         [
           "model",
           "@swamp/software-factory",
@@ -388,9 +387,8 @@ test(
         ],
         ["phase0-partial", { globalTransitions: [] }, /stages/i],
       ]) {
-        const invalid = runRemote(
+        const invalid = run(
           repo,
-          serve.server,
           [
             "model",
             "@swamp/software-factory",
