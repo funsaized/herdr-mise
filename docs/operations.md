@@ -18,6 +18,62 @@ The architecture and ownership boundaries are documented in
 [README](../README.md), contributor gates in [CONTRIBUTING.md](../CONTRIBUTING.md),
 and release policy in [releasing.md](releasing.md).
 
+## Installation
+
+Herdr users should install this independent community plugin through Herdr's
+official plugin system:
+
+```sh
+herdr plugin install funsaized/herdr-mise
+herdr plugin action invoke open --plugin mise.kitchen
+```
+
+The plugin installer needs Herdr, Git, curl, tar, and either `shasum` or
+`sha256sum`; it does not need Node or Rust. It supports macOS arm64, macOS
+x86_64, and Linux x86_64 glibc. Other systems, including Windows, Linux ARM,
+and musl-only Linux, fail without selecting a substitute artifact.
+
+Inspect command logs with `herdr plugin log list`. Herdr v1 updates community
+plugins by reinstalling them:
+
+```sh
+herdr plugin install funsaized/herdr-mise
+```
+
+Uninstall with:
+
+```sh
+herdr plugin uninstall mise.kitchen
+```
+
+### Standalone installer
+
+Install the same pinned, verified release without registering a Herdr plugin:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/funsaized/herdr-mise/main/install.sh | sh
+```
+
+Versions live under `${XDG_DATA_HOME:-$HOME/.local/share}/herdr-mise`; the
+launcher is `${XDG_BIN_HOME:-$HOME/.local/bin}/herdr-mise`. Override those
+defaults with `HERDR_MISE_DATA_HOME` and `HERDR_MISE_BIN_DIR`. The installer
+never uses sudo or edits shell startup files, and warns if the bin directory is
+not in `PATH`. Rerun it to select the pinned release; older directories
+remain available for rollback.
+
+To select an installed version, atomically replace `current` from its parent:
+
+```sh
+cd "${XDG_DATA_HOME:-$HOME/.local/share}/herdr-mise"
+ln -s 0.1.0 current.next
+mv -Tf current.next current 2>/dev/null || mv -fh current.next current
+```
+
+Remove only inactive version directories. To uninstall everything, remove the
+launcher symlink and the data directory. Browser settings may remain in
+`localStorage["herdr-mise:settings"]` and `mise-bell-hint` until site data is
+cleared.
+
 ## Local run
 
 ### Build and run from source
@@ -101,15 +157,6 @@ The archive contains three top-level files (no nested directory): the
 bundled font licenses. The binary serves the embedded client, opens the
 WebSocket, and tails the herdr socket (or runs the demo feed). It binds only to
 `127.0.0.1`, on port `8686` by default (`server/src/main.rs`).
-
-### Upgrade and uninstall
-
-There is no installer or package manager entry. Upgrade by stopping the
-process, verifying a newer archive's checksum, extracting it, and replacing
-the old binary. Uninstall by stopping the process and deleting the binary
-(and any leftover archives). Browser settings under
-`localStorage["herdr-mise:settings"]` and the `mise-bell-hint` key are
-optional cleanup.
 
 ## Client development
 

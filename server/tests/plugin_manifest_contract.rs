@@ -34,6 +34,8 @@ fn plugin_manifest_matches_the_cargo_binary_pane_and_action_contract() {
     let root = repository_root();
     let manifest = read_toml(root.join("herdr-plugin.toml"));
     let server_manifest = read_toml(root.join("server/Cargo.toml"));
+    let installer =
+        fs::read_to_string(root.join("install.sh")).expect("install.sh must be readable");
 
     let binary_name = server_manifest["bin"]
         .as_array()
@@ -42,9 +44,18 @@ fn plugin_manifest_matches_the_cargo_binary_pane_and_action_contract() {
         .expect("server/Cargo.toml must define a named [[bin]]");
 
     let plugin_id = manifest["id"].as_str().expect("plugin id is required");
+    let version = server_manifest["package"]["version"]
+        .as_str()
+        .expect("server/Cargo.toml package version is required");
     assert_eq!(plugin_id, "mise.kitchen");
     assert_eq!(manifest["name"].as_str(), Some("Mise"));
-    assert_eq!(manifest["version"].as_str(), Some("0.1.0"));
+    assert_eq!(manifest["version"].as_str(), Some(version));
+    assert_eq!(
+        installer
+            .lines()
+            .find_map(|line| line.strip_prefix("HERDR_MISE_VERSION=")),
+        Some(version)
+    );
     assert_eq!(manifest["min_herdr_version"].as_str(), Some("0.7.0"));
     assert_eq!(
         manifest["description"].as_str(),
@@ -56,7 +67,7 @@ fn plugin_manifest_matches_the_cargo_binary_pane_and_action_contract() {
     assert_eq!(builds.len(), 1, "exactly one [[build]] is required");
     assert_eq!(
         string_array(&builds[0], "command"),
-        ["cargo", "build", "--release"]
+        ["sh", "install.sh", "--plugin"]
     );
     assert_eq!(string_array(&builds[0], "platforms"), ["linux", "macos"]);
 
@@ -70,7 +81,7 @@ fn plugin_manifest_matches_the_cargo_binary_pane_and_action_contract() {
     assert_eq!(
         string_array(pane, "command"),
         [
-            format!("./target/release/{binary_name}"),
+            format!("./target/herdr-plugin/herdr-mise/current/bin/{binary_name}"),
             "--tui".to_owned()
         ]
     );

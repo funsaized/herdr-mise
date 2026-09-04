@@ -110,11 +110,11 @@ Process modes (parsed in `server/src/runtime.rs`; no CLI crate):
   what makes the four table-view `TestBackend` goldens deterministic. Nine
   additional `scene-*` goldens exercise the tiled renderer.
 
-When Herdr links the repo as a plugin (`herdr-plugin.toml` at the repo
-root, contract-pinned by the `plugin_manifest_contract` test), it
-spawns `./target/release/herdr-mise --tui` in a split pane and the
-TUI shown there is the same process whose browser app is reachable at
-`http://127.0.0.1:8686`.
+When Herdr installs or links the repo as a plugin (`herdr-plugin.toml` at the
+repo root, contract-pinned by the `plugin_manifest_contract` test), the build
+step verifies and installs the pinned release artifact. Herdr then spawns
+`./target/herdr-plugin/herdr-mise/current/bin/herdr-mise --tui` in a split pane;
+the same process serves the browser app on its configured loopback port.
 
 ## Concrete components
 

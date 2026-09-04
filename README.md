@@ -1,27 +1,26 @@
 # herdr-mise
 
 A localhost visualizer that renders AI coding agents as pixel-art line cooks in
-a single restaurant kitchen. Each cook maps to one agent. Their state, the
+a single restaurant kitchen. Agent state, the
 ticket rail, the pass, the 86 board, and the kitchen lights are a glanceable
 skin over a small, versioned JSON feed.
+
+> IT's RAW!
+
+_Gordon Ramsey_
 
 herdr-mise does not control agents, render their output, or aggregate remote
 servers. It is a window, not an office.
 
 ![Seven AI cooks under dinner lighting move through idle, working, blocked, and plated stations, open and dismiss details, then visit two ended cooks in the freezer](docs/assets/herdr-mise-demo.gif)
 
-The GIF and screens below are repeatable captures from the isolated visual
-playground's deterministic feed. Re-record the GIF with `npm run capture:web`;
-see
 [Visual playground](docs/operations.md#visual-playground).
 
 | Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
 
-The same binary also runs as a terminal TUI. This recording uses its clearly
-labeled deterministic demo mode and visits both the kitchen and
-`WALK-IN FREEZER`.
+The binary also runs as a TUI for terminal work. These terminal chefs are lower level, so they're relegated to primitive kitchen tools:
 
 ![The herdr-mise terminal demo moving from the kitchen to the walk-in freezer](docs/assets/herdr-mise-tui-demo.gif)
 
@@ -38,50 +37,29 @@ Re-record the terminal demo with `npm run capture:tui`; see
 
 ## Quick start
 
-Install Herdr, then download, verify, and run herdr-mise `v0.1.0`. Detailed
-platform commands live in [Operations — local run](docs/operations.md#local-run).
-
-### Install and start Herdr
-
-Pick an official install path from <https://herdr.dev> (see the
-[Herdr install docs](https://herdr.dev/docs/install)) and leave `herdr` running
-in its own terminal. Source and releases are at
-<https://github.com/herdrdev/herdr>; the latest tested stable release is Herdr
-`v0.8.2`.
+Install Herdr, install this community plugin, and open its pane:
 
 ```sh
-curl -fsSL https://herdr.dev/install.sh | sh   # or: brew install herdr / mise use -g herdr
-herdr
+brew install herdr
+herdr plugin install funsaized/herdr-mise
+herdr plugin action invoke open --plugin mise.kitchen
 ```
 
-### Download, verify, and run herdr-mise
+The plugin installer downloads the pinned, verified release binary; users do
+not need Node, npm, Cargo, or Rust. Herdr may require Git to clone community
+plugins. See [Operations](docs/operations.md#installation) for logs, updates,
+uninstall, standalone installation, and manual archive verification.
 
-In a second terminal, download the archive and its `.sha256` sidecar, verify the
-checksum, then extract and run. See
-[Operations — run the release archive](docs/operations.md#run-the-release-archive)
-for platform and codesign details.
+### Standalone
 
 ```sh
-TAG=v0.1.0
-TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
-BASE=herdr-mise-${TAG}-${TARGET}
-URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
-
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
-  && {
-    if command -v shasum >/dev/null 2>&1; then
-      shasum -a 256 -c "$BASE.tar.gz.sha256"
-    else
-      sha256sum -c "$BASE.tar.gz.sha256"
-    fi
-  } \
-  && tar -xzf "$BASE.tar.gz" \
-  && ./herdr-mise
+curl -fsSL https://raw.githubusercontent.com/funsaized/herdr-mise/main/install.sh | sh
+herdr-mise --tui
 ```
 
-Open <http://127.0.0.1:8686>.
+Prefer the plugin installation when Herdr should manage pane registration.
 
-### Recognize live vs. demo
+### live vs. demo
 
 - **Live:** the `DEMO SERVICE` placard is absent and the WebSocket payload
   carries `mode: "live"`.
@@ -92,7 +70,7 @@ Open <http://127.0.0.1:8686>.
 Troubleshooting: [Herdr socket unavailable](docs/operations.md#herdr-socket-unavailable),
 [Herdr protocol not supported](docs/operations.md#herdr-protocol-not-supported).
 
-### Tested Herdr compatibility
+### Herdr compatibility
 
 The adapter accepts the protocols in the verified matrix below. Other product
 versions on those protocols may work but are not part of the release matrix.
@@ -165,14 +143,20 @@ HERDR_SOCKET_PATH=/tmp/no-herdr.sock ./target/release/herdr-mise
 See [Client development](docs/operations.md#client-development) for playground
 presets, isolation guarantees, and plain Vite limitations.
 
-## As a Herdr plugin
+## Contributor plugin development
 
-From a source checkout, build and link the manifest:
+Build from source for integration work:
 
 ```sh
 npm ci
 npm ci --prefix client
 npm run bundle
+./target/release/herdr-mise --tui
+```
+
+To exercise the published-binary plugin manifest from a checkout, link it:
+
+```sh
 herdr plugin link .
 ```
 
@@ -182,7 +166,6 @@ Open the linked pane with:
 herdr plugin action invoke open --plugin mise.kitchen
 ```
 
-Run `./target/release/herdr-mise --tui` directly for the same terminal renderer.
 The browser service continues alongside the TUI when its loopback port is free
 (`8686` by default, or `HERDR_MISE_PORT`).
 
@@ -194,8 +177,8 @@ The browser service continues alongside the TUI when its loopback port is free
   proxy, which owns its transport and access control.
 - The binary sends no telemetry and performs no outbound product network
   requests. Live mode reads only the local Herdr Unix socket.
-- Release archives support macOS arm64, macOS x86_64, and Linux x86_64. There is
-  no Homebrew package, background service, installer, or auto-update.
+- Release archives and the installer support macOS arm64, macOS x86_64, and
+  Linux x86_64 glibc. There is no background service or auto-update.
 - Browser settings are local site data. Reduced motion is honored; the manual
   VoiceOver listening pass remains post-release work.
 
