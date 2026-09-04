@@ -1,6 +1,6 @@
 id = "mise.kitchen"
 name = "Mise"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 min_herdr_version = "0.7.0"
 description = "Your coding agents as line cooks — kitchen status in a pane"
 platforms = ["linux", "macos"]
