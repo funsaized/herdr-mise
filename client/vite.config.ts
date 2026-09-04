@@ -1,11 +1,11 @@
 import react from "@vitejs/plugin-react";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 
 const visualAssets = [
   ["../docs/assets/herdr-mise-tui-demo.gif", "tui-demo.gif"],
-  ["../docs/assets/herdr-mise-tui-blocked.png", "tui-demo-poster.png"],
+  ["../docs/assets/herdr-mise-tui-demo-poster.png", "tui-demo-poster.png"],
   ["../docs/assets/working-service-1280x720.png", "og.png"],
 ] as const;
 
@@ -14,16 +14,17 @@ function visualSite(): Plugin {
     name: "visual-site",
     // Fix npm run dev:visual assets
     configureServer(server) {
-      for (const [path, fileName] of visualAssets)
+      for (const [path, fileName] of visualAssets) {
+        const asset = fileURLToPath(new URL(path, import.meta.url));
+        if (!existsSync(asset)) continue;
         server.middlewares.use(`/${fileName}`, (_request, response) => {
           response.setHeader(
             "Content-Type",
             fileName.endsWith(".gif") ? "image/gif" : "image/png",
           );
-          response.end(
-            readFileSync(fileURLToPath(new URL(path, import.meta.url))),
-          );
+          response.end(readFileSync(asset));
         });
+      }
     },
     generateBundle() {
       for (const [path, fileName] of visualAssets)

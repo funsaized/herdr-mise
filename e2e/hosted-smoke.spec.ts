@@ -20,6 +20,7 @@ test("hosted visual demo serves static assets without localhost sockets", async 
     }),
   ).toHaveCount(1);
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
+  expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
   expect((await request.get("/og.png")).status()).toBe(200);
   await page.waitForTimeout(3_500);
   await expect(page.getByRole("alert")).toHaveCount(0);
