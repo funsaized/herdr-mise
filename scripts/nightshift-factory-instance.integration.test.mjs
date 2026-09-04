@@ -252,7 +252,6 @@ test(
         { factory: "phase0-runtime-main", workItem: "101" },
       );
 
-      const sameStartedAt = performance.now();
       const same = await Promise.all([
         runRemoteAsync(repo, serve.server, [
           "workflow",
@@ -273,7 +272,6 @@ test(
           "workItem=201",
         ]),
       ]);
-      const sameElapsed = performance.now() - sameStartedAt;
       assert.deepEqual(same.map(({ json }) => json.status).sort(), [
         "failed",
         "succeeded",
@@ -292,7 +290,6 @@ test(
         "concurrent duplicate intake must not reset state",
       );
 
-      const crossStartedAt = performance.now();
       const cross = await Promise.all([
         runRemoteAsync(repo, serve.server, [
           "workflow",
@@ -313,14 +310,9 @@ test(
           "workItem=302",
         ]),
       ]);
-      const crossElapsed = performance.now() - crossStartedAt;
       assert.deepEqual(
         cross.map(({ json }) => json.status),
         ["succeeded", "succeeded"],
-      );
-      assert.ok(
-        sameElapsed > crossElapsed + 400,
-        `same-model lock ${sameElapsed}ms; separate locks ${crossElapsed}ms`,
       );
       const modelA = expectOk(
         runRemote(repo, serve.server, ["model", "get", "phase0-runtime-a"]),

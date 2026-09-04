@@ -7,8 +7,8 @@ Verified with Swamp `20260903.173640.0-sha.5685207d` and
 - `model.phase0-factory-template.definition.globalArguments` is the accepted
   template accessor. The copy is concrete and preserves nested `self` bindings.
 - A missing-model `data.latest()` lookup returns `null` through `swamp serve`.
-- Concurrent creation produces one model and one version-1 state; calls on that
-  model serialize while separate model instances do not share its lock.
+- Concurrent same-name creation produces one model and one version-1 state;
+  distinct names create distinct model IDs and states.
 - Supplying `globalArgs` for an existing auto-definition overwrites its snapshot
   before the requested method runs, including when duplicate `start` then fails.
 - Explicit repair through `phase0-factory-instance-repair` retains model ID and
