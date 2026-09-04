@@ -113,7 +113,7 @@ async function startServe(repo, port) {
   child.stdout.on("data", (chunk) => (logs += chunk));
   child.stderr.on("data", (chunk) => (logs += chunk));
   const server = `ws://127.0.0.1:${port}`;
-  for (let attempt = 0; attempt < 300; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     const ready = runRemote(repo, server, [
       "workflow",
