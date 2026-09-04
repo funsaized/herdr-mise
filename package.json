@@ -15,7 +15,7 @@
     "measure:server": "sh scripts/measure-server.sh target/release/herdr-mise",
     "typecheck": "npm --prefix client run typecheck",
     "lint": "oxlint --deny-warnings .",
-    "test": "node --test --test-concurrency=1 scripts/*.test.mjs && npm --prefix client run test",
+    "test": "node --test scripts/*.test.mjs && npm --prefix client run test",
     "check:herdr-compatibility": "node scripts/check-herdr-compatibility.mjs",
     "audit:tokens": "node scripts/audit-tokens.mjs",
     "audit:architecture": "node scripts/audit-pixi-architecture.mjs",

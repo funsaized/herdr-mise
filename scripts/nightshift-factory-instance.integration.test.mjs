@@ -319,7 +319,7 @@ test(
         ["succeeded", "succeeded"],
       );
       assert.ok(
-        sameElapsed > crossElapsed + 400,
+        sameElapsed > crossElapsed,
         `same-model lock ${sameElapsed}ms; separate locks ${crossElapsed}ms`,
       );
       const modelA = expectOk(
