@@ -59,6 +59,17 @@ herdr-mise --tui
 
 Prefer the plugin installation when Herdr should manage pane registration.
 
+### Homebrew and Linuxbrew
+
+```sh
+brew install funsaized/tap/herdr-mise
+herdr-mise --tui
+```
+
+The formula installs Homebrew Core's `herdr` dependency but does not register a
+Herdr plugin. Prefer `herdr plugin install funsaized/herdr-mise` for
+Herdr-managed pane registration.
+
 ### live vs. demo
 
 - **Live:** the `DEMO SERVICE` placard is absent and the WebSocket payload

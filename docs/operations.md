@@ -74,6 +74,19 @@ launcher symlink and the data directory. Browser settings may remain in
 `localStorage["herdr-mise:settings"]` and `mise-bell-hint` until site data is
 cleared.
 
+### Homebrew and Linuxbrew
+
+```sh
+brew install funsaized/tap/herdr-mise
+brew upgrade herdr-mise
+brew uninstall herdr-mise
+```
+
+The formula supports macOS arm64/x86_64 and Linux x86_64, consumes the same
+published archives, and installs Homebrew Core's `herdr` dependency. It does
+not register a Herdr plugin; use the plugin installation method for
+Herdr-managed pane registration.
+
 ## Local run
 
 ### Build and run from source
