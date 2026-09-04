@@ -136,8 +136,9 @@ undocumented.
 - Implementation: `server/src/tui/scene/{mod,layout,sprites,particles}.rs`,
   `server/src/tui/{mod,canvas,theme}.rs`.
 - Goldens: `server/tests/goldens/scene-*.txt`.
-- Capture sources: `scripts/tui-demo.tape`, `scripts/capture-tui-demo.sh`,
+- Capture sources: `scripts/capture-demo.sh tui` and
   `scripts/capture-tui-states.sh`.
 - Captured media: `docs/assets/herdr-mise-tui-demo.gif`,
+  `docs/assets/herdr-mise-tui-demo-poster.png`,
   `docs/assets/herdr-mise-tui-{live,blocked,compact}.png`,
-  `scripts/tui-demo.tape.capture.json`, and `scripts/tui-states.capture.json`.
+  `scripts/tui-demo.capture.json`, and `scripts/tui-states.capture.json`.

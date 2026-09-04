@@ -239,6 +239,22 @@ HOSTED_VISUAL_URL=https://herdr-mise.s11a.com \
   npm run test:visual -- hosted-smoke.spec.ts
 ```
 
+#### Human-operated demo recording
+
+One script records either README animation:
+
+```sh
+npm run capture:web
+npm run capture:tui
+```
+
+Run the script from a normal Ghostty shell, not a Herdr pane. TUI capture runs
+six deterministic demo agents, switches to the freezer, and exits without
+human choreography. Web capture reuses the deterministic Playwright sequence.
+Both commands replace their checked-in assets only after encoding and
+validation succeed. Re-run the same command whenever the demo changes. Neither
+capture requires Herdr.
+
 This is a client-development harness check, not full-product release
 acceptance. Use [CONTRIBUTING.md](../CONTRIBUTING.md#verification-commands) for
 the integrated Rust server, source-loss recovery, accessibility, packaging,

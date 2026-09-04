@@ -421,8 +421,12 @@ select:focus-visible {
   z-index: 8;
   top: 20px;
   right: 20px;
-  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 320px;
   max-height: calc(100vh - 80px);
+  margin: 0;
   padding: 5px;
   overflow: hidden;
   background: var(--panelSoft);
@@ -431,10 +435,57 @@ select:focus-visible {
   box-shadow: var(--shadowPlacard);
   pointer-events: auto;
 }
+.visualTuiFigure picture {
+  display: flex;
+  min-height: 0;
+}
 .visualTuiFigure img {
   display: block;
   width: 100%;
   height: auto;
+  object-fit: contain;
+}
+.visualTuiFigure figcaption {
+  color: var(--secondary);
+  font-size: 10px;
+  line-height: 1.3;
+}
+.visualTuiDescription {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.visualTuiControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.visualTuiControls button {
+  padding: 4px 6px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.visualTuiFigure[data-expanded="true"] {
+  position: fixed;
+  z-index: 20;
+  inset: 20px 20px 48px 240px;
+  width: auto;
+  max-height: none;
+  background: var(--panel);
+}
+.visualTuiFigure[data-expanded="true"] picture {
+  flex: 1;
+}
+.visualTuiFigure[data-expanded="true"] img {
+  height: 100%;
 }
 .disconnectScrim {
   position: absolute;
@@ -570,7 +621,10 @@ select:focus-visible {
 }
 @media (max-width: 1279px), (max-height: 719px) {
   .visualTuiFigure {
-    max-width: 200px;
+    width: 200px;
+  }
+  .visualTuiFigure[data-expanded="true"] {
+    width: auto;
   }
 }
 @media (max-width: 900px), (max-height: 640px) {

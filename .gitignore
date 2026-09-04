@@ -7,6 +7,7 @@
 /perf/artifacts/
 *.tsbuildinfo
 /e2e/artifacts/
+/docs/assets/.capture-demo.*/
 /.hermes/
 /.claude/
 /.stable-acceptance-evidence.json
