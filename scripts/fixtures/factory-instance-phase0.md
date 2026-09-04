@@ -1,6 +1,6 @@
 # Factory instance Phase 0 evidence
 
-Verified with Swamp `20260903.173640.0-sha.5685207d` and
+Verified with Swamp `20260904.044433.0-sha.ab26e35b` and
 `@swamp/software-factory` `2026.06.24.1` by
 `scripts/nightshift-factory-instance.integration.test.mjs`.
 
