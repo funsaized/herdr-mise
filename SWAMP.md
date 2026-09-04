@@ -217,11 +217,11 @@ that release includes global OpenCode routing.
 
 State has three deliberately independent owners:
 
-| Concern                                                     | Owner                                    | Contract                                                         |
-| ----------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
-| Delivery gates, artifacts, evidence, retries, and approvals | owning factory (`nightshift-run-<N>`, or `the-nightshift` for legacy) | The factory stage is authoritative only for factory execution. |
-| `Todo`, `in-progress`, `await-merge`, and `done` swim lanes | GitHub Nightshift workflows              | Swamp never writes the Project `Status` field.                   |
-| Issue open/closed state                                     | GitHub issue and pull-request automation | Swamp never closes issues or advances the issue lifecycle model. |
+| Concern                                                     | Owner                                                                 | Contract                                                         |
+| ----------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Delivery gates, artifacts, evidence, retries, and approvals | owning factory (`nightshift-run-<N>`, or `the-nightshift` for legacy) | The factory stage is authoritative only for factory execution.   |
+| `Todo`, `in-progress`, `await-merge`, and `done` swim lanes | GitHub Nightshift workflows                                           | Swamp never writes the Project `Status` field.                   |
+| Issue open/closed state                                     | GitHub issue and pull-request automation                              | Swamp never closes issues or advances the issue lifecycle model. |
 
 The GitHub issue number is the factory `workItem`. Intake creates or refreshes
 the issue context and starts the matching factory run. The lifecycle model's
