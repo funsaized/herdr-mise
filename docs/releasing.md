@@ -118,13 +118,18 @@ and publish assets.
 Before tagging:
 
 1. Confirm the working tree is clean and the tag target is the intended commit.
-2. Confirm `server/Cargo.toml` contains the intended version and
-   `docs/releases/v<VERSION>.md` contains complete release notes.
+2. Confirm `server/Cargo.toml`, `herdr-plugin.toml`, and
+   `HERDR_MISE_VERSION` in `install.sh` contain the intended version. For a
+   stable release, also confirm `docs/releases/v<VERSION>.md` contains complete
+   release notes. Do not leave the manifest or installer pointing at an
+   unpublished version after the release workflow completes.
 3. For a stable tag, install the new accepted-RC contract and complete its
    protected-environment evidence before creating the tag.
 4. Run the relevant local gates from [CONTRIBUTING.md](../CONTRIBUTING.md).
 5. Confirm the Apple signing and notarization secrets are configured for tagged
    macOS jobs.
+6. Confirm all three archive/sidecar pairs will use the names resolved by both
+   plugin and standalone installer modes.
 
 ### Apple trust setup
 
@@ -194,6 +199,25 @@ asset anonymously and rerun its checksum and archive verifier.
   `scripts/verify-release-artifact.sh` before upload.
 - Publication rejects unexpected assets, uploads the exact expected set, and
   verifies the public release through anonymous downloads.
+- After publication, test `install.sh` against the public release in plugin and
+  standalone modes; both must resolve the same three archives and sidecars.
+
+### Homebrew tap update
+
+After the release passes public verification:
+
+1. Copy the three SHA-256 values from the published sidecars, never local
+   rebuilds.
+2. Open a `funsaized/homebrew-tap` pull request updating the formula version,
+   three URLs, and three hashes.
+3. Require tap CI to audit, install, test, and uninstall the formula on macOS
+   arm64, macOS x86_64 while runners exist, and Linux x86_64.
+4. Merge the tap update and record its pull request or commit in the release
+   checklist.
+5. Verify `brew update && brew upgrade herdr-mise` from the preceding version.
+
+Keep tap updates manual until at least two releases show cross-repository
+automation is worth its token and maintenance cost.
 
 ### Standalone CLI notarization
 

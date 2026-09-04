@@ -6,6 +6,9 @@ on:
     paths:
       - client/**
       - server/**
+      - install.sh
+      - herdr-plugin.toml
+      - scripts/install.test.mjs
       - scripts/package-release.sh
       - scripts/release-policy.mjs
       - scripts/stable-release-gate.mjs

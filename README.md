@@ -37,48 +37,27 @@ Re-record the terminal demo with `npm run capture:tui`; see
 
 ## Quick start
 
-Install Herdr, then download, verify, and run herdr-mise `v0.1.0`. Detailed
-platform commands live in [Operations — local run](docs/operations.md#local-run).
-
-### Install and start Herdr
-
-Pick an official install path from <https://herdr.dev> (see the
-[Herdr install docs](https://herdr.dev/docs/install)) and leave `herdr` running
-in its own terminal. Source and releases are at
-<https://github.com/herdrdev/herdr>; the latest tested stable release is Herdr
-`v0.8.2`.
+Install Herdr, install this community plugin, and open its pane:
 
 ```sh
-curl -fsSL https://herdr.dev/install.sh | sh   # or: brew install herdr / mise use -g herdr
-herdr
+brew install herdr
+herdr plugin install funsaized/herdr-mise
+herdr plugin action invoke open --plugin mise.kitchen
 ```
 
-### Download, verify, and run herdr-mise
+The plugin installer downloads the pinned, verified release binary; users do
+not need Node, npm, Cargo, or Rust. Herdr may require Git to clone community
+plugins. See [Operations](docs/operations.md#installation) for logs, updates,
+uninstall, standalone installation, and manual archive verification.
 
-In a second terminal, download the archive and its `.sha256` sidecar, verify the
-checksum, then extract and run. See
-[Operations — run the release archive](docs/operations.md#run-the-release-archive)
-for platform and codesign details.
+### Standalone
 
 ```sh
-TAG=v0.1.0
-TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
-BASE=herdr-mise-${TAG}-${TARGET}
-URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
-
-curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
-  && {
-    if command -v shasum >/dev/null 2>&1; then
-      shasum -a 256 -c "$BASE.tar.gz.sha256"
-    else
-      sha256sum -c "$BASE.tar.gz.sha256"
-    fi
-  } \
-  && tar -xzf "$BASE.tar.gz" \
-  && ./herdr-mise
+curl -fsSL https://raw.githubusercontent.com/funsaized/herdr-mise/main/install.sh | sh
+herdr-mise --tui
 ```
 
-Open <http://127.0.0.1:8686>.
+Prefer the plugin installation when Herdr should manage pane registration.
 
 ### live vs. demo
 
@@ -164,14 +143,20 @@ HERDR_SOCKET_PATH=/tmp/no-herdr.sock ./target/release/herdr-mise
 See [Client development](docs/operations.md#client-development) for playground
 presets, isolation guarantees, and plain Vite limitations.
 
-## As a Herdr plugin
+## Contributor plugin development
 
-From a source checkout, build and link the manifest:
+Build from source for integration work:
 
 ```sh
 npm ci
 npm ci --prefix client
 npm run bundle
+./target/release/herdr-mise --tui
+```
+
+To exercise the published-binary plugin manifest from a checkout, link it:
+
+```sh
 herdr plugin link .
 ```
 
@@ -181,7 +166,6 @@ Open the linked pane with:
 herdr plugin action invoke open --plugin mise.kitchen
 ```
 
-Run `./target/release/herdr-mise --tui` directly for the same terminal renderer.
 The browser service continues alongside the TUI when its loopback port is free
 (`8686` by default, or `HERDR_MISE_PORT`).
 
@@ -193,8 +177,8 @@ The browser service continues alongside the TUI when its loopback port is free
   proxy, which owns its transport and access control.
 - The binary sends no telemetry and performs no outbound product network
   requests. Live mode reads only the local Herdr Unix socket.
-- Release archives support macOS arm64, macOS x86_64, and Linux x86_64. There is
-  no Homebrew package, background service, installer, or auto-update.
+- Release archives and the installer support macOS arm64, macOS x86_64, and
+  Linux x86_64 glibc. There is no background service or auto-update.
 - Browser settings are local site data. Reduced motion is honored; the manual
   VoiceOver listening pass remains post-release work.
 
