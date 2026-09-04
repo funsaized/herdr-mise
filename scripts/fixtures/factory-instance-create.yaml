@@ -1,0 +1,34 @@
+id: 3d7acd17-b8a1-4cef-b991-c00ad29bbe6f
+name: phase0-factory-instance-create
+tags: {}
+inputs:
+  properties:
+    modelName: { type: string }
+    workItem: { type: string }
+  required: [modelName, workItem]
+jobs:
+  - name: main
+    steps:
+      - name: require-missing-state
+        task:
+          type: assert
+          expr: data.latest(inputs.modelName, "state-" + inputs.workItem) == null
+          message: runtime state must not already exist
+          severity: high
+        dependsOn: []
+      - name: start
+        task:
+          type: model_method
+          modelType: '@swamp/software-factory'
+          modelName: ${{ inputs.modelName }}
+          methodName: start
+          globalArgs:
+            stages: ${{ model.phase0-factory-template.definition.globalArguments.stages }}
+            globalTransitions: ${{ model.phase0-factory-template.definition.globalArguments.globalTransitions }}
+          inputs:
+            workItem: ${{ inputs.workItem }}
+        dependsOn:
+          - step: require-missing-state
+            condition: { type: succeeded }
+    dependsOn: []
+version: 1

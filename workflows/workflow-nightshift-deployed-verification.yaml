@@ -6,16 +6,21 @@ tags:
   stage: deployed-verification
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      minLength: 1
+      pattern: '^[1-9][0-9]*$'
+      maxLength: 16
     candidateCommit:
       type: string
       pattern: '^[0-9a-f]{40}$'
     prUrl:
       type: string
       minLength: 1
-  required: [workItem, candidateCommit, prUrl]
+  required: [factory, workItem, candidateCommit, prUrl]
 jobs:
   - name: verify
     description: Resolve the merge, prepare an isolated checkout, run smoke, and clean it.
@@ -94,7 +99,7 @@ jobs:
       - name: record-hosted-smoke-run
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -111,4 +116,4 @@ jobs:
           - { step: hosted-smoke, condition: { type: succeeded } }
           - { step: cleanup-workspace, condition: { type: succeeded } }
     dependsOn: []
-version: 3
+version: 4

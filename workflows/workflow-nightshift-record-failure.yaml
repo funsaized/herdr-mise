@@ -6,9 +6,14 @@ tags:
   stage: failure-recording
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      minLength: 1
+      pattern: '^[1-9][0-9]*$'
+      maxLength: 16
     evidenceName:
       type: string
       minLength: 1
@@ -24,7 +29,7 @@ inputs:
     reason:
       type: string
       minLength: 1
-  required: [workItem, evidenceName, runId, failureKind, failedStep, reason]
+  required: [factory, workItem, evidenceName, runId, failureKind, failedStep, reason]
 jobs:
   - name: record
     description: Persist the failed run using the factory outcome contract.
@@ -32,7 +37,7 @@ jobs:
       - name: record-failure
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -46,4 +51,4 @@ jobs:
                 reason: ${{ inputs.reason }}
         dependsOn: []
     dependsOn: []
-version: 1
+version: 2

@@ -6,13 +6,18 @@ tags:
   stage: closing
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      minLength: 1
+      pattern: '^[1-9][0-9]*$'
+      maxLength: 16
     subjectRoot:
       type: string
       minLength: 1
-  required: [workItem, subjectRoot]
+  required: [factory, workItem, subjectRoot]
 jobs:
   - name: close
     description: Remove only a clean worktree and record the result.
@@ -29,7 +34,7 @@ jobs:
       - name: record-close-run
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -42,4 +47,4 @@ jobs:
         dependsOn:
           - { step: cleanup-workspace, condition: { type: succeeded } }
     dependsOn: []
-version: 3
+version: 4

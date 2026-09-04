@@ -1,0 +1,36 @@
+type: '@swamp/software-factory'
+typeVersion: 2026.06.24.1
+id: e5ddf284-ed2c-48f2-a304-2163908c3082
+name: phase0-factory-template
+version: 1
+tags: {}
+globalArguments:
+  stages:
+    - id: work
+      initial: true
+      description: phase-zero-snapshot
+      work:
+        mode: workflow
+        workflow:
+          name: phase0-noop
+          inputs:
+            factory: "${{ self.name }}"
+            workItem: "${{ self.workItem }}"
+        resultEvidence: workflow-run
+      artifacts:
+        - name: summary
+          schema:
+            type: object
+            required: [text]
+            properties:
+              text: { type: string, minLength: 1 }
+      transitions:
+        - name: finish
+          to: done
+          gates:
+            - type: artifact-exists
+              config: { artifact: summary }
+    - id: done
+      terminal: true
+  globalTransitions: []
+methods: {}

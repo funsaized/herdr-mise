@@ -59,7 +59,8 @@ to run work items (the loop, querying run data, presenting approvals),
 [references/authoring.md](references/authoring.md) to write or edit a
 definition, and
 [references/nightshift-modes.md](references/nightshift-modes.md) for
-Nightshift queue selection, autonomy, parking, and checkout exclusions. You
+Nightshift queue selection, autonomy, parking, checkout exclusions, and the
+per-work-item factory fleet census. You
 rarely need more than one at once.
 
 ## Starting work

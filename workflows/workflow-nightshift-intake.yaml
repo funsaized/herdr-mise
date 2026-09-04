@@ -7,7 +7,7 @@ inputs:
   properties:
     workItem:
       type: string
-      pattern: '^[0-9]+$'
+      pattern: '^[1-9][0-9]*$'
       maxLength: 16
       description: GitHub issue number as a string; this is the factory work-item key.
     issueNumber:
@@ -36,16 +36,32 @@ jobs:
         dependsOn:
           - step: matching-identities
             condition: { type: succeeded }
+      # ponytail: controlled single writer; require atomic create-if-absent before exposing intake to multiple writers.
       - name: start-factory
-        guard: ${{ data.latest("the-nightshift", "state-" + inputs.workItem) != null }}
+        guard: '${{ size(data.query(''modelType == "@swamp/software-factory" && name == "state-'' + inputs.workItem + ''"'')) > 0 }}'
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelType: '@swamp/software-factory'
+          modelName: ${{ "nightshift-run-" + inputs.workItem }}
           methodName: start
+          globalArgs:
+            stages: ${{ model.nightshift-template.definition.globalArguments.stages }}
+            globalTransitions: ${{ model.nightshift-template.definition.globalArguments.globalTransitions }}
           inputs:
             workItem: ${{ inputs.workItem }}
+        allowFailure: true
         dependsOn:
           - step: start-issue
             condition: { type: completed }
+      - name: require-single-factory-owner
+        task:
+          type: assert
+          expr: >-
+            size(data.query('modelType == "@swamp/software-factory" && name == "state-' + inputs.workItem + '"')) == 1 && size(data.query('modelType == "@swamp/software-factory" && name == "state-' + inputs.workItem + '" && attributes.workItem == "' + inputs.workItem + '" && (modelName == "the-nightshift" || modelName == "nightshift-run-' + inputs.workItem + '")')) == 1
+          message: Work item must have exactly one valid legacy or runtime factory owner
+          severity: high
+        dependsOn:
+          - step: start-factory
+            condition: { type: completed }
     dependsOn: []
-version: 4
+version: 5

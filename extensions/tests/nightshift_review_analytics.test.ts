@@ -2,10 +2,12 @@ import {
   analyzeNightshift,
   attributeInvocationRounds,
   dedupeReviewRounds,
+  loadFactoryInput,
   renderMarkdown,
   scopeInput,
   type AnalyticsInput,
   type Invocation,
+  type ReportContext,
   type ReviewRound,
   type SourcePointer,
 } from "../reports/nightshift_review_analytics.ts";
@@ -22,6 +24,161 @@ function source(
     dataName,
     version: 1,
     workflowRunId,
+  };
+}
+
+type StoredRecord = {
+  type: string;
+  modelId: string;
+  modelName: string;
+  specName?: string;
+  name: string;
+  version: number;
+  workflowRunId?: string;
+  content: Record<string, unknown>;
+};
+
+function dataLike(record: StoredRecord): {
+  name: string;
+  version: number;
+  tags: Record<string, string>;
+} {
+  const tags: Record<string, string> = { modelName: record.modelName };
+  if (record.specName !== undefined) tags.specName = record.specName;
+  if (record.workflowRunId !== undefined) {
+    tags.workflowRunId = record.workflowRunId;
+  }
+  return { name: record.name, version: record.version, tags };
+}
+
+function makeRepository(
+  records: StoredRecord[],
+): ReportContext["dataRepository"] {
+  const byName = new Map<string, StoredRecord[]>();
+  for (const record of records) {
+    const key = `${record.type}|${record.modelId}|${record.name}`;
+    const list = byName.get(key) ?? [];
+    list.push(record);
+    byName.set(key, list);
+  }
+  const lookup = (type: string, modelId: string, name: string) =>
+    byName.get(`${type}|${modelId}|${name}`) ?? [];
+  return {
+    async findAllForModel(_type, modelId) {
+      return records
+        .filter((record) => record.modelId === modelId)
+        .map(dataLike);
+    },
+    async findAllForType(type) {
+      return records
+        .filter((record) => record.type === String(type))
+        .map((record) => ({ data: dataLike(record), modelId: record.modelId }));
+    },
+    async findByName(_type, modelId, name, version) {
+      const list = lookup(String(_type), modelId, name).filter(
+        (record) => version === undefined || record.version === version,
+      );
+      const record = list.at(-1);
+      return record ? dataLike(record) : null;
+    },
+    async listVersions(_type, modelId, name) {
+      return lookup(String(_type), modelId, name)
+        .map((record) => record.version)
+        .sort((a, b) => a - b);
+    },
+    async getContent(_type, modelId, name, version) {
+      const list = lookup(String(_type), modelId, name).filter(
+        (record) => version === undefined || record.version === version,
+      );
+      const record = list.at(-1);
+      return record
+        ? new TextEncoder().encode(JSON.stringify(record.content))
+        : null;
+    },
+  };
+}
+
+function reportContext(
+  repository: ReportContext["dataRepository"],
+): ReportContext {
+  return {
+    modelType: "@swamp/software-factory",
+    modelId: "report-host-id",
+    methodName: "summary",
+    methodArgs: {},
+    executionStatus: "succeeded",
+    dataRepository: repository,
+  };
+}
+
+function stateRecord(options: {
+  modelId: string;
+  modelName: string;
+  workItem: string;
+  stageId: string;
+}): StoredRecord {
+  return {
+    type: "@swamp/software-factory",
+    modelId: options.modelId,
+    modelName: options.modelName,
+    name: `state-${options.workItem}`,
+    version: 1,
+    content: {
+      workItem: options.workItem,
+      stageId: options.stageId,
+      startedAt: "2026-08-01T00:00:00Z",
+    },
+  };
+}
+
+function reviewRecord(options: {
+  modelId: string;
+  modelName: string;
+  workItem: string;
+  verdict: "pass" | "fail";
+}): StoredRecord {
+  return {
+    type: "@swamp/software-factory",
+    modelId: options.modelId,
+    modelName: options.modelName,
+    name: `artifact-${options.workItem}-code-review`,
+    version: 1,
+    content: {
+      workItem: options.workItem,
+      stageId: "code-review",
+      cycle: 1,
+      payload: { findings: [{ category: `round:${options.verdict}` }] },
+      recordedAt: "2026-08-01T00:00:00Z",
+    },
+  };
+}
+
+function invocationRecord(options: {
+  modelId: string;
+  name: string;
+  workItem: string;
+  modelNameTag?: string;
+}): StoredRecord {
+  const tags: Record<string, string> = {
+    factory: "nightshift",
+    workItem: options.workItem,
+  };
+  if (options.modelNameTag !== undefined) {
+    tags.modelName = options.modelNameTag;
+  }
+  return {
+    type: "@funsaized/cli-agent",
+    modelId: options.modelId,
+    modelName: "nightshift-reviewer",
+    specName: "invocation",
+    name: options.name,
+    version: 1,
+    content: {
+      tags,
+      provider: "opencode",
+      model: "openai/test",
+      success: true,
+    },
   };
 }
 
@@ -440,5 +597,205 @@ Deno.test("item scope retains evidence-only failures", () => {
     scoped.coverage.factoryWorkItemCount !== 1
   ) {
     throw new Error("item scope dropped or leaked evidence-only failures");
+  }
+});
+
+Deno.test("loadFactoryInput includes legacy and runtime factories with correct pointers", async () => {
+  const input = await loadFactoryInput(
+    reportContext(
+      makeRepository([
+        stateRecord({
+          modelId: "legacy-id",
+          modelName: "the-nightshift",
+          workItem: "1",
+          stageId: "done",
+        }),
+        stateRecord({
+          modelId: "runtime-id",
+          modelName: "nightshift-run-2",
+          workItem: "2",
+          stageId: "building",
+        }),
+        stateRecord({
+          modelId: "other-id",
+          modelName: "other-factory",
+          workItem: "99",
+          stageId: "building",
+        }),
+      ]),
+    ),
+  );
+  const workItems = input.factoryItems
+    .map((item) => item.workItem)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (workItems.join(",") !== "1,2") {
+    throw new Error(
+      `expected legacy and runtime factories only, got ${workItems.join(",")}`,
+    );
+  }
+  const legacy = input.factoryItems.find((item) => item.workItem === "1")!;
+  if (
+    legacy.source.modelId !== "legacy-id" ||
+    legacy.source.modelName !== "the-nightshift" ||
+    legacy.outcome !== "done"
+  ) {
+    throw new Error("terminal legacy pointer or outcome is incorrect");
+  }
+  const runtime = input.factoryItems.find((item) => item.workItem === "2")!;
+  if (
+    runtime.source.modelId !== "runtime-id" ||
+    runtime.source.modelName !== "nightshift-run-2"
+  ) {
+    throw new Error("runtime pointer is incorrect");
+  }
+});
+
+Deno.test("loadFactoryInput rejects nightshift-template data", async () => {
+  const repository = makeRepository([
+    stateRecord({
+      modelId: "template-id",
+      modelName: "nightshift-template",
+      workItem: "1",
+      stageId: "building",
+    }),
+  ]);
+  let message = "";
+  try {
+    await loadFactoryInput(reportContext(repository));
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  if (!message.includes("nightshift-template")) {
+    throw new Error("template factory data did not throw an invariant error");
+  }
+});
+
+Deno.test("loadFactoryInput isolates review rounds to the owning factory model", async () => {
+  const input = await loadFactoryInput(
+    reportContext(
+      makeRepository([
+        stateRecord({
+          modelId: "legacy-id",
+          modelName: "the-nightshift",
+          workItem: "7",
+          stageId: "building",
+        }),
+        reviewRecord({
+          modelId: "legacy-id",
+          modelName: "the-nightshift",
+          workItem: "7",
+          verdict: "pass",
+        }),
+        stateRecord({
+          modelId: "runtime-8-id",
+          modelName: "nightshift-run-8",
+          workItem: "8",
+          stageId: "building",
+        }),
+        reviewRecord({
+          modelId: "runtime-8-id",
+          modelName: "nightshift-run-8",
+          workItem: "7",
+          verdict: "fail",
+        }),
+      ]),
+    ),
+  );
+  if (
+    input.reviewRounds.length !== 1 ||
+    input.reviewRounds[0].source.modelId !== "legacy-id"
+  ) {
+    throw new Error(
+      `expected only the legacy review round, got ${input.reviewRounds.length}`,
+    );
+  }
+});
+
+Deno.test("dedupeReviewRounds keeps duplicate work items separate across model IDs", async () => {
+  const input = await loadFactoryInput(
+    reportContext(
+      makeRepository([
+        stateRecord({
+          modelId: "legacy-id",
+          modelName: "the-nightshift",
+          workItem: "7",
+          stageId: "building",
+        }),
+        reviewRecord({
+          modelId: "legacy-id",
+          modelName: "the-nightshift",
+          workItem: "7",
+          verdict: "pass",
+        }),
+        stateRecord({
+          modelId: "runtime-7-id",
+          modelName: "nightshift-run-7",
+          workItem: "7",
+          stageId: "building",
+        }),
+        reviewRecord({
+          modelId: "runtime-7-id",
+          modelName: "nightshift-run-7",
+          workItem: "7",
+          verdict: "fail",
+        }),
+      ]),
+    ),
+  );
+  if (input.reviewRounds.length !== 2) {
+    throw new Error(
+      `expected two distinct review rounds across models, got ${input.reviewRounds.length}`,
+    );
+  }
+  let message = "";
+  try {
+    analyzeNightshift(input);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  if (!message.includes("multiple factory owners")) {
+    throw new Error(
+      "split factory ownership did not make analytics unavailable",
+    );
+  }
+});
+
+Deno.test("cli-agent invocations resolve the factory by modelName tag and reject ambiguity", async () => {
+  const input = await loadFactoryInput(
+    reportContext(
+      makeRepository([
+        stateRecord({
+          modelId: "legacy-id",
+          modelName: "the-nightshift",
+          workItem: "7",
+          stageId: "building",
+        }),
+        stateRecord({
+          modelId: "runtime-7-id",
+          modelName: "nightshift-run-7",
+          workItem: "7",
+          stageId: "building",
+        }),
+        invocationRecord({
+          modelId: "cli-a",
+          name: "invocation-a",
+          workItem: "7",
+          modelNameTag: "the-nightshift",
+        }),
+        invocationRecord({
+          modelId: "cli-b",
+          name: "invocation-b",
+          workItem: "7",
+        }),
+      ]),
+    ),
+  );
+  const names = input.invocations
+    .map((invocation) => invocation.source.dataName)
+    .sort();
+  if (names.join(",") !== "invocation-a") {
+    throw new Error(
+      `expected only the tagged invocation, got ${names.join(",")}`,
+    );
   }
 });

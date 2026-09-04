@@ -1,0 +1,30 @@
+id: da838948-fa96-4684-bf59-bedb5b82d072
+name: nightshift-factory-repair
+description: Explicitly restore one runtime factory's lifecycle snapshot without replacing its model ID or data.
+tags: {}
+inputs:
+  properties:
+    modelName:
+      type: string
+      pattern: '^nightshift-run-[1-9][0-9]*$'
+      maxLength: 79
+    confirm:
+      type: string
+      enum: [repair]
+  required: [modelName, confirm]
+jobs:
+  - name: repair
+    description: Reapply the tracked snapshot only after explicit operator confirmation.
+    steps:
+      - name: validate-repaired-snapshot
+        task:
+          type: model_method
+          modelType: '@swamp/software-factory'
+          modelName: ${{ inputs.modelName }}
+          methodName: validate
+          globalArgs:
+            stages: ${{ model.nightshift-template.definition.globalArguments.stages }}
+            globalTransitions: ${{ model.nightshift-template.definition.globalArguments.globalTransitions }}
+        dependsOn: []
+    dependsOn: []
+version: 1

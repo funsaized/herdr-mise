@@ -15,6 +15,10 @@ const State = z.object({
   cycles: z.record(z.string(), z.number().int().positive()),
   enteredAt: z.string(),
 });
+const OwnershipState = z.object({
+  workItem: z.string(),
+  status: z.enum(["active", "terminal"]),
+});
 const Factory = z.object({
   stages: z.array(
     z.object({
@@ -52,6 +56,7 @@ const WorkflowSummary = z.object({
 });
 
 type StoredData = {
+  modelId?: string;
   name: string;
   version?: number;
   ownerRef?: string;
@@ -62,13 +67,17 @@ type Context = {
   globalArgs: Record<string, unknown>;
   modelType: string;
   modelId: string;
+  methodName: string;
   definition?: { name: string };
   unresolvedMethodArgs?: Record<string, unknown>;
   definitionRepository?: {
     findById: (
       type: string,
       id: string,
-    ) => Promise<{ globalArguments: Record<string, unknown> } | null>;
+    ) => Promise<{
+      name?: string;
+      globalArguments: Record<string, unknown>;
+    } | null>;
   };
   dataRepository: {
     findAllForModel: (type: string, modelId: string) => Promise<StoredData[]>;
@@ -142,6 +151,95 @@ async function summaryFrom(context: Context, record: StoredData) {
 
 function fail(message: string): CheckResult {
   return { pass: false, errors: [message] };
+}
+
+const workItemMethods = [
+  "start",
+  "status",
+  "record_dispatch",
+  "record_artifact",
+  "record_evidence",
+  "resolve_findings",
+  "approve",
+  "reject",
+  "advance",
+  "summary",
+  "reset",
+];
+
+export async function checkNightshiftFactoryIdentity(
+  context: Context,
+  legacyIntakeFrozen = true,
+): Promise<CheckResult> {
+  const storedDefinition = context.definitionRepository
+    ? await context.definitionRepository.findById(
+        context.modelType,
+        context.modelId,
+      )
+    : null;
+  const name = context.definition?.name ?? storedDefinition?.name;
+  const workItem = context.unresolvedMethodArgs?.workItem;
+  if (name === "nightshift-template") {
+    return fail("nightshift-template cannot own work-item data");
+  }
+  if (typeof name !== "string") {
+    return fail("cannot verify factory identity without its definition name");
+  }
+
+  const runtime = /^nightshift-run-([1-9][0-9]*)$/.exec(name);
+  if (runtime && typeof workItem !== "string") {
+    return fail(`${name} requires its matching work item`);
+  }
+  if (typeof workItem !== "string") return { pass: true };
+
+  if (name === "the-nightshift") {
+    const state = OwnershipState.safeParse(
+      await latestJson(context, `state-${workItemSlug(workItem)}`),
+    );
+    if (context.methodName === "start" && legacyIntakeFrozen) {
+      return fail("the-nightshift no longer accepts new work items");
+    }
+    if (context.methodName === "start") return { pass: true };
+    if (!state.success) {
+      return fail(
+        `legacy work item '${workItem}' is not owned by the-nightshift`,
+      );
+    }
+    if (["status", "summary"].includes(context.methodName)) {
+      return { pass: true };
+    }
+    return state.data.status === "active"
+      ? { pass: true }
+      : fail(
+          `legacy work item '${workItem}' is terminal and cannot be mutated`,
+        );
+  }
+
+  if (!runtime) return { pass: true };
+  if (workItem !== runtime[1]) {
+    return fail(`${name} may only operate on work item '${runtime[1]}'`);
+  }
+
+  if (context.methodName !== "start") return { pass: true };
+  const query =
+    context.queryData ??
+    context.dataQueryService?.query.bind(context.dataQueryService);
+  if (!query) return fail("software-factory ownership records are unavailable");
+  const stateName = `state-${workItemSlug(workItem)}`;
+  let owners: StoredData[];
+  try {
+    owners = (await query(
+      `modelType == ${JSON.stringify(context.modelType)} && name == ${JSON.stringify(stateName)} && version > 0`,
+    )) as StoredData[];
+  } catch (error) {
+    return fail(
+      `software-factory ownership query failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  owners = owners.filter((record) => record.modelId !== context.modelId);
+  return owners.length === 0
+    ? { pass: true }
+    : fail(`work item '${workItem}' is already owned by another factory model`);
 }
 
 export async function checkCorrelatedWorkflowRun(
@@ -265,7 +363,7 @@ export async function checkCorrelatedWorkflowRun(
     const artifact = gate.config.artifact;
     if (typeof artifact !== "string") continue;
     const outputs = await query(
-      `workflowRunId == ${JSON.stringify(runId)} && name == ${JSON.stringify(`artifact-${slug}-${artifact}`)} && modelName == ${JSON.stringify(context.definition?.name ?? "")} && version > 0`,
+      `workflowRunId == ${JSON.stringify(runId)} && name == ${JSON.stringify(`artifact-${slug}-${artifact}`)} && modelName == ${JSON.stringify(context.definition?.name ?? definition?.name ?? "")} && version > 0`,
     );
     if (outputs.length === 0) {
       return fail(
@@ -280,6 +378,15 @@ export const extension = {
   type: "@swamp/software-factory",
   methods: [],
   checks: [
+    {
+      "nightshift-factory-identity": {
+        description:
+          "Nightshift runtime names, work items, and cross-instance ownership must agree",
+        labels: ["policy"],
+        appliesTo: workItemMethods,
+        execute: checkNightshiftFactoryIdentity,
+      },
+    },
     {
       "workflow-result-correlated": {
         description:

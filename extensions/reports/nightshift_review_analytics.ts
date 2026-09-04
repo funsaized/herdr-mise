@@ -2,6 +2,7 @@
 
 const FACTORY_TYPE = "@swamp/software-factory";
 const CLI_AGENT_TYPES = ["@mgreten/cli-agent", "@funsaized/cli-agent"];
+const RUNTIME_FACTORY_NAME = /^nightshift-run-[1-9][0-9]*$/;
 const LANES = [
   "accessibility",
   "clean-code",
@@ -110,7 +111,7 @@ interface DataRepositoryLike {
   ): Promise<Uint8Array | null>;
 }
 
-interface ReportContext {
+export interface ReportContext {
   modelType: unknown;
   modelId: string;
   methodName: string;
@@ -136,7 +137,7 @@ function numberValue(value: unknown): number | undefined {
 }
 
 function isCanonicalWorkItem(value: string): boolean {
-  return /^\d+$/.test(value);
+  return /^[1-9][0-9]*$/.test(value);
 }
 
 function dateValue(value: Date | string | undefined): string | undefined {
@@ -263,140 +264,191 @@ function parseOutcome(stageId: string | undefined): Outcome {
   return "in-flight";
 }
 
-async function loadFactoryInput(
+function isFactoryNameIncluded(modelName: string): boolean {
+  return modelName === "the-nightshift" || RUNTIME_FACTORY_NAME.test(modelName);
+}
+
+function resolveFactoryModelId(
+  factoryModelName: string | undefined,
+  workItem: string,
+  factoryWorkItems: Set<string>,
+  factoryModelIdsByName: Map<string, string>,
+  factoryModelIdsByWorkItem: Map<string, Set<string>>,
+): string | undefined {
+  if (factoryModelName !== undefined) {
+    const modelId = factoryModelIdsByName.get(factoryModelName);
+    return modelId !== undefined &&
+      factoryWorkItems.has(`${modelId}:${workItem}`)
+      ? modelId
+      : undefined;
+  }
+  const owners = factoryModelIdsByWorkItem.get(workItem);
+  return owners !== undefined && owners.size === 1 ? [...owners][0] : undefined;
+}
+
+export async function loadFactoryInput(
   context: ReportContext,
 ): Promise<AnalyticsInput> {
   const repository = context.dataRepository;
-  const latest = await repository.findAllForModel(
+  const allFactoryResources = await repository.findAllForType(
     context.modelType,
-    context.modelId,
   );
-  const stateNames = latest
-    .map((data) => data.name)
-    .filter((name) => name.startsWith("state-"))
-    .sort();
-  const reviewNames = latest
-    .map((data) => data.name)
-    .filter((name) => /-(plan|code)-review$/.test(name))
-    .sort();
-  const evidenceNames = latest
-    .map((data) => data.name)
-    .filter((name) => name.startsWith("evidence-"))
-    .sort();
-  const journalNames = latest
-    .map((data) => data.name)
-    .filter((name) => name.startsWith("journal-"))
-    .sort();
+  for (const resource of allFactoryResources) {
+    if (resource.data.tags.modelName === "nightshift-template") {
+      throw new Error(
+        `nightshift-template factory data must never be analyzed (model ${resource.modelId})`,
+      );
+    }
+  }
+  const resourcesByModel = groupBy(
+    allFactoryResources.filter((resource) =>
+      isFactoryNameIncluded(resource.data.tags.modelName ?? ""),
+    ),
+    (resource) => resource.modelId,
+  );
 
   const factoryItems: FactoryItem[] = [];
   const malformedWorkItems = new Set<string>();
-  for (const name of stateNames) {
-    const data = latest.find((candidate) => candidate.name === name);
-    const content = await readJson(
-      repository,
-      context.modelType,
-      context.modelId,
-      name,
-    );
-    if (data === undefined || content === null) continue;
-    const workItem =
-      stringValue(content.workItem) ?? name.slice("state-".length);
-    if (!isCanonicalWorkItem(workItem)) {
-      malformedWorkItems.add(workItem);
-      continue;
-    }
-    factoryItems.push({
-      workItem,
-      outcome: parseOutcome(stringValue(content.stageId)),
-      startedAt: stringValue(content.startedAt),
-      source: pointer("factory", context.modelId, data),
-    });
-  }
-  const factoryWorkItems = new Set(factoryItems.map((item) => item.workItem));
-
+  const factoryWorkItems = new Set<string>(); // `${modelId}:${workItem}`
+  const factoryModelIdsByName = new Map<string, string>();
+  const factoryModelIdsByWorkItem = new Map<string, Set<string>>();
   const reviewRoundCandidates: ReviewRound[] = [];
-  for (const name of reviewNames) {
-    for (const record of await readVersions(
-      repository,
-      context.modelType,
-      context.modelId,
-      name,
-    )) {
-      const workItem = stringValue(record.content.workItem);
-      if (workItem !== undefined && !isCanonicalWorkItem(workItem)) {
+  const failureWorkflowKinds: AnalyticsInput["failureWorkflowKinds"] = {};
+  const evidenceSources: SourcePointer[] = [];
+  let unmeteredInteractiveWorkCount = 0;
+  const journalSources: SourcePointer[] = [];
+
+  for (const [modelId, resources] of Object.entries(resourcesByModel)) {
+    const modelName = resources[0]?.data.tags.modelName;
+    if (modelName !== undefined) factoryModelIdsByName.set(modelName, modelId);
+    const names = resources.map((resource) => resource.data.name);
+    const stateNames = names.filter((name) => name.startsWith("state-")).sort();
+    const reviewNames = names
+      .filter((name) => /-(plan|code)-review$/.test(name))
+      .sort();
+    const evidenceNames = names
+      .filter((name) => name.startsWith("evidence-"))
+      .sort();
+    const journalNames = names
+      .filter((name) => name.startsWith("journal-"))
+      .sort();
+
+    for (const name of stateNames) {
+      const data = resources.find(
+        (candidate) => candidate.data.name === name,
+      )?.data;
+      const content = await readJson(
+        repository,
+        context.modelType,
+        modelId,
+        name,
+      );
+      if (data === undefined || content === null) continue;
+      const workItem =
+        stringValue(content.workItem) ?? name.slice("state-".length);
+      if (!isCanonicalWorkItem(workItem)) {
         malformedWorkItems.add(workItem);
         continue;
       }
-      const parsed = parseReviewRound(
-        record.content,
-        pointer("factory", context.modelId, record.data),
-      );
-      if (parsed === null || !factoryWorkItems.has(parsed.workItem)) continue;
-      reviewRoundCandidates.push(parsed);
-    }
-  }
-  const reviewRounds = dedupeReviewRounds(reviewRoundCandidates);
-
-  const failureWorkflowKinds: AnalyticsInput["failureWorkflowKinds"] = {};
-  const evidenceSources: SourcePointer[] = [];
-  for (const name of evidenceNames) {
-    for (const record of await readVersions(
-      repository,
-      context.modelType,
-      context.modelId,
-      name,
-    )) {
-      const payload = isRecord(record.content.payload)
-        ? record.content.payload
-        : null;
-      const outputs = isRecord(payload?.outputs) ? payload.outputs : null;
-      const runId = stringValue(payload?.runId);
-      const failureKind = stringValue(outputs?.failureKind);
-      const workItem = stringValue(record.content.workItem);
-      if (workItem !== undefined && !isCanonicalWorkItem(workItem)) {
-        malformedWorkItems.add(workItem);
+      factoryWorkItems.add(`${modelId}:${workItem}`);
+      const owners = factoryModelIdsByWorkItem.get(workItem);
+      if (owners === undefined) {
+        factoryModelIdsByWorkItem.set(workItem, new Set([modelId]));
+      } else {
+        owners.add(modelId);
       }
-      if (
-        runId !== undefined &&
-        failureKind !== undefined &&
-        workItem !== undefined &&
-        isCanonicalWorkItem(workItem) &&
-        factoryWorkItems.has(workItem)
-      ) {
-        failureWorkflowKinds[runId] = { kind: failureKind, workItem };
-        if (failureKind !== "none") {
-          evidenceSources.push(
-            pointer("factory", context.modelId, record.data),
-          );
+      factoryItems.push({
+        workItem,
+        outcome: parseOutcome(stringValue(content.stageId)),
+        startedAt: stringValue(content.startedAt),
+        source: pointer("factory", modelId, data),
+      });
+    }
+
+    for (const name of reviewNames) {
+      for (const record of await readVersions(
+        repository,
+        context.modelType,
+        modelId,
+        name,
+      )) {
+        const workItem = stringValue(record.content.workItem);
+        if (workItem !== undefined && !isCanonicalWorkItem(workItem)) {
+          malformedWorkItems.add(workItem);
+          continue;
+        }
+        const parsed = parseReviewRound(
+          record.content,
+          pointer("factory", modelId, record.data),
+        );
+        if (
+          parsed === null ||
+          !factoryWorkItems.has(`${modelId}:${parsed.workItem}`)
+        ) {
+          continue;
+        }
+        reviewRoundCandidates.push(parsed);
+      }
+    }
+
+    for (const name of evidenceNames) {
+      for (const record of await readVersions(
+        repository,
+        context.modelType,
+        modelId,
+        name,
+      )) {
+        const payload = isRecord(record.content.payload)
+          ? record.content.payload
+          : null;
+        const outputs = isRecord(payload?.outputs) ? payload.outputs : null;
+        const runId = stringValue(payload?.runId);
+        const failureKind = stringValue(outputs?.failureKind);
+        const workItem = stringValue(record.content.workItem);
+        if (workItem !== undefined && !isCanonicalWorkItem(workItem)) {
+          malformedWorkItems.add(workItem);
+        }
+        if (
+          runId !== undefined &&
+          failureKind !== undefined &&
+          workItem !== undefined &&
+          isCanonicalWorkItem(workItem) &&
+          factoryWorkItems.has(`${modelId}:${workItem}`)
+        ) {
+          failureWorkflowKinds[runId] = { kind: failureKind, workItem };
+          if (failureKind !== "none") {
+            evidenceSources.push(pointer("factory", modelId, record.data));
+          }
+        }
+      }
+    }
+
+    for (const name of journalNames) {
+      const workItem = name.slice("journal-".length);
+      if (!isCanonicalWorkItem(workItem)) {
+        malformedWorkItems.add(workItem);
+        continue;
+      }
+      if (!factoryWorkItems.has(`${modelId}:${workItem}`)) continue;
+      for (const record of await readVersions(
+        repository,
+        context.modelType,
+        modelId,
+        name,
+      )) {
+        if (
+          record.content.event === "dispatched" &&
+          ["plan-feedback", "ship-prep"].includes(
+            String(record.content.stageId),
+          )
+        ) {
+          unmeteredInteractiveWorkCount += 1;
+          journalSources.push(pointer("factory", modelId, record.data));
         }
       }
     }
   }
-
-  let unmeteredInteractiveWorkCount = 0;
-  const journalSources: SourcePointer[] = [];
-  for (const name of journalNames) {
-    const workItem = name.slice("journal-".length);
-    if (!isCanonicalWorkItem(workItem)) {
-      malformedWorkItems.add(workItem);
-      continue;
-    }
-    if (!factoryWorkItems.has(workItem)) continue;
-    for (const record of await readVersions(
-      repository,
-      context.modelType,
-      context.modelId,
-      name,
-    )) {
-      if (
-        record.content.event === "dispatched" &&
-        ["plan-feedback", "ship-prep"].includes(String(record.content.stageId))
-      ) {
-        unmeteredInteractiveWorkCount += 1;
-        journalSources.push(pointer("factory", context.modelId, record.data));
-      }
-    }
-  }
+  const reviewRounds = dedupeReviewRounds(reviewRoundCandidates);
 
   const roundByWorkflow = new Map(
     reviewRounds
@@ -432,7 +484,17 @@ async function loadFactoryInput(
       malformedWorkItems.add(workItem);
       continue;
     }
-    if (!factoryWorkItems.has(workItem)) continue;
+    if (
+      resolveFactoryModelId(
+        stringValue(tags.modelName),
+        workItem,
+        factoryWorkItems,
+        factoryModelIdsByName,
+        factoryModelIdsByWorkItem,
+      ) === undefined
+    ) {
+      continue;
+    }
     const workflowRunId = data.tags.workflowRunId;
     const review = workflowRunId
       ? roundByWorkflow.get(workflowRunId)
@@ -553,7 +615,7 @@ function compareRounds(a: ReviewRound, b: ReviewRound): number {
 export function dedupeReviewRounds(rounds: ReviewRound[]): ReviewRound[] {
   const byCycle = new Map<string, ReviewRound>();
   for (const round of rounds) {
-    const key = `${round.workItem}:${round.phase}:${round.round}`;
+    const key = `${round.source.modelId}:${round.workItem}:${round.phase}:${round.round}`;
     const current = byCycle.get(key);
     const differentRuns =
       current?.workflowRunId !== undefined &&
@@ -1324,6 +1386,16 @@ function efficiencyIndicators(
 }
 
 export function analyzeNightshift(input: AnalyticsInput) {
+  const ownerByWorkItem = new Map<string, string>();
+  for (const item of input.factoryItems) {
+    const owner = ownerByWorkItem.get(item.workItem);
+    if (owner !== undefined && owner !== item.source.modelId) {
+      throw new Error(
+        `work item '${item.workItem}' has multiple factory owners; analytics unavailable`,
+      );
+    }
+    ownerByWorkItem.set(item.workItem, item.source.modelId);
+  }
   const workItems = new Set(input.factoryItems.map((item) => item.workItem));
   const joinedInput = {
     ...input,
@@ -1581,7 +1653,7 @@ export const report = {
   execute: async (context: ReportContext) => {
     if (
       String(context.modelType) !== FACTORY_TYPE ||
-      !["status", "summary"].includes(context.methodName)
+      context.methodName !== "summary"
     ) {
       return { markdown: "", json: {} };
     }

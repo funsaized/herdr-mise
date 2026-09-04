@@ -6,27 +6,135 @@ const planFanout = readFileSync(
   "workflows/workflow-nightshift-plan-fanout.yaml",
   "utf8",
 );
+const buildFanout = readFileSync(
+  "workflows/workflow-nightshift-build-fanout.yaml",
+  "utf8",
+);
 const factory = readFileSync(
   "models/@swamp/software-factory/the-nightshift.yaml",
   "utf8",
 );
+const template = readFileSync(
+  "models/@swamp/software-factory/nightshift-template.yaml",
+  "utf8",
+);
+const factoryWorkflows = [
+  "plan",
+  "build",
+  "review",
+  "ship",
+  "close",
+  "cleanup",
+  "deployed-verification",
+  "record-failure",
+].map((name) => [
+  name,
+  readFileSync(`workflows/workflow-nightshift-${name}.yaml`, "utf8"),
+]);
+const nightshiftModes = readFileSync(
+  ".agents/skills/software-factory/references/nightshift-modes.md",
+  "utf8",
+);
+const repairWorkflow = readFileSync(
+  "workflows/workflow-nightshift-factory-repair.yaml",
+  "utf8",
+);
 
-test("Nightshift planning fan-out serializes canonical unique work items", () => {
+const fanoutMapsToFactory =
+  /forEach:\n\s+item: entry\n\s+in: '\$\{\{ inputs\.workItems\.map\(/;
+const item77Routing =
+  '"factory": w == "77" ? "the-nightshift" : "nightshift-run-" + w';
+
+test("Nightshift planning fan-out maps each work item to one factory and serializes", () => {
   assert.match(planFanout, /minItems: 1/);
   assert.match(planFanout, /maxItems: 100/);
   assert.match(planFanout, /uniqueItems: true/);
-  assert.ok(planFanout.includes("pattern: '^[0-9]+$'"));
+  assert.ok(planFanout.includes("pattern: '^[1-9][0-9]*$'"));
   assert.match(planFanout, /maxLength: 16/);
-  assert.match(
-    planFanout,
-    /forEach:\n\s+item: workItem\n\s+in: \$\{\{ inputs\.workItems \}\}/,
-  );
+  assert.match(planFanout, fanoutMapsToFactory);
+  assert.ok(planFanout.includes(item77Routing));
   assert.match(planFanout, /concurrency: 1/);
   assert.match(planFanout, /workflowIdOrName: nightshift-plan/);
-  assert.ok(planFanout.includes("issueNumber: ${{ int(self.workItem) }}"));
-  assert.match(planFanout, /^\s+reviewFeedback: \$\{\{/m);
-  assert.match(planFanout, /^\s+currentPlan: \$\{\{/m);
-  assert.match(planFanout, /^\s+humanFeedback: '\$\{\{/m);
+  assert.match(planFanout, /factory: \$\{\{ self\.entry\.factory \}\}/);
+  assert.match(planFanout, /workItem: \$\{\{ self\.entry\.workItem \}\}/);
+  assert.ok(
+    planFanout.includes("issueNumber: ${{ int(self.entry.workItem) }}"),
+  );
+  assert.match(
+    planFanout,
+    /reviewFeedback: \$\{\{ data\.latest\(self\.entry\.factory/,
+  );
+  assert.match(
+    planFanout,
+    /currentPlan: \$\{\{ data\.latest\(self\.entry\.factory/,
+  );
+  assert.match(
+    planFanout,
+    /humanFeedback: '\$\{\{ data\.latest\(self\.entry\.factory/,
+  );
+});
+
+test("Nightshift build fan-out maps each work item to one factory with two builders", () => {
+  assert.match(buildFanout, fanoutMapsToFactory);
+  assert.ok(buildFanout.includes(item77Routing));
+  assert.match(buildFanout, /concurrency: 2/);
+  assert.match(buildFanout, /workflowIdOrName: nightshift-build/);
+  assert.match(buildFanout, /factory: \$\{\{ self\.entry\.factory \}\}/);
+  assert.match(buildFanout, /workItem: \$\{\{ self\.entry\.workItem \}\}/);
+  assert.match(buildFanout, /plan: \$\{\{ data\.latest\(self\.entry\.factory/);
+  assert.match(
+    buildFanout,
+    /reviewFeedback: \$\{\{ data\.latest\(self\.entry\.factory/,
+  );
+});
+
+test("Nightshift resident driver takes a fleet census and dispatches from fresh per-item status", () => {
+  assert.match(
+    nightshiftModes,
+    /modelType == "@swamp\/software-factory" && name\.startsWith\("state-"\)/,
+  );
+  assert.match(nightshiftModes, /\(modelName, modelId, workItem\)/);
+  assert.match(nightshiftModes, /status --input workItem=/);
+  assert.match(nightshiftModes, /terminal[^\n]*active dispatch/i);
+  assert.match(nightshiftModes, /retain[^\n]*history/i);
+  assert.match(nightshiftModes, /Never[^\n]*status-_factory/i);
+});
+
+test("Nightshift repair is explicit and analytics stays off status paths", () => {
+  assert.match(repairWorkflow, /enum: \[repair\]/u);
+  assert.match(repairWorkflow, /modelType: '@swamp\/software-factory'/u);
+  assert.match(repairWorkflow, /modelName: \$\{\{ inputs\.modelName \}\}/u);
+  assert.match(
+    repairWorkflow,
+    /model\.nightshift-template\.definition\.globalArguments/u,
+  );
+  assert.match(
+    factory,
+    /name: "@funsaized\/nightshift-factory-analytics",\n\s+methods: \[summary\]/u,
+  );
+});
+
+test("Nightshift template is the legacy lifecycle snapshot without runtime reports", () => {
+  const legacyLifecycle = factory.slice(
+    factory.indexOf("globalArguments:\n"),
+    factory.indexOf("reports:\n"),
+  );
+  const templateLifecycle = template.slice(
+    template.indexOf("globalArguments:\n"),
+    template.indexOf("methods: {}\n"),
+  );
+  assert.equal(templateLifecycle, legacyLifecycle);
+  assert.doesNotMatch(template, /^reports:/mu);
+});
+
+test("Nightshift workflows keep factory reads and writes on one explicit owner", () => {
+  for (const [name, workflow] of factoryWorkflows) {
+    assert.match(workflow, /required: \[factory,/u, `${name} requires factory`);
+    assert.doesNotMatch(workflow, /modelIdOrName: the-nightshift/u);
+    assert.doesNotMatch(workflow, /data\.latest\("the-nightshift"/u);
+    assert.doesNotMatch(workflow, /skipChecks|skip-check/u);
+  }
+  assert.equal(factory.match(/factory: "\$\{\{ self\.name \}\}"/gu)?.length, 8);
 });
 
 test("Nightshift parks fresh failed review rounds at cycle four", () => {

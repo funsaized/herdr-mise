@@ -6,9 +6,13 @@ tags:
   stage: review
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      pattern: '^[0-9]+$'
+      pattern: '^[1-9][0-9]*$'
       maxLength: 16
     phase:
       type: string
@@ -22,7 +26,7 @@ inputs:
     subjectRoot:
       type: string
       minLength: 1
-  required: [workItem, phase, artifactName, subject, subjectRoot]
+  required: [factory, workItem, phase, artifactName, subject, subjectRoot]
 jobs:
   - name: review
     description: Each lane gets its own model instance and cannot see sibling results.
@@ -282,7 +286,7 @@ jobs:
       - name: record-review
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_artifact
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -311,7 +315,7 @@ jobs:
       - name: record-review-run
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -330,8 +334,8 @@ jobs:
             issue_number: ${{ int(inputs.workItem) }}
             phase: ${{ inputs.phase }}
             publication_key: ${{ run.id }}
-            findings: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-" + inputs.artifactName).attributes.payload.findings }}
+            findings: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-" + inputs.artifactName).attributes.payload.findings }}
         dependsOn:
           - { step: record-review, condition: { type: succeeded } }
     dependsOn: []
-version: 6
+version: 7

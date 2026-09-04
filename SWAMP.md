@@ -139,6 +139,44 @@ work items from planning through deployed verification and closure. The factory
 stores state and enforces gates. An active human or agent driver selects and
 propels work; `swamp serve` does not poll queued work.
 
+### Factory Instances
+
+Nightshift runs one `@swamp/software-factory` instance per work item so each
+independently mutable run owns its model lock:
+
+```text
+nightshift-template     canonical lifecycle template; never runs work
+the-nightshift          retained legacy instance; active item 77 finishes here
+nightshift-run-<N>      runtime instance for work item <N> only
+```
+
+The GitHub issue number is the factory `workItem`, and `nightshift-run-<N>` may
+read or mutate only `workItem=<N>`. Fan-out resolves each item's factory in one
+place and passes it explicitly to every child workflow and to failure recording:
+
+```text
+w == "77" ? "the-nightshift" : "nightshift-run-" + w
+```
+
+Item 77 stays routed to `the-nightshift` until it is terminal; the exception is
+removed afterward. Children never derive the factory themselves.
+
+One `swamp data query` over the latest `state-*` records of every
+`@swamp/software-factory` instance is the fleet census:
+
+```sh
+swamp data query 'modelType == "@swamp/software-factory" && name.startsWith("state-")' \
+  --select '{"modelName": modelName, "modelId": modelId, "workItem": attributes.workItem, "stageId": attributes.stageId, "status": attributes.status}' --json
+```
+
+Validate each `(modelName, modelId, workItem)` tuple and reject a duplicate or
+mismatched owner before dispatching. The census is discovery only: exclude
+terminal records from active dispatch and retain them as history. Never use
+`status-_factory` as the scheduler source. Before any dispatch, refresh the
+item's own status with
+`swamp model method run <factory> status --input workItem=<N>` and classify from
+that fresh packet, never from `stageId` or `status-_factory`.
+
 ### Capabilities
 
 - State, evidence, artifacts, and journals are namespaced by work item.
@@ -181,7 +219,7 @@ State has three deliberately independent owners:
 
 | Concern                                                     | Owner                                    | Contract                                                         |
 | ----------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
-| Delivery gates, artifacts, evidence, retries, and approvals | `the-nightshift`                         | The factory stage is authoritative only for factory execution.   |
+| Delivery gates, artifacts, evidence, retries, and approvals | owning factory (`nightshift-run-<N>`, or `the-nightshift` for legacy) | The factory stage is authoritative only for factory execution. |
 | `Todo`, `in-progress`, `await-merge`, and `done` swim lanes | GitHub Nightshift workflows              | Swamp never writes the Project `Status` field.                   |
 | Issue open/closed state                                     | GitHub issue and pull-request automation | Swamp never closes issues or advances the issue lifecycle model. |
 
@@ -263,7 +301,9 @@ explicit human instruction.
 - Merge and deployment approvals require a human.
 - Remote multi-host execution is not configured.
 
-The resident driver reuses `the-nightshift` as the only delivery state machine.
+The resident driver reuses `nightshift-template` only as the canonical
+lifecycle snapshot; it drives each item's owning `nightshift-run-<N>` instance
+(or `the-nightshift` for legacy item 77) as the only delivery state machine.
 When no work is actionable, it reports fresh gate subjects for the human queue
 and idles without polling.
 
@@ -325,11 +365,12 @@ checkout files, build outputs, or runtime processes.
 ### Drive Nightshift State
 
 Use the factory methods directly. There is no separate Nightshift advance
-workflow:
+workflow. Each work item has its own factory instance — drive the item's owning
+factory, discovered from the fleet census:
 
 ```sh
-swamp model method run the-nightshift status --input workItem=84
-swamp model method run the-nightshift advance \
+swamp model method run nightshift-run-84 status --input workItem=84
+swamp model method run nightshift-run-84 advance \
   --input workItem=84 \
   --input transition=submit
 ```
@@ -337,7 +378,22 @@ swamp model method run the-nightshift advance \
 After an advance, refresh `status` and dispatch the destination stage's resolved
 work specification. Gate-only stages such as `await-merge` require no dispatch.
 GitHub Project workflows move board cards independently; there is no Swamp
-projection or repair workflow.
+projection workflow.
+
+Runtime definition creation uses a controlled single writer: only
+`nightshift-intake` through the shared `swamp serve` process may create
+`nightshift-run-*`. If an operator explicitly needs to restore an existing
+runtime snapshot without replacing its model ID or data, use the audited repair
+workflow:
+
+```sh
+swamp workflow run nightshift-factory-repair \
+  --input modelName=nightshift-run-84 \
+  --input confirm=repair
+```
+
+Creation is not atomic create-if-absent. Add that upstream before allowing
+multiple or external intake writers.
 
 The `nightshift-issues` model refreshes issue context without posting lifecycle
 comments or syncing lifecycle labels. Planning publishes the current plan and
