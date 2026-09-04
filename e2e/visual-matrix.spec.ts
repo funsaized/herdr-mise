@@ -759,7 +759,7 @@ test("visual mode never touches persisted storage", async ({ page }) => {
   await expect(page.getByRole("note")).toBeVisible();
 });
 
-test("visual production serves fixtures and stays isolated from native and localhost sockets", async ({
+test("TUI recording controls stay accessible, bounded, and isolated", async ({
   page,
   request,
 }) => {
@@ -775,12 +775,31 @@ test("visual production serves fixtures and stays isolated from native and local
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=working&agents=6");
   await expect(placard(page)).toBeVisible();
-  const figureBox = page.locator(".visualTuiFigure"),
+  const figureBox = page.getByRole("figure", {
+      name: "herdr-mise TUI demo recording",
+    }),
     settings = page.getByRole("button", { name: "Open settings" });
-  const figure = page.getByRole("img", {
-    name: "Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label.",
-  });
+  const figure = page.locator(".visualTuiFigure img");
+  const description =
+      "The herdr-mise terminal runs deterministic demo data, showing its kitchen status before visiting WALK-IN FREEZER.",
+    caption = page.getByText(
+      "Native Ghostty recording of herdr-mise using deterministic demo data.",
+    ),
+    stop = page.getByRole("button", { name: "Stop animation" }),
+    expand = page.getByRole("button", { name: "Expand recording" });
   await expect(figure).toBeVisible();
+  await expect(figure).toHaveAttribute(
+    "alt",
+    "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer.",
+  );
+  await expect(figureBox).toHaveAttribute(
+    "aria-describedby",
+    "tui-demo-description",
+  );
+  await expect(page.locator("#tui-demo-description")).toHaveText(description);
+  await expect(caption).toBeVisible();
+  await expect(stop).toBeVisible();
+  await expect(expand).toBeVisible();
   await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
   const defaultBox = await figureBox.boundingBox();
   expect(defaultBox).not.toBeNull();
@@ -796,6 +815,46 @@ test("visual production serves fixtures and stays isolated from native and local
   expect(hoverBox!.width).toBeLessThanOrEqual(321);
   expect(settingsBox).not.toBeNull();
   expect(boxesIntersect(hoverBox!, settingsBox!)).toBe(false);
+  const mediaBox = await figure.boundingBox(),
+    stopBox = await stop.boundingBox(),
+    expandBox = await expand.boundingBox();
+  expect(mediaBox).not.toBeNull();
+  expect(stopBox).not.toBeNull();
+  expect(expandBox).not.toBeNull();
+  expect(boxesIntersect(mediaBox!, stopBox!)).toBe(false);
+  expect(boxesIntersect(mediaBox!, expandBox!)).toBe(false);
+
+  await stop.click();
+  await expect(figure).toHaveAttribute("src", "/tui-demo-poster.png");
+  await expect(figure).toHaveAttribute(
+    "alt",
+    "Still frame of the herdr-mise terminal demo kitchen.",
+  );
+  const restart = page.getByRole("button", { name: "Restart animation" });
+  await restart.click();
+  await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
+  await expect(stop).toBeVisible();
+
+  await page.getByRole("button", { name: "Freezer" }).click();
+  await expand.click();
+  await expect(figureBox).toHaveAttribute("data-expanded", "true");
+  const collapse = page.getByRole("button", { name: "Collapse recording" });
+  await expect(collapse).toHaveAttribute("aria-expanded", "true");
+  const expandedBox = await figureBox.boundingBox();
+  expect(expandedBox).not.toBeNull();
+  expect(expandedBox!.x).toBeGreaterThanOrEqual(0);
+  expect(expandedBox!.y).toBeGreaterThanOrEqual(0);
+  expect(expandedBox!.x + expandedBox!.width).toBeLessThanOrEqual(1280);
+  expect(expandedBox!.y + expandedBox!.height).toBeLessThanOrEqual(720);
+  await expect(figure).toHaveCSS("object-fit", "contain");
+  const freezer = page.getByRole("button", { name: "Freezer" });
+  await freezer.focus();
+  await page.keyboard.press("Escape");
+  await expect(figureBox).toHaveAttribute("data-expanded", "false");
+  await expect(expand).toBeFocused();
+  await expect(freezer).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(freezer).toHaveAttribute("aria-pressed", "false");
   await settings.click();
   await expect(
     page.getByRole("complementary", { name: "Settings" }),
@@ -829,10 +888,37 @@ test("visual production serves fixtures and stays isolated from native and local
   );
   for (const hit of [kitchen.pass, ...kitchen.stations])
     expect(boxesIntersect(boundaryFigureBox!, hit)).toBe(false);
+  await expand.click();
+  const boundaryExpandedBox = await figureBox.boundingBox();
+  expect(boundaryExpandedBox).not.toBeNull();
+  expect(
+    boundaryExpandedBox!.x + boundaryExpandedBox!.width,
+  ).toBeLessThanOrEqual(901);
+  expect(
+    boundaryExpandedBox!.y + boundaryExpandedBox!.height,
+  ).toBeLessThanOrEqual(641);
+  const expandedPlacardBox = await placard(page).boundingBox(),
+    expandedControlsBox = await page
+      .locator(".visualTuiControls")
+      .boundingBox(),
+    expandedMediaBox = await figure.boundingBox();
+  expect(expandedPlacardBox).not.toBeNull();
+  expect(expandedControlsBox).not.toBeNull();
+  expect(expandedMediaBox).not.toBeNull();
+  expect(boxesIntersect(boundaryExpandedBox!, expandedPlacardBox!)).toBe(false);
+  expect(boxesIntersect(expandedMediaBox!, expandedControlsBox!)).toBe(false);
+  await page.getByRole("button", { name: "Collapse recording" }).click();
 
-  await page.setViewportSize({ width: 800, height: 500 });
+  await freezer.click();
+  await expand.click();
+  await page.setViewportSize({ width: 900, height: 700 });
+  await expect(figureBox).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(freezer).toHaveAttribute("aria-pressed", "false");
+  await page.setViewportSize({ width: 1000, height: 640 });
   await expect(figureBox).toBeHidden();
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
+  expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
   expect((await request.get("/og.png")).status()).toBe(200);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     "content",
@@ -856,22 +942,30 @@ test("visual production serves fixtures and stays isolated from native and local
   expect(errors).toEqual([]);
 });
 
-test("reduced motion uses the emitted static poster", async ({
+test("reduced motion starts stopped and allows an explicit GIF restart", async ({
   page,
   request,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?preset=blocked&agents=1");
-  const figure = page.getByRole("img", {
-    name: "Terminal herdr-mise kitchen with the persistent MISE — DEMO SERVICE label.",
-  });
+  const figure = page.locator(".visualTuiFigure img");
   await expect(figure).toBeVisible();
-  await expect
-    .poll(() =>
-      figure.evaluate((image) => (image as HTMLImageElement).currentSrc),
-    )
-    .toContain("/tui-demo-poster.png");
+  await expect(figure).toHaveAttribute(
+    "alt",
+    "Still frame of the herdr-mise terminal demo kitchen.",
+  );
+  await expect(figure).toHaveAttribute("src", "/tui-demo-poster.png");
+  await page.getByRole("button", { name: "Restart animation" }).click();
+  await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
+  await expect(
+    page.getByRole("button", { name: "Stop animation" }),
+  ).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(figure).toHaveAttribute("src", "/tui-demo-poster.png");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
   expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
 });
 

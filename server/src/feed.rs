@@ -51,14 +51,18 @@ impl Feed {
         });
         let feed = Self { inner };
         tokio::spawn(run_coalescer(feed.clone()));
-        let started_at = Utc::now();
-        feed.replace_demo(demo::agents(0, started_at)).await;
+        let start_step =
+            parse_demo_start_step(std::env::var("HERDR_MISE_DEMO_START_STEP").ok().as_deref());
+        let started_at = Utc::now() - chrono::Duration::seconds(start_step as i64);
+        feed.replace_demo(demo::agents(start_step, started_at))
+            .await;
         tokio::spawn(run_startup_recovery(
             feed.clone(),
             path,
             probe_timeout,
             shutdown,
             started_at,
+            start_step + 1,
         ));
         feed
     }
@@ -268,15 +272,22 @@ impl Feed {
 const RETRY_INITIAL: Duration = Duration::from_millis(250);
 const RETRY_MAX: Duration = Duration::from_secs(4);
 
+fn parse_demo_start_step(value: Option<&str>) -> u64 {
+    value
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0)
+        .min(86_400)
+}
+
 async fn run_startup_recovery(
     feed: Feed,
     path: PathBuf,
     probe_timeout: Duration,
     shutdown: CancellationToken,
     started_at: chrono::DateTime<Utc>,
+    mut step: u64,
 ) {
     let mut normalizer = Normalizer::default();
-    let mut step = 1;
     let mut backoff = RETRY_INITIAL;
     let mut demo_tick = tokio::time::interval(Duration::from_secs(1));
     demo_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -424,6 +435,14 @@ mod tests {
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
         net::UnixListener,
     };
+
+    #[test]
+    fn demo_start_step_is_bounded_and_defaults_to_zero() {
+        assert_eq!(parse_demo_start_step(None), 0);
+        assert_eq!(parse_demo_start_step(Some("290")), 290);
+        assert_eq!(parse_demo_start_step(Some("invalid")), 0);
+        assert_eq!(parse_demo_start_step(Some("999999")), 86_400);
+    }
 
     fn record(progress: f64) -> AgentRecord {
         AgentRecord {
