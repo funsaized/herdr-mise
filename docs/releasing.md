@@ -18,11 +18,10 @@ candidate commit, notes, and acceptance record are complete. Published tags
 are immutable: never move, force-update, delete-and-reuse, or otherwise reuse a
 release tag.
 
-The first stable release, `v0.1.0`, is complete. Its RC1 acceptance contract is
-retained as a historical, test-consumed record in `stable-acceptance.md`; it
-must not be reused for another stable release. A future stable release needs a
-new accepted RC, evidence contract, and validator inputs before its tag is
-created.
+The `v0.1.0` stable release is complete; its acceptance contract is retained
+as history in git and in `docs/releases/v0.1.0.md`. The checked-in acceptance
+contract now describes the `v0.2.0` promotion. It must not be reused for another stable release. A future stable release needs a new accepted RC, evidence
+contract, and validator inputs before its tag is created.
 
 Both release classes retain the same three platform archives and three SHA-256
 sidecars, signing/notarization checks, exact-six-asset checks, rerun validation,
@@ -32,9 +31,9 @@ the public Latest release.
 
 ## Stable acceptance gate
 
-The checked-in acceptance schema, template, and evidence describe v0.1.0 only.
+The checked-in acceptance schema, template, and evidence describe v0.2.0 only.
 Before another stable tag is created, replace those inputs with a contract bound
-to the new accepted RC and promotion commit. Reusing the v0.1.0 RC1 evidence is
+to the new accepted RC and promotion commit. Reusing the v0.2.0 RC1 evidence is
 not valid acceptance for a later release.
 
 Stable publication fails closed before release creation or upload. The
@@ -46,21 +45,21 @@ malformed, incomplete, failing, or context-mismatched evidence blocks the job.
 The validator must also emit its exact success marker; exit code zero alone is
 not accepted. RC release workflows do not read this secret.
 
-The checked-in acceptance validator owns the historical v0.1.0 gate list and
+The checked-in acceptance validator owns the current v0.2.0 gate list and
 JSON Schema. Its evidence has two deliberately separate identities:
 
-- `accepted_rc` identifies public prerelease `v0.1.0-rc.1`, its immutable tag
+- `accepted_rc` identifies public prerelease `v0.2.0-rc.1`, its immutable tag
   commit, and the public archive URLs and SHA-256 values actually exercised.
   Every required acceptance row repeats that RC identity and references one or
-  more of those exact artifacts. Public-artifact, manual, and multi-day soak
+  more of those exact artifacts. Public-artifact and manual
   results therefore describe the public RC they really tested.
-- `promotion` identifies the v0.1.0 stable tag, Cargo version, and exact
+- `promotion` identifies the v0.2.0 stable tag, Cargo version, and exact
   accepted `main` commit. The stable workflow passed its tag/version/commit to
   the validator and required an exact match before publication.
 
 Stable workflow asset bytes and checksums are not acceptance inputs. In
 particular, the gate never asks an unpublished stable run to prove a public
-download or completed soak, and timestamped macOS signatures cannot invalidate
+download, and timestamped macOS signatures cannot invalidate
 already-honest RC acceptance evidence.
 
 Keep working evidence outside version control (the root local path
@@ -68,7 +67,7 @@ Keep working evidence outside version control (the root local path
 generic tester identities and sanitized references. It must not contain real
 agent names, workspace paths, private Herdr payloads, credentials, personal
 deployment identifiers, or unresolved placeholders. Never manufacture `PASS`
-for a manual or elapsed-time gate.
+for a manual gate.
 
 ### Recorded v0.1.0 RC-to-stable flow
 

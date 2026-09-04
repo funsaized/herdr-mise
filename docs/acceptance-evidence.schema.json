@@ -48,13 +48,13 @@
       "required": ["tag", "version", "commit", "artifacts"],
       "properties": {
         "tag": {
-          "const": "v0.1.0-rc.1"
+          "const": "v0.2.0-rc.1"
         },
         "version": {
-          "const": "0.1.0-rc.1"
+          "const": "0.2.0-rc.1"
         },
         "commit": {
-          "const": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b"
+          "const": "85440d6577ab12a8c087c1c0919d896503164dc3"
         },
         "artifacts": {
           "type": "array",
@@ -83,23 +83,23 @@
         },
         "archive": {
           "type": "string",
-          "pattern": "^herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+          "pattern": "^herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
         },
         "sha256": {
           "type": "string",
           "enum": [
-            "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c",
-            "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8",
-            "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf"
+            "e4cf8c06845a8fe764042b38816004aa4e23e5abed209f2245ea3b00ec2b9b57",
+            "bad9caf8073a9bfc2a580d537a22de7968a8a6e37f29f711470bf61db121faf8",
+            "bbcb6ab7cf31216313b42692cbb9a3025cdf35e692787e2340ea13b22e116229"
           ]
         },
         "archive_url": {
           "type": "string",
-          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.1\\.0-rc\\.1/herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.2\\.0-rc\\.1/herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
         },
         "checksum_url": {
           "type": "string",
-          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.1\\.0-rc\\.1/herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz\\.sha256$"
+          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.2\\.0-rc\\.1/herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz\\.sha256$"
         }
       }
     },
@@ -114,7 +114,7 @@
         },
         "archive": {
           "type": "string",
-          "pattern": "^herdr-mise-v0\\.1\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+          "pattern": "^herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
         },
         "sha256": {
           "type": "string",
@@ -128,13 +128,13 @@
       "required": ["tag", "version", "commit", "artifacts"],
       "properties": {
         "tag": {
-          "const": "v0.1.0-rc.1"
+          "const": "v0.2.0-rc.1"
         },
         "version": {
-          "const": "0.1.0-rc.1"
+          "const": "0.2.0-rc.1"
         },
         "commit": {
-          "const": "ea74ac5f95afb1052eb41d87c14c4f28d03d932b"
+          "const": "85440d6577ab12a8c087c1c0919d896503164dc3"
         },
         "artifacts": {
           "type": "array",
@@ -182,12 +182,11 @@
             "runtime-reduced-motion",
             "blocked-recognition-two-meters",
             "upgrade",
-            "uninstall",
-            "multi-day-soak"
+            "uninstall"
           ]
         },
         "category": {
-          "enum": ["automated", "manual", "soak"]
+          "enum": ["automated", "manual"]
         },
         "scope": {
           "enum": ["full-product", "scoped-subsystem"]

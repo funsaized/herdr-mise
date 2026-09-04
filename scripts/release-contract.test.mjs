@@ -30,7 +30,7 @@ const stableAcceptanceTemplate = JSON.parse(
   readFileSync("docs/stable-acceptance.template.json", "utf8"),
 );
 
-test("first stable release contract handles upgrade truthfully", () => {
+test("stable release contract handles the public upgrade truthfully", () => {
   assert.match(releasing, /must not be reused for another stable release/);
   assert.match(releasing, /narrow self-reference exception/);
   assert.match(releasing, /RC release deletion, RC\s+remote-tag deletion/);
@@ -38,36 +38,36 @@ test("first stable release contract handles upgrade truthfully", () => {
   assert.match(releasing, /git tag -a "\$TAG"/);
   assert.match(releasing, /There is no stapling target/);
 
-  assert.match(stableAcceptance, /no valid prior public version/);
-  assert.match(stableAcceptance, /verifier-owned prior fixture/);
-  assert.match(stableAcceptance, /isolated install root/);
-  assert.match(stableAcceptance, /production public-artifact verifier/);
-  assert.match(
-    stableAcceptance,
-    /does not prove an upgrade from a prior public release/,
-  );
-  assert.match(stableAcceptance, /no temporary selector/);
-  assert.match(
-    stableAcceptance,
-    /ACCEPTANCE_ALLOW_FILE_URLS=1 ACCEPTANCE_SKIP_SMOKE=1/,
-  );
-  assert.match(stableAcceptance, /tar -C "\$fixture_stage" -czf/);
+  assert.match(stableAcceptance, /valid prior public version/);
+  assert.match(stableAcceptance, /real installer\s+upgrade/);
+  assert.match(stableAcceptance, /isolated install\s+root/);
+  assert.match(stableAcceptance, /production public-artifact\s+verifier/);
+  assert.match(stableAcceptance, /not\s+a synthetic first-release fixture/);
+  assert.match(stableAcceptance, /no\s+temporary selector/);
   assert.match(stableAcceptance, /```sh\nset -e\n/);
   assert.match(
     stableAcceptance,
-    /https:\/\/github\.com\/funsaized\/herdr-mise\/releases\/download\/v0\.1\.0-rc\.1/,
+    /https:\/\/github\.com\/funsaized\/herdr-mise\/releases\/download\/v0\.2\.0-rc\.1/,
+  );
+  assert.match(
+    stableAcceptance,
+    /https:\/\/github\.com\/funsaized\/herdr-mise\/releases\/download\/v0\.1\.0/,
   );
   assert.match(stableAcceptance, /INSTALL_ROOT\/herdr-mise\/current\.next/);
   assert.match(
     stableAcceptance,
-    /aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c/,
+    /e4cf8c06845a8fe764042b38816004aa4e23e5abed209f2245ea3b00ec2b9b57/,
+  );
+  assert.match(
+    stableAcceptance,
+    /test -x "\$install_root\/herdr-mise\/0\.1\.0\/bin\/herdr-mise"/,
   );
   assert.match(stableAcceptance, /current\/bin\/herdr-mise" --tui/);
   assert.match(stableAcceptance, /confirm the first render,\s+then press `q`/i);
   assert.doesNotMatch(stableAcceptance, /current\/bin\/herdr-mise" --version/);
   assert.match(
     stableAcceptance,
-    /VoiceOver speech\/focus listening is deferred[\s\S]*not recorded as `PASS`/,
+    /VoiceOver speech\/focus listening remains outside[\s\S]*not recorded as `PASS`/,
   );
   assert.equal(
     stableAcceptanceTemplate.gates.some(
@@ -81,7 +81,7 @@ test("first stable release contract handles upgrade truthfully", () => {
     ({ gate_id }) => gate_id === "upgrade",
   );
   assert.ok(upgrade, "the schema-compatible upgrade gate ID must be retained");
-  assert.match(upgrade.command_or_action, /verifier-owned prior fixture/);
+  assert.match(upgrade.command_or_action, /public v0\.1\.0-to-RC upgrade/);
   assert.match(upgrade.command_or_action, /isolated install root/);
   assert.match(
     upgrade.command_or_action,
@@ -90,7 +90,7 @@ test("first stable release contract handles upgrade truthfully", () => {
   assert.match(upgrade.command_or_action, /exact RC checksum and path/);
   assert.match(
     upgrade.command_or_action,
-    /fixture remains available for rollback/,
+    /prior public v0\.1\.0 release remains available for rollback/,
   );
   assert.match(
     upgrade.command_or_action,

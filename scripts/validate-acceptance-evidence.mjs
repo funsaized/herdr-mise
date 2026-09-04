@@ -24,7 +24,6 @@ export const REQUIRED_GATES = Object.freeze({
   "blocked-recognition-two-meters": "manual",
   upgrade: "manual",
   uninstall: "manual",
-  "multi-day-soak": "soak",
 });
 
 const rcFields = ["tag", "version", "commit", "artifacts"];
@@ -37,19 +36,19 @@ const publicArtifactFields = [
   "checksum_url",
 ];
 const artifactReferenceFields = ["target", "archive", "sha256"];
-const acceptedRcCommit = "ea74ac5f95afb1052eb41d87c14c4f28d03d932b";
+const acceptedRcCommit = "85440d6577ab12a8c087c1c0919d896503164dc3";
 const supportedArtifacts = new Map([
   [
     "aarch64-apple-darwin",
-    "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c",
+    "e4cf8c06845a8fe764042b38816004aa4e23e5abed209f2245ea3b00ec2b9b57",
   ],
   [
     "x86_64-apple-darwin",
-    "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8",
+    "bad9caf8073a9bfc2a580d537a22de7968a8a6e37f29f711470bf61db121faf8",
   ],
   [
     "x86_64-unknown-linux-gnu",
-    "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf",
+    "bbcb6ab7cf31216313b42692cbb9a3025cdf35e692787e2340ea13b22e116229",
   ],
 ]);
 const rowFields = [
@@ -104,8 +103,8 @@ function validateAcceptedRc(rc, errors) {
     errors.push("accepted_rc has missing or unknown field(s)");
     return new Set();
   }
-  if (rc.tag !== "v0.1.0-rc.1" || !rcTag(rc.tag))
-    errors.push("accepted_rc tag must be public v0.1.0-rc.1");
+  if (rc.tag !== "v0.2.0-rc.1" || !rcTag(rc.tag))
+    errors.push("accepted_rc tag must be public v0.2.0-rc.1");
   if (rc.version !== rc.tag?.slice(1))
     errors.push("accepted_rc version must match tag");
   if (!commit(rc.commit))
@@ -113,7 +112,7 @@ function validateAcceptedRc(rc, errors) {
       "accepted_rc commit must be 40 lowercase hexadecimal characters",
     );
   else if (rc.commit !== acceptedRcCommit)
-    errors.push("accepted_rc commit does not match public v0.1.0-rc.1");
+    errors.push("accepted_rc commit does not match public v0.2.0-rc.1");
   if (!Array.isArray(rc.artifacts) || rc.artifacts.length !== 3) {
     errors.push("accepted_rc must contain exactly the three supported targets");
     return new Set();
@@ -198,7 +197,7 @@ export function validateEvidence(document, expectedPromotion) {
     }
     if (!(row.gate_id in REQUIRED_GATES))
       errors.push(`${label} has unknown gate_id`);
-    if (!["automated", "manual", "soak"].includes(row.category))
+    if (!["automated", "manual"].includes(row.category))
       errors.push(`${label} has invalid category`);
     if (!["full-product", "scoped-subsystem"].includes(row.scope))
       errors.push(`${label} has invalid scope`);

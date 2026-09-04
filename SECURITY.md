@@ -29,6 +29,6 @@ of scope here — report those upstream.
 
 ## Supported versions
 
-Only the newest stable release, currently `v0.1.0`, is supported. Prereleases
+Only the newest stable release, currently `v0.2.0`, is supported. Prereleases
 are evaluation builds and receive fixes only when explicitly identified as
 supported in their release notes.

@@ -8,26 +8,26 @@ import test from "node:test";
 import { isMainModule } from "./validate-acceptance-evidence.mjs";
 
 const promotion = {
-  tag: "v0.1.0",
-  version: "0.1.0",
+  tag: "v0.2.0",
+  version: "0.2.0",
   commit: "a".repeat(40),
 };
 const rcArtifacts = [
   [
     "aarch64-apple-darwin",
-    "aadf2ceaafbd93a10309d02c152b9fce5dc1f19fecd1f71ec757ea745e91b52c",
+    "e4cf8c06845a8fe764042b38816004aa4e23e5abed209f2245ea3b00ec2b9b57",
   ],
   [
     "x86_64-apple-darwin",
-    "4dcfb2f3768cb89d848ebf780bc5418c6c17bb731fc0aae9b4d13a386649dba8",
+    "bad9caf8073a9bfc2a580d537a22de7968a8a6e37f29f711470bf61db121faf8",
   ],
   [
     "x86_64-unknown-linux-gnu",
-    "057a1302c082e552955e13da93d470fb71e9a11612a77f114bd0aabc003ed2bf",
+    "bbcb6ab7cf31216313b42692cbb9a3025cdf35e692787e2340ea13b22e116229",
   ],
 ].map(([target, sha256]) => {
-  const archive = `herdr-mise-v0.1.0-rc.1-${target}.tar.gz`;
-  const archive_url = `https://github.com/funsaized/herdr-mise/releases/download/v0.1.0-rc.1/${archive}`;
+  const archive = `herdr-mise-v0.2.0-rc.1-${target}.tar.gz`;
+  const archive_url = `https://github.com/funsaized/herdr-mise/releases/download/v0.2.0-rc.1/${archive}`;
   return {
     target,
     archive,
@@ -37,9 +37,9 @@ const rcArtifacts = [
   };
 });
 const acceptedRc = {
-  tag: "v0.1.0-rc.1",
-  version: "0.1.0-rc.1",
-  commit: "ea74ac5f95afb1052eb41d87c14c4f28d03d932b",
+  tag: "v0.2.0-rc.1",
+  version: "0.2.0-rc.1",
+  commit: "85440d6577ab12a8c087c1c0919d896503164dc3",
   artifacts: rcArtifacts,
 };
 const categories = {
@@ -63,7 +63,6 @@ const categories = {
   "blocked-recognition-two-meters": "manual",
   upgrade: "manual",
   uninstall: "manual",
-  "multi-day-soak": "soak",
 };
 
 const executedAgainst = () => ({
@@ -185,7 +184,7 @@ for (const [name, mutate, message] of [
   [
     "accepted RC commit mismatch",
     (d) => (d.accepted_rc.commit = "d".repeat(40)),
-    "accepted_rc commit does not match public v0.1.0-rc.1",
+    "accepted_rc commit does not match public v0.2.0-rc.1",
   ],
   [
     "published checksum mismatch",
@@ -314,8 +313,8 @@ test("schema gate enum and template stay aligned with validator policy", () => {
     template.gates.map((row) => row.gate_id).sort(),
     Object.keys(categories).sort(),
   );
-  assert.equal(template.accepted_rc.tag, "v0.1.0-rc.1");
-  assert.equal(template.accepted_rc.version, "0.1.0-rc.1");
+  assert.equal(template.accepted_rc.tag, "v0.2.0-rc.1");
+  assert.equal(template.accepted_rc.version, "0.2.0-rc.1");
   assert.equal(
     schema.$defs.acceptedRc.properties.commit.const,
     acceptedRc.commit,
@@ -330,7 +329,7 @@ test("schema gate enum and template stay aligned with validator policy", () => {
   );
   assert.ok(template.gates.every((row) => row.result === "NOT_RUN"));
   assert.ok(
-    template.gates.every((row) => row.executed_against.tag === "v0.1.0-rc.1"),
+    template.gates.every((row) => row.executed_against.tag === "v0.2.0-rc.1"),
   );
   assertSchema(template, schema, schema);
 });

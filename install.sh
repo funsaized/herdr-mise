@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-HERDR_MISE_VERSION=0.2.0-rc.1
+HERDR_MISE_VERSION=0.2.0
 release_base=${HERDR_MISE_RELEASE_BASE_URL:-https://github.com/funsaized/herdr-mise/releases/download/v$HERDR_MISE_VERSION}
 mode=${1:-standalone}
 
