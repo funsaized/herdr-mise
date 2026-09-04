@@ -95,6 +95,10 @@ const policy = {
   ],
 };
 const policyBytes = Buffer.from(JSON.stringify(policy));
+const pinnedSwampVersion = readFileSync(".swamp.yaml", "utf8").match(
+  /^swampVersion:\s*(\S+)/m,
+)?.[1];
+assert.ok(pinnedSwampVersion);
 const request = {
   schemaVersion: 1,
   repository: "funsaized/herdr-mise",
@@ -164,7 +168,7 @@ function fixture() {
       commit,
       policySha256: sha256(policyBytes),
       workflowSha256: sha256(readFileSync("package.json")),
-      swampVersion: "20260827.184833.0-sha.test",
+      swampVersion: `${pinnedSwampVersion}-sha.test`,
     },
     producer: {
       kind: "github-actions",
