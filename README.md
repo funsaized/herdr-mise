@@ -11,25 +11,30 @@ servers. It is a window, not an office.
 ![Seven AI cooks under dinner lighting move through idle, working, blocked, and plated stations, open and dismiss details, then visit two ended cooks in the freezer](docs/assets/herdr-mise-demo.gif)
 
 The GIF and screens below are repeatable captures from the isolated visual
-playground's deterministic feed; see [Visual playground](docs/operations.md#visual-playground).
+playground's deterministic feed. Re-record the GIF with `npm run capture:web`;
+see
+[Visual playground](docs/operations.md#visual-playground).
 
 | Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
 
-The same binary also runs as a Herdr pane. The pane below is the real release
-binary launched with `--tui` and captured in a real terminal. With no Herdr
-session available, it renders the truthful `MISE — DEMO SERVICE` shell:
+The same binary also runs as a terminal TUI. This recording uses its clearly
+labeled deterministic demo mode and visits both the kitchen and
+`WALK-IN FREEZER`.
 
-![The release binary running as a Herdr pane under the truthful DEMO SERVICE fallback](docs/assets/herdr-mise-tui-demo.gif)
+![The herdr-mise terminal demo moving from the kitchen to the walk-in freezer](docs/assets/herdr-mise-tui-demo.gif)
+
+Mise remains a localhost-only, read-only projection. The browser playground,
+terminal recording, and static fallbacks remain explicitly labeled
+`DEMO SERVICE`; they do not claim live state.
 
 | Live kitchen                                                                                           | Blocked at the pass                                                                                                                                         | Compact fallback                                                                                                                     |
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
 
-The live capture uses verifier workspace labels. The blocked and compact
-examples retain the persistent `MISE — DEMO SERVICE` treatment, so mock data is
-never presented as live state; see [capture sources](docs/tui-scene-parity.md#cross-references).
+Re-record the terminal demo with `npm run capture:tui`; see
+[capture sources](docs/tui-scene-parity.md#cross-references).
 
 ## Quick start
 

@@ -3,13 +3,13 @@
 #
 # Why this script exists:
 #   The README shows three static TUI states (live, blocked, compact) alongside
-#   the demo GIF. The GIF has `scripts/capture-tui-demo.sh`; the static PNGs
+#   the demo GIF. The GIF has `scripts/capture-demo.sh tui`; the static PNGs
 #   have no committed capture method. The pre-refinement PNGs were added by
 #   14783852 ("docs: show TUI UX states in README") without a capture script
 #   and the refined TUI changes (656-style banner, dual-line red border, neutral
 #   outer frame, "MISE — DEMO SERVICE" labelling) made those PNGs stale.
 #
-# Fail-closed contract (same shape as capture-tui-demo.sh):
+# Fail-closed contract:
 #   1. Requires `vhs`, `ffmpeg`, `sips`, `identify`, and a built
 #      `./target/release/herdr-mise` on disk. The script builds the release
 #      binary if missing, but never substitutes a debug binary, a mock, or

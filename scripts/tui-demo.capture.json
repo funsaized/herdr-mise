@@ -1,0 +1,23 @@
+{
+  "automated": true,
+  "captured_at": "2026-09-04T11:30:51.779837+00:00",
+  "mode": "tui-demo",
+  "output": {
+    "bytes": 649226,
+    "duration_seconds": 15.34,
+    "fps": 15,
+    "frames": 230,
+    "height": 618,
+    "media_budget_bytes": 1572864,
+    "path": "docs/assets/herdr-mise-tui-demo.gif",
+    "poster": "docs/assets/herdr-mise-tui-demo-poster.png",
+    "poster_sha256": "a5947f9a84a42e4f1d4c309f41deb40b14b26d06565a26db456e641971aabd94",
+    "scheduled_views": ["kitchen", "freezer"],
+    "sha256": "106c140ea00dadafcd0dda840364b5a81f23ba55eda2f3c9fc3250cd4fe6e4d2",
+    "total_media_bytes": 727832,
+    "width": 1100
+  },
+  "release_binary_sha256": "a08324b7d24c349e299df7498ec2d07e5ed47aa116a4361ed1c96d5560a631d5",
+  "schema": "demo-capture-v1",
+  "source_sha256": "063f0074a798b46c2c08567dd7a686007a2a6625ce2c51207ba78b4df2c4236b"
+}
