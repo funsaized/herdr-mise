@@ -1,27 +1,26 @@
 # herdr-mise
 
 A localhost visualizer that renders AI coding agents as pixel-art line cooks in
-a single restaurant kitchen. Each cook maps to one agent. Their state, the
+a single restaurant kitchen. Agent state, the
 ticket rail, the pass, the 86 board, and the kitchen lights are a glanceable
 skin over a small, versioned JSON feed.
+
+> IT's RAW!
+
+_Gordon Ramsey_
 
 herdr-mise does not control agents, render their output, or aggregate remote
 servers. It is a window, not an office.
 
 ![Seven AI cooks under dinner lighting move through idle, working, blocked, and plated stations, open and dismiss details, then visit two ended cooks in the freezer](docs/assets/herdr-mise-demo.gif)
 
-The GIF and screens below are repeatable captures from the isolated visual
-playground's deterministic feed. Re-record the GIF with `npm run capture:web`;
-see
 [Visual playground](docs/operations.md#visual-playground).
 
 | Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
 
-The same binary also runs as a terminal TUI. This recording uses its clearly
-labeled deterministic demo mode and visits both the kitchen and
-`WALK-IN FREEZER`.
+The binary also runs as a TUI for terminal work. These terminal chefs are lower level, so they're relegated to primitive kitchen tools:
 
 ![The herdr-mise terminal demo moving from the kitchen to the walk-in freezer](docs/assets/herdr-mise-tui-demo.gif)
 
@@ -81,7 +80,7 @@ curl -fsSL -O "$URL/$BASE.tar.gz" -O "$URL/$BASE.tar.gz.sha256" \
 
 Open <http://127.0.0.1:8686>.
 
-### Recognize live vs. demo
+### live vs. demo
 
 - **Live:** the `DEMO SERVICE` placard is absent and the WebSocket payload
   carries `mode: "live"`.
@@ -92,7 +91,7 @@ Open <http://127.0.0.1:8686>.
 Troubleshooting: [Herdr socket unavailable](docs/operations.md#herdr-socket-unavailable),
 [Herdr protocol not supported](docs/operations.md#herdr-protocol-not-supported).
 
-### Tested Herdr compatibility
+### Herdr compatibility
 
 The adapter accepts the protocols in the verified matrix below. Other product
 versions on those protocols may work but are not part of the release matrix.
