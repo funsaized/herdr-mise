@@ -319,7 +319,7 @@ test(
         ["succeeded", "succeeded"],
       );
       assert.ok(
-        sameElapsed > crossElapsed,
+        sameElapsed > crossElapsed + 400,
         `same-model lock ${sameElapsed}ms; separate locks ${crossElapsed}ms`,
       );
       const modelA = expectOk(
@@ -332,9 +332,8 @@ test(
 
       const changed = structuredClone(definition.globalArguments);
       changed.stages[0].description = "unsafe-overwrite";
-      const duplicate = runRemote(
+      const duplicate = run(
         repo,
-        serve.server,
         [
           "model",
           "@swamp/software-factory",
