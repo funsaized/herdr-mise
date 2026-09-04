@@ -51,6 +51,7 @@
     "version": "2026.06.24.1",
     "pulledAt": "2026-08-29T19:40:12.242Z",
     "files": [
+      ".agents/skills/software-factory",
       ".swamp/bundles/a324fda6/software_factory.js",
       ".swamp/pulled-extensions/@swamp/software-factory/files/LICENSE.txt",
       ".swamp/pulled-extensions/@swamp/software-factory/files/README.md",
@@ -66,7 +67,6 @@
       ".swamp/pulled-extensions/@swamp/software-factory/models/_lib/summary.ts",
       ".swamp/pulled-extensions/@swamp/software-factory/models/software_factory.ts",
       ".swamp/pulled-extensions/@swamp/software-factory/reports/work_item_summary_report.ts",
-      ".swamp/pulled-extensions/skills/software-factory",
       ".swamp/report-bundles/637144ef/work_item_summary_report.js"
     ],
     "checksum": "29622d1cb0a3bffabf82f68b3d6cbe7e18efcac2c38458b7231e436eb91ab55f",

@@ -1,8 +1,8 @@
-type: "@swamp/software-factory"
+type: '@swamp/software-factory'
 typeVersion: 2026.06.24.1
-id: 0ad3b6ba-3337-4449-87b4-640e1b3eebfc
-name: the-nightshift
-version: 10
+id: 23616e37-b02b-485e-a273-ee8b5a371dd0
+name: nightshift-template
+version: 1
 tags: {}
 globalArguments:
     stages:
@@ -533,15 +533,4 @@ globalArguments:
           gates:
               - type: human-approval
                 config: { id: abort-confirmation }
-reports:
-    require:
-        - {
-              name: "@swamp/software-factory/work-item-summary",
-              methods: [summary],
-          }
-        - { name: "@mgreten/software-factory-flow-metrics", methods: [summary] }
-        - {
-              name: "@funsaized/nightshift-factory-analytics",
-              methods: [summary],
-          }
 methods: {}

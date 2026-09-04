@@ -13,25 +13,26 @@ inputs:
       uniqueItems: true
       items:
         type: string
-        pattern: '^[0-9]+$'
+        pattern: '^[1-9][0-9]*$'
         maxLength: 16
   required: [workItems]
 jobs:
   - name: build-ready-items
     description: Each child workflow owns one work item and workspace.
     steps:
-      - name: build-${{ self.workItem }}
+      - name: build-${{ self.entry.workItem }}
         forEach:
-          item: workItem
-          in: ${{ inputs.workItems }}
+          item: entry
+          in: '${{ inputs.workItems.map(w, {"workItem": w, "factory": w == "77" ? "the-nightshift" : "nightshift-run-" + w}) }}'
         concurrency: 2
         task:
           type: workflow
           workflowIdOrName: nightshift-build
           inputs:
-            workItem: ${{ self.workItem }}
-            plan: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan").attributes.payload }}
-            reviewFeedback: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-code-review").?attributes.?payload.?findings.orValue([]) }}
+            factory: ${{ self.entry.factory }}
+            workItem: ${{ self.entry.workItem }}
+            plan: ${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan").attributes.payload }}
+            reviewFeedback: ${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-code-review").?attributes.?payload.?findings.orValue([]) }}
         dependsOn: []
     dependsOn: []
-version: 2
+version: 4

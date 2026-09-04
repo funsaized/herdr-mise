@@ -316,9 +316,11 @@ payload='{"status":"succeeded|failed","runId":"…"}'`. The outcome must
 
 Nightshift workflows record successful result evidence themselves. After a
 failed Nightshift workflow, inspect `@swamp/workflow-summary`, then run
-`nightshift-record-failure` with the failed result's `id`, failed step, reason,
-and `failureKind=candidate|configuration|infrastructure`. This preserves the
-attempt and lets the factory distinguish code rework from an operational retry.
+`nightshift-record-failure` with `factory=<owning-factory>`, the failed result's
+`id`, failed step, reason, and
+`failureKind=candidate|configuration|infrastructure`. This preserves the attempt
+on the correct factory and lets it distinguish code rework from an operational
+retry.
 
 Do not raise stage `maxCycles` to recover a failed workflow. Record failure
 evidence first. Dispatch exhaustion is not a cycle-limit problem.
@@ -344,10 +346,12 @@ worktree) as `configuration`. Classify verification test failures as
 ## Nightshift resident mode
 
 For autonomous Nightshift operation, load
-[`nightshift-modes.md`](nightshift-modes.md) before selecting work. Refresh the
-factory-wide status, classify every run, and apply that reference's priority
-and checkout-exclusion rules. Before a fan-out, call `record_dispatch` once for
-each selected work item.
+[`nightshift-modes.md`](nightshift-modes.md) before selecting work. Take the
+fleet census (one `swamp data query` over the latest `state-*` records of every
+`@swamp/software-factory` instance), then refresh each selected work item's own
+`status --input workItem=<N>` and classify it fresh. Apply that reference's
+priority and checkout-exclusion rules. Before a fan-out, call `record_dispatch`
+once for each selected work item.
 
 After each execution, persist its products, refresh status, and take at most one
 unambiguous transition without a human gate. Leave human-wait and `parked`

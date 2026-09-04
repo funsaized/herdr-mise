@@ -6,15 +6,20 @@ tags:
   stage: cleanup
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      minLength: 1
+      pattern: '^[1-9][0-9]*$'
+      maxLength: 16
     subjectRoot:
       type: string
     evidenceName:
       type: string
       enum: [cleanup-run, abort-cleanup-run]
-  required: [workItem, subjectRoot, evidenceName]
+  required: [factory, workItem, subjectRoot, evidenceName]
 jobs:
   - name: cleanup
     description: Clean one registered worktree and persist the bounded result.
@@ -33,7 +38,7 @@ jobs:
         guard: ${{ inputs.subjectRoot != "" }}
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -49,7 +54,7 @@ jobs:
         guard: ${{ inputs.subjectRoot == "" }}
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -64,4 +69,4 @@ jobs:
                   reason: workspace was never created
         dependsOn: []
     dependsOn: []
-version: 3
+version: 4

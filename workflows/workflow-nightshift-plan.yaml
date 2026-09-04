@@ -6,9 +6,13 @@ tags:
   stage: plan
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      pattern: '^[0-9]+$'
+      pattern: '^[1-9][0-9]*$'
       maxLength: 16
     issueNumber:
       type: integer
@@ -25,7 +29,7 @@ inputs:
     humanFeedback:
       type: string
       default: ''
-  required: [workItem, issueNumber, reviewFeedback]
+  required: [factory, workItem, issueNumber, reviewFeedback]
 jobs:
   - name: plan
     description: Use GitHub issue data as authority and produce a scoped plan.
@@ -74,7 +78,7 @@ jobs:
       - name: record-factory-plan
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_artifact
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -96,14 +100,14 @@ jobs:
           inputs:
             issue_number: ${{ inputs.issueNumber }}
             publication_key: ${{ run.id }}
-            plan: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-plan").attributes.payload }}
+            plan: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-plan").attributes.payload }}
         dependsOn:
           - step: record-factory-plan
             condition: { type: succeeded }
       - name: record-planning-run
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -115,4 +119,4 @@ jobs:
           - step: publish-plan
             condition: { type: succeeded }
     dependsOn: []
-version: 5
+version: 6

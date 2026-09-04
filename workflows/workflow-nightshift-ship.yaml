@@ -6,9 +6,14 @@ tags:
   stage: ship
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      minLength: 1
+      pattern: '^[1-9][0-9]*$'
+      maxLength: 16
     commit:
       type: string
       pattern: '^[0-9a-f]{40}$'
@@ -21,7 +26,7 @@ inputs:
     prUrl:
       type: string
       minLength: 1
-  required: [workItem, commit, baseCommit, subjectRoot, prUrl]
+  required: [factory, workItem, commit, baseCommit, subjectRoot, prUrl]
 jobs:
   - name: ship
     description: Verify the exact commit before human merge review.
@@ -79,7 +84,7 @@ jobs:
       - name: record-shipping-run
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -93,4 +98,4 @@ jobs:
           - { step: verify-candidate, condition: { type: succeeded } }
           - { step: cleanup-ship-workspace, condition: { type: succeeded } }
     dependsOn: []
-version: 6
+version: 7

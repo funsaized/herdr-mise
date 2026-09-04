@@ -409,11 +409,13 @@ export function auditIntakeWorkflowContract(candidateWorkflows) {
   const allowedMethods = new Set([
     "nightshift-github.create_issue",
     "nightshift-issues.start",
-    "the-nightshift.start",
   ]);
   const allowedWorkflows = new Set(["nightshift-intake"]);
 
   for (const [name, source] of Object.entries(candidateWorkflows)) {
+    if (/skipChecks|skip-check/u.test(source)) {
+      errors.push(`${name}: intake must not skip factory checks`);
+    }
     const taskBlocks = [
       ...source.matchAll(
         /^[ \t]+task:[ \t]*\n([\s\S]*?)(?=^[ \t]+dependsOn:)/gm,
@@ -434,7 +436,31 @@ export function auditIntakeWorkflowContract(candidateWorkflows) {
       }
       if (type === "model_method") {
         const model = task.match(/^[ \t]+modelIdOrName:[ \t]*([^\s]+)/m)?.[1];
+        const modelType = task
+          .match(/^[ \t]+modelType:[ \t]*(.+)$/m)?.[1]
+          ?.trim();
+        const modelName = task
+          .match(/^[ \t]+modelName:[ \t]*(.+)$/m)?.[1]
+          ?.trim();
         const method = task.match(/^[ \t]+methodName:[ \t]*([^\s]+)/m)?.[1];
+        if (modelType || modelName) {
+          const directFactoryStart =
+            modelType === "'@swamp/software-factory'" &&
+            modelName === '${{ "nightshift-run-" + inputs.workItem }}' &&
+            method === "start" &&
+            task.includes(
+              "stages: ${{ model.nightshift-template.definition.globalArguments.stages }}",
+            ) &&
+            task.includes(
+              "globalTransitions: ${{ model.nightshift-template.definition.globalArguments.globalTransitions }}",
+            );
+          if (!directFactoryStart) {
+            errors.push(
+              `${name}: ${modelType}.${modelName}.${method} is not an allowlisted direct factory start`,
+            );
+          }
+          continue;
+        }
         const operation = `${model}.${method}`;
         if (!model || !method || !allowedMethods.has(operation)) {
           errors.push(`${name}: ${operation} is not metadata-only`);
@@ -530,6 +556,18 @@ test("repository workflows satisfy the supply-chain contract", () => {
 
 test("parallel intake workflows stay metadata-only", () => {
   assert.deepEqual(auditIntakeWorkflowContract(intakeWorkflows), []);
+  const intake = intakeWorkflows["workflow-nightshift-intake.yaml"];
+  assert.match(intake, /pattern: '\^\[1-9\]\[0-9\]\*\$'/u);
+  assert.match(intake, /modelType: '@swamp\/software-factory'/u);
+  assert.match(
+    intake,
+    /modelName: \$\{\{ "nightshift-run-" \+ inputs\.workItem \}\}/u,
+  );
+  assert.match(
+    intake,
+    /model\.nightshift-template\.definition\.globalArguments/u,
+  );
+  assert.match(intake, /require-single-factory-owner/u);
 });
 
 test("nightshift-ship requires the candidate PR to close the work item", () => {
@@ -606,6 +644,52 @@ test("parallel intake allowlist is independent of YAML field order", () => {
   assert.ok(
     auditIntakeWorkflowContract(unsafe).some((error) =>
       error.includes("prepare_workspace is not metadata-only"),
+    ),
+  );
+});
+
+test("runtime intake allowlists only the exact factory name expression", () => {
+  const unsafe = {
+    ...intakeWorkflows,
+    "workflow-nightshift-intake.yaml": intakeWorkflows[
+      "workflow-nightshift-intake.yaml"
+    ].replace(
+      'modelName: ${{ "nightshift-run-" + inputs.workItem }}',
+      "modelName: ${{ inputs.workItem }}",
+    ),
+  };
+  assert.ok(
+    auditIntakeWorkflowContract(unsafe).some((error) =>
+      error.includes("not an allowlisted direct factory start"),
+    ),
+  );
+});
+
+test("runtime intake pins the canonical lifecycle snapshot", () => {
+  const unsafe = {
+    ...intakeWorkflows,
+    "workflow-nightshift-intake.yaml": intakeWorkflows[
+      "workflow-nightshift-intake.yaml"
+    ].replace(
+      "model.nightshift-template.definition.globalArguments.stages",
+      "model.the-nightshift.definition.globalArguments.stages",
+    ),
+  };
+  assert.ok(
+    auditIntakeWorkflowContract(unsafe).some((error) =>
+      error.includes("not an allowlisted direct factory start"),
+    ),
+  );
+});
+
+test("runtime intake cannot skip factory checks", () => {
+  const unsafe = {
+    ...intakeWorkflows,
+    "workflow-nightshift-intake.yaml": `${intakeWorkflows["workflow-nightshift-intake.yaml"]}\n        skipChecks: true\n`,
+  };
+  assert.ok(
+    auditIntakeWorkflowContract(unsafe).some((error) =>
+      error.includes("must not skip factory checks"),
     ),
   );
 });

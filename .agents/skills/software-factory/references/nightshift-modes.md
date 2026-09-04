@@ -1,13 +1,58 @@
 # Nightshift driver modes
 
-Nightshift autonomy is a resident-driver policy over `the-nightshift`. The
-factory remains the only delivery state machine; existing workflows remain its
-execution units.
+Nightshift autonomy is a resident-driver policy over the discovered factory
+fleet. Each factory remains the delivery state machine for its work item;
+existing workflows remain its execution units.
 
 ## Work-item identity
 
-Accept only decimal GitHub issue numbers matching `^[0-9]+$`. Reject malformed
+Accept only decimal GitHub issue numbers matching `^[1-9][0-9]*$`. Reject malformed
 identities such as `#106` before calling a factory method or workflow.
+
+## Factory instances
+
+Each work item runs on its own factory instance, one model lock per item:
+
+- `nightshift-run-<N>` — the runtime factory for work item `<N>` only; it must
+  never read or write another work item.
+- `the-nightshift` — the retained legacy shared factory; only active work item
+  77 finishes here.
+- `nightshift-template` — the canonical lifecycle template; it never runs work
+  and owns no runtime records.
+
+Fan-out is the one place that resolves an item's factory. It maps each work item
+once to `{workItem, factory}` and passes that explicit `factory` to the child
+workflow and to failure recording:
+
+```text
+w == "77" ? "the-nightshift" : "nightshift-run-" + w
+```
+
+Item 77 stays routed to `the-nightshift` until it is terminal; every other item
+routes to its own runtime instance. Child workflows never derive the factory
+independently.
+
+## Fleet census
+
+Discover every run with one query across the latest `state-*` records of every
+`@swamp/software-factory` instance:
+
+```bash
+swamp data query 'modelType == "@swamp/software-factory" && name.startsWith("state-")' \
+  --select '{"modelName": modelName, "modelId": modelId, "workItem": attributes.workItem, "stageId": attributes.stageId, "status": attributes.status}' --json
+```
+
+This returns the active legacy record on `the-nightshift` and every runtime
+record on `^nightshift-run-[1-9][0-9]*$`. Before trusting any row, validate the
+`(modelName, modelId, workItem)` tuple: `nightshift-run-N` may own only
+`workItem=N`, and a work item must have exactly one owner. A duplicate or
+mismatched owner is a hard stop — never choose an owner heuristically.
+
+`state-*` is a census, not a schedule. It shows which items exist and their
+coarse `stageId`/`status`; it never carries gates, transitions, or pending
+approvals. Exclude terminal records from active dispatch and retain their
+history. Never use `status-_factory` (or any factory-wide overview) as the
+multi-instance scheduler source.
 
 ## Modes
 
@@ -25,10 +70,12 @@ identities such as `#106` before calling a factory method or workflow.
 
 ## Autonomous loop
 
-1. Run factory-wide `status`, then refresh the selected work item's `status`
-   before acting.
-2. Classify every run as `actionable`, `human-wait`, `parked`, `terminal`, or
-   `malformed`.
+1. Take the fleet census (one `swamp data query` over the latest `state-*`
+   records), validate each `(modelName, modelId, workItem)` tuple, and drop
+   terminal and malformed rows.
+2. Before dispatching any item, refresh that item's own status —
+   `swamp model method run <factory> status --input workItem=<N>` — and classify
+   it fresh from that packet.
 3. Retry configuration or infrastructure failures.
 4. Run pending plan or code reviews.
 5. Build ready independent work through `nightshift-build-fanout`, at most two.
@@ -43,11 +90,17 @@ identities such as `#106` before calling a factory method or workflow.
     no human gate.
 12. Repeat until stopped or no work is actionable.
 
-An actionable run has executable stage work or exactly one automatic
-transition. A human-wait run is blocked by a manual transition or human gate.
-A parked run is at the explicit `parked` stage. A terminal run is done or
-aborted. A malformed run has a noncanonical work-item identity and must only be
-reported.
+Classify each item from its fresh status packet, never from the census
+`stageId` or `status-_factory`:
+
+- `actionable` — executable stage work or exactly one automatic transition.
+- `gates` — a transition whose non-human gates are still unsatisfied; follow
+  their reasons.
+- `human-approval` — blocked only by a human gate; present it and wait.
+- `rework` — a satisfied rework transition back to planning or building.
+- `parked` — at the explicit `parked` stage awaiting a human exit.
+- `terminal` — `done` or `aborted`; excluded from dispatch, retained as history.
+- `malformed` — noncanonical work-item identity; report only, never dispatch.
 
 Prepared features may enter through `nightshift-create-intake`, and open GitHub
 issues without a matching factory state may enter through `nightshift-intake`.

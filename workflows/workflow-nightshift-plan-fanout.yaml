@@ -13,27 +13,28 @@ inputs:
       uniqueItems: true
       items:
         type: string
-        pattern: '^[0-9]+$'
+        pattern: '^[1-9][0-9]*$'
         maxLength: 16
   required: [workItems]
 jobs:
   - name: plan-queued-items
     description: Each child workflow owns one canonical GitHub issue number.
     steps:
-      - name: plan-${{ self.workItem }}
+      - name: plan-${{ self.entry.workItem }}
         forEach:
-          item: workItem
-          in: ${{ inputs.workItems }}
+          item: entry
+          in: '${{ inputs.workItems.map(w, {"workItem": w, "factory": w == "77" ? "the-nightshift" : "nightshift-run-" + w}) }}'
         concurrency: 1
         task:
           type: workflow
           workflowIdOrName: nightshift-plan
           inputs:
-            workItem: ${{ self.workItem }}
-            issueNumber: ${{ int(self.workItem) }}
-            reviewFeedback: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan-review").?attributes.?payload.?findings.orValue([]) }}
-            currentPlan: ${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan").?attributes.?payload.orValue({}) }}
-            humanFeedback: '${{ data.latest("the-nightshift", "artifact-" + self.workItem + "-plan-feedback").?attributes.?subjectVersion.orValue(0) == data.latest("the-nightshift", "artifact-" + self.workItem + "-plan").?version.orValue(-1) ? data.latest("the-nightshift", "artifact-" + self.workItem + "-plan-feedback").attributes.payload.feedback : "" }}'
+            factory: ${{ self.entry.factory }}
+            workItem: ${{ self.entry.workItem }}
+            issueNumber: ${{ int(self.entry.workItem) }}
+            reviewFeedback: ${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan-review").?attributes.?payload.?findings.orValue([]) }}
+            currentPlan: ${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan").?attributes.?payload.orValue({}) }}
+            humanFeedback: '${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan-feedback").?attributes.?subjectVersion.orValue(0) == data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan").?version.orValue(-1) ? data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan-feedback").attributes.payload.feedback : "" }}'
         dependsOn: []
     dependsOn: []
-version: 1
+version: 3

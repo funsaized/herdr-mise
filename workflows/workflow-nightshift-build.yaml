@@ -6,9 +6,13 @@ tags:
   stage: build
 inputs:
   properties:
+    factory:
+      type: string
+      pattern: '^[a-z0-9_-]+$'
+      maxLength: 64
     workItem:
       type: string
-      pattern: '^[0-9]+$'
+      pattern: '^[1-9][0-9]*$'
       maxLength: 16
     plan:
       type: object
@@ -18,7 +22,7 @@ inputs:
       items:
         type: object
         additionalProperties: true
-  required: [workItem, plan, reviewFeedback]
+  required: [factory, workItem, plan, reviewFeedback]
 jobs:
   - name: build
     description: Make the smallest tested change from the approved factory plan.
@@ -26,7 +30,7 @@ jobs:
       - name: require-building-stage
         task:
           type: assert
-          expr: data.latest("the-nightshift", "state-" + inputs.workItem).attributes.stageId == "building"
+          expr: data.latest(inputs.factory, "state-" + inputs.workItem).attributes.stageId == "building"
           message: The work item must be in the factory building stage.
           severity: high
         dependsOn: []
@@ -48,7 +52,7 @@ jobs:
       - name: record-workspace
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_artifact
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -86,7 +90,7 @@ jobs:
           inputs:
             opencodeAgent: build
             invocationId: ${{ "nightshift-" + inputs.workItem + "-build-" + run.id }}
-            cwd: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-workspace").attributes.payload.subjectRoot }}
+            cwd: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-workspace").attributes.payload.subjectRoot }}
             tags:
               factory: nightshift
               stage: build
@@ -112,7 +116,7 @@ jobs:
       - name: record-change-summary
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_artifact
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -121,8 +125,8 @@ jobs:
               summary: ${{ data.latest("nightshift-builder-" + inputs.workItem, "invocation-nightshift-" + inputs.workItem + "-build-" + run.id).attributes.parsedResponse.summary }}
               files: ${{ data.latest("nightshift-builder-" + inputs.workItem, "invocation-nightshift-" + inputs.workItem + "-build-" + run.id).attributes.parsedResponse.files }}
               tests: ${{ data.latest("nightshift-builder-" + inputs.workItem, "invocation-nightshift-" + inputs.workItem + "-build-" + run.id).attributes.parsedResponse.tests }}
-              branch: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-workspace").attributes.payload.branch }}
-              baseCommit: ${{ data.latest("the-nightshift", "artifact-" + inputs.workItem + "-workspace").attributes.payload.baseCommit }}
+              branch: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-workspace").attributes.payload.branch }}
+              baseCommit: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-workspace").attributes.payload.baseCommit }}
               invocationId: ${{ "nightshift-" + inputs.workItem + "-build-" + run.id }}
         dependsOn:
           - step: implement-plan
@@ -130,7 +134,7 @@ jobs:
       - name: record-build-run
         task:
           type: model_method
-          modelIdOrName: the-nightshift
+          modelIdOrName: ${{ inputs.factory }}
           methodName: record_evidence
           inputs:
             workItem: ${{ inputs.workItem }}
@@ -141,4 +145,4 @@ jobs:
         dependsOn:
           - { step: record-change-summary, condition: { type: succeeded } }
     dependsOn: []
-version: 6
+version: 7

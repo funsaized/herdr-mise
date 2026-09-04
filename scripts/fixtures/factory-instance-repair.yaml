@@ -1,0 +1,22 @@
+id: 7100af92-1999-403a-bbc8-84c3470cd018
+name: phase0-factory-instance-repair
+tags: {}
+inputs:
+  properties:
+    modelName: { type: string }
+  required: [modelName]
+jobs:
+  - name: main
+    steps:
+      - name: validate-repaired-snapshot
+        task:
+          type: model_method
+          modelType: '@swamp/software-factory'
+          modelName: ${{ inputs.modelName }}
+          methodName: validate
+          globalArgs:
+            stages: ${{ model.phase0-factory-template.definition.globalArguments.stages }}
+            globalTransitions: ${{ model.phase0-factory-template.definition.globalArguments.globalTransitions }}
+        dependsOn: []
+    dependsOn: []
+version: 1
