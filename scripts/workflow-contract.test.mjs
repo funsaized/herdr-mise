@@ -344,6 +344,9 @@ export function auditWorkflowContract(
   if (
     !managed.includes("runs-on: ubuntu-24.04") ||
     !/^    timeout-minutes: 60$/m.test(managedJobs.execute ?? "") ||
+    managed.includes(
+      "cache-dependency-path: |\n            ${{ runner.temp }}",
+    ) ||
     managed.includes("persist-credentials: true") ||
     /^    environment:/m.test(managedJobs.execute ?? "") ||
     /secrets\./.test(managedJobs.execute ?? "")

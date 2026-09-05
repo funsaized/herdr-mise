@@ -227,16 +227,6 @@ jobs:
           test "$(git -C "$control" rev-parse HEAD)" = "$CONTROL_SHA"
           test "$(git -C "$subject" rev-parse HEAD)" = "$HEAD_SHA"
           git -C "$subject" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
-      - name: Cache integrity-checked npm downloads only
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        env:
-          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-download-cache
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            ${{ runner.temp }}/subject/package-lock.json
-            ${{ runner.temp }}/subject/client/package-lock.json
       - name: Install pinned Swamp
         working-directory: ${{ runner.temp }}/control
         run: sh scripts/install-swamp-managed.sh
