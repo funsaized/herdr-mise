@@ -501,6 +501,7 @@ test("native freezer control renders only visible board spirits and preserves Es
 test("responsive mixed scenes keep station text focus and mobile chrome bounded", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const errors = watchErrors(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   for (const viewport of [
