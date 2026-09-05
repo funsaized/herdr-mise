@@ -64,6 +64,7 @@ fn record(index: usize, step: u64, started_at: DateTime<Utc>) -> AgentRecord {
         _ => None,
     };
     AgentRecord {
+        state_known: None,
         id: if index == 4 {
             format!("demo-{index}-session-{generation}")
         } else {
@@ -84,6 +85,7 @@ fn record(index: usize, step: u64, started_at: DateTime<Utc>) -> AgentRecord {
             .unwrap_or("/demo/overflow")
             .to_owned(),
         session: SessionStats {
+            tickets_available: Some(true),
             runtime_ms: observed_step * 1_000,
             tickets: observed_step / 60,
         },

@@ -303,7 +303,8 @@ reconnects in 1 s.
       |--- apply_live_coalesced(active_agents, ended_ids)
                 |
                 v
-          pending: HashMap<id, AgentRecord>
+          observed state/new agent --> immediate broadcast
+          metrics-only updates --> pending: HashMap<id, AgentRecord>
                 |
                 v
   run_coalescer (1.25 s) ----drain pending----> reconcile(active, authoritative=false)
@@ -311,18 +312,31 @@ reconnects in 1 s.
                 |                                       v
                 |                                 broadcast -> WS frame
                 v
-        (runs for the process lifetime; process exit reaps it)
+        (cancelled with the shared token; weak ownership for fixed feeds)
 ```
 
-`publish_high_frequency` is the production path for bursty
-publication. Anything that goes through it lands in `pending` and is
-drained by the 1.25 s coalescer task (`server/src/feed.rs`). This is
-stricter than the per-agent ≤ 4 Hz release ceiling, and the test
+`apply_live_coalesced` publishes observed state/timestamp changes and new agents
+immediately, while progress-like updates land in `pending` and are drained by
+the 1.25 s coalescer task (`server/src/feed.rs`). An urgent transition evicts any
+older pending metric record under the same lock. The test
 `twelve_record_chatty_source_stays_below_wire_budget` enforces
 the ≤ 5 KB/s wire rate with the heartbeat included.
 
-`ended_ids` is the one exception: it always publishes immediately so
-the final record of a session is never lost.
+`ended_ids` also publishes immediately so the final record of a session is
+never lost. Queued structural wakeups are drained before fetching one snapshot.
+Polling remains one-second reconciliation: transitions entirely between two
+upstream observations can still be missed. This is not a sub-250 ms
+upstream-to-pixel guarantee. `pane.agent_status_changed` remains outside the
+subscription contract until supported upstream subscription semantics are
+verified; the decoder recognizing a name is not sufficient evidence.
+
+Browser and TUI take a snapshot with a new broadcast cursor while holding the
+Feed state read lock. Both initial subscription and lag recovery use this
+boundary, preventing queued pre-snapshot deltas from regressing the projection.
+Upstream frames are capped at 4 MiB, rosters at 4096 records, and each downstream
+send at two seconds. A stalled connection is dropped rather than retaining its
+task indefinitely. See [observation semantics](../protocol/README.md) for
+unknown state, unavailable metrics, and bounded local history.
 
 ## Ended lifecycle
 

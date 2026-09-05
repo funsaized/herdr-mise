@@ -133,7 +133,11 @@ test("scheduled compatibility workflow is immutable, read-only, and non-publishi
   for (const { upstreamCommit } of manifest.supported)
     assert.ok(workflow.includes(`ref: ${upstreamCommit}`));
   assert.match(workflow, /npm run check:herdr-compatibility/);
-  assert.doesNotMatch(workflow, /secrets\.|release|publish|git push|git tag/i);
+  assert.doesNotMatch(
+    workflow,
+    /secrets\.|gh release (?:create|upload|edit|delete)|publish|git push|git tag/i,
+  );
+  assert.match(workflow, /swamp workflow run herdr-release-discovery/);
 });
 
 test("workflow audit rejects privileged triggers and additional permission declarations", () => {

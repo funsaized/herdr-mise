@@ -19,6 +19,7 @@ opinions; the docs below will save you time.
 ```sh
 npm ci
 npm ci --prefix client
+npm run doctor       # checks tool versions and installed-vs-locked dependencies
 npm run bundle        # builds the client and the release binary
 ```
 
@@ -27,6 +28,21 @@ Client-only iteration needs no Rust at all:
 ```sh
 npm run dev:visual    # isolated playground on http://localhost:8686
 ```
+
+Managed CI uses Node 22 and the Rust version in `rust-toolchain.toml`.
+`rustup` installs that named toolchain automatically; install its `rustfmt` and
+`clippy` components when provisioning offline. Use the exact Swamp version in
+`.swamp.yaml`; extension tests use Swamp's bundled Deno (or `DENO_EXEC_PATH`).
+`npm run doctor` reports actual versions and rejects direct dependency drift.
+Run both `npm ci` commands after lockfile changes, not just `npm install`.
+On sandboxed macOS, if Swamp reports `SecTrustSettingsCopyCertificates`, use
+`DENO_TLS_CA_STORE=mozilla swamp ...` (or run in a terminal with certificate
+access). This selects Mozilla trust roots; it does not disable TLS verification.
+
+For the cross-browser critical path, install Chromium, Firefox, and WebKit with
+`npm run verify:browser:install`, then run
+`HERDR_MISE_CROSS_BROWSER=1 npm run test:visual`. Browser automation is not a
+replacement for the recorded human screen-reader pass.
 
 ## Before you open a PR
 
@@ -68,6 +84,7 @@ complete locally runnable gates:
 | Client typecheck           | `npm run typecheck`               |
 | JavaScript/TypeScript lint | `npm run lint`                    |
 | Unit and contract tests    | `npm test`                        |
+| Extension tests            | `npm run test:extensions`         |
 | Token audit                | `npm run audit:tokens`            |
 | Architecture audit         | `npm run audit:architecture`      |
 | Accessibility audit        | `npm run audit:accessibility`     |

@@ -39,6 +39,7 @@ fn bind_conflict_becomes_one_tui_warning() {
 #[tokio::test]
 async fn fixed_feed_snapshot_applies_through_real_reducer() {
     let active = AgentRecord {
+        state_known: None,
         id: "fixed-a".into(),
         name: "Fixed A".into(),
         state: AgentState::Blocked,
@@ -48,6 +49,7 @@ async fn fixed_feed_snapshot_applies_through_real_reducer() {
         model: "codex".into(),
         workspace: "/work/fixed".into(),
         session: SessionStats {
+            tickets_available: None,
             runtime_ms: 60_000,
             tickets: 2,
         },

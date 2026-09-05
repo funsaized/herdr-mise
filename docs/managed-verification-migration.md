@@ -60,9 +60,28 @@ is recorded so the shorter observation period is not mistaken for an omission.
 
 The path allowlist is authoritative in `verification/managed-policy.json` and
 enforced by the trusted resolver. Proposed changes to workflows, models,
-extensions, policies, validators, or contract tests are passive subject data
-until merged. They are verified with the trusted versions from `main` and must
-be dispatched by `@funsaized`.
+extensions and policies do not replace the trusted controller until merged.
+The npm commands and tests themselves execute from the proposed source so new
+behavior is exercised. Package scripts, lockfiles, test configurations, and
+audit/test scripts are therefore classified as trust-boundary changes and
+require dispatch by `@funsaized`. The allowlist names an invocation, not an
+immutable implementation of that command. Separate checkout directories are
+not an OS sandbox.
+
+The verification DAG runs independent root/client dependency installs on
+different model instances, then cheap checks before browser setup and Rust
+compilation. Prepared browser/bundle scripts reuse the production client build.
+Only npm download blobs are cached, keyed by the subject lockfiles and runner
+platform through setup-node; npm still checks lockfile integrity. Cached
+contents are untrusted, never evidence. No `node_modules`, compiled executables,
+or managed evidence is restored from a proposal-written cache.
+
+The required Rust result now explicitly includes Clippy. Extension tests execute
+the proposed `extensions/tests` with Swamp's Deno, type checking, no runtime
+network permission, and only git subprocess permission. GitHub retains browser
+failure traces/screenshots for seven days. This does not change the controller
+provenance: these new controls become authoritative only after owner-reviewed
+adoption on main and a fresh managed dispatch.
 
 The managed execution signal is conventional hosted-CI assurance. The retained
 attestation adds structured audit detail and tamper detection but is not an

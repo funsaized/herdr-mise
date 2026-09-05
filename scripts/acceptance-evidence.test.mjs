@@ -315,14 +315,19 @@ test("schema gate enum and template stay aligned with validator policy", () => {
   );
   assert.equal(template.accepted_rc.tag, "v0.2.0-rc.1");
   assert.equal(template.accepted_rc.version, "0.2.0-rc.1");
-  assert.equal(
-    schema.$defs.acceptedRc.properties.commit.const,
-    acceptedRc.commit,
+  const contract = JSON.parse(
+    readFileSync("acceptance/releases/v0.2.0.json", "utf8"),
   );
-  assert.equal(
-    schema.$defs.executedAgainst.properties.commit.const,
+  assert.equal(contract.acceptedRcCommit, acceptedRc.commit);
+  assert.match(
     acceptedRc.commit,
+    new RegExp(schema.$defs.acceptedRc.properties.commit.pattern),
   );
+  assert.match(
+    acceptedRc.commit,
+    new RegExp(schema.$defs.executedAgainst.properties.commit.pattern),
+  );
+  assert.equal(schema.$defs.acceptedRc.properties.commit.const, undefined);
   assert.deepEqual(
     template.accepted_rc.artifacts.map((artifact) => artifact.target).sort(),
     rcArtifacts.map((artifact) => artifact.target).sort(),

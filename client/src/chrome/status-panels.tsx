@@ -29,6 +29,12 @@ export function ModeTreatment({
     sourceStatus === "unsupportedProtocol" && sourceDiagnostic
       ? ` — observed ${sourceDiagnostic.observedProtocol}; supported: ${sourceDiagnostic.supportedProtocols.join(", ")}; ${sourceDiagnostic.nextAction}`
       : "";
+  if (mode === "connecting")
+    return (
+      <div className="emptyPill" role="status">
+        Connecting to Mise — waiting for agent state
+      </div>
+    );
   if (mode === "empty")
     return (
       <div className="emptyPill" role="status">
@@ -52,14 +58,14 @@ export function ModeTreatment({
       <div className="disconnectScrim">
         <div className="disconnectCard" role="alert">
           <h2>GAS LEAK — SERVICE SUSPENDED</h2>
-          <strong>Lost connection to herdr</strong>
+          <strong>Lost connection to Mise</strong>
           <p>
             <i />
             Retrying — last update {lastUpdateSeconds}s ago
           </p>
           <small>
-            The kitchen will reopen on its own. If herdr isn't running, start it
-            and mise will reconnect.
+            The kitchen will reopen on its own. Check that Mise is running; Mise
+            will reconnect to Herdr when its local source is available.
           </small>
         </div>
       </div>

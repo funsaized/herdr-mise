@@ -50,7 +50,7 @@ impl Feed {
             health,
         });
         let feed = Self { inner };
-        tokio::spawn(run_coalescer(feed.clone()));
+        tokio::spawn(run_coalescer(Arc::downgrade(&feed.inner), shutdown.clone()));
         let start_step =
             parse_demo_start_step(std::env::var("HERDR_MISE_DEMO_START_STEP").ok().as_deref());
         let started_at = Utc::now() - chrono::Duration::seconds(start_step as i64);
@@ -88,7 +88,10 @@ impl Feed {
             }),
         };
         feed.replace(agents).await;
-        tokio::spawn(run_coalescer(feed.clone()));
+        tokio::spawn(run_coalescer(
+            Arc::downgrade(&feed.inner),
+            CancellationToken::new(),
+        ));
         feed
     }
     pub fn subscribe(&self) -> broadcast::Receiver<AgentStateEvent> {
@@ -99,6 +102,16 @@ impl Feed {
     }
     pub async fn snapshot(&self) -> AgentStateEvent {
         let state = self.inner.state.read().await;
+        Self::snapshot_state(&state)
+    }
+    /// The cursor and snapshot share a read lock: no queued event predates it.
+    pub async fn subscribe_snapshot(
+        &self,
+    ) -> (broadcast::Receiver<AgentStateEvent>, AgentStateEvent) {
+        let state = self.inner.state.read().await;
+        (self.subscribe(), Self::snapshot_state(&state))
+    }
+    fn snapshot_state(state: &FeedState) -> AgentStateEvent {
         let mut agents = state.agents.values().cloned().collect::<Vec<_>>();
         agents.sort_by(|a, b| a.id.cmp(&b.id));
         AgentStateEvent::Snapshot {
@@ -180,8 +193,24 @@ impl Feed {
     async fn apply_live_coalesced(&self, agents: Vec<AgentRecord>, ended_ids: Vec<String>) {
         {
             let mut pending = self.inner.pending.lock().await;
+            let mut state = self.inner.state.write().await;
             for agent in agents {
-                pending.insert(agent.id.clone(), agent);
+                let transition = state.agents.get(&agent.id).is_none_or(|prior| {
+                    prior.state != agent.state || prior.state_entered_at != agent.state_entered_at
+                });
+                if transition {
+                    pending.remove(&agent.id);
+                    state.agents.insert(agent.id.clone(), agent.clone());
+                    let _ = self.inner.changes.send(AgentStateEvent::Delta {
+                        version: PROTOCOL_VERSION,
+                        mode: state.mode.clone(),
+                        operation: DeltaOperation::Upsert,
+                        agent: Some(agent),
+                        agent_id: None,
+                    });
+                } else {
+                    pending.insert(agent.id.clone(), agent);
+                }
             }
         }
         self.end_ids(ended_ids).await;
@@ -323,19 +352,26 @@ async fn run_startup_recovery(
     }
 }
 
-async fn run_coalescer(feed: Feed) {
+async fn run_coalescer(inner: std::sync::Weak<Inner>, shutdown: CancellationToken) {
     // Progress-like sources are intentionally stricter than the four-Hz ceiling so a
     // full twelve-record roster remains beneath the steady wire budget.
     let mut interval = tokio::time::interval(Duration::from_millis(1_250));
     interval.tick().await;
     loop {
-        interval.tick().await;
-        let pending = {
-            let mut pending = feed.inner.pending.lock().await;
-            pending.drain().map(|(_, agent)| agent).collect::<Vec<_>>()
+        tokio::select! {
+            _ = shutdown.cancelled() => return,
+            _ = interval.tick() => {},
+        }
+        let Some(inner) = inner.upgrade() else {
+            return;
         };
-        if !pending.is_empty() {
-            feed.reconcile(pending, false).await;
+        let feed = Feed { inner };
+        let mut pending = feed.inner.pending.lock().await;
+        let records = pending.drain().map(|(_, agent)| agent).collect::<Vec<_>>();
+        if !records.is_empty() {
+            // Keep lock order pending -> state so an urgent transition cannot
+            // be overwritten by an already-drained progress update.
+            feed.reconcile(records, false).await;
         }
     }
 }
@@ -353,6 +389,7 @@ async fn run_live(
     let mut reconnecting = false;
     loop {
         tokio::select! { _=shutdown.cancelled()=>break, _=interval.tick()=>{}, event=wake_rx.recv()=>if event.is_none(){break} }
+        while wake_rx.try_recv().is_ok() {}
         let result = tokio::select! {
             _ = shutdown.cancelled() => return,
             result = adapter::fetch_snapshot(&path, Duration::from_secs(2)) => {
@@ -367,9 +404,8 @@ async fn run_live(
                         .await;
                     reconnecting = false;
                 } else {
-                    // Event wakes can burst; all production snapshot upserts therefore use
-                    // the same bounded coalescer exercised by the wire-rate tests. Ended
-                    // transitions remain immediate so their final record is never lost.
+                    // Preserve observed state transitions immediately; only
+                    // same-state metrics wait for the bounded coalescer.
                     feed.apply_live_coalesced(snapshot.agents, snapshot.ended_ids)
                         .await;
                 }
@@ -426,6 +462,52 @@ fn now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn observed_blocked_transitions_bypass_metric_coalescing() {
+        let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
+        let mut changes = feed.subscribe();
+        let mut blocked = record(0.2);
+        blocked.state = crate::protocol::AgentState::Blocked;
+        feed.apply_live_coalesced(vec![blocked.clone()], vec![])
+            .await;
+        assert!(
+            matches!(changes.try_recv().unwrap(), AgentStateEvent::Delta { agent: Some(agent), .. } if agent.state == crate::protocol::AgentState::Blocked)
+        );
+        feed.apply_live_coalesced(vec![record(0.3)], vec![]).await;
+        assert!(
+            matches!(changes.try_recv().unwrap(), AgentStateEvent::Delta { agent: Some(agent), .. } if agent.state == crate::protocol::AgentState::Working)
+        );
+    }
+    #[tokio::test]
+    async fn resnapshot_cursor_cannot_replay_old_queued_states() {
+        let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
+        let (mut cursor, _) = feed.subscribe_snapshot().await;
+        for index in 1..300 {
+            feed.publish(record(index as f64 / 300.0)).await;
+        }
+        assert!(matches!(
+            cursor.recv().await,
+            Err(broadcast::error::RecvError::Lagged(_))
+        ));
+        let (mut cursor, snapshot) = feed.subscribe_snapshot().await;
+        assert_eq!(snapshot, feed.snapshot().await);
+        assert!(matches!(
+            cursor.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+        feed.publish(record(1.0)).await;
+        assert!(
+            matches!(cursor.recv().await.unwrap(), AgentStateEvent::Delta { agent: Some(agent), .. } if agent.progress == Some(1.0))
+        );
+    }
+
+    #[tokio::test]
+    async fn fixed_feed_coalescer_does_not_own_the_feed_forever() {
+        let feed = Feed::fixed(AppMode::Live, vec![]).await;
+        let weak = Arc::downgrade(&feed.inner);
+        drop(feed);
+        assert!(weak.upgrade().is_none());
+    }
     use crate::{
         adapter::{decode_event, AdapterEvent},
         protocol::{AgentState, SessionStats},
@@ -446,6 +528,7 @@ mod tests {
 
     fn record(progress: f64) -> AgentRecord {
         AgentRecord {
+            state_known: None,
             id: "a".into(),
             name: "A".into(),
             state: AgentState::Working,
@@ -455,6 +538,7 @@ mod tests {
             model: "".into(),
             workspace: "".into(),
             session: SessionStats {
+                tickets_available: None,
                 runtime_ms: 0,
                 tickets: 0,
             },
@@ -506,7 +590,9 @@ mod tests {
         let path = directory.path().join("unsupported.sock");
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         const UNSUPPORTED: &[u8] = br#"{"version":"9.9.9","protocol":23,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}"#;
@@ -743,7 +829,9 @@ mod tests {
         let path = directory.path().join("feed.sock");
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         let server = serve_snapshots(listener);
@@ -803,7 +891,9 @@ mod tests {
         let path = directory.path().join("feed.sock");
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         let server = serve_snapshots(listener);
@@ -875,7 +965,9 @@ mod tests {
         let mut changes = feed.subscribe();
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         let server = serve_snapshots(listener);
@@ -911,7 +1003,9 @@ mod tests {
         let path = directory.path().join("malformed.sock");
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         let (attempt_tx, mut attempt_rx) = tokio::sync::mpsc::unbounded_channel();

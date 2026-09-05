@@ -137,7 +137,8 @@ function historyColor(state: StatePeriod["state"]) {
 }
 
 const availableText = (value: string) => value.trim() || "Unavailable";
-const availableTickets = (value: number) => (value > 0 ? value : "Unavailable");
+const availableTickets = (value: number, available?: boolean) =>
+  (available ?? value > 0) ? value : "Unavailable";
 
 export function DetailCard({
   agent,
@@ -152,7 +153,11 @@ export function DetailCard({
     <FocusedPanel label={`${agent.name} details`}>
       <PanelHeader
         name={agent.name}
-        label={stateLabels[agent.targetState]}
+        label={
+          agent.stateKnown === false
+            ? "UNKNOWN — AT PREP"
+            : stateLabels[agent.targetState]
+        }
         color={color}
         onClose={onClose}
       />
@@ -164,7 +169,10 @@ export function DetailCard({
           {duration(now - Date.parse(agent.stateEnteredAt))}
         </Fact>
         <Fact label="Tickets this session">
-          {availableTickets(agent.session.tickets)}
+          {availableTickets(
+            agent.session.tickets,
+            agent.session.ticketsAvailable,
+          )}
         </Fact>
       </div>
       <HistoryStrip history={agent.history} now={now} />
@@ -198,7 +206,9 @@ export function SessionSummary({
       />
       <div className="facts">
         <Fact label="Mise time">{duration(entry.runtimeMs)}</Fact>
-        <Fact label="Tickets served">{availableTickets(entry.tickets)}</Fact>
+        <Fact label="Tickets served">
+          {availableTickets(entry.tickets, entry.ticketsAvailable)}
+        </Fact>
         <Fact label="Ended at">
           {ended.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </Fact>

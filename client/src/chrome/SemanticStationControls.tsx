@@ -23,7 +23,11 @@ export function SemanticStationControls({
           onClick={(event) => onSelect(agent.id, event.currentTarget)}
         >
           {agent.name}
-          <span>{humanStateWords[agent.targetState]}</span>
+          <span>
+            {agent.stateKnown === false
+              ? "Unknown — at prep"
+              : humanStateWords[agent.targetState]}
+          </span>
         </button>
       ))}
     </nav>

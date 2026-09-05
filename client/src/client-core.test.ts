@@ -921,9 +921,9 @@ describe("websocket loss and resync", () => {
       clock,
     );
     client.start();
-    expect(store.snapshot().mode).toBe("empty");
+    expect(store.snapshot().mode).toBe("connecting");
     clock.advance(2_899);
-    expect(store.snapshot().mode).toBe("empty");
+    expect(store.snapshot().mode).toBe("connecting");
     clock.advance(1);
     expect(store.snapshot().mode).toBe("disconnected");
     clock.advance(1_000);

@@ -1,0 +1,20 @@
+id: d1452b44-d2aa-4078-812f-37d7e4c32894
+name: herdr-release-discovery
+tags: {}
+jobs:
+  - name: main
+    description: Discover published upstream releases without changing supported protocols.
+    steps:
+      - name: list-releases
+        task:
+          type: model_method
+          modelIdOrName: herdr-upstream
+          methodName: list_releases
+          inputs:
+            repo: herdrdev/herdr
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+    dependsOn: []
+    weight: 0
+version: 1

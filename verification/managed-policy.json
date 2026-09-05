@@ -62,7 +62,21 @@
     "scripts/nightshift-serve.sh",
     "intake/nightshift-features.json",
     "verification/**",
-    "workflows/**"
+    "workflows/**",
+    "package.json",
+    "package-lock.json",
+    "client/package.json",
+    "client/package-lock.json",
+    "client/vite.config.ts",
+    "client/tsconfig.json",
+    "client/tsconfig.app.json",
+    "client/tsconfig.node.json",
+    "e2e/**",
+    "scripts/**",
+    "extensions/reports/**",
+    "rust-toolchain.toml",
+    "acceptance/**",
+    "docs/acceptance-evidence.schema.json"
   ],
   "artifacts": ["client/dist", "target/release/herdr-mise"],
   "steps": [
@@ -144,7 +158,7 @@
       "modelId": "ec39c096-17c8-4326-982d-42953b22bde8",
       "modelType": "@funsaized/herdr-mise-rust",
       "method": "verify",
-      "checks": ["format", "check", "test"],
+      "checks": ["format", "check", "clippy", "test"],
       "outputs": ["result"]
     },
     {
@@ -181,6 +195,17 @@
       "outputs": ["invocation", "log"]
     },
     {
+      "name": "extension-tests",
+      "modelName": "verification-root",
+      "modelId": "e40b7444-cebe-4008-90a0-730a9e1137c0",
+      "modelType": "@funsaized/npm/project",
+      "method": "run_subject",
+      "operation": "run",
+      "projectDir": ".",
+      "argv": ["npm", "run", "test:extensions"],
+      "outputs": ["invocation", "log"]
+    },
+    {
       "name": "compatibility",
       "modelName": "verification-root",
       "modelId": "e40b7444-cebe-4008-90a0-730a9e1137c0",
@@ -199,7 +224,7 @@
       "method": "run_subject",
       "operation": "run",
       "projectDir": ".",
-      "argv": ["npm", "run", "test:visual"],
+      "argv": ["npm", "run", "test:visual:prepared"],
       "outputs": ["invocation", "log"]
     },
     {
@@ -243,7 +268,7 @@
       "method": "run_subject",
       "operation": "run",
       "projectDir": ".",
-      "argv": ["npm", "run", "bundle"],
+      "argv": ["npm", "run", "bundle:prepared"],
       "outputs": ["invocation", "log"]
     },
     {

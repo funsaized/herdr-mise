@@ -74,10 +74,28 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-12
         with:
+          toolchain: 1.97.1
           targets: ${{ matrix.target }}
       - run: npm ci --prefix client
       - run: npm run build
       - run: cargo build --release --locked --bin herdr-mise --target ${{ matrix.target }}
+      - name: Retain build environment identity
+        shell: bash
+        run: |
+          {
+            rustc --version --verbose
+            cargo --version
+            node --version
+            npm --version
+            uname -sm
+            if test "$RUNNER_OS" = Linux; then ldd --version | head -1; fi
+          } > "$RUNNER_TEMP/build-environment.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-environment-${{ matrix.target }}
+          path: ${{ runner.temp }}/build-environment.txt
+          retention-days: 30
+          if-no-files-found: error
       - name: Assert tag matches authoritative Cargo version
         if: startsWith(github.ref, 'refs/tags/')
         run: node scripts/release-policy.mjs classify-tag "$GITHUB_REF_NAME"
@@ -238,11 +256,26 @@ jobs:
             comm -23 existing-assets.txt expected-assets.txt >unexpected-assets.txt
             test ! -s unexpected-assets.txt
           else
-            gh release create "$GITHUB_REF_NAME" --verify-tag "${create_flags[@]}" --title "$GITHUB_REF_NAME"
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag "${create_flags[@]}" --title "$GITHUB_REF_NAME"
           fi
-          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          # Validate every existing byte before uploading anything. A rebuilt,
+          # timestamp-signed binary must never replace an accepted RC artifact.
+          existing="$RUNNER_TEMP/existing-release"
+          mkdir -p "$existing"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets[].name' >existing-assets.txt
+          while IFS= read -r asset; do
+            test -n "$asset" || continue
+            gh release download "$GITHUB_REF_NAME" --pattern "$asset" --dir "$existing"
+            cmp "dist/$asset" "$existing/$asset"
+          done <existing-assets.txt
+          for file in "${files[@]}"; do
+            if ! test -f "$existing/${file##*/}"; then
+              gh release upload "$GITHUB_REF_NAME" "$file"
+            fi
+          done
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets[].name' | sort >published-assets.txt
           diff -u expected-assets.txt published-assets.txt
+          gh release edit "$GITHUB_REF_NAME" --draft=false
 
   verify-public-release:
     # stable_acceptance is intentionally skipped for prereleases. Use an

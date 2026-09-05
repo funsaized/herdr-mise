@@ -1,4 +1,4 @@
-name: Herdr compatibility drift
+name: Herdr compatibility regression and discovery
 on:
   schedule:
     - cron: '17 9 * * 1'
@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   verify:
+    name: Immutable supported-matrix regression
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -35,3 +36,20 @@ jobs:
           npm run check:herdr-compatibility -- --upstream=0.7.5=upstream/herdr-075
           --upstream=0.8.0=upstream/herdr-080
           --upstream=0.8.2=upstream/herdr-082
+  discovery:
+    name: Read-only upstream candidate discovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh scripts/install-swamp-managed.sh
+      - run: swamp extension install
+      - run: swamp workflow validate herdr-release-discovery
+      - run: swamp workflow run herdr-release-discovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Summarize candidates without modifying support
+        if: always()
+        run: swamp report get @funsaized/herdr-release-discovery --model herdr-upstream >> "$GITHUB_STEP_SUMMARY"

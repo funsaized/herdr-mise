@@ -1,0 +1,12 @@
+type: '@webframp/github'
+typeVersion: 2026.08.28.1
+id: a9bb07b0-01d7-4c33-871a-a4e25459b54b
+name: herdr-upstream
+version: 1
+tags: {}
+globalArguments: {}
+methods: {}
+reports:
+  require:
+    - name: '@funsaized/herdr-release-discovery'
+      methods: [list_releases]

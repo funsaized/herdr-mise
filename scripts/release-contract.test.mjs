@@ -498,7 +498,10 @@ test("existing expected asset subsets are rerunnable but unexpected assets fail 
     /comm -23 existing-assets\.txt expected-assets\.txt >unexpected-assets\.txt/,
   );
   assert.match(workflow, /test ! -s unexpected-assets\.txt/);
-  assert.match(workflow, /gh release upload .* --clobber/);
+  assert.doesNotMatch(workflow, /--clobber/);
+  assert.match(workflow, /cmp "dist\/\$asset" "\$existing\/\$asset"/);
+  assert.match(workflow, /gh release create .* --draft /);
+  assert.match(workflow, /gh release edit .* --draft=false/);
   assert.match(workflow, /diff -u expected-assets\.txt published-assets\.txt/);
 });
 

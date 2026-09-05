@@ -81,7 +81,11 @@ export function auditWorkflow(workflow) {
   if (/^\s*pull_request_target\s*:/m.test(workflow)) {
     errors.push("compatibility workflow uses pull_request_target");
   }
-  if (/secrets\.|\brelease\b|\bpublish\b|git push|git tag/i.test(workflow)) {
+  if (
+    /secrets\.|gh release (?:create|upload|edit|delete)|\bpublish\b|git push|git tag/i.test(
+      workflow,
+    )
+  ) {
     errors.push("compatibility workflow is publishing or uses secrets");
   }
   return errors;

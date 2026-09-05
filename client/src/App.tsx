@@ -75,6 +75,7 @@ export function App() {
     [metrics, setMetrics] = useState<DebugMetrics>(initialMetrics),
     [announcement, setAnnouncement] = useState(""),
     [hintVisible, setHintVisible] = useState(() => hintPersistence.isVisible());
+  const [rendererFailed, setRendererFailed] = useState(false);
   useEffect(() => clientStore.subscribeCoarse(setCoarse), []);
   useEffect(
     () =>
@@ -109,7 +110,10 @@ export function App() {
         configurable: true,
         value: () => scene.metrics(),
       });
-    void scene.init();
+    let mounted = true;
+    void scene.init().catch(() => {
+      if (mounted) setRendererFailed(true);
+    });
     const protocol = location.protocol === "https:" ? "wss:" : "ws:",
       socket = new AgentWebSocketClient(
         `${protocol}//${location.host}/ws`,
@@ -118,6 +122,7 @@ export function App() {
     socketRef.current = socket;
     socket.start();
     return () => {
+      mounted = false;
       socket.stop();
       scene.destroy();
       delete (window as Window & { __miseSceneMetrics?: unknown })
@@ -244,6 +249,9 @@ export function App() {
         return;
       }
       if (event.key === "Enter" && focusedId) {
+        // Native semantic buttons own activation and remember their trigger.
+        // Handling Enter here as well clears it before Chrome/WebKit click.
+        if (semanticNav) return;
         semanticRestoreRef.current = null;
         clientStore.select(focusedId);
       }
@@ -294,6 +302,29 @@ export function App() {
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
   return (
     <main className="appShell" style={cssTokens}>
+      {rendererFailed && (
+        <section className="rendererFallback" aria-label="Agent status list">
+          <p role="alert">
+            The kitchen graphics could not start. Agent status is available
+            below. Reload to retry graphics.
+          </p>
+          <ul>
+            {agents.map((agent) => (
+              <li key={agent.id}>
+                <button
+                  onClick={(event) => {
+                    semanticRestoreRef.current = event.currentTarget;
+                    clientStore.select(agent.id);
+                  }}
+                >
+                  {agent.name}:{" "}
+                  {agent.stateKnown === false ? "unknown" : agent.targetState}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div
         ref={host}
         className={canvasClass}

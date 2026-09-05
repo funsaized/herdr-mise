@@ -4,6 +4,23 @@ export default defineConfig({
   testDir: ".",
   timeout: 60_000,
   retries: 0,
+  projects: [
+    { name: "chromium", use: { browserName: "chromium" } },
+    ...(process.env.HERDR_MISE_CROSS_BROWSER === "1"
+      ? [
+          {
+            name: "firefox",
+            use: { browserName: "firefox" as const },
+            testMatch: "**/critical-accessibility.spec.ts",
+          },
+          {
+            name: "webkit",
+            use: { browserName: "webkit" as const },
+            testMatch: "**/critical-accessibility.spec.ts",
+          },
+        ]
+      : []),
+  ],
   use: {
     baseURL: hostedVisualUrl ?? "http://127.0.0.1:4174",
     headless: true,
@@ -14,7 +31,10 @@ export default defineConfig({
     ? undefined
     : {
         command:
-          "npm --prefix client run build && cargo build --bin herdr-mise && npm --prefix client run build -- --mode visual && npm --prefix client run preview -- --host 127.0.0.1 --port 4174 --strictPort --outDir dist-visual",
+          (process.env.HERDR_MISE_PREBUILT === "1"
+            ? ""
+            : "npm --prefix client run build && ") +
+          "cargo build --locked --bin herdr-mise && npm --prefix client run build -- --mode visual && npm --prefix client run preview -- --host 127.0.0.1 --port 4174 --strictPort --outDir dist-visual",
         cwd: "..",
         url: "http://127.0.0.1:4174",
         reuseExistingServer: false,

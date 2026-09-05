@@ -1,4 +1,4 @@
-import type { AgentStateEvent } from "../../../protocol/generated/agent-state-event";
+import { decodeFeedEvent } from "./feed-decoder";
 import type { AgentStore, Scheduler } from "./store";
 
 export interface SocketLike {
@@ -25,6 +25,7 @@ export class AgentWebSocketClient {
   private stopped = true;
   private generation = 0;
   private bytes: { at: number; count: number }[] = [];
+  private invalidMessages = 0;
   constructor(
     private url: string,
     private store: AgentStore,
@@ -42,6 +43,7 @@ export class AgentWebSocketClient {
     this.clearTimers();
     this.socket?.close();
     this.socket = null;
+    this.bytes = [];
   }
   private connect() {
     // Snapshot eligibility is per connection and resets on every reconnect.
@@ -52,6 +54,9 @@ export class AgentWebSocketClient {
     this.socket = socket;
     const lose = () => {
       if (generation !== this.generation || this.stopped) return;
+      this.generation++;
+      this.socket = null;
+      socket.close();
       this.scheduler.clearTimeout(this.staleTimer);
       this.staleTimer = null;
       this.store.setDisconnected();
@@ -69,19 +74,23 @@ export class AgentWebSocketClient {
       if (generation !== this.generation) return;
       try {
         const raw = String(message.data);
-        this.bytes.push({
-          at: this.scheduler.now(),
-          count: new TextEncoder().encode(raw).byteLength,
-        });
-        const parsed = JSON.parse(raw) as AgentStateEvent;
-        if (
-          parsed.version !== 1 ||
-          !["snapshot", "delta", "heartbeat"].includes(parsed.type)
-        )
+        const at = Math.floor(this.scheduler.now() / 100) * 100;
+        this.bytes = this.bytes.filter((sample) => at - sample.at < 1_000);
+        const count = new TextEncoder().encode(raw).byteLength;
+        const bucket = this.bytes.at(-1);
+        if (bucket?.at === at) bucket.count += count;
+        else this.bytes.push({ at, count });
+        const parsed = decodeFeedEvent(raw);
+        if (!parsed) {
+          this.invalidMessages = Math.min(
+            this.invalidMessages + 1,
+            Number.MAX_SAFE_INTEGER,
+          );
           return;
+        }
         if (parsed.type === "snapshot") {
-          hasSnapshot = true;
           this.store.apply(parsed);
+          hasSnapshot = true;
         } else if (parsed.type === "delta" && hasSnapshot)
           this.store.apply(parsed);
         this.armStale(lose);
@@ -90,10 +99,13 @@ export class AgentWebSocketClient {
       }
     };
     socket.onerror = socket.onclose = lose;
-    this.armStale(() => {
-      socket.close();
-      lose();
-    });
+    this.armStale(lose);
+  }
+  diagnostics() {
+    return {
+      invalidMessages: this.invalidMessages,
+      retainedByteBuckets: this.bytes.length,
+    };
   }
   bytesPerSecond(now = this.scheduler.now()) {
     this.bytes = this.bytes.filter((sample) => now - sample.at <= 1_000);
