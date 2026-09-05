@@ -11,7 +11,7 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
     page.getByRole("status").filter({ hasText: "DEMO SERVICE" }),
   ).toBeVisible();
   const station = page
-    .getByRole("button", { name: /Blocked — at the pass, open details/ })
+    .getByRole("button", { name: /Blocked — .*open details/ })
     .first();
   await page.locator("body").click({ position: { x: 1, y: 1 } });
   await page.keyboard.press("ArrowRight");

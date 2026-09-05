@@ -48,14 +48,17 @@ describe("semantic station controls", () => {
     id: "a",
     name: "Codex",
     targetState: "blocked",
+    stateEnteredAt: new Date(Date.now() - 65_000).toISOString(),
+    blockedPlacement: { kind: "pass", queueOrdinal: 1, queueTotal: 2 },
   };
   it("uses human state wording, stays out of Tab order, and activates details", () => {
     const onSelect = vi.fn();
     render(<SemanticStationControls agents={[agent]} onSelect={onSelect} />);
     const control = screen.getByRole("button", {
-      name: "Codex, Blocked — at the pass, open details",
+      name: /Codex, Blocked — at the pass, queue 1 of 2, 1m \d+s blocked, open details/,
     });
     expect(control.getAttribute("tabindex")).toBe("-1");
+    expect(control.textContent).toMatch(/queue 1 of 2 · 1m \d+s blocked/);
     fireEvent.click(control);
     expect(onSelect).toHaveBeenCalledWith("a", control);
   });
@@ -80,13 +83,53 @@ describe("semantic station controls", () => {
     expect(semanticAgentsEqual(same, [{ ...agent, targetState: "done" }])).toBe(
       false,
     );
+    expect(
+      semanticAgentsEqual(same, [
+        { ...agent, stateEnteredAt: new Date().toISOString() },
+      ]),
+    ).toBe(false);
+  });
+  it("uses station and location-neutral blocked fallbacks truthfully", () => {
+    const { rerender } = render(
+      <SemanticStationControls
+        agents={[
+          {
+            ...agent,
+            blockedPlacement: {
+              kind: "station",
+              queueOrdinal: 2,
+              queueTotal: 2,
+            },
+          },
+        ]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: /Blocked — waiting at station, queue 2 of 2, 1m 5s blocked/,
+      }),
+    ).toBeTruthy();
+    rerender(
+      <SemanticStationControls
+        agents={[{ ...agent, blockedPlacement: undefined }]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Blocked — waiting, 1m 5s blocked/ }),
+    ).toBeTruthy();
   });
   it("keeps the accessible label contract explicit for every human state", () => {
     for (const targetState of Object.keys(humanStateWords) as Array<
       keyof typeof humanStateWords
     >)
-      expect(semanticStationLabel({ ...agent, targetState })).toContain(
-        humanStateWords[targetState],
-      );
+      expect(
+        semanticStationLabel({
+          ...agent,
+          targetState,
+          blockedPlacement: undefined,
+        }),
+      ).toContain(humanStateWords[targetState]);
   });
 });

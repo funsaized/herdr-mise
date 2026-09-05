@@ -53,7 +53,7 @@ import {
   type ReducedMotionPreference,
 } from "../runtime";
 import {
-  blockedPassGeometry,
+  blockedPlacements,
   compactPixelText,
   donePlateGeometry,
   doorGeometry,
@@ -62,15 +62,15 @@ import {
   stationIdentityLabels,
   stationTicketGeometry,
   stationWorkspaceLabel,
+  type BlockedPlacement,
 } from "./geometry";
 
 export {
-  blockedPassGeometry,
+  blockedPlacements,
   compactPixelText,
   donePlateGeometry,
   doorGeometry,
   passBellGeometry,
-  passFrontSlot,
   stationIdentityLabels,
   stationTicketGeometry,
   stationWorkspaceLabel,
@@ -81,6 +81,10 @@ export interface SceneHit {
   kind: "station" | "board" | "spirit";
   id: string;
   rect: Rect;
+  blockedPlacement?: Pick<
+    BlockedPlacement,
+    "kind" | "queueOrdinal" | "queueTotal"
+  >;
 }
 export interface KitchenSceneOptions {
   onHitLayout?: (hits: readonly SceneHit[]) => void;
@@ -101,6 +105,10 @@ export interface SceneMetrics {
   stationNameBounds: Record<string, Rect & { text: string }>;
   stationStatusBounds: Record<string, Rect & { text: string }>;
   activeFocusBounds: Record<string, Rect>;
+  blockedPlacements: Record<
+    string,
+    BlockedPlacement & { timerText: string; exiting: boolean }
+  >;
   blockedIndicators: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
@@ -208,6 +216,11 @@ export class KitchenScene {
   private readonly idlePoses = new IdlePoseAssignments();
   private readonly stationVisuals: SceneMetrics["stationVisuals"] = {};
   private readonly spiritAccents: SceneMetrics["spiritAccents"] = {};
+  private readonly retainedBlocked = new Map<
+    string,
+    BlockedPlacement & { timerText: string }
+  >();
+  private blockedPlacementMetrics: SceneMetrics["blockedPlacements"] = {};
   private hits: SceneHit[] = [];
   private lastHitSignature = "";
   private focusedId: string | null = null;
@@ -426,6 +439,7 @@ export class KitchenScene {
       stationNameBounds,
       stationStatusBounds,
       activeFocusBounds,
+      blockedPlacements: { ...this.blockedPlacementMetrics },
       blockedIndicators,
       stateIndicators,
       endedEntries: snapshot.board.length,
@@ -459,7 +473,10 @@ export class KitchenScene {
     else this.ticker.start();
     const now = performance.now();
     this.store.reconcileRendered(undefined, force);
-    if (force) this.transitions.reconcile();
+    if (force) {
+      this.transitions.reconcile();
+      this.retainedBlocked.clear();
+    }
     const ids = [...snapshot.agents.keys()],
       liveIds = ids.join("|"),
       boardIds = snapshot.board.map((entry) => entry.id).join("|"),
@@ -493,7 +510,16 @@ export class KitchenScene {
       ? snapshot.selectedId
       : null;
     const width = this.host.clientWidth || innerWidth,
-      height = this.host.clientHeight || innerHeight;
+      height = this.host.clientHeight || innerHeight,
+      layoutChanged =
+        this.layout &&
+        (this.layout.wall.width !== width ||
+          this.app.renderer.height !== height);
+    if (layoutChanged) {
+      this.transitions.reconcile();
+      this.retainedBlocked.clear();
+      this.store.reconcileRendered(undefined, true);
+    }
     this.layout = computeLayout(width, height, [...snapshot.agents.keys()]);
     this.app.renderer.resize(width, height);
     const kitchen = this.view === "kitchen";
@@ -508,6 +534,7 @@ export class KitchenScene {
       this.drawStations(performance.now());
     } else {
       this.particles.releaseAll();
+      this.blockedPlacementMetrics = {};
       this.hits = [];
       this.freezerLayout = computeFreezerLayout(
         width,
@@ -1013,6 +1040,39 @@ export class KitchenScene {
     const snapshot = this.store.snapshot(),
       index = paletteIndex(this.resolvedTheme()),
       active = new Set<string>();
+    for (const id of this.retainedBlocked.keys()) {
+      const agent = snapshot.agents.get(id);
+      if (!agent || (this.reducedMotion && agent.targetState !== "blocked"))
+        this.retainedBlocked.delete(id);
+    }
+    const blockedIds = this.layout.stations
+        .filter(
+          (station) =>
+            snapshot.agents.get(station.id)?.targetState === "blocked",
+        )
+        .map((station) => station.id),
+      exiting = [...this.retainedBlocked.values()].filter(
+        (retained) =>
+          snapshot.agents.get(retained.id)?.targetState !== "blocked",
+      ),
+      placements = blockedPlacements(this.layout, blockedIds, exiting);
+    this.blockedPlacementMetrics = {};
+    for (const [id, placement] of placements) {
+      const agent = snapshot.agents.get(id)!;
+      const retained = {
+        ...placement,
+        timerText: formatElapsed(
+          Math.max(0, Date.now() - Date.parse(agent.stateEnteredAt)),
+        ),
+      };
+      this.retainedBlocked.set(id, retained);
+      this.blockedPlacementMetrics[id] = { ...retained, exiting: false };
+    }
+    for (const retained of exiting)
+      this.blockedPlacementMetrics[retained.id] = {
+        ...retained,
+        exiting: true,
+      };
     this.hits = this.hits.filter((hit) => hit.kind !== "station");
     for (const station of this.layout.stations) {
       const agent = snapshot.agents.get(station.id);
@@ -1024,9 +1084,28 @@ export class KitchenScene {
         this.stationViews.set(agent.id, view);
         this.stationNodes.set(agent.id, view.node);
       }
-      this.updateStation(view, agent, station, index, now);
+      this.updateStation(
+        view,
+        agent,
+        station,
+        index,
+        now,
+        placements.get(agent.id) ?? this.retainedBlocked.get(agent.id),
+      );
       this.stationLayer.addChild(view.node);
-      this.hits.push({ kind: "station", id: agent.id, rect: station });
+      const placement = placements.get(agent.id);
+      this.hits.push({
+        kind: "station",
+        id: agent.id,
+        rect: station,
+        blockedPlacement: placement
+          ? {
+              kind: placement.kind,
+              queueOrdinal: placement.queueOrdinal,
+              queueTotal: placement.queueTotal,
+            }
+          : undefined,
+      });
     }
     for (const [id, view] of this.stationViews)
       if (!active.has(id) && !this.busserSweeps.has(id))
@@ -1037,7 +1116,7 @@ export class KitchenScene {
     const signature = this.hits
       .map(
         (hit) =>
-          `${hit.kind}:${hit.id}:${hit.rect.x}:${hit.rect.y}:${hit.rect.width}:${hit.rect.height}`,
+          `${hit.kind}:${hit.id}:${hit.rect.x}:${hit.rect.y}:${hit.rect.width}:${hit.rect.height}:${hit.blockedPlacement?.kind ?? ""}:${hit.blockedPlacement?.queueOrdinal ?? ""}:${hit.blockedPlacement?.queueTotal ?? ""}`,
       )
       .join("|");
     if (signature !== this.lastHitSignature) {
@@ -1087,6 +1166,7 @@ export class KitchenScene {
     rect: Rect & { scale: number },
     index: number,
     now: number,
+    placement?: BlockedPlacement,
   ) {
     const snapshot = this.store.snapshot(),
       p = getTheme().palette,
@@ -1116,9 +1196,8 @@ export class KitchenScene {
       transition = this.transitions.sample(agent.id, now);
     }
     const counterY = 19 * u,
-      passGeometry = blockedPassGeometry(this.layout, agent.id),
-      slot = passGeometry.cook,
       home = { x: rect.x + rect.width / 2, y: rect.y + counterY },
+      slot = placement?.cook ?? home,
       blockedProgress = motion.travel
         ? transition?.to === "blocked"
           ? transition.progress
@@ -1216,9 +1295,20 @@ export class KitchenScene {
             (nameFontSize * tokens.scene.layout.stationNameCharacterWidth),
         ),
       ),
-      identity = stationIdentityLabels(agent, state, wallNow, nameCharacters),
+      identity = stationIdentityLabels(
+        agent,
+        state,
+        wallNow,
+        nameCharacters,
+        state === "blocked" ? placement : undefined,
+      ),
       dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}`,
-      dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`;
+      dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`,
+      exitComplete =
+        state !== "blocked" &&
+        transition?.from === "blocked" &&
+        transition.progress >= 1;
+    if (exitComplete) this.retainedBlocked.delete(agent.id);
     if (view.dynamicSignature === dynamicSignature) return;
     view.dynamicSignature = dynamicSignature;
     if (view.dataSignature !== dataSignature) {
@@ -1326,9 +1416,9 @@ export class KitchenScene {
         .rect(potX + u, counterY, 2 * u, u)
         .fill(flicker ? p.semantic.flameDark : p.semantic.flameHighDark);
     }
-    if (state === "blocked") {
-      const ticket = passGeometry.ticket,
-        timerChip = passGeometry.timer,
+    if (state === "blocked" && placement) {
+      const ticket = placement.ticket,
+        timerChip = placement.timer,
         ticketX = ticket.x - rect.x,
         ticketY = ticket.y - rect.y,
         timerX = timerChip.x - rect.x,
@@ -1348,9 +1438,10 @@ export class KitchenScene {
           ticket.width - 1.6 * u,
           0.7 * u,
         )
-        .fill(p.scene.ticket)
-        .rect(timerX, timerY, timerChip.width, timerChip.height)
-        .fill(p.scene.blockedChip);
+        .fill(p.scene.ticket);
+      g.rect(timerX, timerY, timerChip.width, timerChip.height).fill(
+        p.scene.blockedChip,
+      );
       timer.text = elapsedText;
       timer.style.fill = p.semantic.blockedText;
       timer.style.fontSize = Math.max(8, 1.6 * u);

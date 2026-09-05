@@ -1,5 +1,19 @@
 import type { AgentMachine } from "../state/store";
-import type { SceneLayout } from "./layout";
+import { tokens } from "../theme/tokens";
+import type { Rect, SceneLayout } from "./layout";
+
+export interface BlockedPlacement {
+  id: string;
+  kind: "pass" | "station";
+  queueOrdinal: number;
+  queueTotal: number;
+  cook: { x: number; y: number };
+  cookBounds: Rect;
+  ticket: Rect;
+  timer: Rect;
+  station: Rect;
+  bell: Rect;
+}
 
 export function workspaceDisplayName(workspace: string) {
   const value = workspace.trim();
@@ -32,8 +46,19 @@ export function stationIdentityLabels(
   state: AgentMachine["targetState"],
   now = Date.now(),
   maxCharacters = 30,
+  blockedPlacement?: Pick<
+    BlockedPlacement,
+    "kind" | "queueOrdinal" | "queueTotal"
+  >,
 ) {
   const workspace = workspaceDisplayName(agent.workspace).toUpperCase(),
+    agentName = agent.name.toUpperCase(),
+    compactName =
+      maxCharacters <= agentName.length
+        ? agentName.length <= maxCharacters
+          ? agentName
+          : `${agentName.slice(0, Math.floor((maxCharacters - 3) / 2))}...${agentName.slice(-Math.ceil((maxCharacters - 3) / 2))}`
+        : compactPixelText(`${agentName} · ${workspace}`, maxCharacters),
     labels = {
       idle: "PREP",
       working: "FIRE",
@@ -42,12 +67,13 @@ export function stationIdentityLabels(
       ended: "86'D",
     } as const,
     answered = state === "working" && (agent.answerReceivedUntil ?? 0) > now,
-    status = answered ? "ANSWER RECEIVED" : labels[state];
+    status = answered
+      ? "ANSWER RECEIVED"
+      : state === "blocked" && blockedPlacement
+        ? `${blockedPlacement.kind === "pass" ? "AT THE PASS" : "BLOCKED AT STATION"} · ${blockedPlacement.queueOrdinal}/${blockedPlacement.queueTotal}`
+        : labels[state];
   return {
-    name: compactPixelText(
-      `${agent.name.toUpperCase()} · ${workspace}`,
-      maxCharacters,
-    ),
+    name: compactName,
     status,
     signature: `${agent.name}:${agent.workspace}`,
   };
@@ -80,77 +106,165 @@ export function passBellGeometry(layout: SceneLayout) {
   };
 }
 
-function passLane(layout: SceneLayout, index: number) {
-  const count = Math.max(1, layout.stations.length),
-    permutations: Partial<Record<number, readonly number[]>> = {
-      6: [0, 2, 1, 3, 5, 4],
-      12: [0, 3, 1, 4, 2, 6, 5, 9, 7, 10, 8, 11],
-    },
-    permutation = permutations[count];
-  return permutation?.[index] ?? index % count;
-}
+const intersects = (a: Rect, b: Rect) =>
+  a.x < b.x + b.width &&
+  a.x + a.width > b.x &&
+  a.y < b.y + b.height &&
+  a.y + a.height > b.y;
 
-export function passFrontSlot(layout: SceneLayout, id: string) {
-  const stationIndex = layout.stations.findIndex(
-      (station) => station.id === id,
-    ),
-    index =
-      stationIndex < 0
-        ? sceneIdentityHash(id) % Math.max(1, layout.stations.length)
-        : stationIndex,
+export function blockedPlacements(
+  layout: SceneLayout,
+  blockedIds: readonly string[],
+  occupied: readonly BlockedPlacement[] = [],
+) {
+  const ordered = layout.stations
+      .filter((station) => blockedIds.includes(station.id))
+      .map((station) => station.id),
+    total = ordered.length,
+    placements = new Map<string, BlockedPlacement>(),
     u = layout.unit,
-    bell = passBellGeometry(layout),
-    rightmost = bell.center.x - 13 * u,
-    leftmost = layout.pass.x + 8 * u,
-    laneCount = Math.max(1, layout.stations.length),
-    lane = passLane(layout, index),
-    maxSpacing = laneCount >= 4 ? 16 * u : 32 * u,
-    spacing = Math.min(
-      maxSpacing,
-      (rightmost - leftmost) / Math.max(1, laneCount - 1),
-    );
-  return { x: rightmost - lane * spacing, y: layout.pass.y + 20 * u };
-}
-
-export function blockedPassGeometry(layout: SceneLayout, id: string) {
-  const cook = passFrontSlot(layout, id),
-    u = layout.unit,
-    count = layout.stations.length,
-    dense = count > 6,
-    stationIndex = layout.stations.findIndex((station) => station.id === id),
-    index =
-      stationIndex < 0
-        ? sceneIdentityHash(id) % Math.max(1, count)
-        : stationIndex,
-    lane = passLane(layout, index),
-    attachRight = dense && lane >= count - 3,
-    stationScale = layout.stations[stationIndex]?.scale ?? 1,
-    ticketWidth = (dense ? 5 : 6.5) * u,
-    timerWidth = (dense ? 7 : 13.4) * u,
-    passClusterCenter =
-      cook.x +
-      (attachRight
-        ? 9.25
-        : dense
-          ? -9.25
-          : -Math.max(15, 6 * stationScale + timerWidth / u / 2 + 1)) *
-        u;
-  return {
-    cook,
-    ticket: {
-      x: passClusterCenter - ticketWidth / 2,
-      y: layout.pass.y + 8.8 * u,
-      width: ticketWidth,
-      height: 7.6 * u,
+    blocked = tokens.scene.layout.blocked,
+    bellGeometry = passBellGeometry(layout),
+    bell = {
+      x: bellGeometry.center.x - blocked.bellClearance * u,
+      y: bellGeometry.center.y - blocked.bellClearance * u,
+      width: blocked.bellSize * u,
+      height: blocked.bellSize * u,
     },
-    timer: {
-      x: passClusterCenter - timerWidth / 2,
-      y: layout.pass.y + 18.2 * u,
-      width: timerWidth,
-      height: 4.4 * u,
-    },
-    bell: passBellGeometry(layout).center,
-  };
+    occupiedBounds = occupied.flatMap((placement) => [
+      placement.cookBounds,
+      placement.ticket,
+      placement.timer,
+    ]),
+    admittedBounds: Rect[] = [],
+    left = layout.pass.x + blocked.passInset * u,
+    right = bell.x - blocked.passInset * u;
+  let cursor = left,
+    overflow = false;
+  ordered.forEach((id, index) => {
+    const station = layout.stations.find((item) => item.id === id)!,
+      scale = station.scale,
+      cookWidth = blocked.cookWidth * u * scale,
+      cookHeight = blocked.cookHeight * u * scale,
+      ticketWidth = blocked.ticketWidth * u,
+      timerWidth = blocked.timerWidth * u,
+      chipWidth = Math.max(ticketWidth, timerWidth),
+      clusterWidth = chipWidth + blocked.chipGap * u + cookWidth,
+      stationUnit = u * scale,
+      homeTicket = stationTicketGeometry("blocked", stationUnit)!,
+      stationPlacement = (): BlockedPlacement => {
+        const cook = {
+            x:
+              station.x +
+              Math.min(
+                Math.max(
+                  station.width / 2,
+                  blocked.stationCookMinX * stationUnit,
+                ),
+                station.width - cookWidth / 2,
+              ),
+            y: station.y + cookHeight,
+          },
+          timer = {
+            x:
+              station.x +
+              station.width / 2 -
+              blocked.stationTimerInset * stationUnit,
+            y: station.y + blocked.stationTimerY * stationUnit,
+            width: blocked.stationTimerWidth * stationUnit,
+            height: blocked.timerHeight * stationUnit,
+          };
+        return {
+          id,
+          kind: "station",
+          queueOrdinal: index + 1,
+          queueTotal: total,
+          cook,
+          cookBounds: {
+            x: cook.x - cookWidth / 2,
+            y: cook.y - cookHeight,
+            width: cookWidth,
+            height: cookHeight,
+          },
+          ticket: {
+            x: station.x + homeTicket.x,
+            y: station.y + homeTicket.y,
+            width: homeTicket.width,
+            height: homeTicket.height,
+          },
+          timer,
+          station,
+          bell,
+        };
+      };
+    if (!overflow) {
+      let candidate: BlockedPlacement | null = null;
+      while (cursor + clusterWidth <= right) {
+        const cook = {
+            x: cursor + chipWidth + blocked.chipGap * u + cookWidth / 2,
+            y: layout.pass.y + blocked.cookY * u,
+          },
+          next: BlockedPlacement = {
+            id,
+            kind: "pass",
+            queueOrdinal: index + 1,
+            queueTotal: total,
+            cook,
+            cookBounds: {
+              x: cook.x - cookWidth / 2,
+              y: cook.y - cookHeight,
+              width: cookWidth,
+              height: cookHeight,
+            },
+            ticket: {
+              x: cursor + (chipWidth - ticketWidth) / 2,
+              y: layout.pass.y + blocked.ticketY * u,
+              width: ticketWidth,
+              height: blocked.ticketHeight * u,
+            },
+            timer: {
+              x: cursor,
+              y: layout.pass.y + blocked.timerY * u,
+              width: timerWidth,
+              height: blocked.timerHeight * u,
+            },
+            station,
+            bell,
+          },
+          bounds = [next.cookBounds, next.ticket, next.timer];
+        if (
+          !bounds.some((bound) =>
+            [...occupiedBounds, ...admittedBounds, bell].some((other) =>
+              intersects(bound, other),
+            ),
+          )
+        ) {
+          candidate = next;
+          break;
+        }
+        cursor += blocked.chipGap * u;
+      }
+      if (candidate) {
+        placements.set(id, candidate);
+        admittedBounds.push(
+          candidate.cookBounds,
+          candidate.ticket,
+          candidate.timer,
+        );
+        cursor =
+          Math.max(
+            candidate.cookBounds.x + candidate.cookBounds.width,
+            candidate.ticket.x + candidate.ticket.width,
+            candidate.timer.x + candidate.timer.width,
+          ) +
+          blocked.chipGap * u;
+        return;
+      }
+      overflow = true;
+    }
+    placements.set(id, stationPlacement());
+  });
+  return placements;
 }
 
 export function stationTicketGeometry(
