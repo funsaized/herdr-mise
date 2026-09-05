@@ -124,9 +124,17 @@ export function blockedPassGeometry(layout: SceneLayout, id: string) {
         : stationIndex,
     lane = passLane(layout, index),
     attachRight = dense && lane >= count - 3,
+    stationScale = layout.stations[stationIndex]?.scale ?? 1,
     ticketWidth = (dense ? 5 : 6.5) * u,
     timerWidth = (dense ? 7 : 13.4) * u,
-    passClusterCenter = cook.x + (attachRight ? 9.25 : dense ? -9.25 : -15) * u;
+    passClusterCenter =
+      cook.x +
+      (attachRight
+        ? 9.25
+        : dense
+          ? -9.25
+          : -Math.max(15, 6 * stationScale + timerWidth / u / 2 + 1)) *
+        u;
   return {
     cook,
     ticket: {

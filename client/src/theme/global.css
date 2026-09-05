@@ -633,6 +633,26 @@ select:focus-visible {
   }
 }
 @media (max-width: 480px) {
+  .demoPlacard {
+    inset: 8px 8px auto;
+    width: auto;
+    padding: 7px 10px;
+    transform: none;
+    border-width: 2px;
+  }
+  .demoPlacard h2 {
+    font-size: 13px;
+  }
+  .demoPlacard hr {
+    margin: 4px 0;
+  }
+  .demoPlacard p {
+    font-size: 10px;
+    line-height: 1.25;
+  }
+  .demoPlacard small {
+    display: none;
+  }
   .firstHint {
     bottom: 52px;
   }

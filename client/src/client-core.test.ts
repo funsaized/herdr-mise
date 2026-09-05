@@ -377,7 +377,7 @@ describe("layout, transitions and resources", () => {
     });
   });
   it.each([
-    [2, 2, 1, false],
+    [1, 1, 1, false],
     [6, 3, 2, false],
     [12, 6, 2, true],
   ] as const)("lays out %i agents", (count, columns, rows, banquet) => {
@@ -396,6 +396,46 @@ describe("layout, transitions and resources", () => {
       expect(rect.width).toBeGreaterThan(0);
       expect(rect.x + rect.width).toBeLessThanOrEqual(1200);
     }
+  });
+  it.each([
+    [320, 640],
+    [390, 844],
+    [720, 720],
+    [1280, 720],
+    [1440, 900],
+  ])("keeps 1/6/12-agent layouts bounded at %ix%i", (width, height) => {
+    for (const count of [1, 6, 12]) {
+      const layout = computeLayout(
+        width,
+        height,
+        Array.from({ length: count }, (_, index) => String(index)),
+      );
+      for (const station of layout.stations) {
+        expect(station.x).toBeGreaterThanOrEqual(0);
+        expect(station.y).toBeGreaterThanOrEqual(0);
+        expect(station.x + station.width).toBeLessThanOrEqual(width);
+        expect(station.y + station.height).toBeLessThanOrEqual(height);
+      }
+    }
+  });
+  it("applies configured gutters and sparse composition dimensions", () => {
+    const dense = computeLayout(
+        390,
+        844,
+        Array.from({ length: 6 }, (_, index) => String(index)),
+      ),
+      sparse = computeLayout(1440, 900, ["solo"]),
+      firstGap =
+        dense.stations[1]!.x -
+        (dense.stations[0]!.x + dense.stations[0]!.width);
+    expect(firstGap).toBe(tokens.scene.layout.stationGutter * dense.unit);
+    expect(firstGap).toBeGreaterThanOrEqual(6);
+    expect(sparse.stations[0]!.scale).toBe(tokens.scene.layout.sparseScale);
+    expect(sparse.stations[0]!.width).toBeGreaterThanOrEqual(350);
+    expect(sparse.pass.width).toBeLessThanOrEqual(450);
+    expect(sparse.pass.width).toBe(
+      tokens.scene.layout.sparsePassWidth * sparse.unit,
+    );
   });
   it.each([1, 2, 6, 12])(
     "keeps %i-agent compositions dense, bounded, and on-screen",

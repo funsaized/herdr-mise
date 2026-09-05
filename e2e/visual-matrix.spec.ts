@@ -61,6 +61,10 @@ type MotionMetrics = {
     { accent: string; idlePose: string | null; prepStep: 0 | 1 | null }
   >;
   spiritAccents: Record<string, string>;
+  stationCells: Record<string, Box>;
+  stationNameBounds: Record<string, Box & { text: string }>;
+  stationStatusBounds: Record<string, Box & { text: string }>;
+  activeFocusBounds: Record<string, Box>;
   view: "kitchen" | "freezer";
   visibleSpirits: number;
   board: {
@@ -74,6 +78,7 @@ type MotionMetrics = {
     pass: number;
   };
 };
+type Box = { x: number; y: number; width: number; height: number };
 const sceneMetrics = (page: Page) =>
   page.evaluate(() =>
     (
@@ -97,16 +102,155 @@ async function availablePort() {
   return address.port;
 }
 
-function boxesIntersect(
-  first: { x: number; y: number; width: number; height: number },
-  second: { x: number; y: number; width: number; height: number },
-) {
+function boxesIntersect(first: Box, second: Box) {
   return !(
     first.x + first.width <= second.x ||
     second.x + second.width <= first.x ||
     first.y + first.height <= second.y ||
     second.y + second.height <= first.y
   );
+}
+
+const FULL_STATUSES = new Set([
+  "PREP",
+  "FIRE",
+  "AT THE PASS",
+  "PLATED",
+  "86'D",
+  "ANSWER RECEIVED",
+  "UNKNOWN · PREP",
+]);
+
+function expectInside(inner: Box, outer: Box, tolerance = 1) {
+  expect(inner.x).toBeGreaterThanOrEqual(outer.x - tolerance);
+  expect(inner.y).toBeGreaterThanOrEqual(outer.y - tolerance);
+  expect(inner.x + inner.width).toBeLessThanOrEqual(
+    outer.x + outer.width + tolerance,
+  );
+  expect(inner.y + inner.height).toBeLessThanOrEqual(
+    outer.y + outer.height + tolerance,
+  );
+}
+
+async function cycleSceneFocus(page: Page, count: number) {
+  const stationIds = new Set<string>(),
+    boardIds = new Set<string>();
+  for (let index = 0; index < count; index++) {
+    await page.keyboard.press("ArrowRight");
+    await expect
+      .poll(async () => {
+        const metrics = await sceneMetrics(page);
+        return (
+          Object.keys(metrics?.activeFocusBounds ?? {}).length +
+          (metrics?.board.strokedIds.length ?? 0)
+        );
+      })
+      .toBe(1);
+    const focused = (await sceneMetrics(page))!,
+      [stationId] = Object.keys(focused.activeFocusBounds),
+      [boardId] = focused.board.strokedIds;
+    if (stationId) {
+      stationIds.add(stationId);
+      expectInside(
+        focused.activeFocusBounds[stationId]!,
+        focused.stationCells[stationId]!,
+      );
+    } else if (boardId) boardIds.add(boardId);
+  }
+  return { stationIds, boardIds };
+}
+
+async function assertResponsiveScene(page: Page, count: number, demo: boolean) {
+  await page.evaluate(() => document.fonts.ready);
+  await expect
+    .poll(async () => {
+      const cells = Object.values(
+          (await sceneMetrics(page))?.stationCells ?? {},
+        ),
+        viewport = page.viewportSize()!;
+      return (
+        cells.length === count &&
+        cells.every(
+          (cell) =>
+            cell.x >= 0 &&
+            cell.y >= 0 &&
+            cell.x + cell.width <= viewport.width &&
+            cell.y + cell.height <= viewport.height,
+        )
+      );
+    })
+    .toBe(true);
+  const metrics = (await sceneMetrics(page))!,
+    viewport = {
+      x: 0,
+      y: 0,
+      width: page.viewportSize()!.width,
+      height: page.viewportSize()!.height,
+    },
+    text = Object.entries(metrics.stationNameBounds).flatMap(([id, bounds]) => [
+      { id, bounds },
+      { id, bounds: metrics.stationStatusBounds[id]! },
+    ]);
+  for (const [id, cell] of Object.entries(metrics.stationCells)) {
+    expectInside(cell, viewport);
+    expectInside(metrics.stationNameBounds[id]!, cell);
+    expectInside(metrics.stationStatusBounds[id]!, cell);
+    expect(FULL_STATUSES.has(metrics.stationStatusBounds[id]!.text)).toBe(true);
+  }
+  for (const [index, first] of text.entries())
+    for (const second of text.slice(index + 1))
+      if (first.id !== second.id)
+        expect(boxesIntersect(first.bounds, second.bounds)).toBe(false);
+
+  const settings = page.getByRole("button", { name: "Open settings" }),
+    freezer = page.getByRole("button", { name: "Freezer" });
+  await expect(settings).toBeVisible();
+  await expect(freezer).toBeVisible();
+  if (demo) {
+    const banner = placard(page);
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("DEMO SERVICE");
+    await expect(banner).toContainText("Nothing here is real.");
+    const bannerBox = (await banner.boundingBox())!;
+    expectInside(bannerBox, viewport);
+    expect(boxesIntersect(bannerBox, (await settings.boundingBox())!)).toBe(
+      false,
+    );
+    expect(boxesIntersect(bannerBox, (await freezer.boundingBox())!)).toBe(
+      false,
+    );
+    if (viewport.width <= 480)
+      await expect(banner.locator("small")).toBeHidden();
+  }
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
+  await cycleSceneFocus(page, count);
+  await page.keyboard.press("Enter");
+  await expect(
+    page.locator(
+      'aside[aria-label$="details"], aside[aria-label$="session summary"]',
+    ),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.locator('[aria-label="Agent stations"] button:focus'),
+  ).toHaveCount(1);
+  await expect
+    .poll(async () => {
+      const metrics = await sceneMetrics(page);
+      return (
+        Object.keys(metrics?.activeFocusBounds ?? {}).length +
+        (metrics?.board.strokedIds.length ?? 0)
+      );
+    })
+    .toBe(1);
 }
 
 function boardRowPoint(width: number, height: number) {
@@ -329,6 +473,56 @@ test("native freezer control renders only visible board spirits and preserves Es
   expect(errors).toEqual([]);
 });
 
+test("responsive mixed scenes keep station text focus and mobile chrome bounded", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const viewport of [
+    { width: 320, height: 640 },
+    { width: 390, height: 844 },
+    { width: 720, height: 720 },
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ])
+    for (const count of [1, 6, 12]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`/?preset=mixed&agents=${count}&stats`);
+      await assertResponsiveScene(page, count, true);
+    }
+  expect(errors).toEqual([]);
+});
+
+test("responsive mixed focus follows live stations onto the 86 board", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?preset=mixed&agents=6&stats");
+  await expect
+    .poll(
+      async () => {
+        const metrics = await sceneMetrics(page);
+        return [
+          Object.keys(metrics?.stationCells ?? {}).length,
+          metrics?.endedEntries,
+        ];
+      },
+      { timeout: 20_000 },
+    )
+    .toEqual([4, 2]);
+
+  for (let pass = 0; pass < 2; pass++) {
+    const focused = await cycleSceneFocus(page, 6),
+      metrics = (await sceneMetrics(page))!;
+    expect([...focused.stationIds].sort()).toEqual(
+      Object.keys(metrics.stationCells).sort(),
+    );
+    expect([...focused.boardIds].sort()).toEqual(
+      metrics.board.rows.map(({ id }) => id).sort(),
+    );
+  }
+});
+
 test("authoritative fixture drives rendered feed accents poses prep and freezer spirits", async ({
   page,
 }) => {
@@ -423,6 +617,13 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
           firstPrepStep,
       )
       .toBe(true);
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await assertResponsiveScene(page, 2, false);
+    }
     snapshot = empty;
     await expect(
       page.getByRole("button", {
