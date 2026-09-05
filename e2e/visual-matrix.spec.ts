@@ -14,7 +14,7 @@ const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const STATE_WORDS = {
   idle: "Idle — prepping",
   working: "Working — on the fire",
-  blocked: "Blocked — at the pass",
+  blocked: "Blocked —",
   done: "Done — plated",
 } as const;
 const IDENTITIES = ["Codex", "Claude", "Hermes", "OpenClaw", "Gemini", "Aider"];
@@ -65,6 +65,22 @@ type MotionMetrics = {
   stationNameBounds: Record<string, Box & { text: string }>;
   stationStatusBounds: Record<string, Box & { text: string }>;
   activeFocusBounds: Record<string, Box>;
+  blockedPlacements: Record<
+    string,
+    {
+      id: string;
+      kind: "pass" | "station";
+      queueOrdinal: number;
+      queueTotal: number;
+      cookBounds: Box;
+      ticket: Box;
+      timer: Box;
+      station: Box;
+      bell: Box;
+      timerText: string;
+      exiting: boolean;
+    }
+  >;
   view: "kitchen" | "freezer";
   visibleSpirits: number;
   board: {
@@ -115,6 +131,7 @@ const FULL_STATUSES = new Set([
   "PREP",
   "FIRE",
   "AT THE PASS",
+  "BLOCKED AT STATION",
   "PLATED",
   "86'D",
   "ANSWER RECEIVED",
@@ -195,7 +212,11 @@ async function assertResponsiveScene(page: Page, count: number, demo: boolean) {
     expectInside(cell, viewport);
     expectInside(metrics.stationNameBounds[id]!, cell);
     expectInside(metrics.stationStatusBounds[id]!, cell);
-    expect(FULL_STATUSES.has(metrics.stationStatusBounds[id]!.text)).toBe(true);
+    expect(
+      [...FULL_STATUSES].some((status) =>
+        metrics.stationStatusBounds[id]!.text.startsWith(status),
+      ),
+    ).toBe(true);
   }
   for (const [index, first] of text.entries())
     for (const second of text.slice(index + 1))
@@ -272,7 +293,7 @@ test("reduced motion is static before blocked-scene startup in light and dinner 
     await expect(placard(page)).toBeVisible();
     await expect(
       page.getByRole("button", {
-        name: "mise-01, Blocked — at the pass, open details",
+        name: /mise-01, Blocked — at the pass.*open details/,
       }),
     ).toHaveCount(1);
     await expect
@@ -345,7 +366,9 @@ test("runtime preference changes preserve mixed lifecycle truth in both directio
     .toMatchObject({
       motion: { reduced: false, continuous: true, preferenceChanges: 1 },
     });
-  await expect(hero("Blocked — at the pass")).toHaveCount(1, {
+  await expect(
+    page.getByRole("button", { name: /Codex, Blocked — at the pass/ }),
+  ).toHaveCount(1, {
     timeout: 8_000,
   });
   await expect(page.getByLabel("Agent state announcements")).toHaveText(
@@ -400,7 +423,9 @@ test("reduced startup preserves idle working blocked waiting and ended state ind
   ] as const) {
     await page.goto(`/?preset=${preset}&agents=1&stats`);
     await expect(
-      page.getByRole("button", { name: `mise-01, ${label}, open details` }),
+      page.getByRole("button", {
+        name: new RegExp(`mise-01, ${label}.*open details`),
+      }),
     ).toHaveCount(1);
     await expect
       .poll(async () => sceneMetrics(page))
@@ -669,6 +694,267 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
         visibleSpirits: 2,
         spiritAccents: { "p-11": "#667a9e", "p-8": "#997f5e" },
       });
+  } finally {
+    app.kill("SIGTERM");
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("blocked pass density", async ({ page }) => {
+  const directory = await mkdtemp(
+      join(tmpdir(), "herdr-mise-blocked-density-"),
+    ),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
+    socketPath = join(directory, "herdr.sock"),
+    source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.0-p19.json",
+        ),
+        "utf8",
+      ),
+    ) as {
+      agents: Array<{
+        pane_id: string;
+        workspace_id: string;
+        display_agent: string;
+        agent_status: string;
+        agent_session: { value: string };
+      }>;
+    },
+    makeSnapshot = (count: number) => ({
+      ...source,
+      agents: Array.from({ length: count }, (_, index) => {
+        const suffix = String(index + 1).padStart(2, "0");
+        return {
+          ...source.agents[0]!,
+          pane_id: `fictional-pane-${suffix}`,
+          display_agent: `density-${suffix}`,
+          agent_session: { value: `fictional-session-${suffix}` },
+        };
+      }),
+    }),
+    sockets = new Set<Socket>();
+  let snapshot = makeSnapshot(1);
+  const fixtureServer = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    let request = "";
+    socket.on("data", (chunk) => {
+      request += chunk;
+      if (!request.includes("\n")) return;
+      const method = JSON.parse(request).method;
+      if (method === "session.snapshot")
+        socket.end(`${JSON.stringify({ result: { snapshot } })}\n`);
+      else socket.write('{"result":{"type":"subscription_started"}}\n');
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    fixtureServer.once("error", reject);
+    fixtureServer.listen(socketPath, resolve);
+  });
+  const app = spawn("target/debug/herdr-mise", [], {
+    env: {
+      ...process.env,
+      HERDR_MISE_PORT: String(port),
+      HERDR_SOCKET_PATH: socketPath,
+    },
+    stdio: "ignore",
+  });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(appUrl)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.goto(`${appUrl}/?stats&theme=dinner`);
+
+    for (const count of [1, 6, 12]) {
+      for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 390, height: 844 },
+        { width: 320, height: 640 },
+      ]) {
+        await page.setViewportSize(viewport);
+        snapshot = makeSnapshot(count);
+        const buttons = page
+          .getByRole("navigation", { name: "Agent stations" })
+          .getByRole("button", { name: /Blocked —/ });
+        await expect(buttons).toHaveCount(count, { timeout: 10_000 });
+        await expect
+          .poll(async () =>
+            Object.keys((await sceneMetrics(page))?.blockedPlacements ?? {}),
+          )
+          .toHaveLength(count);
+        await expect
+          .poll(async () => {
+            const cells = Object.values(
+              (await sceneMetrics(page))?.stationCells ?? {},
+            );
+            return (
+              cells.length === count &&
+              cells.every(
+                (cell) =>
+                  cell.x >= 0 && cell.x + cell.width <= viewport.width + 0.001,
+              )
+            );
+          })
+          .toBe(true);
+        const metrics = (await sceneMetrics(page))!,
+          placements = Object.values(metrics.blockedPlacements).sort(
+            (left, right) => left.queueOrdinal - right.queueOrdinal,
+          );
+        expect(placements.map(({ queueOrdinal }) => queueOrdinal)).toEqual(
+          Array.from({ length: count }, (_, index) => index + 1),
+        );
+        expect(placements.every(({ queueTotal }) => queueTotal === count)).toBe(
+          true,
+        );
+        expect(placements.map(({ kind }) => kind).join(",")).toMatch(
+          /^pass(?:,pass)*(?:,station)*$/,
+        );
+        for (const [index, placement] of placements.entries()) {
+          expect(placement.timerText).toMatch(/^\d+:\d{2}$/);
+          expect(metrics.stationNameBounds[placement.id]?.text).toContain(
+            String(index + 1).padStart(2, "0"),
+          );
+          expect(metrics.stationStatusBounds[placement.id]?.text).toBe(
+            `${placement.kind === "pass" ? "AT THE PASS" : "BLOCKED AT STATION"} · ${index + 1}/${count}`,
+          );
+          const control = buttons.nth(index);
+          await expect(control).toContainText(
+            `density-${String(index + 1).padStart(2, "0")}`,
+          );
+          await expect(control).toContainText(
+            placement.kind === "pass"
+              ? "Blocked — at the pass"
+              : "Blocked — waiting at station",
+          );
+          await expect(control).toContainText(`queue ${index + 1} of ${count}`);
+          await expect(control).toContainText(/\d+(?:h|m|s)/);
+          if (placement.kind === "station")
+            for (const bound of [
+              placement.cookBounds,
+              placement.ticket,
+              placement.timer,
+            ])
+              expectInside(bound, metrics.stationCells[placement.id]!);
+        }
+        const passBounds = placements
+          .filter(({ kind }) => kind === "pass")
+          .flatMap((placement) => [
+            placement.cookBounds,
+            placement.ticket,
+            placement.timer,
+          ]);
+        passBounds.forEach((bound, index) => {
+          expect(boxesIntersect(bound, placements[0]!.bell)).toBe(false);
+          for (const other of passBounds.slice(index + 1))
+            expect(boxesIntersect(bound, other)).toBe(false);
+        });
+
+        await page.evaluate(() => document.body.focus());
+        const focused = await cycleSceneFocus(page, count);
+        expect(focused.stationIds.size).toBe(count);
+        const active = page.locator(".stationA11yMirror button:focus");
+        await expect(active).toHaveCount(1);
+        const activeIndex = await buttons.evaluateAll((controls) =>
+          controls.findIndex((control) => control === document.activeElement),
+        );
+        await page.keyboard.press("Enter");
+        await expect(
+          page.getByRole("complementary", { name: /details$/ }),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(buttons.nth(activeIndex)).toBeFocused();
+
+        if (count === 12 && viewport.width === 320) {
+          snapshot = structuredClone(snapshot);
+          snapshot.agents[0]!.agent_status = "working";
+          await expect(
+            page.getByRole("button", { name: /density-01, Working/ }),
+          ).toBeAttached({ timeout: 10_000 });
+          await expect
+            .poll(async () => {
+              const current = (await sceneMetrics(page))?.blockedPlacements;
+              return current?.["fictional-pane-01"]?.exiting;
+            })
+            .toBe(true);
+          const duringExit = Object.values(
+            (await sceneMetrics(page))!.blockedPlacements,
+          );
+          duringExit.forEach((placement, index) => {
+            for (const other of duringExit.slice(index + 1))
+              for (const bound of [
+                placement.cookBounds,
+                placement.ticket,
+                placement.timer,
+              ])
+                for (const otherBound of [
+                  other.cookBounds,
+                  other.ticket,
+                  other.timer,
+                ])
+                  expect(
+                    boxesIntersect(bound, otherBound),
+                    `${placement.id} ${JSON.stringify(bound)} intersects ${other.id} ${JSON.stringify(otherBound)}`,
+                  ).toBe(false);
+          });
+          await expect
+            .poll(async () => {
+              return (await sceneMetrics(page))?.blockedPlacements[
+                "fictional-pane-01"
+              ];
+            })
+            .toBeUndefined();
+
+          snapshot = structuredClone(snapshot);
+          snapshot.agents[1]!.agent_status = "done";
+          await expect(
+            page.getByRole("button", { name: /density-02, Done/ }),
+          ).toBeAttached({ timeout: 10_000 });
+          await expect
+            .poll(
+              async () =>
+                (await sceneMetrics(page))?.blockedPlacements[
+                  "fictional-pane-02"
+                ]?.exiting,
+            )
+            .toBe(true);
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          await expect
+            .poll(async () => ({
+              retained: (await sceneMetrics(page))?.blockedPlacements[
+                "fictional-pane-02"
+              ],
+              transitions: (await sceneMetrics(page))?.motion.activeTransitions,
+            }))
+            .toEqual({ retained: undefined, transitions: 0 });
+
+          snapshot = structuredClone(snapshot);
+          snapshot.agents[2]!.agent_status = "working";
+          await expect(
+            page.getByRole("button", { name: /density-03, Working/ }),
+          ).toBeAttached({ timeout: 10_000 });
+          await expect
+            .poll(async () => ({
+              retained: (await sceneMetrics(page))?.blockedPlacements[
+                "fictional-pane-03"
+              ],
+              transitions: (await sceneMetrics(page))?.motion.activeTransitions,
+            }))
+            .toEqual({ retained: undefined, transitions: 0 });
+        }
+      }
+    }
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();

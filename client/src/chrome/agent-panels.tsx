@@ -1,36 +1,24 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { SceneHit } from "../scene/kitchen-scene";
+import {
+  humanStateWords,
+  semanticQueueWords,
+  semanticStateWords,
+  type SemanticAgent,
+} from "../state/semantic-stations";
 import type { AgentMachine, BoardEntry, StatePeriod } from "../state/store";
 import { tokens } from "../theme/tokens";
+import { formatDuration } from "./duration";
 import { FocusedPanel } from "./panel-support";
-
-const stateWords = {
-  idle: "Idle — prepping",
-  working: "Working — on the fire",
-  blocked: "Blocked — at the pass",
-  done: "Done — plated",
-  ended: "Ended — 86'd",
-} as const;
 
 const stateLabels = {
   idle: "IDLE — PREPPING",
   working: "WORKING — ON THE FIRE",
-  blocked: "BLOCKED — AT THE PASS",
+  blocked: "BLOCKED — WAITING",
   done: "DONE — PLATED",
   ended: "86'D — SESSION ENDED",
 } as const;
-
-function duration(ms: number) {
-  const seconds = Math.max(0, Math.floor(ms / 1000)),
-    minutes = Math.floor(seconds / 60),
-    hours = Math.floor(minutes / 60);
-  return hours
-    ? `${hours}h ${minutes % 60}m`
-    : minutes
-      ? `${minutes}m ${seconds % 60}s`
-      : `${seconds}s`;
-}
 
 function stateColor(agent: AgentMachine) {
   if (agent.targetState === "blocked") return tokens.semantic.blocked;
@@ -64,8 +52,10 @@ export function Tooltip({
   return (
     <div className="stationTooltip" style={style} role="tooltip">
       <strong>{agent.name}</strong>
-      <span>{stateWords[agent.targetState]}</span>
-      <time>{duration(now - Date.parse(agent.stateEnteredAt))} in state</time>
+      <span>{placementStateWords(agent, hit)}</span>
+      <time>
+        {formatDuration(now - Date.parse(agent.stateEnteredAt))} in state
+      </time>
     </div>
   );
 }
@@ -111,7 +101,7 @@ function HistoryStrip({
                 width: `${width}%`,
                 background: historyColor(period.state),
               }}
-              title={stateWords[period.state]}
+              title={humanStateWords[period.state]}
             />
           );
         })}
@@ -142,9 +132,11 @@ const availableTickets = (value: number, available?: boolean) =>
 
 export function DetailCard({
   agent,
+  hit,
   onClose,
 }: {
   agent: AgentMachine;
+  hit?: SceneHit;
   onClose(): void;
 }) {
   const now = useClock(true),
@@ -156,7 +148,7 @@ export function DetailCard({
         label={
           agent.stateKnown === false
             ? "UNKNOWN — AT PREP"
-            : stateLabels[agent.targetState]
+            : placementStateLabel(agent, hit)
         }
         color={color}
         onClose={onClose}
@@ -166,7 +158,7 @@ export function DetailCard({
           {availableText(agent.workspace)}
         </Fact>
         <Fact label="Time in state">
-          {duration(now - Date.parse(agent.stateEnteredAt))}
+          {formatDuration(now - Date.parse(agent.stateEnteredAt))}
         </Fact>
         <Fact label="Tickets this session">
           {availableTickets(
@@ -205,7 +197,7 @@ export function SessionSummary({
         onClose={onClose}
       />
       <div className="facts">
-        <Fact label="Mise time">{duration(entry.runtimeMs)}</Fact>
+        <Fact label="Mise time">{formatDuration(entry.runtimeMs)}</Fact>
         <Fact label="Tickets served">
           {availableTickets(entry.tickets, entry.ticketsAvailable)}
         </Fact>
@@ -213,11 +205,27 @@ export function SessionSummary({
           {ended.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </Fact>
         <Fact label="Final state">
-          <span style={{ color }}>{stateWords[entry.finalState]}</span>
+          <span style={{ color }}>{humanStateWords[entry.finalState]}</span>
         </Fact>
       </div>
     </FocusedPanel>
   );
+}
+
+function placementStateWords(agent: AgentMachine, hit?: SceneHit) {
+  const semanticAgent: SemanticAgent = {
+      ...agent,
+      blockedPlacement:
+        agent.targetState === "blocked" ? hit?.blockedPlacement : undefined,
+    },
+    queue = semanticQueueWords(semanticAgent);
+  return `${semanticStateWords(semanticAgent)}${queue ? ` · ${queue}` : ""}`;
+}
+
+function placementStateLabel(agent: AgentMachine, hit?: SceneHit) {
+  return agent.targetState === "blocked"
+    ? placementStateWords(agent, hit).toUpperCase()
+    : stateLabels[agent.targetState];
 }
 
 function PanelHeader({

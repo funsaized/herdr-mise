@@ -5,12 +5,10 @@ import type {
 } from "../../protocol/generated/agent-state-event";
 import fixtureSnapshot from "../../protocol/fixtures/snapshot.v1.json";
 import {
-  blockedPassGeometry,
+  blockedPlacements,
   compactPixelText,
   donePlateGeometry,
   doorGeometry,
-  passBellGeometry,
-  passFrontSlot,
   stationIdentityLabels,
   stationTicketGeometry,
   stationWorkspaceLabel,
@@ -490,143 +488,104 @@ describe("layout, transitions and resources", () => {
     expect(engine.sample("a", 1100)?.progress).toBe(1);
     expect(engine.activeCount()).toBe(0);
   });
-  it("stages one blocked cook immediately left of the actual pass bell", () => {
-    const layout = computeLayout(1200, 740, ["a"]),
-      geometry = blockedPassGeometry(layout, "a"),
-      bell = passBellGeometry(layout).center,
-      cookLeft = geometry.cook.x - 6 * layout.unit * layout.stations[0]!.scale,
-      ticketCenter = geometry.ticket.x + geometry.ticket.width / 2,
-      timerCenter = geometry.timer.x + geometry.timer.width / 2;
-    expect(geometry.cook.x).toBe(bell.x - 13 * layout.unit);
-    expect(geometry.cook.y).toBeGreaterThan(layout.pass.y + layout.pass.height);
-    expect(ticketCenter).toBe(timerCenter);
-    expect(geometry.ticket.x + geometry.ticket.width).toBeLessThan(cookLeft);
-    expect(geometry.timer.x + geometry.timer.width).toBeLessThan(cookLeft);
-    expect(geometry.ticket.y + geometry.ticket.height).toBeLessThan(
-      geometry.timer.y,
-    );
-    expect(geometry.bell).toEqual(bell);
-  });
-  it("keeps the supported mixed-scene pass clusters clear of every blocked cook", () => {
-    const ids = ["codex", "claude", "hermes", "openclaw", "gemini", "aider"],
-      layout = computeLayout(1200, 740, ids),
-      blocked = ["codex", "claude", "aider"],
-      clusters = blocked.map((id) => blockedPassGeometry(layout, id)),
-      cooks = blocked.map((id, index) => ({
-        x: clusters[index]!.cook.x,
-        halfWidth:
-          6 *
-          layout.unit *
-          layout.stations.find((station) => station.id === id)!.scale,
-      }));
-    expect(new Set(cooks.map((cook) => cook.x))).toHaveLength(blocked.length);
-    for (const cluster of clusters)
-      for (const item of [cluster.ticket, cluster.timer])
-        for (const cook of cooks)
-          expect(
-            item.x + item.width < cook.x - cook.halfWidth ||
-              item.x > cook.x + cook.halfWidth,
-          ).toBe(true);
-  });
-  it("keeps every mixed 12-agent hero-blocked pass cluster unique, bounded, stable, and clear", () => {
-    const ids = Array.from(
-        { length: 12 },
-        (_, index) => `visual-agent-${index + 1}`,
-      ),
-      layout = computeLayout(1200, 740, ids),
-      blocked = [0, 1, 5, 7, 11].map((index) => ids[index]!),
-      clusters = blocked.map((id) => blockedPassGeometry(layout, id)),
-      cooks = blocked.map((id, index) => ({
-        x: clusters[index]!.cook.x,
-        y: clusters[index]!.cook.y,
-        halfWidth:
-          6 *
-          layout.unit *
-          layout.stations.find((station) => station.id === id)!.scale,
-      }));
-    expect(cooks.map((cook) => cook.x)).toEqual([
-      772, 661.8181818181818, 551.6363636363636, 441.45454545454544, 368,
-    ]);
-    expect(cooks.every((cook) => cook.y === 314)).toBe(true);
-    expect(new Set(cooks.map((cook) => `${cook.x}:${cook.y}`))).toHaveLength(
-      blocked.length,
-    );
-    for (const cook of cooks) {
-      expect(cook.x - cook.halfWidth).toBeGreaterThan(layout.pass.x);
-      expect(cook.x + cook.halfWidth).toBeLessThan(
-        layout.pass.x + layout.pass.width,
-      );
-      expect(cook.y).toBeGreaterThan(layout.pass.y + layout.pass.height);
-    }
-    for (const cluster of clusters)
-      for (const item of [cluster.ticket, cluster.timer]) {
-        expect(item.x).toBeGreaterThanOrEqual(layout.pass.x);
-        expect(item.x + item.width).toBeLessThanOrEqual(
-          layout.pass.x + layout.pass.width,
-        );
-        for (const cook of cooks)
-          expect(
-            item.x + item.width < cook.x - cook.halfWidth ||
-              item.x > cook.x + cook.halfWidth,
-          ).toBe(true);
-      }
-  });
-  it.each([1, 2, 6, 12])(
-    "gives every agent a unique non-collocated pass cluster at the supported all-blocked count %i",
-    (count) => {
+  it.each([
+    [1440, 900, 1],
+    [1440, 900, 6],
+    [1440, 900, 12],
+    [390, 844, 1],
+    [390, 844, 6],
+    [390, 844, 12],
+    [320, 640, 1],
+    [320, 640, 6],
+    [320, 640, 12],
+  ])(
+    "allocates the maximal blocked prefix at %ix%i for %i cooks",
+    (width, height, count) => {
       const ids = Array.from(
           { length: count },
-          (_, index) => `visual-agent-${index + 1}`,
+          (_, index) => `agent-${String(index + 1).padStart(2, "0")}`,
         ),
-        layout = computeLayout(1200, 740, ids),
-        clusters = ids.map((id) => blockedPassGeometry(layout, id));
-      expect(
-        new Set(clusters.map(({ cook }) => `${cook.x}:${cook.y}`)),
-      ).toHaveLength(count);
-      expect(
-        new Set(clusters.map(({ ticket }) => `${ticket.x}:${ticket.y}`)),
-      ).toHaveLength(count);
-      expect(
-        new Set(clusters.map(({ timer }) => `${timer.x}:${timer.y}`)),
-      ).toHaveLength(count);
+        layout = computeLayout(width, height, ids),
+        placements = blockedPlacements(layout, [...ids].reverse()),
+        ordered = layout.stations.map((station) => placements.get(station.id)!);
+      expect(placements.size).toBe(count);
+      expect(ordered.map((placement) => placement.queueOrdinal)).toEqual(
+        ids.map((_, index) => index + 1),
+      );
+      expect(ordered.map((placement) => placement.kind).join(",")).toMatch(
+        /^pass(?:,pass)*(?:,station)*$/,
+      );
+
+      const pass = ordered.filter((placement) => placement.kind === "pass"),
+        intersects = (
+          a: (typeof ordered)[number]["cookBounds"],
+          b: (typeof ordered)[number]["cookBounds"],
+        ) =>
+          a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y;
+      ordered.forEach((placement, index) => {
+        for (const bound of [
+          placement.cookBounds,
+          placement.ticket,
+          placement.timer,
+        ]) {
+          expect(intersects(bound, ordered[0]!.bell)).toBe(false);
+          for (const other of ordered.slice(index + 1))
+            for (const otherBound of [
+              other.cookBounds,
+              other.ticket,
+              other.timer,
+            ])
+              expect(intersects(bound, otherBound)).toBe(false);
+        }
+      });
+      for (const placement of ordered.filter((item) => item.kind === "station"))
+        for (const bound of [
+          placement.cookBounds,
+          placement.ticket,
+          placement.timer,
+        ]) {
+          expect(bound.x).toBeGreaterThanOrEqual(placement.station.x - 0.001);
+          expect(bound.y).toBeGreaterThanOrEqual(placement.station.y - 0.001);
+          expect(bound.x + bound.width).toBeLessThanOrEqual(
+            placement.station.x + placement.station.width + 0.001,
+          );
+          expect(bound.y + bound.height).toBeLessThanOrEqual(
+            placement.station.y + placement.station.height + 0.001,
+          );
+        }
+      const firstOverflow = ordered.findIndex(
+        (placement) => placement.kind === "station",
+      );
+      if (firstOverflow >= 0)
+        expect(
+          blockedPlacements(layout, ids.slice(0, firstOverflow + 1)).get(
+            ids[firstOverflow]!,
+          )?.kind,
+        ).toBe("station");
+      expect(stationTicketGeometry("blocked", layout.unit)?.blocked).toBe(true);
+
+      if (pass.length) {
+        const retained = pass[0]!,
+          next = blockedPlacements(layout, ids.slice(1), [retained]);
+        for (const placement of next.values())
+          if (placement.kind === "pass")
+            for (const bound of [
+              placement.cookBounds,
+              placement.ticket,
+              placement.timer,
+            ])
+              for (const occupied of [
+                retained.cookBounds,
+                retained.ticket,
+                retained.timer,
+              ])
+                expect(intersects(bound, occupied)).toBe(false);
+      }
     },
   );
-  it("retains a blocked-styled ticket on the home station rail as well as the pass ticket", () => {
-    const home = stationTicketGeometry("blocked", 4);
-    expect(home).toEqual({
-      x: 24,
-      y: 10,
-      width: 28,
-      height: 36,
-      blocked: true,
-    });
-    const layout = computeLayout(1200, 740, ["a"]),
-      pass = blockedPassGeometry(layout, "a");
-    expect(pass.ticket.x).not.toBe(home?.x);
-    expect(pass.ticket.y).not.toBe(home?.y);
-  });
-  it("assigns distinct bounded pass-front staging slots that progress left from the bell", () => {
-    const layout = computeLayout(1200, 740, ["a", "b"]),
-      a = passFrontSlot(layout, "a"),
-      b = passFrontSlot(layout, "b"),
-      bell = passBellGeometry(layout).center;
-    expect(a.x).toBeGreaterThan(b.x);
-    expect(a.x - b.x).toBeGreaterThanOrEqual(12 * layout.unit);
-    for (const slot of [a, b]) {
-      expect(slot.x - 6 * layout.unit).toBeGreaterThan(layout.pass.x);
-      expect(slot.x + 6 * layout.unit).toBeLessThan(
-        layout.pass.x + layout.pass.width,
-      );
-      expect(slot.x).toBeLessThan(bell.x);
-      expect(slot.y).toBeGreaterThan(layout.pass.y + layout.pass.height);
-    }
-  });
-  it("assigns a concrete stable endpoint from station ordering and identity", () => {
-    const ids = ["codex", "claude", "hermes", "openclaw", "gemini", "aider"],
-      layout = computeLayout(1200, 740, ids);
-    expect(passFrontSlot(layout, "codex")).toEqual({ x: 772, y: 314 });
-    expect(passFrontSlot(layout, "aider")).toEqual({ x: 516, y: 314 });
-  });
   it.each([
     [1200, 740],
     [960, 540],
@@ -749,6 +708,14 @@ describe("layout, transitions and resources", () => {
     expect(estimatedWidth).toBeLessThan(layout.stations[0]!.width);
     expect(labels[1]!.name).toContain("...");
     expect(labels[2]!.name).toContain("...");
+    expect(
+      stationIdentityLabels(
+        { name: "density-01", workspace: "/service/density" },
+        "blocked",
+        Date.now(),
+        6,
+      ).name,
+    ).toBe("D...01");
   });
   it("compacts arbitrary station text deterministically while preserving short demo labels", () => {
     expect(compactPixelText("CLAUDE · PAYMENTS")).toBe("CLAUDE · PAYMENTS");

@@ -73,13 +73,17 @@ export function Chrome(props: ChromeProps) {
         hit.kind === "station" &&
         hit.id === (props.hoveredId ?? props.focusedId),
     ),
-    hoverAgent = hoverHit ? snapshot.agents.get(hoverHit.id) : undefined;
+    hoverAgent = hoverHit ? snapshot.agents.get(hoverHit.id) : undefined,
+    selectedHit = props.hits.find(
+      (hit) => hit.kind === "station" && hit.id === selectedAgent?.id,
+    );
   return (
     <>
       {hoverAgent && hoverHit && <Tooltip agent={hoverAgent} hit={hoverHit} />}
       {selectedAgent && (
         <DetailCard
           agent={selectedAgent}
+          hit={selectedHit}
           onClose={() => props.store.select(null)}
         />
       )}
