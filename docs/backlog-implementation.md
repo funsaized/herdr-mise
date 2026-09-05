@@ -69,6 +69,43 @@ maintainer dispatch for the current committed subject.
 | ENG-023 | Reusable gate schema/validator plus exact per-release identity manifests and preparation command; retain build-tool identity separately from public assets.     | Future release and manual gates remain intentional operator actions.                                                                               |
 | ENG-024 | Optional state-known/ticket-availability fields distinguish unknown from idle and genuine zero from unavailable across browser/TUI details and compact display. | None beyond managed execution; strict external v1 schema consumers need the updated schema.                                                        |
 
+## Delivery acceptance follow-up (2026-09-05)
+
+[PR #143](https://github.com/funsaized/herdr-mise/pull/143) publishes this branch.
+Owner-authenticated managed verification was dispatched from trusted main;
+every subsequent head still requires its own successful run before merge.
+The delivery integration requires the exact open head, successful authoritative
+managed status, required checks, and normal GitHub merge protection. It has no
+admin bypass or automatic merge path.
+
+Additional local acceptance observations:
+
+- Public demo smoke: one passing test against `https://herdr-mise.s11a.com`.
+  This observes the deployed site, not proof that the PR is deployed there.
+- Keyboard reflow at 320 CSS pixels and renderer fallback: all six cases passed
+  across Chromium, Firefox, and WebKit. This is reflow-width coverage, not native
+  browser zoom interaction or assistive-technology listening certification.
+- Existing performance fixtures were missing required `sourceStatus` and used
+  obsolete connection copy. Corrected those fixtures; periodic idle traffic now
+  uses protocol heartbeat frames. Full-snapshot replacement is tested separately.
+- Corrected-fixture cold start: 176 ms; unchanged snapshots: zero rebuilds;
+  roster replacement: 12 disposals; 60-second hidden CPU: 0.058% of one core,
+  zero hidden animation frames, resume 1.8 ms. These are single local observations,
+  not representative p50/p95 or multi-day soak evidence. The earlier full-snapshot
+  idle workload measured 0.117% and failed the existing 0.1% assertion; the
+  heartbeat workload is different, not evidence of a runtime optimization.
+- Browser event-to-next-frame scheduling: 13.3 ms. The test label now explicitly
+  excludes source transport and paint completion; ENG-014 remains open.
+- Production coalescer integration observation: 2119.4 bytes/second for the
+  existing twelve-record fixture test.
+- Delivery extension suite: 35 passing Deno tests including stale-head and
+  authoritative-status guards. No performance-budget lane was added.
+
+Worker deployment awaits a selected account/project and spending authorization.
+Hosted trust-control canaries must use adopted trusted controls; signed public
+retry acceptance requires a separately identified release candidate. Multi-day
+soaks and human listening remain unexecuted, not waived by merge.
+
 ## Isolation boundary that remains open
 
 The installed `@funsaized/cli-agent` version exposes backend selection and

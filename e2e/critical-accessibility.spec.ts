@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-test("blocked agents and settings remain keyboard-accessible at narrow width", async ({
+test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.setViewportSize({ width: 720, height: 640 });
+  // Reflow-width coverage equivalent to 1280px at 400% zoom; not an AT listening test.
+  await page.setViewportSize({ width: 320, height: 640 });
   await page.goto("/?preset=blocked&agents=1");
   await expect(
     page.getByRole("status").filter({ hasText: "DEMO SERVICE" }),

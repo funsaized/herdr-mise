@@ -19,7 +19,13 @@ const agents = Array.from({ length: 12 }, (_, index) => ({
   workspace: `/work/${index}`,
   session: { runtimeMs: 60_000, tickets: index },
 }));
-const snapshot = { version: 1, type: "snapshot", mode: "demo", agents };
+const snapshot = {
+  version: 1,
+  type: "snapshot",
+  mode: "demo",
+  sourceStatus: "unavailableSocket",
+  agents,
+};
 const hiddenCpuMeasurementMs = 60_000;
 async function mockFeed(page: Page) {
   await page.addInitScript((payload) => {
@@ -37,7 +43,10 @@ async function mockFeed(page: Page) {
           this.readyState = 1;
           this.onopen?.();
           this.send(payload);
-          this.heartbeat = window.setInterval(() => this.send(payload), 1_000);
+          this.heartbeat = window.setInterval(
+            () => this.send({ version: 1, type: "heartbeat" }),
+            1_000,
+          );
         }, 20);
       }
       send(value: unknown) {
@@ -130,11 +139,11 @@ test("T-5.5/T-9.2 opening handshake times out into disconnected mode", async ({
     Object.defineProperty(window, "WebSocket", { value: OpeningSocket });
   });
   await page.goto("/");
+  await expect(page.getByText("Connecting to Mise")).toBeVisible({
+    timeout: 500,
+  });
   await expect(
-    page.getByText("Waiting for agents — start one in herdr"),
-  ).toBeVisible({ timeout: 500 });
-  await expect(
-    page.getByRole("alert").getByText("Lost connection to herdr"),
+    page.getByRole("alert").getByText("Lost connection to Mise"),
   ).toBeVisible({ timeout: 3_500 });
   const timing = await page.evaluate(() => {
       const values = window as unknown as {
@@ -172,6 +181,7 @@ test("station heartbeats are no-op and replacement disposes retained views", asy
     version: 1,
     type: "snapshot",
     mode: "demo",
+    sourceStatus: "unavailableSocket",
     agents: agents.map((agent) => ({
       ...agent,
       state: "idle",
@@ -229,8 +239,11 @@ test("station heartbeats are no-op and replacement disposes retained views", asy
   );
   expect(replaced.stationDisposals - before.stationDisposals).toBe(12);
 });
-test("PR-3 event-to-pixel scheduling", async ({ page }) => {
+test("PR-3 browser event-to-next-frame scheduling (not source-to-pixel)", async ({
+  page,
+}) => {
   await page.goto("/");
+  await expect(page.getByText("DEMO SERVICE")).toBeVisible();
   const changed = {
     ...agents[0],
     state: "blocked",
@@ -248,7 +261,9 @@ test("PR-3 event-to-pixel scheduling", async ({ page }) => {
     await new Promise(requestAnimationFrame);
     return performance.now() - before;
   }, changed);
-  console.log(`PR-3 event-to-next-pixel ${latency.toFixed(2)} ms`);
+  console.log(
+    `PR-3 browser event-to-next-frame ${latency.toFixed(2)} ms; excludes source transport and paint completion`,
+  );
   expect(latency).toBeLessThanOrEqual(250);
 });
 test("PR-4 hidden CPU and resume", async ({ page }) => {

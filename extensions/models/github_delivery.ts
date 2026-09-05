@@ -74,6 +74,20 @@ export function requireSubject(pr: Record<string, unknown>, headSha: string) {
     throw new Error("Expected exact open, non-draft PR head against main");
   }
 }
+
+export function requireManagedSuccess(checks: Array<Record<string, unknown>>) {
+  if (
+    !checks.some(
+      (check) =>
+        check.context === "Swamp managed verification" &&
+        check.state === "SUCCESS",
+    )
+  ) {
+    throw new Error(
+      "Exact-head Swamp managed verification status is not successful",
+    );
+  }
+}
 export const extension = {
   type: "@webframp/github",
   resources: {
@@ -89,6 +103,79 @@ export const extension = {
     },
   },
   methods: [
+    {
+      inspect_delivery_run: {
+        description:
+          "Read one repository Actions run, its jobs and artifact metadata, with failed-step logs",
+        arguments: z.object({ runId: Pr }),
+        execute: async (args: { runId: number }, context: Context) => {
+          const run = JSON.parse(
+            await gh(
+              [
+                "run",
+                "view",
+                String(args.runId),
+                "--repo",
+                repo,
+                "--json",
+                "databaseId,url,status,conclusion,headSha,createdAt,updatedAt,jobs",
+              ],
+              context.signal,
+            ),
+          );
+          const artifacts = JSON.parse(
+            await gh(
+              ["api", `repos/${repo}/actions/runs/${args.runId}/artifacts`],
+              context.signal,
+            ),
+          );
+          const failedLogs =
+            run.conclusion === "failure"
+              ? await gh(
+                  [
+                    "run",
+                    "view",
+                    String(args.runId),
+                    "--repo",
+                    repo,
+                    "--log-failed",
+                  ],
+                  context.signal,
+                )
+              : null;
+          return record(context, `run-${args.runId}`, {
+            run,
+            artifacts,
+            failedLogs,
+          });
+        },
+      },
+    },
+    {
+      dispatch_compatibility: {
+        description:
+          "Dispatch the non-publishing compatibility and discovery check from trusted main",
+        arguments: z.object({}),
+        execute: async (_args: Record<string, never>, context: Context) => {
+          await gh(
+            [
+              "workflow",
+              "run",
+              "herdr-compatibility-drift.yml",
+              "--repo",
+              repo,
+              "--ref",
+              "main",
+            ],
+            context.signal,
+          );
+          return record(context, "compatibility-dispatch", {
+            controlRef: "main",
+            accepted: true,
+          });
+        },
+      },
+    },
     {
       inspect_delivery: {
         description:
@@ -235,6 +322,7 @@ export const extension = {
         ) => {
           const pr = await view(args.prNumber, context.signal);
           requireSubject(pr, args.headSha);
+          requireManagedSuccess(pr.statusCheckRollup);
           if (
             pr.mergeStateStatus !== "CLEAN" ||
             pr.reviewDecision === "CHANGES_REQUESTED" ||

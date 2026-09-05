@@ -1,4 +1,8 @@
-import { extension, requireSubject } from "../models/github_delivery.ts";
+import {
+  extension,
+  requireSubject,
+  requireManagedSuccess,
+} from "../models/github_delivery.ts";
 
 const sha = "a".repeat(40);
 const subject = {
@@ -28,7 +32,7 @@ Deno.test("delivery accepts only the exact open non-draft main subject", () => {
   }
 });
 
-Deno.test("delivery schemas reject flags, missing identities, and alternate repositories", () => {
+Deno.test("delivery schemas reject flags and missing identities", () => {
   const methods = Object.assign({}, ...extension.methods);
   for (const input of [
     { prNumber: 1 },
@@ -48,4 +52,24 @@ Deno.test("delivery schemas reject flags, missing identities, and alternate repo
     }).success
   )
     throw new Error("Flag accepted as branch");
+});
+
+Deno.test("merge requires the authoritative managed status, not a similarly named check", () => {
+  requireManagedSuccess([
+    { context: "Swamp managed verification", state: "SUCCESS" },
+  ]);
+  for (const checks of [
+    [],
+    [{ context: "Swamp managed verification", state: "PENDING" }],
+    [{ name: "Swamp managed verification", conclusion: "SUCCESS" }],
+  ]) {
+    let rejected = false;
+    try {
+      requireManagedSuccess(checks);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected)
+      throw new Error("Missing authoritative success was accepted");
+  }
 });
