@@ -1210,8 +1210,11 @@ export class KitchenScene {
       nameFontSize = Math.max(9, 2.1 * u),
       statusFontSize = Math.max(8, 1.8 * u),
       nameCharacters = Math.max(
-        4,
-        Math.floor((rect.width - 2 * u) / (nameFontSize * 0.7)),
+        tokens.scene.layout.stationNameMinCharacters,
+        Math.floor(
+          (rect.width - 2 * u) /
+            (nameFontSize * tokens.scene.layout.stationNameCharacterWidth),
+        ),
       ),
       identity = stationIdentityLabels(agent, state, wallNow, nameCharacters),
       dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}`,
