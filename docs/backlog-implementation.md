@@ -36,8 +36,11 @@ managed dispatch, release publication, or human gate was performed.
 
 Local tools: Node 26.8.1, Rust 1.97.1, Swamp
 `20260904.044433.0-sha.ab26e35b`, bundled Deno 2.9.6, Vitest 4.1.11.
-CI uses Node 22. No managed attestation was produced from this dirty development
-checkout; its checks require a committed subject and maintainer dispatch.
+CI uses Node 22. Full advisory Swamp verification passed all 20 steps on committed
+subject `774aa079eff38b5e762edb6dbb32b68db50361fd` in 255,633 ms (run
+`8671b44f-5caa-4501-bc2e-b94a783931dd`). This evidence applies to that subject,
+not subsequent changes. No managed attestation was produced; its checks require
+maintainer dispatch for the current committed subject.
 
 | Item    | Branch implementation                                                                                                                                           | Acceptance still outstanding                                                                                                                       |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -75,13 +78,14 @@ provider authentication/egress, and a readonly tool profile is not proof of an
 OS read-only mount. Therefore `auto` plus `required` must not be advertised as
 complete hostile-input containment.
 
-Before enabling autonomous operation on untrusted input, use disposable
-provider-specific workers or a reviewed egress proxy, with fixture credentials
-and explicit writable mounts. Record successful normal reviewer output and
-builder writes, denied writes to reviewer source, denied unrelated fixture
-credentials, denied unauthorized egress, and the effective backend for each
-supported OS. No real credentials should be used as test targets. That runner
-and provider-authentication choice needs maintainer direction.
+The selected target is [disposable Linux VMs with mandatory inner bwrap
+isolation](agent-worker-isolation.md), read-only reviewer source, disposable
+builder checkouts, and externally enforced provider-only egress. Existing macOS
+execution remains advisory, not a second production isolation target. The
+installed integration's `checkFactoryViability` probe is reusable for actors,
+but does not prove reviewer mounts or Linux network restrictions. Deployment,
+provider authentication, and the documented positive/negative canaries remain
+outstanding; no credentials, workers, or passing acceptance evidence were created.
 
 ## Review-cost decision
 
