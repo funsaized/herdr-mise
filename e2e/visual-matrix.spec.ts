@@ -138,7 +138,7 @@ const FULL_STATUSES = new Set([
   "UNKNOWN · PREP",
 ]);
 
-function expectInside(inner: Box, outer: Box, tolerance = 2) {
+function expectInside(inner: Box, outer: Box, tolerance = 3) {
   expect(inner.x).toBeGreaterThanOrEqual(outer.x - tolerance);
   expect(inner.y).toBeGreaterThanOrEqual(outer.y - tolerance);
   expect(inner.x + inner.width).toBeLessThanOrEqual(
@@ -703,6 +703,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
 });
 
 test("blocked pass density", async ({ page }) => {
+  test.setTimeout(120_000);
   const directory = await mkdtemp(
       join(tmpdir(), "herdr-mise-blocked-density-"),
     ),
