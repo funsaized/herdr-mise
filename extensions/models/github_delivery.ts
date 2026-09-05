@@ -21,6 +21,7 @@ async function gh(args: string[], signal?: AbortSignal) {
       "GITHUB_TOKEN",
       "HOME",
       "XDG_CONFIG_HOME",
+      "PATH",
     ].flatMap((name) => {
       const value = Deno.env.get(name);
       return value === undefined ? [] : [[name, value]];
