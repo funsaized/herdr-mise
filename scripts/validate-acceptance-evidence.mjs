@@ -36,21 +36,6 @@ const publicArtifactFields = [
   "checksum_url",
 ];
 const artifactReferenceFields = ["target", "archive", "sha256"];
-const acceptedRcCommit = "85440d6577ab12a8c087c1c0919d896503164dc3";
-const supportedArtifacts = new Map([
-  [
-    "aarch64-apple-darwin",
-    "e4cf8c06845a8fe764042b38816004aa4e23e5abed209f2245ea3b00ec2b9b57",
-  ],
-  [
-    "x86_64-apple-darwin",
-    "bad9caf8073a9bfc2a580d537a22de7968a8a6e37f29f711470bf61db121faf8",
-  ],
-  [
-    "x86_64-unknown-linux-gnu",
-    "bbcb6ab7cf31216313b42692cbb9a3025cdf35e692787e2340ea13b22e116229",
-  ],
-]);
 const rowFields = [
   "gate_id",
   "category",
@@ -98,13 +83,15 @@ const privateData = (value) =>
 export const isMainModule = (argvPath, moduleUrl) =>
   Boolean(argvPath) && resolve(argvPath) === resolve(fileURLToPath(moduleUrl));
 
-function validateAcceptedRc(rc, errors) {
+function validateAcceptedRc(rc, errors, contract) {
+  const supportedArtifacts = new Map(Object.entries(contract.artifacts));
+  const acceptedRcCommit = contract.acceptedRcCommit;
   if (!exactKeys(rc, rcFields)) {
     errors.push("accepted_rc has missing or unknown field(s)");
     return new Set();
   }
-  if (rc.tag !== "v0.2.0-rc.1" || !rcTag(rc.tag))
-    errors.push("accepted_rc tag must be public v0.2.0-rc.1");
+  if (rc.tag !== contract.acceptedRcTag || !rcTag(rc.tag))
+    errors.push(`accepted_rc tag must be public ${contract.acceptedRcTag}`);
   if (rc.version !== rc.tag?.slice(1))
     errors.push("accepted_rc version must match tag");
   if (!commit(rc.commit))
@@ -112,7 +99,9 @@ function validateAcceptedRc(rc, errors) {
       "accepted_rc commit must be 40 lowercase hexadecimal characters",
     );
   else if (rc.commit !== acceptedRcCommit)
-    errors.push("accepted_rc commit does not match public v0.2.0-rc.1");
+    errors.push(
+      `accepted_rc commit does not match public ${contract.acceptedRcTag}`,
+    );
   if (!Array.isArray(rc.artifacts) || rc.artifacts.length !== 3) {
     errors.push("accepted_rc must contain exactly the three supported targets");
     return new Set();
@@ -161,6 +150,37 @@ function validateAcceptedRc(rc, errors) {
 export function validateEvidence(document, expectedPromotion) {
   const errors = [];
   if (
+    document?.promotion &&
+    !exactObject(document.promotion, expectedPromotion, promotionFields)
+  )
+    return ["promotion context mismatch"];
+  if (!stableTag(expectedPromotion?.tag)) return ["invalid promotion tag"];
+  let contract;
+  try {
+    contract = JSON.parse(
+      readFileSync(
+        new URL(
+          `../acceptance/releases/${expectedPromotion.tag}.json`,
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+  } catch {
+    return ["release acceptance contract is missing or malformed"];
+  }
+  if (
+    contract.schemaVersion !== 1 ||
+    contract.promotionTag !== expectedPromotion.tag ||
+    !contract.acceptedRcTag?.startsWith(`${expectedPromotion.tag}-rc.`) ||
+    !rcTag(contract.acceptedRcTag) ||
+    !commit(contract.acceptedRcCommit) ||
+    !contract.artifacts ||
+    Object.keys(contract.artifacts).length !== 3 ||
+    !Object.values(contract.artifacts).every(sha256)
+  )
+    return ["release acceptance contract is invalid"];
+  if (
     !exactKeys(document, [
       "schema_version",
       "accepted_rc",
@@ -170,7 +190,11 @@ export function validateEvidence(document, expectedPromotion) {
   )
     return ["document has missing or unknown field(s)"];
   if (document.schema_version !== 2) errors.push("schema_version must equal 2");
-  const acceptedArtifacts = validateAcceptedRc(document.accepted_rc, errors);
+  const acceptedArtifacts = validateAcceptedRc(
+    document.accepted_rc,
+    errors,
+    contract,
+  );
   if (!exactKeys(document.promotion, promotionFields))
     errors.push("promotion has missing or unknown field(s)");
   else {

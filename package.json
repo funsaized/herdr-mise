@@ -4,6 +4,8 @@
   "license": "MIT",
   "author": "Funsaized",
   "scripts": {
+    "doctor": "node scripts/check-environment.mjs",
+    "prepare:acceptance": "node scripts/prepare-acceptance.mjs",
     "build": "npm --prefix client run build --",
     "dev:visual": "npm --prefix client run dev:visual --",
     "bundle": "npm run build && cargo build --release --bin herdr-mise",
@@ -16,6 +18,9 @@
     "typecheck": "npm --prefix client run typecheck",
     "lint": "oxlint --deny-warnings .",
     "test": "node --test scripts/*.test.mjs && npm --prefix client run test",
+    "test:extensions": "node scripts/test-extensions.mjs",
+    "bundle:prepared": "cargo build --release --locked --bin herdr-mise",
+    "test:visual:prepared": "HERDR_MISE_PREBUILT=1 HERDR_MISE_CROSS_BROWSER=1 playwright test --config e2e/playwright.config.ts",
     "check:herdr-compatibility": "node scripts/check-herdr-compatibility.mjs",
     "audit:tokens": "node scripts/audit-tokens.mjs",
     "audit:architecture": "node scripts/audit-pixi-architecture.mjs",
@@ -28,7 +33,7 @@
     "test:hosted": "HOSTED_VISUAL_URL=https://herdr-mise.s11a.com playwright test --config e2e/playwright.config.ts e2e/hosted-smoke.spec.ts",
     "test:acceptance": "node --test scripts/acceptance-evidence.test.mjs scripts/public-artifact.test.mjs",
     "validate:acceptance-evidence": "node scripts/validate-acceptance-evidence.mjs",
-    "verify:browser:install": "playwright install chromium",
+    "verify:browser:install": "playwright install --with-deps chromium firefox webkit",
     "validate:managed-verification-evidence": "node scripts/managed-verification-evidence.mjs",
     "orchestrator:serve": "sh scripts/nightshift-serve.sh",
     "intake:nightshift": "node scripts/nightshift-intake.mjs intake/nightshift-features.json"

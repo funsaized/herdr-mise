@@ -98,31 +98,40 @@ fn allowed_origin(headers: &HeaderMap, port: u16, extra_origins: &[String]) -> b
         || extra_origins.iter().any(|extra| extra == origin)
 }
 async fn client(socket: WebSocket, feed: Arc<Feed>) {
-    let mut changes = feed.subscribe();
+    let (mut changes, initial_snapshot) = feed.subscribe_snapshot().await;
     let mut health = feed.subscribe_health();
     let (mut output, mut input) = socket.split();
     if !*health.borrow() {
-        let _ = output.send(Message::Close(None)).await;
+        let _ = send_bounded(&mut output, Message::Close(None)).await;
         return;
     }
-    let Ok(snapshot) = serde_json::to_string(&feed.snapshot().await) else {
+    let Ok(snapshot) = serde_json::to_string(&initial_snapshot) else {
         return;
     };
-    if output.send(Message::Text(snapshot.into())).await.is_err() {
+    if !send_bounded(&mut output, Message::Text(snapshot.into())).await {
         return;
     }
     let mut heartbeat = tokio::time::interval(Duration::from_secs(1));
     heartbeat.tick().await;
     loop {
         tokio::select! {
-            changed=health.changed()=>if changed.is_err() || !*health.borrow() { let _=output.send(Message::Close(None)).await; break },
+            changed=health.changed()=>if changed.is_err() || !*health.borrow() { let _=send_bounded(&mut output, Message::Close(None)).await; break },
             message=input.next()=>match message { Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break, _=>{} },
-            event=changes.recv()=>match event { Ok(event)=> { let Ok(text)=serde_json::to_string(&event) else{continue}; if output.send(Message::Text(text.into())).await.is_err(){break} }, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=> { let Ok(text)=serde_json::to_string(&feed.snapshot().await) else{continue}; if output.send(Message::Text(text.into())).await.is_err(){break} }, Err(_)=>break },
-            _=heartbeat.tick()=> { let event=AgentStateEvent::Heartbeat{version:PROTOCOL_VERSION}; let Ok(text)=serde_json::to_string(&event) else{continue}; if output.send(Message::Text(text.into())).await.is_err(){break} }
+            event=changes.recv()=>match event { Ok(event)=> { let Ok(text)=serde_json::to_string(&event) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=> { let (cursor, snapshot) = feed.subscribe_snapshot().await; changes = cursor; let Ok(text)=serde_json::to_string(&snapshot) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(_)=>break },
+            _=heartbeat.tick()=> { let event=AgentStateEvent::Heartbeat{version:PROTOCOL_VERSION}; let Ok(text)=serde_json::to_string(&event) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }
         }
     }
 }
-async fn static_asset(uri: Uri) -> Response {
+async fn send_bounded<S: futures_util::Sink<Message> + Unpin>(
+    output: &mut S,
+    message: Message,
+) -> bool {
+    matches!(
+        tokio::time::timeout(Duration::from_secs(2), output.send(message)).await,
+        Ok(Ok(()))
+    )
+}
+async fn static_asset(uri: Uri, headers: HeaderMap) -> Response {
     let requested = uri.path().trim_start_matches('/');
     let key = if requested.is_empty() {
         "index.html"
@@ -139,13 +148,41 @@ async fn static_asset(uri: Uri) -> Response {
     match asset {
         Some(file) => {
             let mime = content_type(key);
+            let etag = format!(
+                "\"{}\"",
+                file.metadata
+                    .sha256_hash()
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            );
+            let cache = if key.starts_with("assets/") {
+                "public, max-age=31536000, immutable"
+            } else {
+                "no-cache"
+            };
+            if headers
+                .get(header::IF_NONE_MATCH)
+                .and_then(|value| value.to_str().ok())
+                == Some(etag.as_str())
+            {
+                return Response::builder()
+                    .status(StatusCode::NOT_MODIFIED)
+                    .header(header::ETAG, etag)
+                    .header(header::CACHE_CONTROL, cache)
+                    .body(Body::empty())
+                    .unwrap();
+            }
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, mime)
-                .body(Body::from(match file.data {
-                    Cow::Borrowed(data) => data.to_vec(),
-                    Cow::Owned(data) => data,
-                }))
+                .header(header::ETAG, etag)
+                .header(header::CACHE_CONTROL, cache)
+                .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+                .body(match file.data {
+                    Cow::Borrowed(data) => Body::from(data),
+                    Cow::Owned(data) => Body::from(data),
+                })
                 .unwrap()
         }
         None => StatusCode::NOT_FOUND.into_response(),
@@ -168,6 +205,10 @@ fn content_type(path: &str) -> &'static str {
         "image/svg+xml"
     } else if path.ends_with(".ttf") {
         "font/ttf"
+    } else if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".gif") {
+        "image/gif"
     } else if path.ends_with(".txt") {
         "text/plain; charset=utf-8"
     } else {
@@ -177,6 +218,22 @@ fn content_type(path: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test(start_paused = true)]
+    async fn downstream_send_deadline_drops_stalled_sinks() {
+        let mut stalled = Box::pin(futures_util::sink::unfold((), |_, _: Message| {
+            std::future::pending::<Result<(), ()>>()
+        }));
+        let started = tokio::time::Instant::now();
+        assert!(!send_bounded(&mut stalled, Message::Text("test".into())).await);
+        assert_eq!(started.elapsed(), Duration::from_secs(2));
+        assert!(
+            send_bounded(
+                &mut futures_util::sink::drain(),
+                Message::Text("test".into())
+            )
+            .await
+        );
+    }
     use super::*;
     use crate::protocol::{AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats};
     use axum::body::to_bytes;
@@ -187,6 +244,34 @@ mod tests {
     };
     use tokio_util::sync::CancellationToken;
     use tower::ServiceExt;
+    #[tokio::test]
+    async fn html_revalidates_without_resending_the_body() {
+        let app = router(Feed::fixed(AppMode::Demo, vec![]).await, 8686);
+        let first = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.headers()[header::CACHE_CONTROL], "no-cache");
+        let etag = first.headers()[header::ETAG].clone();
+        let second = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/")
+                    .header(header::IF_NONE_MATCH, etag)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        assert!(to_bytes(second.into_body(), 1024).await.unwrap().is_empty());
+    }
     #[tokio::test]
     async fn serves_root_and_spa_fallback() {
         let app = router(Feed::fixed(AppMode::Demo, vec![]).await, 8686);
@@ -564,6 +649,7 @@ mod tests {
             AgentStateEvent::Snapshot { .. }
         ));
         feed.publish(AgentRecord {
+            state_known: None,
             id: "a".into(),
             name: "A".into(),
             state: AgentState::Working,
@@ -573,6 +659,7 @@ mod tests {
             model: "".into(),
             workspace: "".into(),
             session: SessionStats {
+                tickets_available: None,
                 runtime_ms: 0,
                 tickets: 0,
             },

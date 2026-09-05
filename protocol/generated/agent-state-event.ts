@@ -4,8 +4,9 @@ export type AgentState = "idle" | "working" | "blocked" | "done" | "ended";
 export type AppMode = "live" | "demo";
 export type SourceStatus = "unavailableSocket" | "timeout" | "unsupportedProtocol" | "incompatibleResponse" | "connected";
 export interface SourceDiagnostic { observedProtocol: number; supportedProtocols: number[]; nextAction: string }
-export interface SessionStats { runtimeMs: number; tickets: number }
+export interface SessionStats { runtimeMs: number; tickets: number; ticketsAvailable?: boolean }
 export interface AgentRecord {
+  stateKnown?: boolean;
   id: string;
   name: string;
   state: AgentState;

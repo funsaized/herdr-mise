@@ -31,10 +31,26 @@ the public Latest release.
 
 ## Stable acceptance gate
 
-The checked-in acceptance schema, template, and evidence describe v0.2.0 only.
-Before another stable tag is created, replace those inputs with a contract bound
-to the new accepted RC and promotion commit. Reusing the v0.2.0 RC1 evidence is
-not valid acceptance for a later release.
+Publication first assembles a draft. Retries download and compare every existing
+asset before uploading missing files, then expose the complete set. Existing
+bytes are never overwritten. A timestamp-signed rebuild with different bytes
+fails closed: rerun the publish job using the original retained `release-*`
+artifacts, rather than rebuilding an accepted RC. Build-environment artifacts
+are separate from the six public assets and retained for 30 days.
+
+The Linux release is built on Ubuntu 24.04 (glibc 2.39 baseline); older glibc and
+musl are not claimed supported. Each build retains its actual compiler, Node,
+OS, and libc identities. Supporting older distributions requires a deliberately
+older build sysroot and installation acceptance, not just relaxing the installer.
+
+The gate schema and validator are reusable. Exact accepted RC identities live
+in `acceptance/releases/<stable-tag>.json`; preserve historical manifests.
+The current template and evidence still describe v0.2.0 only. Prepare a future
+candidate with `npm run prepare:acceptance -- v0.3.0 reviewed-rc-evidence.json`.
+Review its stdout as the new manifest, verify the public sidecar hashes, and
+make the intentional version edits listed on stderr. This command never
+publishes or marks a manual gate passed. Collect fresh evidence bound to the
+new RC and promotion commit; old evidence cannot satisfy a new promotion.
 
 Stable publication fails closed before release creation or upload. The
 `stable_acceptance` workflow job runs only for a stable tag and is a dependency
@@ -45,7 +61,7 @@ malformed, incomplete, failing, or context-mismatched evidence blocks the job.
 The validator must also emit its exact success marker; exit code zero alone is
 not accepted. RC release workflows do not read this secret.
 
-The checked-in acceptance validator owns the current v0.2.0 gate list and
+The checked-in acceptance validator owns the reusable gate list and
 JSON Schema. Its evidence has two deliberately separate identities:
 
 - `accepted_rc` identifies public prerelease `v0.2.0-rc.1`, its immutable tag

@@ -1,3 +1,18 @@
+
+/package.json @funsaized
+/package-lock.json @funsaized
+/client/package.json @funsaized
+/client/package-lock.json @funsaized
+/client/vite.config.ts @funsaized
+/client/tsconfig.json @funsaized
+/client/tsconfig.app.json @funsaized
+/client/tsconfig.node.json @funsaized
+/e2e/ @funsaized
+/scripts/ @funsaized
+/extensions/reports/ @funsaized
+/rust-toolchain.toml @funsaized
+/acceptance/ @funsaized
+/docs/acceptance-evidence.schema.json @funsaized
 # Require human review for files that define or validate verification policy.
 /AGENTS.md @funsaized
 /.github/CODEOWNERS @funsaized

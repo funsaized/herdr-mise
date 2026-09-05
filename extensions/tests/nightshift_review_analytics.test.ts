@@ -265,6 +265,14 @@ Deno.test("analytics joins review rounds without treating zero cost as free", ()
   };
 
   const result = analyzeNightshift(input);
+  if (
+    result.reviewPolicy.automaticRoutingChanges ||
+    result.reviewPolicy.decision !== "retain-current-lanes" ||
+    !result.reviewPolicy.reason.includes("No delivered items")
+  )
+    throw new Error(
+      "Incomplete delivery evidence must not reduce review coverage",
+    );
   if (result.usage.total.tokens.total.value !== 210) {
     throw new Error("provider total was changed by cache token fields");
   }

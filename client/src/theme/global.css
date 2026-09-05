@@ -637,3 +637,13 @@ select:focus-visible {
     bottom: 52px;
   }
 }
+.rendererFallback {
+  position: relative;
+  z-index: 10;
+  margin: 4rem 1rem;
+  padding: 1rem;
+  color: var(--text);
+  background: var(--panel);
+  max-height: 70vh;
+  overflow: auto;
+}

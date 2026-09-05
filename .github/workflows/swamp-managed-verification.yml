@@ -200,7 +200,8 @@ jobs:
           node-version: 22
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-12
         with:
-          components: rustfmt
+          toolchain: 1.97.1
+          components: rustfmt, clippy
       - name: Check out exact trusted control and subject commits
         env:
           BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
@@ -226,6 +227,16 @@ jobs:
           test "$(git -C "$control" rev-parse HEAD)" = "$CONTROL_SHA"
           test "$(git -C "$subject" rev-parse HEAD)" = "$HEAD_SHA"
           git -C "$subject" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+      - name: Cache integrity-checked npm downloads only
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        env:
+          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-download-cache
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            ${{ runner.temp }}/subject/package-lock.json
+            ${{ runner.temp }}/subject/client/package-lock.json
       - name: Install pinned Swamp
         working-directory: ${{ runner.temp }}/control
         run: sh scripts/install-swamp-managed.sh
@@ -233,8 +244,11 @@ jobs:
         env:
           CONTROL_ROOT: ${{ runner.temp }}/control
         run: swamp extension install --repo-dir "$CONTROL_ROOT"
+      - name: Resolve Swamp Deno runtime
+        run: swamp doctor extensions --repo-dir "$RUNNER_TEMP/control" --json | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const p=JSON.parse(s).denoPath;if(!p)process.exit(1);require("node:fs").appendFileSync(process.env.GITHUB_ENV,`DENO_EXEC_PATH=${p}\n`)})'
       - name: Run shared Swamp verification
         env:
+          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-download-cache
           ACTOR: ${{ needs.resolve.outputs.actor }}
           BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
           CONTROL_ROOT: ${{ runner.temp }}/control
@@ -281,6 +295,14 @@ jobs:
             --repo-dir "$CONTROL_ROOT" > "$RUNNER_TEMP/diagnostics/workflow-summary.json" 2>&1 || true
           node -e "const fs=require('node:fs');const p=process.argv[1];fs.writeFileSync(p,fs.readFileSync(p,'utf8').replaceAll(process.env.RUNNER_TEMP,'\u003crunner-temp\u003e'))" \
             "$RUNNER_TEMP/diagnostics/workflow-summary.json"
+      - name: Retain browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: managed-browser-failures
+          path: ${{ runner.temp }}/subject/e2e/artifacts/results
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Retain managed diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

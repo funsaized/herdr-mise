@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "type": "snapshot",
+  "mode": "live",
+  "sourceStatus": "connected",
+  "agents": [
+    {
+      "id": "fictional-unknown",
+      "name": "Fictional unknown agent",
+      "state": "idle",
+      "stateKnown": false,
+      "progress": null,
+      "stateEnteredAt": "2026-09-05T00:00:00Z",
+      "accentIndex": 0,
+      "model": "",
+      "workspace": "fictional-workspace",
+      "session": { "runtimeMs": 0, "tickets": 0, "ticketsAvailable": false }
+    },
+    {
+      "id": "fictional-zero",
+      "name": "Fictional observed zero",
+      "state": "working",
+      "stateKnown": true,
+      "progress": null,
+      "stateEnteredAt": "2026-09-05T00:00:00Z",
+      "accentIndex": 1,
+      "model": "",
+      "workspace": "fictional-workspace",
+      "session": { "runtimeMs": 0, "tickets": 0, "ticketsAvailable": true }
+    }
+  ]
+}

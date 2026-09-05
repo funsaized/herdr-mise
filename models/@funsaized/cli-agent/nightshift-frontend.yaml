@@ -20,8 +20,8 @@ globalArguments:
   idleTimeoutMs: 600000
   wallTimeoutMs: 3600000
   maxRetries: 2
-  sandboxMode: off
-  sandboxRequired: false
+  sandboxMode: auto
+  sandboxRequired: true
   sandboxNetwork: allow
   sandboxCredentialAccess: provider
 methods: {}

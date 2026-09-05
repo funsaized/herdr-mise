@@ -7,9 +7,12 @@ export const humanStateWords = {
   done: "Done — plated",
   ended: "Ended — 86'd",
 } as const;
-export type SemanticAgent = Pick<AgentMachine, "id" | "name" | "targetState">;
+export type SemanticAgent = Pick<
+  AgentMachine,
+  "id" | "name" | "targetState" | "stateKnown"
+>;
 export function semanticStationLabel(agent: SemanticAgent) {
-  return `${agent.name}, ${humanStateWords[agent.targetState]}, open details`;
+  return `${agent.name}, ${agent.stateKnown === false ? "Unknown — at prep" : humanStateWords[agent.targetState]}, open details`;
 }
 export function semanticAgentsEqual(
   a: readonly SemanticAgent[],
@@ -21,6 +24,7 @@ export function semanticAgentsEqual(
       (agent, index) =>
         agent.id === b[index]?.id &&
         agent.name === b[index]?.name &&
+        agent.stateKnown === b[index]?.stateKnown &&
         agent.targetState === b[index]?.targetState,
     )
   );
@@ -28,9 +32,12 @@ export function semanticAgentsEqual(
 export function semanticAgents(
   snapshot: ReadonlyMap<string, AgentMachine>,
 ): SemanticAgent[] {
-  return [...snapshot.values()].map(({ id, name, targetState }) => ({
-    id,
-    name,
-    targetState,
-  }));
+  return [...snapshot.values()].map(
+    ({ id, name, targetState, stateKnown }) => ({
+      id,
+      name,
+      targetState,
+      stateKnown,
+    }),
+  );
 }

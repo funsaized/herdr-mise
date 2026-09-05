@@ -49,9 +49,9 @@ console.log(
   `Loaded WebGL JS: ${runtimeRaw} bytes raw / ${runtimeGzip} bytes gzip (${runtime.map((item) => basename(item.file)).join(", ")})`,
 );
 console.log(
-  `Total emitted client: ${totalRaw} bytes raw / ${totalTransfer} bytes gzip transfer`,
+  `Total emitted client: ${totalRaw} bytes raw (not all assets load on every visit) / ${totalTransfer} bytes gzip size estimate`,
 );
 console.log(
-  `Limits: WebGL path ${webglLimit} bytes gzip; total transfer ${transferLimit} bytes gzip`,
+  `Size limits: WebGL path ${webglLimit} bytes gzip; total emitted ${transferLimit} bytes gzip (estimates, not HTTP wire measurements)`,
 );
 if (runtimeGzip > webglLimit || totalTransfer > transferLimit) process.exit(1);

@@ -51,6 +51,7 @@
       ],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "stateKnown": { "type": "boolean" },
         "name": { "type": "string", "minLength": 1 },
         "state": { "enum": ["idle", "working", "blocked", "done", "ended"] },
         "progress": {
@@ -69,6 +70,7 @@
           "required": ["runtimeMs", "tickets"],
           "properties": {
             "runtimeMs": { "type": "integer", "minimum": 0 },
+            "ticketsAvailable": { "type": "boolean" },
             "tickets": { "type": "integer", "minimum": 0 }
           }
         }

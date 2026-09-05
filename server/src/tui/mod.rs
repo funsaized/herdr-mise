@@ -270,9 +270,9 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let guard = TerminalGuard::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let mut events = EventStream::new();
-    let mut receiver = feed.subscribe();
+    let (mut receiver, snapshot) = feed.subscribe_snapshot().await;
     let mut table = AgentTable::default();
-    table.apply(feed.snapshot().await);
+    table.apply(snapshot);
     guard.set_board_len(table.board().len());
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
@@ -306,7 +306,9 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                     guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Resnapshot => {
-                    table.apply(feed.snapshot().await);
+                    let (cursor, snapshot) = feed.subscribe_snapshot().await;
+                    receiver = cursor;
+                    table.apply(snapshot);
                     guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Closed => break,
@@ -382,6 +384,7 @@ mod tests {
         };
 
         let agent = |id: &str| AgentRecord {
+            state_known: None,
             id: id.into(),
             name: id.into(),
             state: AgentState::Working,
@@ -391,6 +394,7 @@ mod tests {
             model: String::new(),
             workspace: String::new(),
             session: SessionStats {
+                tickets_available: None,
                 runtime_ms: 0,
                 tickets: 0,
             },

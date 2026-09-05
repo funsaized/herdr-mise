@@ -40,16 +40,12 @@ fn workspace_display_name(workspace: &str) -> &str {
 }
 
 pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
-    let tickets = if agent.session.tickets == 0 {
-        "Unavailable".into()
-    } else {
-        agent.session.tickets.to_string()
-    };
+    let tickets = agent.session.tickets_text();
     [
         format!(
             "{} · {}",
             sanitize_external(&agent.name),
-            state_label(&agent.state)
+            record_state_label(agent)
         ),
         format!(
             "Workspace: {} · Tickets: {tickets}",
@@ -78,6 +74,14 @@ fn state_label(state: &AgentState) -> &'static str {
         AgentState::Blocked => "BLOCKED / AT THE PASS",
         AgentState::Done => "DONE / PLATED",
         AgentState::Ended => "86'D / SESSION ENDED",
+    }
+}
+
+fn record_state_label(agent: &AgentRecord) -> &'static str {
+    if agent.state_known == Some(false) {
+        "UNKNOWN / AT PREP"
+    } else {
+        state_label(&agent.state)
     }
 }
 
@@ -210,11 +214,11 @@ pub fn draw(
                 sanitize_external(&agent.name)
             })
             .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
-            Cell::from(state_label(&agent.state))
+            Cell::from(record_state_label(agent))
                 .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
             Cell::from(sanitize_external(workspace_display_name(&agent.workspace))),
-            Cell::from(agent.session.tickets.to_string()),
+            Cell::from(agent.session.tickets_text()),
             Cell::from(format_duration(agent.session.runtime_ms)),
         ])
         .style(style)
@@ -297,6 +301,21 @@ pub fn draw(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shared_provenance_fixture_distinguishes_unavailable_from_zero() {
+        let event: crate::protocol::AgentStateEvent = serde_json::from_str(include_str!(
+            "../../../protocol/fixtures/snapshot-provenance.v1.json"
+        ))
+        .unwrap();
+        let crate::protocol::AgentStateEvent::Snapshot { agents, .. } = event else {
+            panic!("snapshot")
+        };
+        assert!(super::inspect_facts(&agents[0])[0].contains("UNKNOWN"));
+        assert!(super::inspect_facts(&agents[0])[1].contains("Tickets: Unavailable"));
+        assert!(super::inspect_facts(&agents[1])[1].contains("Tickets: 0"));
+        assert_eq!(agents[0].session.tickets_text(), "Unavailable");
+        assert_eq!(agents[1].session.tickets_text(), "0");
+    }
     use super::super::{
         handle_key, handle_key_with_view, retain_selection, scene, SceneView, HELP_LINES,
     };
@@ -311,6 +330,7 @@ mod tests {
 
     fn record(id: &str, state: AgentState) -> AgentRecord {
         AgentRecord {
+            state_known: None,
             id: id.into(),
             name: format!("Cook {id}"),
             state,
@@ -320,6 +340,7 @@ mod tests {
             model: "gpt-5.6-sol".into(),
             workspace: "/work/customer-api".into(),
             session: SessionStats {
+                tickets_available: None,
                 runtime_ms: 3_661_000,
                 tickets: 7,
             },

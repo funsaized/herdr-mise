@@ -1462,9 +1462,24 @@ export function analyzeNightshift(input: AnalyticsInput) {
     .map((values) =>
       values.reduce((sum, value) => sum + value.providerReportedCostUsd!, 0),
     );
+  const efficiency = efficiencyIndicators(
+    joinedInput,
+    review.firstMergeable,
+    review.findingsAfterPreviouslyCleanLane,
+  );
   return {
     schemaVersion: 1,
     deterministic: true,
+    reviewPolicy: {
+      decision: "retain-current-lanes",
+      automaticRoutingChanges: false,
+      reason:
+        efficiency.delivered.workItemCount === 0
+          ? "No delivered items in this report scope: cost per delivered item and escaped-defect comparisons are unavailable."
+          : "Delivery data alone does not establish causal lane value. Compare scoped before/after cohorts, unique findings, overlap, and escaped defects before a maintainer-approved routing pilot.",
+      requiredControls:
+        "Security and trust-boundary review remain mandatory; stale findings must be refreshed for affected concerns.",
+    },
     usageSemantics: {
       cost: "providerReportedCostUsd is recorded invocation.attributes.costUsd. Zero means provider-reported zero, not free.",
       tokens:
@@ -1500,11 +1515,7 @@ export function analyzeNightshift(input: AnalyticsInput) {
       ),
       coveredWorkItemCount: perWorkItemCosts.length,
     },
-    efficiency: efficiencyIndicators(
-      joinedInput,
-      review.firstMergeable,
-      review.findingsAfterPreviouslyCleanLane,
-    ),
+    efficiency,
     sourcePointers: {
       factory: joinedInput.factoryItems.map((item) => item.source),
       reviews: joinedInput.reviewRounds.map((round) => round.source),
@@ -1573,6 +1584,8 @@ export function renderMarkdown(
     `| ${coverage.factoryWorkItemCount} | ${coverage.reviewRoundCount} | ${coverage.invocationCount} | ${coverage.tokenCoveredInvocationCount} | ${coverage.nonzeroCostInvocationCount} | ${coverage.zeroCostInvocationCount} | ${coverage.unmeteredInteractiveWorkCount.value ?? "unavailable"} | unavailable |`,
     "",
     "A provider-reported zero cost is not interpreted as free. Resident driver orchestration usage is unavailable, not zero. Provider token accounting is not normalized across providers.",
+    "",
+    `Review routing: ${analytics.reviewPolicy.decision}. ${analytics.reviewPolicy.reason} ${analytics.reviewPolicy.requiredControls}`,
     "",
     "## Review Effectiveness",
     "",

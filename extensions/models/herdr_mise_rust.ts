@@ -264,6 +264,18 @@ export const model = {
           [
             { name: "format", args: ["fmt", "--all", "--check"] },
             { name: "check", args: ["check", "--workspace", "--locked"] },
+            {
+              name: "clippy",
+              args: [
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--locked",
+                "--",
+                "-D",
+                "warnings",
+              ],
+            },
             { name: "test", args: ["test", "--workspace", "--locked"] },
           ],
           args.expectedGitHead,

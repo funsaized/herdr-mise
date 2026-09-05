@@ -193,6 +193,15 @@ async function execute(
   const inherited = Deno.env.toObject();
   const env = {
     PATH: inherited.PATH ?? "",
+    ...(inherited.DENO_EXEC_PATH
+      ? { DENO_EXEC_PATH: inherited.DENO_EXEC_PATH }
+      : {}),
+    ...(inherited.DENO_TLS_CA_STORE
+      ? { DENO_TLS_CA_STORE: inherited.DENO_TLS_CA_STORE }
+      : {}),
+    ...(inherited.NPM_CONFIG_CACHE
+      ? { NPM_CONFIG_CACHE: inherited.NPM_CONFIG_CACHE }
+      : {}),
     ...context.globalArgs.environment,
     HOME: temp,
     CARGO_HOME: inherited.CARGO_HOME ?? `${inherited.HOME}/.cargo`,

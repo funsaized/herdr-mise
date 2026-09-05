@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
     time::timeout,
 };
@@ -133,7 +133,7 @@ struct RawSnapshot {
 #[derive(Debug, Default)]
 pub struct Normalizer {
     previous_ids: HashSet<String>,
-    entered_at: HashMap<String, (AgentState, String)>,
+    entered_at: HashMap<String, (AgentState, bool, String)>,
     first_seen: HashMap<String, String>,
 }
 
@@ -169,11 +169,17 @@ impl Normalizer {
             .map(|w| (w.workspace_id, w.label))
             .collect();
         let source = raw.agents;
+        if source.len() > 4096 {
+            return Err(AdapterError::Remote(
+                "snapshot exceeds 4096 agent limit".into(),
+            ));
+        }
         let mut current = HashSet::new();
         let mut agents = Vec::with_capacity(source.len());
         for agent in source {
             let id = agent.pane_id.clone();
             current.insert(id.clone());
+            let state_known = !matches!(agent.agent_status, RawStatus::Unknown);
             let state = match agent.agent_status {
                 RawStatus::Idle | RawStatus::Unknown => AgentState::Idle,
                 RawStatus::Working => AgentState::Working,
@@ -181,10 +187,14 @@ impl Normalizer {
                 RawStatus::Done => AgentState::Done,
             };
             let stamp = match self.entered_at.get(&id) {
-                Some((old, stamp)) if old == &state => stamp.clone(),
+                Some((old, known, stamp)) if old == &state && *known == state_known => {
+                    stamp.clone()
+                }
                 _ => {
-                    self.entered_at
-                        .insert(id.clone(), (state.clone(), received_at.to_owned()));
+                    self.entered_at.insert(
+                        id.clone(),
+                        (state.clone(), state_known, received_at.to_owned()),
+                    );
                     received_at.to_owned()
                 }
             };
@@ -204,6 +214,7 @@ impl Normalizer {
                 .or_insert_with(|| received_at.to_owned())
                 .clone();
             agents.push(AgentRecord {
+                state_known: Some(state_known),
                 accent_index: accent(&id),
                 id,
                 name,
@@ -213,6 +224,7 @@ impl Normalizer {
                 model: String::new(),
                 workspace,
                 session: SessionStats {
+                    tickets_available: Some(false),
                     runtime_ms: mise_runtime_ms(&started, received_at),
                     tickets: 0,
                 },
@@ -222,6 +234,7 @@ impl Normalizer {
         let ended_ids: Vec<String> = self.previous_ids.difference(&current).cloned().collect();
         for id in &ended_ids {
             self.first_seen.remove(id);
+            self.entered_at.remove(id);
         }
         self.previous_ids = current;
         Ok(NormalizedSnapshot { agents, ended_ids })
@@ -296,12 +309,7 @@ pub async fn fetch_snapshot(path: &Path, bound: Duration) -> Result<Value, Adapt
             json!({"id":"herdr-mise-snapshot","method":"session.snapshot","params":{}}).to_string();
         stream.write_all(request.as_bytes()).await?;
         stream.write_all(b"\n").await?;
-        let mut line = String::new();
-        let read = BufReader::new(stream).read_line(&mut line).await?;
-        if read == 0 {
-            return Err(AdapterError::MissingSnapshot);
-        }
-        let value: Value = serde_json::from_str(&line)?;
+        let value = read_frame(&mut BufReader::new(stream), &mut Vec::new()).await?;
         if let Some(error) = value.get("error") {
             return Err(AdapterError::Remote(error.to_string()));
         }
@@ -313,19 +321,43 @@ pub async fn fetch_snapshot(path: &Path, bound: Duration) -> Result<Value, Adapt
 
 pub struct EventStream {
     reader: BufReader<UnixStream>,
+    pending: Vec<u8>,
+}
+
+const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
+
+// fill_buf is cancellation-safe; partial frames survive the event watchdog.
+async fn read_frame<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+    pending: &mut Vec<u8>,
+) -> Result<Value, AdapterError> {
+    loop {
+        let buffer = reader.fill_buf().await?;
+        if buffer.is_empty() {
+            return Err(AdapterError::MissingSnapshot);
+        }
+        let newline = buffer.iter().position(|byte| *byte == b'\n');
+        let count = newline.map_or(buffer.len(), |index| index + 1);
+        if pending.len() + count > MAX_FRAME_BYTES {
+            return Err(AdapterError::Remote(
+                "response exceeds 4 MiB frame limit".into(),
+            ));
+        }
+        pending.extend_from_slice(&buffer[..count]);
+        reader.consume(count);
+        if newline.is_some() {
+            let result = serde_json::from_slice(pending).map_err(AdapterError::from);
+            pending.clear();
+            return result;
+        }
+    }
 }
 
 impl EventStream {
     pub async fn next(&mut self, bound: Duration) -> Result<Value, AdapterError> {
-        timeout(bound, async {
-            let mut line = String::new();
-            if self.reader.read_line(&mut line).await? == 0 {
-                return Err(AdapterError::MissingSnapshot);
-            }
-            Ok(serde_json::from_str(&line)?)
-        })
-        .await
-        .map_err(|_| AdapterError::Timeout)?
+        timeout(bound, read_frame(&mut self.reader, &mut self.pending))
+            .await
+            .map_err(|_| AdapterError::Timeout)?
     }
 }
 
@@ -342,12 +374,10 @@ pub async fn subscribe_events(path: &Path, bound: Duration) -> Result<EventStrea
         stream.write_all(request.as_bytes()).await?;
         stream.write_all(b"\n").await?;
         let mut reader = BufReader::new(stream);
-        let mut line = String::new();
-        if reader.read_line(&mut line).await? == 0 { return Err(AdapterError::MissingSnapshot); }
-        let response: Value = serde_json::from_str(&line)?;
+        let response = read_frame(&mut reader, &mut Vec::new()).await?;
         if let Some(error) = response.get("error") { return Err(AdapterError::Remote(error.to_string())); }
         if response.pointer("/result/type").and_then(Value::as_str) != Some("subscription_started") { return Err(AdapterError::MissingSnapshot); }
-        Ok(EventStream { reader })
+        Ok(EventStream { reader, pending: Vec::new() })
     }).await.map_err(|_| AdapterError::Timeout)?
 }
 
@@ -355,6 +385,44 @@ pub async fn subscribe_events(path: &Path, bound: Duration) -> Result<EventStrea
 mod tests {
     use super::*;
     use tokio::{io::AsyncBufReadExt, net::UnixListener};
+    #[tokio::test]
+    async fn bounded_frames_reject_oversize_and_keep_following_frame() {
+        let mut reader = BufReader::new(&b"{\"one\":1}\n{\"two\":2}\n"[..]);
+        let mut pending = Vec::new();
+        assert_eq!(
+            read_frame(&mut reader, &mut pending).await.unwrap()["one"],
+            1
+        );
+        assert_eq!(
+            read_frame(&mut reader, &mut pending).await.unwrap()["two"],
+            2
+        );
+        let oversized = vec![b'x'; MAX_FRAME_BYTES + 1];
+        assert!(matches!(
+            read_frame(&mut BufReader::new(oversized.as_slice()), &mut pending).await,
+            Err(AdapterError::Remote(_))
+        ));
+        assert!(pending.len() <= MAX_FRAME_BYTES);
+    }
+
+    #[test]
+    fn departed_panes_release_timestamps_and_reentry_starts_now() {
+        let mut normalizer = Normalizer::default();
+        normalizer
+            .normalize_snapshot_value(raw("working"), "2026-07-31T00:00:00Z")
+            .unwrap();
+        let mut empty = raw("working");
+        empty["agents"] = json!([]);
+        normalizer
+            .normalize_snapshot_value(empty, "2026-07-31T00:00:01Z")
+            .unwrap();
+        assert!(normalizer.entered_at.is_empty());
+        assert!(normalizer.first_seen.is_empty());
+        let again = normalizer
+            .normalize_snapshot_value(raw("working"), "2026-07-31T00:01:00Z")
+            .unwrap();
+        assert_eq!(again.agents[0].state_entered_at, "2026-07-31T00:01:00Z");
+    }
     fn raw(status: &str) -> Value {
         json!({"version":"0.7.5","protocol":17,"workspaces":[{"workspace_id":"ws-1","label":"demo"}],"tabs":[],"panes":[],"layouts":[],"agents":[{"pane_id":"p-1","workspace_id":"ws-1","agent":"codex","agent_status":status,"agent_session":null}]})
     }
@@ -622,7 +690,9 @@ mod tests {
         let path = directory.path().join("stub.sock");
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         let server = tokio::spawn(async move {
@@ -653,7 +723,9 @@ mod tests {
         let path = directory.path().join("silent.sock");
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         let server = tokio::spawn(async move {
@@ -675,7 +747,9 @@ mod tests {
         let path = directory.path().join("events.sock");
         let listener = match UnixListener::bind(&path) {
             Ok(listener) => listener,
-            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => return,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                panic!("required socket integration unavailable: {error}")
+            }
             Err(error) => panic!("bind stub socket: {error}"),
         };
         let server = tokio::spawn(async move {

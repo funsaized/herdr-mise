@@ -8,7 +8,8 @@ import type {
 import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings } from "./settings-storage";
 
-export type AppMode = FeedMode | "empty" | "disconnected";
+export type AppMode = FeedMode | "empty" | "disconnected" | "connecting";
+export const HISTORY_LIMIT = 256;
 export interface Settings {
   sound: boolean;
   atmosphere: boolean;
@@ -23,6 +24,7 @@ export interface BoardEntry {
   accentIndex: number;
   runtimeMs: number;
   tickets: number;
+  ticketsAvailable?: boolean;
   endedAt: number;
   finalState: AgentRecord["state"];
 }
@@ -92,7 +94,7 @@ export const defaultSettings: Settings = {
 export class AgentStore {
   private agents = new Map<string, AgentMachine>();
   private board: BoardEntry[] = [];
-  private mode: AppMode = "empty";
+  private mode: AppMode = "connecting";
   private feedMode: FeedMode = "live";
   private sourceStatus: SourceStatus = "connected";
   private sourceDiagnostic: SourceDiagnostic | null = null;
@@ -103,6 +105,7 @@ export class AgentStore {
   private changeListeners = new Set<() => void>();
   private eventListeners = new Set<Listener<StoreEvent>>();
   private doneTimers = new Map<string, unknown>();
+  private dismissedDone = new Map<string, string>();
   constructor(
     private scheduler: Scheduler = nativeScheduler,
     settings: Partial<Settings> = {},
@@ -190,11 +193,16 @@ export class AgentStore {
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
       const incoming = new Set(event.agents.map((agent) => agent.id));
+      for (const id of this.dismissedDone.keys())
+        if (!incoming.has(id)) this.dismissedDone.delete(id);
       for (const id of this.agents.keys())
         if (!incoming.has(id)) this.remove(id);
       for (const agent of event.agents) this.upsert(agent);
     } else if (event.operation === "upsert") this.upsert(event.agent);
-    else this.remove(event.agentId);
+    else {
+      this.dismissedDone.delete(event.agentId);
+      this.remove(event.agentId);
+    }
     this.mode =
       this.agents.size === 0 &&
       event.mode === "live" &&
@@ -213,11 +221,18 @@ export class AgentStore {
     for (const timer of this.doneTimers.values())
       this.scheduler.clearTimeout(timer);
     this.doneTimers.clear();
+    this.dismissedDone.clear();
     this.coarseListeners.clear();
     this.changeListeners.clear();
     this.eventListeners.clear();
   }
   private upsert(agent: AgentRecord) {
+    if (
+      agent.state === "done" &&
+      this.dismissedDone.get(agent.id) === agent.stateEnteredAt
+    )
+      return;
+    this.dismissedDone.delete(agent.id);
     const prior = this.agents.get(agent.id);
     const now = this.scheduler.now();
     if (agent.state === "ended") {
@@ -238,7 +253,10 @@ export class AgentStore {
       enteredAt > lastObservedAt + 1_000;
     const history = prior
       ? stateChanged || sameStateReentered
-        ? [...prior.history, { state: agent.state, startedAt: enteredAt }]
+        ? [
+            ...prior.history,
+            { state: agent.state, startedAt: enteredAt },
+          ].slice(-HISTORY_LIMIT)
         : prior.history
       : initialHistory;
     const answerReceivedUntil =
@@ -276,8 +294,18 @@ export class AgentStore {
         this.doneTimers.set(
           agent.id,
           this.scheduler.setTimeout(() => {
+            this.dismissedDone.set(agent.id, agent.stateEnteredAt);
             this.emitEvent({ type: "busser", agentId: agent.id });
             this.remove(agent.id);
+            if (this.mode !== "disconnected")
+              this.mode =
+                this.agents.size === 0 &&
+                this.feedMode === "live" &&
+                this.sourceStatus === "connected"
+                  ? "empty"
+                  : this.feedMode;
+            this.emitChange();
+            this.emitCoarse();
           }, this.settings.doneTimeoutMs),
         );
     }
@@ -293,6 +321,7 @@ export class AgentStore {
       accentIndex: agent.accentIndex,
       runtimeMs: agent.session.runtimeMs,
       tickets: agent.session.tickets,
+      ticketsAvailable: agent.session.ticketsAvailable,
       endedAt: prior ? now : (existing?.endedAt ?? now),
       finalState: prior?.targetState ?? existing?.finalState ?? "ended",
     };

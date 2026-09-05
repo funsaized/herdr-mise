@@ -15,6 +15,9 @@ globalArguments:
     - typecheck
     - lint
     - test
+    - test:extensions
+    - bundle:prepared
+    - test:visual:prepared
     - check:herdr-compatibility
     - test:visual
     - test:hosted

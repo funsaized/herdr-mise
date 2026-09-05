@@ -181,6 +181,7 @@ mod tests {
 
     fn record(id: &str, state: AgentState, runtime_ms: u64, tickets: u64) -> AgentRecord {
         AgentRecord {
+            state_known: None,
             id: id.into(),
             name: format!("cook-{id}"),
             state,
@@ -190,6 +191,7 @@ mod tests {
             model: "codex".into(),
             workspace: format!("/work/{id}"),
             session: SessionStats {
+                tickets_available: None,
                 runtime_ms,
                 tickets,
             },

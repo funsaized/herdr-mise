@@ -51,11 +51,15 @@ pub enum DeltaOperation {
 pub struct SessionStats {
     pub runtime_ms: u64,
     pub tickets: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tickets_available: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_known: Option<bool>,
     pub id: String,
     pub name: String,
     pub state: AgentState,
@@ -65,6 +69,16 @@ pub struct AgentRecord {
     pub model: String,
     pub workspace: String,
     pub session: SessionStats,
+}
+
+impl SessionStats {
+    pub fn tickets_text(&self) -> String {
+        if self.tickets_available.unwrap_or(self.tickets > 0) {
+            self.tickets.to_string()
+        } else {
+            "Unavailable".into()
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -117,6 +131,7 @@ mod tests {
 
         for name in [
             "snapshot.v1.json",
+            "snapshot-provenance.v1.json",
             "snapshot-demo-unsupported.v1.json",
             "delta-upsert.v1.json",
             "delta-remove.v1.json",

@@ -48,13 +48,16 @@
       "required": ["tag", "version", "commit", "artifacts"],
       "properties": {
         "tag": {
-          "const": "v0.2.0-rc.1"
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$"
         },
         "version": {
-          "const": "0.2.0-rc.1"
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$"
         },
         "commit": {
-          "const": "85440d6577ab12a8c087c1c0919d896503164dc3"
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
         },
         "artifacts": {
           "type": "array",
@@ -83,23 +86,19 @@
         },
         "archive": {
           "type": "string",
-          "pattern": "^herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+          "pattern": "^herdr-mise-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+-[a-z0-9_-]+\\.tar\\.gz$"
         },
         "sha256": {
           "type": "string",
-          "enum": [
-            "e4cf8c06845a8fe764042b38816004aa4e23e5abed209f2245ea3b00ec2b9b57",
-            "bad9caf8073a9bfc2a580d537a22de7968a8a6e37f29f711470bf61db121faf8",
-            "bbcb6ab7cf31216313b42692cbb9a3025cdf35e692787e2340ea13b22e116229"
-          ]
+          "pattern": "^[0-9a-f]{64}$"
         },
         "archive_url": {
           "type": "string",
-          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.2\\.0-rc\\.1/herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/"
         },
         "checksum_url": {
           "type": "string",
-          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/v0\\.2\\.0-rc\\.1/herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz\\.sha256$"
+          "pattern": "^https://github\\.com/funsaized/herdr-mise/releases/download/"
         }
       }
     },
@@ -114,7 +113,7 @@
         },
         "archive": {
           "type": "string",
-          "pattern": "^herdr-mise-v0\\.2\\.0-rc\\.1-[a-z0-9_-]+\\.tar\\.gz$"
+          "pattern": "^herdr-mise-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+-[a-z0-9_-]+\\.tar\\.gz$"
         },
         "sha256": {
           "type": "string",
@@ -128,13 +127,16 @@
       "required": ["tag", "version", "commit", "artifacts"],
       "properties": {
         "tag": {
-          "const": "v0.2.0-rc.1"
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$"
         },
         "version": {
-          "const": "0.2.0-rc.1"
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$"
         },
         "commit": {
-          "const": "85440d6577ab12a8c087c1c0919d896503164dc3"
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
         },
         "artifacts": {
           "type": "array",

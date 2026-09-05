@@ -82,7 +82,7 @@ describe("chrome interactions", () => {
       />,
     );
     expect(screen.getByRole("alert").textContent).toContain(
-      "Lost connection to herdr",
+      "Lost connection to Mise",
     );
     expect(screen.getByRole("alert").textContent).toContain(
       "last update 14s ago",
@@ -315,6 +315,31 @@ describe("chrome interactions", () => {
       />,
     );
     expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+  });
+  it("distinguishes observed zero tickets from unknown source state", () => {
+    const store = new AgentStore();
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "live",
+      sourceStatus: "connected",
+      agents: [
+        {
+          ...record,
+          stateKnown: false,
+          session: { runtimeMs: 0, tickets: 0, ticketsAvailable: true },
+        },
+      ],
+    });
+    render(
+      <DetailCard
+        agent={store.snapshot().agents.get(record.id)!}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("UNKNOWN — AT PREP")).toBeTruthy();
+    expect(screen.getByText("0")).toBeTruthy();
+    store.destroy();
   });
   it("shows DEMO SERVICE for an empty unsupported websocket snapshot", () => {
     const store = new AgentStore(),
