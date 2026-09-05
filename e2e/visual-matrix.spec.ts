@@ -132,6 +132,34 @@ function expectInside(inner: Box, outer: Box, tolerance = 1) {
   );
 }
 
+async function cycleSceneFocus(page: Page, count: number) {
+  const stationIds = new Set<string>(),
+    boardIds = new Set<string>();
+  for (let index = 0; index < count; index++) {
+    await page.keyboard.press("ArrowRight");
+    await expect
+      .poll(async () => {
+        const metrics = await sceneMetrics(page);
+        return (
+          Object.keys(metrics?.activeFocusBounds ?? {}).length +
+          (metrics?.board.strokedIds.length ?? 0)
+        );
+      })
+      .toBe(1);
+    const focused = (await sceneMetrics(page))!,
+      [stationId] = Object.keys(focused.activeFocusBounds),
+      [boardId] = focused.board.strokedIds;
+    if (stationId) {
+      stationIds.add(stationId);
+      expectInside(
+        focused.activeFocusBounds[stationId]!,
+        focused.stationCells[stationId]!,
+      );
+    } else if (boardId) boardIds.add(boardId);
+  }
+  return { stationIds, boardIds };
+}
+
 async function assertResponsiveScene(page: Page, count: number, demo: boolean) {
   await page.evaluate(() => document.fonts.ready);
   await expect
@@ -203,31 +231,31 @@ async function assertResponsiveScene(page: Page, count: number, demo: boolean) {
   await page.evaluate(() =>
     (document.activeElement as HTMLElement | null)?.blur(),
   );
-  const focusedIds = new Set<string>();
-  for (let index = 0; index < count; index++) {
-    await page.keyboard.press("ArrowRight");
-    await expect
-      .poll(async () =>
-        Object.keys((await sceneMetrics(page))?.activeFocusBounds ?? {}),
-      )
-      .toHaveLength(1);
-    const focused = (await sceneMetrics(page))!,
-      [id] = Object.keys(focused.activeFocusBounds);
-    focusedIds.add(id!);
-    expectInside(focused.activeFocusBounds[id!]!, focused.stationCells[id!]!);
-  }
-  expect(focusedIds.size).toBe(count);
+  const focused = await cycleSceneFocus(page, count);
+  expect(
+    Object.keys((await sceneMetrics(page))!.stationCells).every((id) =>
+      focused.stationIds.has(id),
+    ),
+  ).toBe(true);
   await page.keyboard.press("Enter");
-  await expect(page.locator('aside[aria-label$="details"]')).toBeVisible();
+  await expect(
+    page.locator(
+      'aside[aria-label$="details"], aside[aria-label$="session summary"]',
+    ),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
     page.locator('[aria-label="Agent stations"] button:focus'),
   ).toHaveCount(1);
   await expect
-    .poll(async () =>
-      Object.keys((await sceneMetrics(page))?.activeFocusBounds ?? {}),
-    )
-    .toHaveLength(1);
+    .poll(async () => {
+      const metrics = await sceneMetrics(page);
+      return (
+        Object.keys(metrics?.activeFocusBounds ?? {}).length +
+        (metrics?.board.strokedIds.length ?? 0)
+      );
+    })
+    .toBe(1);
 }
 
 function boardRowPoint(width: number, height: number) {
@@ -468,6 +496,36 @@ test("responsive mixed scenes keep station text focus and mobile chrome bounded"
       await assertResponsiveScene(page, count, true);
     }
   expect(errors).toEqual([]);
+});
+
+test("responsive mixed focus follows live stations onto the 86 board", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?preset=mixed&agents=6&stats");
+  await expect
+    .poll(
+      async () => {
+        const metrics = await sceneMetrics(page);
+        return [
+          Object.keys(metrics?.stationCells ?? {}).length,
+          metrics?.endedEntries,
+        ];
+      },
+      { timeout: 20_000 },
+    )
+    .toEqual([4, 2]);
+
+  for (let pass = 0; pass < 2; pass++) {
+    const focused = await cycleSceneFocus(page, 6),
+      metrics = (await sceneMetrics(page))!;
+    expect([...focused.stationIds].sort()).toEqual(
+      Object.keys(metrics.stationCells).sort(),
+    );
+    expect([...focused.boardIds].sort()).toEqual(
+      metrics.board.rows.map(({ id }) => id).sort(),
+    );
+  }
 });
 
 test("authoritative fixture drives rendered feed accents poses prep and freezer spirits", async ({
