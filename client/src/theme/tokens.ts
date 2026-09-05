@@ -26,6 +26,7 @@ export const tokens = {
     "#6f8a9a",
   ],
   scene: {
+    layout: { stationGutter: 2, sparseScale: 1.5, sparsePassWidth: 90 },
     wall: ["#8d97a5", "#4a5260"],
     wainscot: ["#ece5d1", "#6e6a59"],
     grout: ["#d8d0b8", "#5d594b"],

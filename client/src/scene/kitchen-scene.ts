@@ -97,6 +97,10 @@ export interface SceneMetrics {
     { accent: string; idlePose: IdlePose | null; prepStep: 0 | 1 | null }
   >;
   spiritAccents: Record<string, string>;
+  stationCells: Record<string, Rect>;
+  stationNameBounds: Record<string, Rect & { text: string }>;
+  stationStatusBounds: Record<string, Rect & { text: string }>;
+  activeFocusBounds: Record<string, Rect>;
   blockedIndicators: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
@@ -358,6 +362,10 @@ export class KitchenScene {
   metrics(): SceneMetrics {
     const idlePoses: Record<string, IdlePose> = {},
       stateIndicators: Record<string, number> = {},
+      stationCells: Record<string, Rect> = {},
+      stationNameBounds: Record<string, Rect & { text: string }> = {},
+      stationStatusBounds: Record<string, Rect & { text: string }> = {},
+      activeFocusBounds: Record<string, Rect> = {},
       snapshot = this.store.snapshot(),
       agents = [...snapshot.agents.values()];
     for (const agent of agents) {
@@ -365,6 +373,41 @@ export class KitchenScene {
       if (agent.targetState === "idle" && pose) idlePoses[agent.id] = pose;
       stateIndicators[agent.targetState] =
         (stateIndicators[agent.targetState] ?? 0) + 1;
+    }
+    for (const station of this.layout?.stations ?? []) {
+      const view = this.stationViews.get(station.id);
+      if (!view) continue;
+      stationCells[station.id] = {
+        x: station.x,
+        y: station.y,
+        width: station.width,
+        height: station.height,
+      };
+      const name = view.name.getBounds(),
+        status = view.label.getBounds();
+      stationNameBounds[station.id] = {
+        x: name.x,
+        y: name.y,
+        width: name.width,
+        height: name.height,
+        text: view.name.text,
+      };
+      stationStatusBounds[station.id] = {
+        x: status.x,
+        y: status.y,
+        width: status.width,
+        height: status.height,
+        text: view.label.text,
+      };
+      if (snapshot.selectedId === station.id || this.focusedId === station.id) {
+        const focus = view.selection.getBounds();
+        activeFocusBounds[station.id] = {
+          x: focus.x,
+          y: focus.y,
+          width: focus.width,
+          height: focus.height,
+        };
+      }
     }
     const activeParticles = this.particles.activeCount,
       activeTransitions = this.transitions.activeCount(),
@@ -379,6 +422,10 @@ export class KitchenScene {
       idlePoses,
       stationVisuals: { ...this.stationVisuals },
       spiritAccents: { ...this.spiritAccents },
+      stationCells,
+      stationNameBounds,
+      stationStatusBounds,
+      activeFocusBounds,
       blockedIndicators,
       stateIndicators,
       endedEntries: snapshot.board.length,
@@ -1160,12 +1207,13 @@ export class KitchenScene {
           : 1000,
       progress =
         agent.progress === null ? "null" : Math.round(agent.progress * 1000),
-      identity = stationIdentityLabels(
-        agent,
-        state,
-        wallNow,
-        this.layout.banquet ? 18 : 30,
+      nameFontSize = Math.max(9, 2.1 * u),
+      statusFontSize = Math.max(8, 1.8 * u),
+      nameCharacters = Math.max(
+        4,
+        Math.floor((rect.width - 2 * u) / (nameFontSize * 0.7)),
       ),
+      identity = stationIdentityLabels(agent, state, wallNow, nameCharacters),
       dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}`,
       dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`;
     if (view.dynamicSignature === dynamicSignature) return;
@@ -1331,33 +1379,41 @@ export class KitchenScene {
     }
     if (selected || focused) {
       const color = index === 1 ? p.semantic.flameHighDark : p.scene.ink,
-        size = 5 * u,
-        w = Math.max(20 * u, rect.width - 2 * u),
-        h = Math.min(rect.height, 47 * u);
+        strokeWidth = Math.max(1, u),
+        inset = strokeWidth,
+        w = Math.max(
+          0,
+          Math.min(rect.width - strokeWidth * 2, rect.width - 2 * u),
+        ),
+        h = Math.max(0, Math.min(rect.height - strokeWidth * 2, 47 * u)),
+        size = Math.min(5 * u, w / 2, h / 2);
       selection
-        .moveTo(0, size)
-        .lineTo(0, 0)
-        .lineTo(size, 0)
-        .moveTo(w - size, 0)
-        .lineTo(w, 0)
-        .lineTo(w, size)
-        .moveTo(0, h - size)
-        .lineTo(0, h)
-        .lineTo(size, h)
-        .moveTo(w - size, h)
-        .lineTo(w, h)
-        .lineTo(w, h - size)
-        .stroke({ color, width: Math.max(1, u) });
+        .moveTo(inset, inset + size)
+        .lineTo(inset, inset)
+        .lineTo(inset + size, inset)
+        .moveTo(inset + w - size, inset)
+        .lineTo(inset + w, inset)
+        .lineTo(inset + w, inset + size)
+        .moveTo(inset, inset + h - size)
+        .lineTo(inset, inset + h)
+        .lineTo(inset + size, inset + h)
+        .moveTo(inset + w - size, inset + h)
+        .lineTo(inset + w, inset + h)
+        .lineTo(inset + w, inset + h - size)
+        .stroke({ color, width: strokeWidth });
     }
     const colors = p.scene.stationState;
     name.text = identity.name;
     name.style.fill = p.scene.stationName[index];
-    name.style.fontSize = Math.max(9, 2.1 * u);
+    name.style.fontSize = nameFontSize;
     name.position.set(rect.width / 2, 32 * u);
     label.text =
       agent.stateKnown === false ? "UNKNOWN · PREP" : identity.status;
     label.style.fill = colors[state][index];
-    label.style.fontSize = Math.max(8, 1.8 * u);
+    label.style.fontSize = statusFontSize;
+    label.style.wordWrap = true;
+    label.style.breakWords = false;
+    label.style.wordWrapWidth = Math.max(0, rect.width - 2 * u);
     label.position.set(rect.width / 2, 37 * u);
     node.alpha = 1;
   }

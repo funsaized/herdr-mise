@@ -57,26 +57,34 @@ export function computeLayout(
   const sceneWidth = width / unit,
     sceneHeight = height / unit;
   const wallHeight = Math.min(56, Math.max(42, sceneHeight * 0.3));
-  const passWidth = Math.min(132, sceneWidth * 0.52);
+  const sparse = ids.length <= 2,
+    passWidth = Math.min(
+      sparse ? tokens.scene.layout.sparsePassWidth : 132,
+      sceneWidth * 0.52,
+    );
   const columns = columnCount(ids.length),
     rows = Math.max(1, Math.ceil(ids.length / columns)),
     banquet = ids.length > 8,
-    scale = banquet ? 0.8 : ids.length <= 2 ? 1.2 : 1;
+    scale = banquet ? 0.8 : sparse ? tokens.scene.layout.sparseScale : 1,
+    gutter = banquet ? 0 : tokens.scene.layout.stationGutter;
   const gridTop = wallHeight + 25;
   const availableHeight = Math.max(36 * scale, sceneHeight - gridTop - 4);
   const cellHeight = Math.min(
     banquet ? 42 : 45 * scale,
     availableHeight / rows,
   );
-  const cellWidth = Math.min(48 * scale, (sceneWidth - 14) / columns);
-  const gridWidth = cellWidth * columns;
+  const cellWidth = Math.min(
+    48 * scale,
+    (sceneWidth - 14 - gutter * (columns - 1)) / columns,
+  );
+  const gridWidth = cellWidth * columns + gutter * (columns - 1);
   const left = (sceneWidth - gridWidth) / 2;
   const stations = ids.map((id, index) => ({
     id,
     row: Math.floor(index / columns),
     column: index % columns,
     scale,
-    x: (left + (index % columns) * cellWidth) * unit,
+    x: (left + (index % columns) * (cellWidth + gutter)) * unit,
     y: (gridTop + Math.floor(index / columns) * cellHeight) * unit,
     width: cellWidth * unit,
     height: cellHeight * unit,
