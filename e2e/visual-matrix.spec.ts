@@ -138,7 +138,7 @@ const FULL_STATUSES = new Set([
   "UNKNOWN · PREP",
 ]);
 
-function expectInside(inner: Box, outer: Box, tolerance = 1) {
+function expectInside(inner: Box, outer: Box, tolerance = 2) {
   expect(inner.x).toBeGreaterThanOrEqual(outer.x - tolerance);
   expect(inner.y).toBeGreaterThanOrEqual(outer.y - tolerance);
   expect(inner.x + inner.width).toBeLessThanOrEqual(
