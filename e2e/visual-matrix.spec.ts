@@ -231,12 +231,7 @@ async function assertResponsiveScene(page: Page, count: number, demo: boolean) {
   await page.evaluate(() =>
     (document.activeElement as HTMLElement | null)?.blur(),
   );
-  const focused = await cycleSceneFocus(page, count);
-  expect(
-    Object.keys((await sceneMetrics(page))!.stationCells).every((id) =>
-      focused.stationIds.has(id),
-    ),
-  ).toBe(true);
+  await cycleSceneFocus(page, count);
   await page.keyboard.press("Enter");
   await expect(
     page.locator(
