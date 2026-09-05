@@ -71,10 +71,10 @@ not an OS sandbox.
 The verification DAG runs independent root/client dependency installs on
 different model instances, then cheap checks before browser setup and Rust
 compilation. Prepared browser/bundle scripts reuse the production client build.
-Only npm download blobs are cached, keyed by the subject lockfiles and runner
-platform through setup-node; npm still checks lockfile integrity. Cached
-contents are untrusted, never evidence. No `node_modules`, compiled executables,
-or managed evidence is restored from a proposal-written cache.
+Within a run, npm installs share an ephemeral download cache under the runner
+temporary directory; npm still checks lockfile integrity. Nothing is restored
+across runs, and no `node_modules`, compiled executables, or managed evidence is
+cached.
 
 The required Rust result now explicitly includes Clippy. Extension tests execute
 the proposed `extensions/tests` with Swamp's Deno, type checking, no runtime
