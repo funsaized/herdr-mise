@@ -162,41 +162,55 @@ describe("chrome interactions", () => {
       agents: [record],
     });
     store.select("a");
-    const dismiss = vi.fn();
-    render(
-      <Chrome
-        store={store}
-        coarse={store.coarse()}
-        hoveredId="a"
-        focusedId={null}
-        hits={[
+    const dismiss = vi.fn(),
+      props = {
+        store,
+        coarse: store.coarse(),
+        hoveredId: "a",
+        focusedId: null,
+        hits: [
           {
-            kind: "station",
+            kind: "station" as const,
             id: "a",
             rect: { x: 10, y: 100, width: 80, height: 50 },
           },
-        ]}
-        settingsOpen={false}
-        statsOpen={false}
-        lastUpdateSeconds={0}
-        metrics={{ drawCalls: 0, socketBytesPerSecond: 0 }}
-        onCloseSettings={() => {}}
-        onOpenSettings={() => {}}
-        hintVisible
-        onDismissHint={dismiss}
-        view="kitchen"
-        onToggleFreezer={() => {}}
-      />,
-    );
-    expect(screen.getByRole("tooltip").textContent).toContain(
-      "Working — on the fire",
-    );
+        ],
+        settingsOpen: false,
+        statsOpen: false,
+        lastUpdateSeconds: 0,
+        metrics: { drawCalls: 0, socketBytesPerSecond: 0 },
+        onCloseSettings: () => {},
+        onOpenSettings: () => {},
+        hintVisible: true,
+        onDismissHint: dismiss,
+        view: "kitchen" as const,
+        onToggleFreezer: () => {},
+      },
+      { rerender } = render(<Chrome {...props} />);
+    expect(screen.queryByRole("tooltip")).toBeNull();
     expect(screen.getByLabelText("refactor-auth details")).toBeTruthy();
     expect(store.coarse().selectedId).toBe("a");
     fireEvent.click(screen.getByText("Got it"));
     expect(dismiss).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
     expect(store.coarse().selectedId).toBeNull();
+    rerender(<Chrome {...props} coarse={store.coarse()} hintVisible={false} />);
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "Working — on the fire",
+    );
+    store.select("a");
+    rerender(
+      <Chrome
+        {...props}
+        coarse={store.coarse()}
+        settingsOpen
+        hintVisible={false}
+      />,
+    );
+    expect(screen.getByLabelText("Settings")).toBeTruthy();
+    expect(screen.queryByLabelText("refactor-auth details")).toBeNull();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(document.querySelectorAll("aside.panel")).toHaveLength(1);
   });
   it("exposes a native boolean freezer toggle", () => {
     const store = new AgentStore(),
@@ -276,7 +290,7 @@ describe("chrome interactions", () => {
       hit = {
         kind: "station" as const,
         id: "a",
-        rect: { x: 10, y: 100, width: 80, height: 50 },
+        rect: { x: 10, y: 10, width: 80, height: 50 },
         blockedPlacement: {
           kind: "station" as const,
           queueOrdinal: 6,
@@ -286,6 +300,10 @@ describe("chrome interactions", () => {
     const { unmount } = render(<Tooltip agent={agent} hit={hit} />);
     expect(screen.getByRole("tooltip").textContent).toContain(
       "Blocked — waiting at station · queue 6 of 12",
+    );
+    expect(screen.getByRole("tooltip").id).toBe("station-tooltip-a");
+    expect(screen.getByRole("tooltip").getAttribute("data-placement")).toBe(
+      "below",
     );
     unmount();
     render(<DetailCard agent={agent} hit={hit} onClose={() => {}} />);
@@ -317,7 +335,8 @@ describe("chrome interactions", () => {
     );
     expect(screen.getByRole("heading", { name: "refactor-auth" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "app" })).toBeNull();
-    expect(screen.getByText("/work/app")).toBeTruthy();
+    expect(screen.getByText("app")).toBeTruthy();
+    expect(screen.queryByText("/work/app")).toBeNull();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
     const history = screen.getByLabelText("Session history");
     expect(history.querySelectorAll(".historyStrip i")).toHaveLength(2);

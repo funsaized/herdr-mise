@@ -30,6 +30,7 @@ export const tokens = {
       stationGutter: 2,
       sparseScale: 1.5,
       sparsePassWidth: 90,
+      selectionCornerSize: 3,
       stationNameMinCharacters: 4,
       stationNameCharacterWidth: 0.7,
       blocked: {
@@ -389,8 +390,8 @@ export const tokens = {
     textMuted: "#6a6455",
     workingText: "#b05f14",
     doneText: "#3d7a4a",
-    secondary: "#8a8272",
-    tertiary: "#a39b89",
+    secondary: "#716a5d",
+    tertiary: "#746d5e",
     tooltipSecondary: "#c9c3b2",
     chip: "#f1ede1",
     buttonText: "#faf8f2",
@@ -403,6 +404,7 @@ export const tokens = {
     shadowStrong: "0 20px 48px rgba(10, 8, 4, 0.4)",
     shadowPlacard: "0 10px 26px rgba(10, 8, 4, 0.28)",
   },
+  tooltipPlacement: { gap: 8, topEdgeThreshold: 88 },
   spacing: { panel: 18, rowSmall: 12, row: 14 },
   radius: { small: 6, tooltip: 7, control: 8, panel: 12 },
   typography: {

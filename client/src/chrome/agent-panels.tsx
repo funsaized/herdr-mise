@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { SceneHit } from "../scene/kitchen-scene";
+import { workspaceDisplayName } from "../scene/geometry";
 import {
   humanStateWords,
   semanticQueueWords,
@@ -35,12 +36,24 @@ export function Tooltip({
   hit: SceneHit;
 }) {
   const now = useClock(true),
+    below = hit.rect.y < tokens.tooltipPlacement.topEdgeThreshold,
     style = {
-      left: hit.rect.x + hit.rect.width / 2,
-      top: Math.max(8, hit.rect.y - 8),
-    };
+      "--tooltipAnchor": `${hit.rect.x + hit.rect.width / 2}px`,
+      top: below
+        ? hit.rect.y + hit.rect.height + tokens.tooltipPlacement.gap
+        : Math.max(
+            tokens.tooltipPlacement.gap,
+            hit.rect.y - tokens.tooltipPlacement.gap,
+          ),
+    } as CSSProperties;
   return (
-    <div className="stationTooltip" style={style} role="tooltip">
+    <div
+      id={`station-tooltip-${encodeURIComponent(agent.id)}`}
+      className="stationTooltip"
+      data-placement={below ? "below" : "above"}
+      style={style}
+      role="tooltip"
+    >
       <strong>{agent.name}</strong>
       <span>{placementStateWords(agent, hit)}</span>
       <time>
@@ -116,7 +129,6 @@ function historyColor(state: StatePeriod["state"]) {
   return tokens.scene.ticketDone;
 }
 
-const availableText = (value: string) => value.trim() || "Unavailable";
 const availableTickets = (value: number, available?: boolean) =>
   (available ?? value > 0) ? value : "Unavailable";
 
@@ -145,7 +157,7 @@ export function DetailCard({
       />
       <div className="facts">
         <Fact label="Workspace" mono>
-          {availableText(agent.workspace)}
+          {workspaceDisplayName(agent.workspace)}
         </Fact>
         <Fact label="Time in state">
           {formatDuration(now - Date.parse(agent.stateEnteredAt))}

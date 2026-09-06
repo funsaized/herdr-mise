@@ -54,11 +54,18 @@ describe("semantic station controls", () => {
   };
   it("uses human state wording, stays out of Tab order, and activates details", () => {
     const onSelect = vi.fn();
-    render(<SemanticStationControls agents={[agent]} onSelect={onSelect} />);
+    render(
+      <SemanticStationControls
+        agents={[agent]}
+        tooltipAgentId="a"
+        onSelect={onSelect}
+      />,
+    );
     const control = screen.getByRole("button", {
       name: /Codex, Blocked — at the pass, queue 1 of 2, 1m \d+s blocked, open details/,
     });
     expect(control.getAttribute("tabindex")).toBe("-1");
+    expect(control.getAttribute("aria-describedby")).toBe("station-tooltip-a");
     expect(control.textContent).toMatch(/queue 1 of 2 · 1m \d+s blocked/);
     fireEvent.click(control);
     expect(onSelect).toHaveBeenCalledWith("a", control);

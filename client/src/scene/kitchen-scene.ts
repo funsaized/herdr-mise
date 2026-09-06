@@ -1655,7 +1655,7 @@ export class KitchenScene {
           Math.min(rect.width - strokeWidth * 2, rect.width - 2 * u),
         ),
         h = Math.max(0, Math.min(rect.height - strokeWidth * 2, 47 * u)),
-        size = Math.min(5 * u, w / 2, h / 2);
+        size = Math.min(p.scene.layout.selectionCornerSize * u, w / 2, h / 2);
       selection
         .moveTo(inset, inset + size)
         .lineTo(inset, inset)
