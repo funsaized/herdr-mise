@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   semanticQueueWords,
   semanticStateWords,
@@ -6,6 +5,7 @@ import {
   type SemanticAgent,
 } from "../state/semantic-stations";
 import { formatDuration } from "./duration";
+import { useClock } from "./use-clock";
 
 export function SemanticStationControls({
   agents,
@@ -17,12 +17,7 @@ export function SemanticStationControls({
   label?: string;
 }) {
   const blocked = agents.some((agent) => agent.targetState === "blocked"),
-    [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!blocked) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [blocked]);
+    now = useClock(blocked);
   return (
     <nav className="stationA11yMirror" aria-label={label}>
       {agents.map((agent) => (

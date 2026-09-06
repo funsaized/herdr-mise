@@ -93,6 +93,13 @@ type MotionMetrics = {
     shelf: number;
     pass: number;
   };
+  materials: {
+    wallPlanes: number;
+    floorSeams: number;
+    fixtureShadows: number;
+    passEdges: number;
+    stationGroundings: number;
+  };
 };
 type Box = { x: number; y: number; width: number; height: number };
 const sceneMetrics = (page: Page) =>
@@ -703,7 +710,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
   }
 });
 
-test("blocked pass density", async ({ page }) => {
+test("fixture-driven kitchen materials", async ({ page }) => {
   test.setTimeout(120_000);
   const directory = await mkdtemp(
       join(tmpdir(), "herdr-mise-blocked-density-"),
@@ -728,7 +735,7 @@ test("blocked pass density", async ({ page }) => {
         agent_session: { value: string };
       }>;
     },
-    makeSnapshot = (count: number) => ({
+    makeSnapshot = (count: number, status = "blocked") => ({
       ...source,
       agents: Array.from({ length: count }, (_, index) => {
         const suffix = String(index + 1).padStart(2, "0");
@@ -736,12 +743,13 @@ test("blocked pass density", async ({ page }) => {
           ...source.agents[0]!,
           pane_id: `fictional-pane-${suffix}`,
           display_agent: `density-${suffix}`,
+          agent_status: status,
           agent_session: { value: `fictional-session-${suffix}` },
         };
       }),
     }),
     sockets = new Set<Socket>();
-  let snapshot = makeSnapshot(1);
+  let snapshot = makeSnapshot(1, "working");
   const fixtureServer = createServer((socket) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -777,7 +785,33 @@ test("blocked pass density", async ({ page }) => {
         }
       })
       .toBe(200);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(`${appUrl}/?stats&theme=light`);
+    const workingControl = page.getByRole("button", {
+      name: /density-01, Working — on the fire/,
+    });
+    await expect(workingControl).toBeVisible();
+    const workingOn = (await sceneMetrics(page))!;
+    expect(workingOn.materials).toMatchObject({
+      wallPlanes: 3,
+      fixtureShadows: 4,
+      passEdges: 3,
+      stationGroundings: 1,
+    });
+    expect(workingOn.materials.floorSeams).toBeGreaterThan(0);
+    expectInside(
+      workingOn.stationNameBounds["fictional-pane-01"]!,
+      workingOn.stationCells["fictional-pane-01"]!,
+    );
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("switch", { name: "Atmosphere" }).click();
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.atmosphere)
+      .toEqual({ window: 0, shelf: 0, pass: 0 });
+    expect((await sceneMetrics(page))?.materials).toEqual(workingOn.materials);
+
     await page.goto(`${appUrl}/?stats&theme=dinner`);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
 
     for (const count of [1, 6, 12]) {
       for (const viewport of [
@@ -814,6 +848,23 @@ test("blocked pass density", async ({ page }) => {
           placements = Object.values(metrics.blockedPlacements).sort(
             (left, right) => left.queueOrdinal - right.queueOrdinal,
           );
+        if (count === 12 && viewport.width === 1440) {
+          expect(metrics.materials).toMatchObject({
+            wallPlanes: 3,
+            fixtureShadows: 4,
+            passEdges: 3,
+            stationGroundings: 12,
+          });
+          await page.getByRole("button", { name: "Open settings" }).click();
+          await page.getByRole("switch", { name: "Atmosphere" }).click();
+          await expect
+            .poll(async () => (await sceneMetrics(page))?.atmosphere.pass)
+            .toBeGreaterThan(0);
+          expect((await sceneMetrics(page))?.materials).toEqual(
+            metrics.materials,
+          );
+          await page.keyboard.press("Escape");
+        }
         expect(placements.map(({ queueOrdinal }) => queueOrdinal)).toEqual(
           Array.from({ length: count }, (_, index) => index + 1),
         );
@@ -863,7 +914,9 @@ test("blocked pass density", async ({ page }) => {
             expect(boxesIntersect(bound, other)).toBe(false);
         });
 
-        await page.evaluate(() => document.body.focus());
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.blur(),
+        );
         const focused = await cycleSceneFocus(page, count);
         expect(focused.stationIds.size).toBe(count);
         const active = page.locator(".stationA11yMirror button:focus");

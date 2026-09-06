@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { SceneHit } from "../scene/kitchen-scene";
 import {
@@ -11,6 +10,7 @@ import type { AgentMachine, BoardEntry, StatePeriod } from "../state/store";
 import { tokens } from "../theme/tokens";
 import { formatDuration } from "./duration";
 import { FocusedPanel } from "./panel-support";
+import { useClock } from "./use-clock";
 
 const stateLabels = {
   idle: "IDLE — PREPPING",
@@ -25,16 +25,6 @@ function stateColor(agent: AgentMachine) {
   if (agent.targetState === "working") return tokens.semantic.flame;
   if (agent.targetState === "done") return tokens.semantic.done;
   return tokens.scene.muted;
-}
-
-function useClock(active: boolean) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!active) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [active]);
-  return now;
 }
 
 export function Tooltip({

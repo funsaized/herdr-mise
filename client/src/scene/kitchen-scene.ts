@@ -124,6 +124,13 @@ export interface SceneMetrics {
     shelf: number;
     pass: number;
   };
+  materials: {
+    wallPlanes: number;
+    floorSeams: number;
+    fixtureShadows: number;
+    passEdges: number;
+    stationGroundings: number;
+  };
   motion: {
     reduced: boolean;
     activeParticles: number;
@@ -236,6 +243,15 @@ export class KitchenScene {
     window: 0,
     shelf: 0,
     pass: 0,
+  };
+  private materialMetrics: Omit<
+    SceneMetrics["materials"],
+    "stationGroundings"
+  > = {
+    wallPlanes: 0,
+    floorSeams: 0,
+    fixtureShadows: 0,
+    passEdges: 0,
   };
   private layout!: SceneLayout;
   private freezerLayout: FreezerLayout | null = null;
@@ -447,6 +463,11 @@ export class KitchenScene {
       visibleSpirits: this.freezerLayout?.spirits.length ?? 0,
       board: this.boardMetrics,
       atmosphere: this.atmosphereMetrics,
+      materials: {
+        ...this.materialMetrics,
+        stationGroundings:
+          this.view === "kitchen" ? (this.layout?.stations.length ?? 0) : 0,
+      },
       motion: {
         reduced: this.reducedMotion,
         activeParticles,
@@ -528,6 +549,12 @@ export class KitchenScene {
     this.escalationLayer.visible = kitchen;
     this.busserLayer.visible = kitchen;
     this.atmosphereMetrics = { window: 0, shelf: 0, pass: 0 };
+    this.materialMetrics = {
+      wallPlanes: 0,
+      floorSeams: 0,
+      fixtureShadows: 0,
+      passEdges: 0,
+    };
     if (kitchen) {
       this.freezerLayout = null;
       this.drawRoom();
@@ -753,17 +780,20 @@ export class KitchenScene {
     const p = getTheme().palette,
       index = paletteIndex(this.resolvedTheme()),
       l = this.layout,
-      u = l.unit;
+      u = l.unit,
+      materials = p.scene.materials,
+      horizon = l.wall.height,
+      wainscotY = l.wall.height * materials.wall.wainscotStart;
     destroyChildren(this.room);
     this.boardLayer = new Container();
     const room = new Graphics()
       .rect(0, 0, l.wall.width, l.wall.height)
       .fill(p.scene.wall[index])
-      .rect(0, l.wall.height * 0.42, l.wall.width, l.wall.height * 0.58)
+      .rect(0, wainscotY, l.wall.width, l.wall.height - wainscotY)
       .fill(p.scene.wainscot[index]);
     const tileW = 9 * u,
       tileH = 4.5 * u;
-    for (let y = l.wall.height * 0.42; y < l.wall.height; y += tileH) {
+    for (let y = wainscotY; y < l.wall.height; y += tileH) {
       const row = Math.round(y / tileH);
       for (let x = row % 2 ? -tileW / 2 : 0; x < l.wall.width; x += tileW)
         room.rect(x, y, tileW, tileH).stroke({
@@ -772,6 +802,8 @@ export class KitchenScene {
         });
     }
     room
+      .rect(0, wainscotY, l.wall.width, materials.highlight.height * u)
+      .fill({ color: p.scene.wall[index], alpha: materials.highlight.alpha })
       .rect(0, l.wall.height - u, l.wall.width, u)
       .fill(p.scene.trim[index])
       .rect(
@@ -781,11 +813,22 @@ export class KitchenScene {
         this.app.renderer.height - l.wall.height,
       )
       .fill(p.scene.floor[index]);
-    for (let x = 0; x < l.wall.width; x += 16 * u)
+    for (let x = 0; x <= l.wall.width; x += materials.seam.spacing * u) {
       room
-        .moveTo(x, l.wall.height)
+        .moveTo(
+          l.wall.width / 2 +
+            (x - l.wall.width / 2) * materials.seam.perspective,
+          horizon,
+        )
         .lineTo(x, this.app.renderer.height)
-        .stroke({ color: p.scene.floorSeam[index], width: 1, alpha: 0.35 });
+        .stroke({
+          color: p.scene.floorSeam[index],
+          width: Math.max(1, materials.seam.width * u),
+          alpha: materials.seam.alpha,
+        });
+      this.materialMetrics.floorSeams++;
+    }
+    this.materialMetrics.wallPlanes = 3;
     this.room.addChild(room);
     this.drawWindow(index);
     this.drawBoard(index);
@@ -803,6 +846,16 @@ export class KitchenScene {
       w = 26 * u,
       h = 17 * u,
       g = new Graphics()
+        .rect(
+          x - 2 * u + p.scene.materials.contactShadow.offset * u,
+          y - 2 * u + p.scene.materials.contactShadow.offset * u,
+          w + 4 * u,
+          h + 4 * u,
+        )
+        .fill({
+          color: p.scene.shadow,
+          alpha: p.scene.materials.contactShadow.alpha,
+        })
         .rect(x - 2 * u, y - 2 * u, w + 4 * u, h + 4 * u)
         .fill(p.scene.wood[index])
         .rect(x, y, w, h)
@@ -835,6 +888,7 @@ export class KitchenScene {
       .rect(x + 19 * u, y + h - 2 * u, 5 * u, 2 * u)
       .fill(p.scene.ink);
     this.room.addChild(g);
+    this.materialMetrics.fixtureShadows++;
   }
   private drawBoard(index: number) {
     const p = getTheme().palette,
@@ -931,6 +985,16 @@ export class KitchenScene {
       u = this.layout.unit,
       x = this.layout.wall.width - 73 * u;
     const shelf = new Graphics()
+      .rect(
+        x + p.scene.materials.contactShadow.offset * u,
+        9 * u + p.scene.materials.contactShadow.offset * u,
+        30 * u,
+        2 * u,
+      )
+      .fill({
+        color: p.scene.shadow,
+        alpha: p.scene.materials.contactShadow.alpha,
+      })
       .rect(x, 9 * u, 30 * u, 2 * u)
       .fill(p.scene.wood[index]);
     if (this.lastAtmosphere) {
@@ -948,6 +1012,16 @@ export class KitchenScene {
     );
     this.room.addChild(
       new Graphics()
+        .rect(
+          door.frame.x + p.scene.materials.contactShadow.offset * u,
+          door.frame.y + p.scene.materials.contactShadow.offset * u,
+          door.frame.width,
+          door.frame.height,
+        )
+        .fill({
+          color: p.scene.shadow,
+          alpha: p.scene.materials.contactShadow.alpha,
+        })
         .rect(door.frame.x, door.frame.y, door.frame.width, door.frame.height)
         .fill(p.scene.wood[index])
         .rect(
@@ -960,10 +1034,13 @@ export class KitchenScene {
         .circle(door.knob.x, door.knob.y, door.knob.radius)
         .fill(p.scene.brass),
     );
+    this.materialMetrics.fixtureShadows += 2;
   }
   private drawPass(index: number) {
     const p = getTheme().palette,
       atmosphereTokens = p.scene.atmosphere.pass,
+      materialTokens = p.scene.materials,
+      passTokens = materialTokens.pass,
       u = this.layout.unit,
       pass = this.layout.pass,
       g = new Graphics(),
@@ -1016,10 +1093,52 @@ export class KitchenScene {
           });
         this.atmosphereMetrics.pass += 2;
       }
-    g.rect(pass.x, pass.y + 6 * u, pass.width, 3 * u)
+    g.rect(
+      pass.x + materialTokens.contactShadow.offset * u,
+      pass.y + (passTokens.topY + materialTokens.contactShadow.offset) * u,
+      pass.width,
+      (passTokens.shadowHeight + materialTokens.contactShadow.height) * u,
+    )
+      .fill({
+        color: p.scene.shadow,
+        alpha: materialTokens.contactShadow.alpha,
+      })
+      .rect(
+        pass.x,
+        pass.y + passTokens.topY * u,
+        pass.width,
+        passTokens.topHeight * u,
+      )
       .fill(p.scene.steel[1][index])
-      .rect(pass.x, pass.y + 9 * u, pass.width, 8 * u)
+      .rect(
+        pass.x,
+        pass.y + passTokens.topY * u,
+        pass.width,
+        materialTokens.bevel.topHeight * u,
+      )
+      .fill({
+        color: p.scene.steel[0][index],
+        alpha: materialTokens.highlight.alpha,
+      })
+      .rect(
+        pass.x,
+        pass.y + (passTokens.topY + passTokens.topHeight) * u,
+        pass.width,
+        passTokens.frontHeight * u,
+      )
       .fill(p.scene.steel[0][index])
+      .rect(
+        pass.x,
+        pass.y +
+          (passTokens.topY +
+            passTokens.topHeight +
+            passTokens.frontHeight -
+            materialTokens.bevel.frontHeight) *
+            u,
+        pass.width,
+        materialTokens.bevel.frontHeight * u,
+      )
+      .fill(p.scene.steel[2][index])
       .rect(pass.x, pass.y + 16 * u, pass.width, 2 * u)
       .fill(p.scene.steel[2][index])
       .rect(pass.x + 2 * u, pass.y + 11 * u, pass.width - 4 * u, 0.7 * u)
@@ -1034,6 +1153,8 @@ export class KitchenScene {
       .rect(bell.base.x + 2.6 * u, pass.y + 0.2 * u, 0.8 * u, u)
       .fill(p.scene.ink);
     this.room.addChild(g);
+    this.materialMetrics.fixtureShadows++;
+    this.materialMetrics.passEdges = 3;
   }
   private drawStations(now: number) {
     if (this.view !== "kitchen") return;
@@ -1221,10 +1342,25 @@ export class KitchenScene {
     if (view.staticSignature !== geometrySignature) {
       const counterWidth = Math.max(20 * u, rect.width - 9 * u),
         left = 4.5 * u,
+        materialTokens = p.scene.materials,
+        stationTokens = materialTokens.station,
         accent = tokens.accents[agent.accentIndex]!;
       view.staticSignature = geometrySignature;
       staticBody
         .clear()
+        .rect(
+          left + materialTokens.contactShadow.offset * u,
+          counterY + materialTokens.contactShadow.offset * u,
+          counterWidth,
+          (stationTokens.topHeight +
+            stationTokens.frontHeight +
+            materialTokens.contactShadow.height) *
+            u,
+        )
+        .fill({
+          color: p.scene.shadow,
+          alpha: materialTokens.contactShadow.alpha,
+        })
         .rect(left, 1.5 * u, counterWidth, u)
         .fill(p.scene.steel[2][index])
         .rect(left, 1.5 * u, u, 6 * u)
@@ -1233,13 +1369,28 @@ export class KitchenScene {
         .fill(p.scene.steel[2][index])
         .rect(rect.width - 6 * u, -2 * u, 5 * u, 3 * u)
         .fill(accent)
-        .rect(left, counterY, counterWidth, 2 * u)
+        .rect(left, counterY, counterWidth, stationTokens.topHeight * u)
         .fill(p.scene.steel[1][index])
-        .rect(left, counterY + 2 * u, counterWidth, 7 * u)
+        .rect(left, counterY, counterWidth, materialTokens.bevel.topHeight * u)
+        .fill({
+          color: p.scene.steel[0][index],
+          alpha: materialTokens.highlight.alpha,
+        })
+        .rect(
+          left,
+          counterY + stationTokens.topHeight * u,
+          counterWidth,
+          stationTokens.frontHeight * u,
+        )
         .fill(p.scene.steel[0][index])
         .rect(left, counterY + 3 * u, counterWidth, 0.7 * u)
         .fill({ color: p.scene.steel[1][index], alpha: 0.65 })
-        .rect(left, counterY + 9 * u, counterWidth, 1.5 * u)
+        .rect(
+          left,
+          counterY + (stationTokens.topHeight + stationTokens.frontHeight) * u,
+          counterWidth,
+          1.5 * u,
+        )
         .fill(p.scene.steel[2][index])
         .rect(left + 2 * u, counterY + 10.5 * u, 2 * u, 3 * u)
         .fill(p.scene.steel[2][index])

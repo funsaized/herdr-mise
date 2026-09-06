@@ -554,7 +554,23 @@ fn draw_kitchen(
         theme::BG,
         color_mode,
     );
-    canvas.clear(theme::BG);
+    canvas.clear(theme::WALL);
+    let floor_y = theme::KITCHEN_HEADER_BAND.saturating_add(theme::KITCHEN_PASS_BAND);
+    canvas.fill_rect(
+        0,
+        floor_y.into(),
+        area.width.into(),
+        theme::KITCHEN_FLOOR_SEAM_HEIGHT.into(),
+        theme::SEAM,
+    );
+    let floor_start = floor_y.saturating_add(theme::KITCHEN_FLOOR_SEAM_HEIGHT);
+    canvas.fill_rect(
+        0,
+        floor_start.into(),
+        area.width.into(),
+        i32::from(area.height.saturating_mul(2).saturating_sub(floor_start)),
+        theme::FLOOR,
+    );
     canvas.fill_rect(
         layout.board.x.into(),
         layout.board.y.into(),
@@ -562,19 +578,43 @@ fn draw_kitchen(
         layout.board.height.into(),
         theme::BOARD,
     );
-    if agents
-        .iter()
-        .any(|agent| agent.state == AgentState::Blocked)
-    {
-        canvas.fill_rect(
-            layout.pass.x.into(),
-            layout.pass.y.into(),
-            layout.pass.width.into(),
-            layout.pass.height.into(),
-            theme::PANEL2,
-        );
-    }
+    canvas.fill_rect(
+        i32::from(layout.pass.x + theme::KITCHEN_PASS_SHADOW_OFFSET),
+        i32::from(layout.pass.y + theme::KITCHEN_PASS_SHADOW_OFFSET),
+        layout.pass.width.into(),
+        layout.pass.height.into(),
+        theme::CONTACT_SHADOW,
+    );
+    canvas.fill_rect(
+        layout.pass.x.into(),
+        layout.pass.y.into(),
+        layout.pass.width.into(),
+        theme::KITCHEN_PASS_EDGE_HEIGHT.into(),
+        theme::STEEL,
+    );
+    canvas.fill_rect(
+        layout.pass.x.into(),
+        i32::from(layout.pass.y + theme::KITCHEN_PASS_EDGE_HEIGHT),
+        layout.pass.width.into(),
+        theme::KITCHEN_PASS_EDGE_HEIGHT.into(),
+        theme::STEEL_LO,
+    );
     for (station, agent) in layout.stations.iter().copied().zip(&agents) {
+        canvas.fill_rect(
+            i32::from(station.x + theme::KITCHEN_STATION_SHADOW_X_INSET),
+            i32::from(station.y + theme::KITCHEN_STATION_SHADOW_Y_INSET),
+            i32::from(
+                station
+                    .width
+                    .saturating_sub(theme::KITCHEN_STATION_SHADOW_X_INSET),
+            ),
+            i32::from(
+                station
+                    .height
+                    .saturating_sub(theme::KITCHEN_STATION_SHADOW_Y_INSET),
+            ),
+            theme::CONTACT_SHADOW,
+        );
         canvas.fill_rect(
             i32::from(station.x + 1),
             i32::from(station.y + 2),
@@ -719,7 +759,7 @@ fn draw_kitchen(
             layout.pass.width.saturating_sub(2),
             Line::styled(
                 "— all stations clear —",
-                Style::default().fg(mapped(theme::DIM, color_mode)),
+                Style::default().fg(mapped(theme::TEXT, color_mode)),
             ),
         );
     } else {
