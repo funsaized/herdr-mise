@@ -53,6 +53,26 @@ const cssTokens = {
   "--flame": tokens.semantic.flame,
   "--done": tokens.semantic.done,
   "--tungsten": tokens.semantic.tungsten,
+  "--spacePanel": `${tokens.spacing.panel}px`,
+  "--spaceRowSmall": `${tokens.spacing.rowSmall}px`,
+  "--spaceRow": `${tokens.spacing.row}px`,
+  "--radiusSmall": `${tokens.radius.small}px`,
+  "--radiusTooltip": `${tokens.radius.tooltip}px`,
+  "--radiusControl": `${tokens.radius.control}px`,
+  "--radiusPanel": `${tokens.radius.panel}px`,
+  "--fontWorld": tokens.typography.worldFamily,
+  "--fontChrome": tokens.typography.chromeFamily,
+  "--fontTitleSize": `${tokens.typography.title.size}px`,
+  "--fontTitleWeight": tokens.typography.title.weight,
+  "--fontRowLabelSize": `${tokens.typography.rowLabel.size}px`,
+  "--fontRowLabelWeight": tokens.typography.rowLabel.weight,
+  "--fontValueSize": `${tokens.typography.value.size}px`,
+  "--fontValueWeight": tokens.typography.value.weight,
+  "--fontSecondarySize": `${tokens.typography.secondary.size}px`,
+  "--fontSecondaryWeight": tokens.typography.secondary.weight,
+  "--fontSectionSize": `${tokens.typography.section.size}px`,
+  "--fontSectionWeight": tokens.typography.section.weight,
+  "--fontNumericVariant": tokens.typography.numericVariant,
 } as CSSProperties;
 const initialMetrics: DebugMetrics = { drawCalls: 0, socketBytesPerSecond: 0 };
 export function App() {
@@ -194,7 +214,16 @@ export function App() {
             : [];
         }),
     ],
-    controls = view === "freezer" ? spiritAgents : kitchenControls;
+    controls = view === "freezer" ? spiritAgents : kitchenControls,
+    tooltipAgentIdCandidate =
+      !settingsOpen && coarse.selectedId === null
+        ? (hoveredId ?? focusedId)
+        : null,
+    tooltipAgentId = hits.some(
+      (hit) => hit.kind === "station" && hit.id === tooltipAgentIdCandidate,
+    )
+      ? tooltipAgentIdCandidate
+      : null;
   useLayoutEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (isGlobalEscape(event)) {
@@ -290,12 +319,16 @@ export function App() {
       settingsRestorePendingRef.current = false;
     }
   }, [settingsOpen]);
-  const pointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+  const pointerHit = (event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect(),
       hit = sceneRef.current?.hitTest(
         event.clientX - bounds.left,
         event.clientY - bounds.top,
       );
+    return hit;
+  };
+  const pointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const hit = pointerHit(event);
     setHoveredId(hit?.kind === "station" ? hit.id : null);
   };
   const dismissHint = () => {
@@ -343,8 +376,17 @@ export function App() {
         ref={host}
         className={canvasClass}
         aria-label={`Agent state ${view} scene`}
-        onPointerDown={() => {
-          semanticRestoreRef.current = null;
+        onPointerDown={(event) => {
+          const hit = pointerHit(event),
+            index = controls.findIndex((control) => control.id === hit?.id);
+          semanticRestoreRef.current =
+            document.querySelectorAll<HTMLButtonElement>(
+              ".stationA11yMirror button",
+            )[index] ?? null;
+          if (hit) {
+            setFocusedId(hit.id);
+            sceneRef.current?.focus(hit.id);
+          }
         }}
         onPointerMove={pointerMove}
         onPointerLeave={() => setHoveredId(null)}
@@ -352,6 +394,7 @@ export function App() {
       <SemanticStationControls
         agents={controls}
         label={view === "freezer" ? "Ended chefs" : undefined}
+        tooltipAgentId={tooltipAgentId}
         onSelect={(id, element) => {
           semanticRestoreRef.current = element;
           clientStore.select(id);

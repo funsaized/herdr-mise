@@ -29,6 +29,8 @@ function contrast(a, b) {
 const checks = [
   ["text", "panel", 4.5],
   ["textMuted", "panel", 4.5],
+  ["secondary", "panel", 4.5],
+  ["tertiary", "panel", 4.5],
   ["buttonText", "text", 4.5],
   ["tooltipSecondary", "ink", 4.5],
 ];

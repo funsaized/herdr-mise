@@ -66,6 +66,7 @@ type MotionMetrics = {
   stationNameBounds: Record<string, Box & { text: string }>;
   stationStatusBounds: Record<string, Box & { text: string }>;
   activeFocusBounds: Record<string, Box>;
+  activeFocusCornerSizes: Record<string, number>;
   blockedPlacements: Record<
     string,
     {
@@ -394,8 +395,22 @@ test("runtime preference changes preserve mixed lifecycle truth in both directio
         continuous: false,
         preferenceChanges: 2,
       },
-      blockedIndicators: 3,
     });
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const indicators = (
+            window as typeof window & {
+              __miseSceneMetrics?: () => { blockedIndicators: number };
+            }
+          ).__miseSceneMetrics?.().blockedIndicators,
+          controls = document.querySelectorAll(
+            '.stationA11yMirror button[aria-label*="Blocked —"]',
+          ).length;
+        return controls > 0 && indicators === controls;
+      }),
+    )
+    .toBe(true);
   await expect(hero("Working — on the fire")).toHaveCount(1, {
     timeout: 5_000,
   });
@@ -675,11 +690,11 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       await assertResponsiveScene(page, 2, false);
     }
     snapshot = blocked;
-    await expect(
-      page.getByRole("button", {
-        name: /example-reviewer, Blocked — at the pass.*open details/,
-      }),
-    ).toBeAttached({ timeout: 10_000 });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const blockedStation = page.getByRole("button", {
+      name: /example-reviewer, Blocked — at the pass.*open details/,
+    });
+    await expect(blockedStation).toBeAttached({ timeout: 10_000 });
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
@@ -692,6 +707,98 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
           },
         },
       });
+    await page.locator(".canvasHost").evaluate((element) => {
+      element.setAttribute("tabindex", "-1");
+      (element as HTMLElement).focus();
+    });
+    await expect
+      .poll(async () => {
+        if (
+          await blockedStation.evaluate((element) => element.matches(":focus"))
+        )
+          return true;
+        await page.keyboard.press("ArrowRight");
+        return blockedStation.evaluate((element) => element.matches(":focus"));
+      })
+      .toBe(true);
+    await expect(blockedStation).toBeFocused();
+    const tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toHaveAttribute(
+      "id",
+      "station-tooltip-fictional-pane-19",
+    );
+    await expect(blockedStation).toHaveAttribute(
+      "aria-describedby",
+      "station-tooltip-fictional-pane-19",
+    );
+    const tooltipBox = await tooltip.boundingBox();
+    expect(tooltipBox).not.toBeNull();
+    expect(tooltipBox!.x).toBeGreaterThanOrEqual(0);
+    expect(tooltipBox!.x + tooltipBox!.width).toBeLessThanOrEqual(390);
+    await page.keyboard.press("Enter");
+    const details = page.getByRole("complementary", {
+        name: "example-reviewer details",
+      }),
+      primaryPanels = page.locator("aside.panel");
+    await expect(details).toBeFocused();
+    await expect(
+      details.locator(".fact", { hasText: "Workspace" }).locator("b"),
+    ).toHaveText("example-pantry");
+    await expect(primaryPanels).toHaveCount(1);
+    await expect(tooltip).toHaveCount(0);
+    const selected = (await sceneMetrics(page))!.activeFocusBounds[
+        "fictional-pane-19"
+      ]!,
+      detailBox = await details.boundingBox();
+    expect(
+      (await sceneMetrics(page))!.activeFocusCornerSizes["fictional-pane-19"],
+    ).toBe(13.5);
+    expect(detailBox).not.toBeNull();
+    expectInside(detailBox!, { x: 0, y: 0, width: 390, height: 844 });
+    expect(boxesIntersect(selected, detailBox!)).toBe(false);
+    const settings = page.getByRole("button", { name: "Open settings" });
+    await settings.focus();
+    await page.keyboard.press("Enter");
+    const settingsPanel = page.getByRole("complementary", { name: "Settings" });
+    await expect(settingsPanel).toBeFocused();
+    await expect(primaryPanels).toHaveCount(1);
+    await expect(details).toHaveCount(0);
+    const settingsBox = await settingsPanel.boundingBox();
+    expect(settingsBox).not.toBeNull();
+    expectInside(settingsBox!, { x: 0, y: 0, width: 390, height: 844 });
+    expect(boxesIntersect(selected, settingsBox!)).toBe(false);
+    await page.setViewportSize({ width: 320, height: 640 });
+    const narrowSelected = (await sceneMetrics(page))!.activeFocusBounds[
+        "fictional-pane-19"
+      ]!,
+      narrowSettingsBox = await settingsPanel.boundingBox();
+    expect(narrowSettingsBox).not.toBeNull();
+    expectInside(narrowSettingsBox!, { x: 0, y: 0, width: 320, height: 640 });
+    expect(boxesIntersect(narrowSelected, narrowSettingsBox!)).toBe(false);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(settings).toBeFocused();
+    await expect(details).toBeVisible();
+    await expect(primaryPanels).toHaveCount(1);
+    const narrowDetailBox = await details.boundingBox();
+    expect(narrowDetailBox).not.toBeNull();
+    expect(boxesIntersect(narrowSelected, narrowDetailBox!)).toBe(false);
+    await page.keyboard.press("Escape");
+    await expect(blockedStation).toBeFocused();
+    await expect(primaryPanels).toHaveCount(0);
+    await page.mouse.click(
+      narrowSelected.x + narrowSelected.width / 2,
+      narrowSelected.y + narrowSelected.height / 2,
+    );
+    await expect(details).toBeVisible();
+    await page.getByRole("button", { name: "Close panel" }).click();
+    await expect(blockedStation).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 844 });
     snapshot = empty;
     await expect(
       page.getByRole("button", {
@@ -721,27 +828,44 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     ]);
     for (const [, runtime] of rows ?? [])
       expect(runtime).toMatch(/^(?:—|\d+:\d{2})$/);
+    await settings.click();
+    const emptyStatus = page
+      .getByRole("status")
+      .filter({ hasText: "Waiting for agents" });
+    await expect(settingsPanel).toBeVisible();
+    await expect(emptyStatus).toBeVisible();
+    const emptySettingsBox = await settingsPanel.boundingBox(),
+      emptyStatusBox = await emptyStatus.boundingBox();
+    expect(emptySettingsBox).not.toBeNull();
+    expect(emptyStatusBox).not.toBeNull();
+    expect(boxesIntersect(emptySettingsBox!, emptyStatusBox!)).toBe(false);
+    await page.keyboard.press("Escape");
+    await expect(settings).toBeFocused();
     await boardButton.evaluate((element) =>
       (element as HTMLButtonElement).click(),
     );
     await expect(
       page.locator('aside[aria-label$="session summary" i]'),
     ).toBeVisible();
+    await expect(primaryPanels).toHaveCount(1);
     await page.keyboard.press("Escape");
-    await page.setViewportSize({ width: 390, height: 500 });
     await page.getByRole("button", { name: "Freezer" }).click();
+    await expect(page.getByRole("button", { name: "Freezer" })).toHaveCSS(
+      "background-color",
+      "rgb(44, 39, 33)",
+    );
     await expect(
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
-    ).toHaveCount(2);
+    ).toHaveCount(3);
     await expect(page.getByLabel("Agent state announcements")).toHaveText(
-      "Freezer, 2 of 3 ended chefs shown",
+      "Freezer, 3 of 3 ended chefs shown",
     );
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         view: "freezer",
         endedEntries: 3,
-        visibleSpirits: 2,
+        visibleSpirits: 3,
       });
   } finally {
     app.kill("SIGTERM");
@@ -1418,37 +1542,43 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
     ),
     stop = page.getByRole("button", { name: "Stop animation" }),
     expand = page.getByRole("button", { name: "Expand recording" });
-  await expect(figure).toBeVisible();
-  await expect(figure).toHaveAttribute(
-    "alt",
-    "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer.",
-  );
+  await expect(figure).toHaveCount(0);
   await expect(figureBox).toHaveAttribute(
     "aria-describedby",
     "tui-demo-description",
   );
   await expect(page.locator("#tui-demo-description")).toHaveText(description);
   await expect(caption).toBeVisible();
-  await expect(stop).toBeVisible();
+  await expect(stop).toHaveCount(0);
   await expect(expand).toBeVisible();
-  await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
   const defaultBox = await figureBox.boundingBox();
   expect(defaultBox).not.toBeNull();
-  expect(defaultBox!.width).toBeGreaterThanOrEqual(319);
-  expect(defaultBox!.width).toBeLessThanOrEqual(321);
+  expect(defaultBox!.width).toBeGreaterThanOrEqual(259);
+  expect(defaultBox!.width).toBeLessThanOrEqual(261);
   await figureBox.hover();
   await expect
     .poll(async () => (await figureBox.boundingBox())?.width)
-    .toBeGreaterThanOrEqual(319);
+    .toBeGreaterThanOrEqual(259);
   const hoverBox = await figureBox.boundingBox(),
     settingsBox = await settings.boundingBox();
   expect(hoverBox).not.toBeNull();
-  expect(hoverBox!.width).toBeLessThanOrEqual(321);
+  expect(hoverBox!.width).toBeLessThanOrEqual(261);
   expect(settingsBox).not.toBeNull();
   expect(boxesIntersect(hoverBox!, settingsBox!)).toBe(false);
+  await expand.click();
+  await expect(figureBox).toHaveAttribute("data-expanded", "true");
+  await expect(figure).toBeVisible();
+  await expect(figure).toHaveAttribute(
+    "alt",
+    "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer.",
+  );
+  await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
+  await expect(stop).toBeVisible();
   const mediaBox = await figure.boundingBox(),
     stopBox = await stop.boundingBox(),
-    expandBox = await expand.boundingBox();
+    expandBox = await page
+      .getByRole("button", { name: "Collapse recording" })
+      .boundingBox();
   expect(mediaBox).not.toBeNull();
   expect(stopBox).not.toBeNull();
   expect(expandBox).not.toBeNull();
@@ -1465,6 +1595,9 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
   await restart.click();
   await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
   await expect(stop).toBeVisible();
+  await page.getByRole("button", { name: "Collapse recording" }).click();
+  await expect(figure).toHaveCount(0);
+  await expect(stop).toHaveCount(0);
 
   await page.getByRole("button", { name: "Freezer" }).click();
   await expand.click();
@@ -1486,7 +1619,10 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
   await expect(freezer).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await expect(freezer).toHaveAttribute("aria-pressed", "false");
-  await settings.click();
+  await expand.click();
+  await settings.focus();
+  await page.keyboard.press("Enter");
+  await expect(figureBox).toHaveAttribute("data-expanded", "false");
   await expect(
     page.getByRole("complementary", { name: "Settings" }),
   ).toBeVisible();
@@ -1495,7 +1631,7 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
   await page.mouse.move(400, 500);
   await expect
     .poll(async () => (await figureBox.boundingBox())?.width)
-    .toBeLessThanOrEqual(321);
+    .toBeLessThanOrEqual(261);
 
   await page.setViewportSize({ width: 901, height: 641 });
   await expect(figureBox).toBeVisible();
@@ -1581,6 +1717,8 @@ test("reduced motion starts stopped and allows an explicit GIF restart", async (
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?preset=blocked&agents=1");
   const figure = page.locator(".visualTuiFigure img");
+  await expect(figure).toHaveCount(0);
+  await page.getByRole("button", { name: "Expand recording" }).click();
   await expect(figure).toBeVisible();
   await expect(figure).toHaveAttribute(
     "alt",

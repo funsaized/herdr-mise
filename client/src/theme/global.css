@@ -35,6 +35,9 @@
 }
 :root {
   font-family: "Instrument Sans", sans-serif;
+}
+.appShell {
+  font-family: var(--fontChrome);
   color: var(--text);
 }
 * {
@@ -90,18 +93,23 @@ select:focus-visible {
 }
 .stationTooltip {
   position: fixed;
+  left: clamp(118px, var(--tooltipAnchor), calc(100vw - 118px));
   transform: translate(-50%, -100%);
   z-index: 10;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 154px;
-  padding: 9px 11px;
+  width: max-content;
+  max-width: min(220px, calc(100vw - 16px));
+  padding: 9px var(--spaceRowSmall);
   color: var(--buttonText);
   background: var(--tooltip);
-  border-radius: 7px;
+  border-radius: var(--radiusTooltip);
   pointer-events: none;
   box-shadow: var(--shadow);
+}
+.stationTooltip[data-placement="below"] {
+  transform: translate(-50%, 0);
 }
 .stationTooltip::after {
   content: "";
@@ -112,18 +120,25 @@ select:focus-visible {
   border: 6px solid transparent;
   border-top-color: var(--tooltip);
 }
+.stationTooltip[data-placement="below"]::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: var(--tooltip);
+}
 .stationTooltip strong {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--fontRowLabelSize);
+  font-weight: var(--fontRowLabelWeight);
 }
 .stationTooltip span {
-  font-size: 12px;
+  font-size: var(--fontSecondarySize);
+  font-weight: var(--fontSecondaryWeight);
   color: var(--tooltipSecondary);
 }
 .stationTooltip time {
-  font-size: 12px;
-  color: var(--secondary);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--fontSecondarySize);
+  color: var(--tooltipSecondary);
+  font-variant-numeric: var(--fontNumericVariant);
 }
 .panel {
   position: absolute;
@@ -134,7 +149,7 @@ select:focus-visible {
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radiusPanel);
   box-shadow: var(--shadow);
   overflow: hidden;
 }
@@ -143,13 +158,12 @@ select:focus-visible {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 18px 18px 0;
+  padding: var(--spacePanel) var(--spacePanel) 0;
 }
 .panelHeader h2 {
   margin: 0;
-  font:
-    400 15px "Silkscreen",
-    monospace;
+  font-size: var(--fontTitleSize);
+  font-weight: var(--fontTitleWeight);
 }
 .panelHeader button,
 .settingsHeader button {
@@ -171,22 +185,23 @@ select:focus-visible {
   height: 8px;
 }
 .stateChip span {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--fontSecondarySize);
+  font-weight: var(--fontRowLabelWeight);
   letter-spacing: 0.3px;
 }
 .facts {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px;
+  gap: var(--spaceRowSmall);
+  padding: var(--spacePanel);
   border-bottom: 1px solid var(--hairline);
 }
 .fact {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
+  gap: var(--spaceRowSmall);
+  font-size: var(--fontValueSize);
+  font-weight: var(--fontValueWeight);
 }
 .fact > span:first-child {
   color: var(--secondary);
@@ -197,7 +212,7 @@ select:focus-visible {
   font-weight: 500;
   text-align: right;
   overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: var(--fontNumericVariant);
 }
 .fact .mono,
 .mono {
@@ -210,14 +225,14 @@ select:focus-visible {
   font-weight: 600;
 }
 .sessionHistory {
-  padding: 16px 18px;
+  padding: var(--spaceRow) var(--spacePanel);
   border-bottom: 1px solid var(--hairline);
 }
 .sessionHistory h3 {
   margin: 0 0 10px;
   color: var(--secondary);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--fontSectionSize);
+  font-weight: var(--fontSectionWeight);
   letter-spacing: 0.6px;
 }
 .historyStrip {
@@ -239,7 +254,7 @@ select:focus-visible {
   margin-top: 6px;
   color: var(--tertiary);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: var(--fontNumericVariant);
 }
 .panel > :last-child {
   border-bottom: 0;
@@ -249,33 +264,35 @@ select:focus-visible {
 }
 .settingsHeader {
   align-items: center;
-  padding: 16px 18px;
+  padding: var(--spaceRow) var(--spacePanel);
   border-bottom: 1px solid var(--hairline);
 }
 .settingsHeader h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--fontTitleSize);
+  font-weight: var(--fontTitleWeight);
 }
 .settingRow,
 .settingBlock {
-  padding: 14px 18px;
+  padding: var(--spaceRow) var(--spacePanel);
   border-bottom: 1px solid var(--hairline2);
 }
 .settingRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--spaceRowSmall);
 }
 .settingRow b,
 .settingBlock > b {
-  font-size: 13.5px;
+  font-size: var(--fontRowLabelSize);
 }
 .settingRow small {
   display: block;
   margin-top: 2px;
   color: var(--tertiary);
-  font-size: 12px;
+  font-size: var(--fontSecondarySize);
+  font-weight: var(--fontSecondaryWeight);
 }
 .settingBlock label {
   display: flex;
@@ -291,7 +308,7 @@ select:focus-visible {
   max-width: 130px;
   padding: 5px 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radiusSmall);
   color: var(--text);
   background: var(--chip);
 }
@@ -327,18 +344,18 @@ select:focus-visible {
   gap: 4px;
   margin-top: 9px;
   padding: 3px;
-  border-radius: 8px;
+  border-radius: var(--radiusControl);
   background: var(--chip);
 }
 .segments button {
   flex: 1;
   padding: 6px 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radiusSmall);
   color: var(--secondary);
   background: transparent;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--fontSecondarySize);
 }
 .segments button[aria-pressed="true"] {
   color: var(--text);
@@ -353,14 +370,20 @@ select:focus-visible {
   bottom: 12px;
   padding: 5px 11px;
   border: 1px solid var(--borderSoft);
-  border-radius: 6px;
+  border-radius: var(--radiusSmall);
   color: var(--textMuted);
   background: var(--panelSoft);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fontSecondarySize);
 }
 .freezerTrigger {
   right: 92px;
+}
+.freezerTrigger[aria-pressed="true"] {
+  color: var(--buttonText);
+  background: var(--text);
+  border-color: var(--text);
+  font-weight: var(--fontRowLabelWeight);
 }
 .emptyPill {
   position: absolute;
@@ -372,9 +395,9 @@ select:focus-visible {
   color: var(--textWarm);
   background: var(--panelSoft);
   border: 1px solid var(--borderSoft);
-  border-radius: 8px;
+  border-radius: var(--radiusControl);
   box-shadow: var(--shadowSmall);
-  font-size: 13.5px;
+  font-size: var(--fontRowLabelSize);
 }
 .demoPlacard {
   position: absolute;
@@ -387,14 +410,12 @@ select:focus-visible {
   color: var(--text);
   background: var(--buttonText);
   border: 3px solid var(--text);
-  border-radius: 4px;
+  border-radius: var(--radiusSmall);
   box-shadow: var(--shadowPlacard);
 }
 .demoPlacard h2 {
   margin: 0;
-  font:
-    700 16px "Silkscreen",
-    monospace;
+  font: 700 16px var(--fontWorld);
   letter-spacing: 1px;
 }
 .demoPlacard hr {
@@ -424,14 +445,14 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  width: 320px;
+  width: 260px;
   max-height: calc(100vh - 80px);
   margin: 0;
-  padding: 5px;
+  padding: 7px;
   overflow: hidden;
   background: var(--panelSoft);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radiusSmall);
   box-shadow: var(--shadowPlacard);
   pointer-events: auto;
 }
@@ -447,7 +468,7 @@ select:focus-visible {
 }
 .visualTuiFigure figcaption {
   color: var(--secondary);
-  font-size: 10px;
+  font-size: var(--fontSecondarySize);
   line-height: 1.3;
 }
 .visualTuiDescription {
@@ -468,9 +489,9 @@ select:focus-visible {
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radiusSmall);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--fontSecondarySize);
   cursor: pointer;
 }
 .visualTuiFigure[data-expanded="true"] {
@@ -501,16 +522,14 @@ select:focus-visible {
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radiusPanel);
   box-shadow: var(--shadowStrong);
   text-align: center;
 }
 .disconnectCard h2 {
   margin: 0;
   color: var(--workingText);
-  font:
-    400 13px "Silkscreen",
-    monospace;
+  font: 400 13px var(--fontWorld);
   letter-spacing: 0.5px;
 }
 .disconnectCard strong {
@@ -550,7 +569,7 @@ select:focus-visible {
   padding: 7px 10px;
   color: var(--textWarm);
   background: var(--panelSoft);
-  border-radius: 6px;
+  border-radius: var(--radiusSmall);
   font-size: 12px;
 }
 .firstHint button {
@@ -633,6 +652,15 @@ select:focus-visible {
   }
 }
 @media (max-width: 480px) {
+  .panel {
+    inset: auto 8px 52px;
+    width: auto;
+    max-height: 22vh;
+    overflow-y: auto;
+  }
+  .panel ~ .emptyPill {
+    bottom: calc(22vh + 60px);
+  }
   .demoPlacard {
     inset: 8px 8px auto;
     width: auto;
@@ -655,6 +683,11 @@ select:focus-visible {
   }
   .firstHint {
     bottom: 52px;
+  }
+}
+@media (max-width: 340px) {
+  .panel {
+    max-height: 11vh;
   }
 }
 .rendererFallback {

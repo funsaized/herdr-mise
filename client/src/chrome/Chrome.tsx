@@ -76,18 +76,28 @@ export function Chrome(props: ChromeProps) {
     hoverAgent = hoverHit ? snapshot.agents.get(hoverHit.id) : undefined,
     selectedHit = props.hits.find(
       (hit) => hit.kind === "station" && hit.id === selectedAgent?.id,
+    ),
+    primaryPanelOpen = Boolean(
+      props.settingsOpen || selectedAgent || selectedBoard,
     );
+  useEffect(() => {
+    if (!primaryPanelOpen || !tuiExpanded) return;
+    const frame = requestAnimationFrame(() => setTuiExpanded(false));
+    return () => cancelAnimationFrame(frame);
+  }, [primaryPanelOpen, tuiExpanded]);
   return (
     <>
-      {hoverAgent && hoverHit && <Tooltip agent={hoverAgent} hit={hoverHit} />}
-      {selectedAgent && (
+      {!primaryPanelOpen && hoverAgent && hoverHit && (
+        <Tooltip agent={hoverAgent} hit={hoverHit} />
+      )}
+      {!props.settingsOpen && selectedAgent && (
         <DetailCard
           agent={selectedAgent}
           hit={selectedHit}
           onClose={() => props.store.select(null)}
         />
       )}
-      {selectedBoard && (
+      {!props.settingsOpen && selectedBoard && (
         <SessionSummary
           entry={selectedBoard}
           onClose={() => props.store.select(null)}
@@ -131,20 +141,22 @@ export function Chrome(props: ChromeProps) {
           aria-label="herdr-mise TUI demo recording"
           aria-describedby="tui-demo-description"
         >
-          <picture>
-            <img
-              src={
-                tuiStopped
-                  ? "/tui-demo-poster.png"
-                  : `/tui-demo.gif${tuiRestart ? `?restart=${tuiRestart}` : ""}`
-              }
-              alt={
-                tuiStopped
-                  ? "Still frame of the herdr-mise terminal demo kitchen."
-                  : "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer."
-              }
-            />
-          </picture>
+          {tuiExpanded && (
+            <picture>
+              <img
+                src={
+                  tuiStopped
+                    ? "/tui-demo-poster.png"
+                    : `/tui-demo.gif${tuiRestart ? `?restart=${tuiRestart}` : ""}`
+                }
+                alt={
+                  tuiStopped
+                    ? "Still frame of the herdr-mise terminal demo kitchen."
+                    : "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer."
+                }
+              />
+            </picture>
+          )}
           <figcaption>
             Native Ghostty recording of herdr-mise using deterministic demo
             data.
@@ -154,15 +166,6 @@ export function Chrome(props: ChromeProps) {
           </span>
           <div className="visualTuiControls">
             <button
-              type="button"
-              onClick={() => {
-                if (tuiStopped) setTuiRestart((value) => value + 1);
-                setTuiStopped(!tuiStopped);
-              }}
-            >
-              {tuiStopped ? "Restart animation" : "Stop animation"}
-            </button>
-            <button
               ref={tuiExpandToggle}
               type="button"
               aria-expanded={tuiExpanded}
@@ -170,6 +173,17 @@ export function Chrome(props: ChromeProps) {
             >
               {tuiExpanded ? "Collapse recording" : "Expand recording"}
             </button>
+            {tuiExpanded && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (tuiStopped) setTuiRestart((value) => value + 1);
+                  setTuiStopped(!tuiStopped);
+                }}
+              >
+                {tuiStopped ? "Restart animation" : "Stop animation"}
+              </button>
+            )}
           </div>
         </figure>
       )}

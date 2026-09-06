@@ -567,7 +567,7 @@ mod tests {
                 include_str!("../tests/fixtures/snapshot-herdr-0.8.0-p19.json"),
                 "fictional-pane-19",
                 AgentState::Blocked,
-                "Example Pantry",
+                "/work/example-pantry",
             ),
             (
                 include_str!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json"),

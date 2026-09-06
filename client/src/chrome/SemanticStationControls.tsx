@@ -11,10 +11,12 @@ export function SemanticStationControls({
   agents,
   onSelect,
   label = "Agent stations",
+  tooltipAgentId = null,
 }: {
   agents: readonly SemanticAgent[];
   onSelect(id: string, element: HTMLButtonElement): void;
   label?: string;
+  tooltipAgentId?: string | null;
 }) {
   const blocked = agents.some((agent) => agent.targetState === "blocked"),
     now = useClock(blocked);
@@ -24,6 +26,11 @@ export function SemanticStationControls({
         <button
           key={agent.id}
           tabIndex={-1}
+          aria-describedby={
+            agent.id === tooltipAgentId
+              ? `station-tooltip-${encodeURIComponent(agent.id)}`
+              : undefined
+          }
           aria-label={semanticStationLabel(
             agent,
             agent.targetState === "blocked" && agent.stateKnown !== false

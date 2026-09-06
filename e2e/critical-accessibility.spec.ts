@@ -6,25 +6,55 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
   await page.emulateMedia({ reducedMotion: "reduce" });
   // Reflow-width coverage equivalent to 1280px at 400% zoom; not an AT listening test.
   await page.setViewportSize({ width: 320, height: 640 });
-  await page.goto("/?preset=blocked&agents=1");
+  await page.goto("/?preset=blocked&agents=12&stats");
   await expect(
     page.getByRole("status").filter({ hasText: "DEMO SERVICE" }),
   ).toBeVisible();
   const station = page
     .getByRole("button", { name: /Blocked — .*open details/ })
-    .first();
+    .last();
   await page.locator("body").click({ position: { x: 1, y: 1 } });
-  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowLeft");
   await expect(station).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(
-    page.getByRole("complementary", { name: /details$/ }),
-  ).toBeVisible();
+  const panel = page.getByRole("complementary", { name: /details$/ });
+  await expect(panel).toBeVisible();
+  const selectedBox = await page.evaluate(() => {
+    const metrics = (
+      window as typeof window & {
+        __miseSceneMetrics?: () => {
+          activeFocusBounds: Record<
+            string,
+            { x: number; y: number; width: number; height: number }
+          >;
+        };
+      }
+    ).__miseSceneMetrics?.();
+    return Object.values(metrics?.activeFocusBounds ?? {})[0];
+  });
+  if (selectedBox) {
+    const panelBox = (await panel.boundingBox())!;
+    expect(panelBox.y).toBeGreaterThanOrEqual(
+      selectedBox.y + selectedBox.height,
+    );
+  } else {
+    await expect(
+      page.getByRole("region", { name: "Agent status list" }),
+    ).toBeVisible();
+  }
   await page.keyboard.press("Escape");
   await expect(station).toBeFocused();
   const settings = page.getByRole("button", { name: /settings/i }).first();
   await settings.focus();
   await page.keyboard.press("Enter");
+  const settingsPanel = page.getByRole("complementary", { name: "Settings" });
+  await expect(settingsPanel).toBeVisible();
+  if (selectedBox) {
+    const settingsBox = (await settingsPanel.boundingBox())!;
+    expect(settingsBox.y).toBeGreaterThanOrEqual(
+      selectedBox.y + selectedBox.height,
+    );
+  }
   await page.keyboard.press("Escape");
   await expect(settings).toBeFocused();
   expect(
