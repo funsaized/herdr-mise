@@ -93,13 +93,19 @@ pub const ACCENT_DIMS: [Color; 12] = [
     Color::Indexed(53),
     Color::Indexed(23),
 ];
-pub const SPIRIT: Color = ACCENTS[4];
-pub const SPIRIT_DIM: Color = ACCENT_DIMS[4];
+pub const SPIRIT: Color = ICE;
+pub const SPIRIT_DIM: Color = ICE_LO;
 
 pub const FREEZER_SHELL_INSET: i32 = 2;
 pub const FREEZER_BIN_FRACTION: u16 = 3;
+pub const FREEZER_STOCK_CADENCE: usize = 3;
 pub const SPIRIT_LABEL_CHARS: usize = 11;
 pub const SPIRIT_LABEL_Y_INSET: u16 = 2;
+pub const SPIRIT_BAY_WIDTH: u16 = 11;
+pub const SPIRIT_BAY_HEIGHT: u16 = 18;
+pub const FREEZER_AISLE_WIDTH: u16 = 2;
+pub const FREEZER_STATUS_HEIGHT: u16 = 2;
+pub const FREEZER_STATUS_BOTTOM_INSET: u16 = 3;
 pub const FREEZER_RACK_WIDTH: u16 = 12;
 pub const FREEZER_RACK_MARGIN_X: u16 = 3;
 pub const FREEZER_RACK_MARGIN_Y: u16 = 8;
@@ -110,8 +116,6 @@ pub const FREEZER_DOOR_WIDTH: u16 = 18;
 pub const FREEZER_DOOR_HEIGHT: u16 = 12;
 pub const FREEZER_FROST_MARGIN: u16 = 2;
 pub const FREEZER_FROST_TOP_HEIGHT: u16 = 2;
-pub const FREEZER_FROST_BOTTOM_Y: u16 = 8;
-pub const FREEZER_FROST_BOTTOM_HEIGHT: u16 = 3;
 pub const FREEZER_FROST_DOOR_PAD: u16 = 2;
 pub const FREEZER_FROST_DOOR_HEIGHT: u16 = 3;
 pub const FREEZER_FLOOR_GAP: u16 = 2;

@@ -324,6 +324,14 @@ describe("layout, transitions and resources", () => {
     expect(first.spirits.map((slot) => slot.id)).toEqual(
       ids.slice(-first.spirits.length),
     );
+    expect(first.totalSpirits).toBe(ids.length);
+    expect(first.spirits[0]!.x).toBe(first.floor.x);
+    expect(first.spirits[1]!.x + first.spirits[1]!.width).toBe(
+      first.floor.x + first.floor.width,
+    );
+    expect(computeFreezerLayout(320, 640, ids).spirits.length).toBeGreaterThan(
+      0,
+    );
     for (const [index, slot] of first.spirits.entries()) {
       expect(slot.x).toBeGreaterThanOrEqual(first.floor.x);
       expect(slot.y).toBeGreaterThanOrEqual(first.floor.y);

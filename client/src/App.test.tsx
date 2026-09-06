@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { SemanticStationControls } from "./chrome/SemanticStationControls";
 import {
+  freezerAnnouncement,
   humanStateWords,
   semanticAgentsEqual,
   semanticStationLabel,
@@ -132,4 +133,9 @@ describe("semantic station controls", () => {
         }),
       ).toContain(humanStateWords[targetState]);
   });
+});
+
+it("announces truthful freezer capacity", () => {
+  expect(freezerAnnouncement(4, 12)).toBe("Freezer, 4 of 12 ended chefs shown");
+  expect(freezerAnnouncement(0, 0)).toBe("Freezer, 0 of 0 ended chefs shown");
 });

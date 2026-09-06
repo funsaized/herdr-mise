@@ -102,6 +102,7 @@ export interface SceneMetrics {
     { accent: string; idlePose: IdlePose | null; prepStep: 0 | 1 | null }
   >;
   spiritAccents: Record<string, string>;
+  spiritPoseBounds: Record<string, Pick<Rect, "width" | "height">>;
   stationCells: Record<string, Rect>;
   stationNameBounds: Record<string, Rect & { text: string }>;
   stationStatusBounds: Record<string, Rect & { text: string }>;
@@ -224,6 +225,7 @@ export class KitchenScene {
   private readonly idlePoses = new IdlePoseAssignments();
   private readonly stationVisuals: SceneMetrics["stationVisuals"] = {};
   private readonly spiritAccents: SceneMetrics["spiritAccents"] = {};
+  private readonly spiritPoseBounds: SceneMetrics["spiritPoseBounds"] = {};
   private readonly retainedBlocked = new Map<
     string,
     BlockedPlacement & { timerText: string }
@@ -452,6 +454,7 @@ export class KitchenScene {
       idlePoses,
       stationVisuals: { ...this.stationVisuals },
       spiritAccents: { ...this.spiritAccents },
+      spiritPoseBounds: { ...this.spiritPoseBounds },
       stationCells,
       stationNameBounds,
       stationStatusBounds,
@@ -578,6 +581,8 @@ export class KitchenScene {
     if (!layout) return;
     for (const id of Object.keys(this.spiritAccents))
       delete this.spiritAccents[id];
+    for (const id of Object.keys(this.spiritPoseBounds))
+      delete this.spiritPoseBounds[id];
     const p = getTheme().palette,
       index = paletteIndex(this.resolvedTheme()),
       g = new Graphics();
@@ -663,7 +668,7 @@ export class KitchenScene {
         tokens.freezer.door.latch.height,
       )
       .fill(p.scene.ink);
-    for (const rack of layout.racks) {
+    for (const [rackIndex, rack] of layout.racks.entries()) {
       g.rect(rack.x, rack.y, rack.width, rack.height).stroke({
         color: p.scene.ink,
         width: tokens.freezer.rack.borderWidth,
@@ -674,8 +679,8 @@ export class KitchenScene {
         g.rect(rack.x, y, rack.width, tokens.freezer.rack.shelfWidth).fill(
           p.scene.ink,
         );
-        for (const item of tokens.freezer.rack.stock[shelf - 1] ??
-          tokens.freezer.rack.stock[0]!) {
+        for (const item of tokens.freezer.rack.stock[rackIndex]![shelf - 1] ??
+          []) {
           const lift = item.h * 0.55;
           for (let layer = 0; layer < item.stack; layer++)
             drawShelfFood(
@@ -728,19 +733,19 @@ export class KitchenScene {
         base = slot.y + slot.height - tokens.freezer.spirit.baseInset;
       const spiritAccent = tokens.accents[entry.accentIndex]!;
       this.spiritAccents[entry.id] = spiritAccent;
-      drawFrozenCook(
+      this.spiritPoseBounds[entry.id] = drawFrozenCook(
         spirit,
         slot.x + slot.width / 2,
-        base - 4 * u,
+        base - tokens.freezer.cook.baseOffset * u,
         u,
         {
-          coat: p.scene.coat[index],
-          skin: p.scene.skin,
+          coat: tokens.freezer.spirit.body,
+          shadow: tokens.freezer.spirit.shadow,
           ink: p.scene.ink,
-          boot: p.scene.boot[index],
           tongue: tokens.freezer.tongue,
         },
         slot.x > layout.floor.x + layout.floor.width / 2 ? -1 : 1,
+        sceneIdentityHash(entry.id) % tokens.freezer.cook.poses.length,
       );
       if (snapshot.selectedId === entry.id || this.focusedId === entry.id)
         spirit
@@ -772,8 +777,36 @@ export class KitchenScene {
         slot.x + slot.width / 2,
         base + tokens.freezer.spirit.nameOffset,
       );
+      spirit
+        .circle(
+          slot.x + tokens.freezer.spirit.accentMarker.inset,
+          base +
+            tokens.freezer.spirit.nameOffset +
+            tokens.freezer.spirit.accentMarker.radius,
+          tokens.freezer.spirit.accentMarker.radius,
+        )
+        .fill(spiritAccent);
       this.room.addChild(spirit, name);
       this.hits.push({ kind: "spirit", id: entry.id, rect: slot });
+    }
+    const hidden = layout.totalSpirits - layout.spirits.length,
+      statusText =
+        layout.totalSpirits === 0
+          ? "FREEZER EMPTY"
+          : hidden > 0
+            ? `SHOWING ${layout.spirits.length} OF ${layout.totalSpirits}`
+            : "";
+    if (statusText) {
+      const status = new Text({
+        text: statusText,
+        style: worldText(p.scene.ink, tokens.freezer.emptyPill.fontSize),
+      });
+      status.anchor.set(0.5);
+      status.position.set(
+        layout.emptyPill.x + layout.emptyPill.width / 2,
+        layout.emptyPill.y + layout.emptyPill.height / 2,
+      );
+      this.room.addChild(status);
     }
     this.publishHits();
   }
@@ -1953,15 +1986,16 @@ function drawFrozenCook(
   u: number,
   colors: {
     coat: string;
-    skin: string;
+    shadow: string;
     ink: string;
-    boot: string;
     tongue: string;
   },
   flip: number,
+  poseIndex: number,
 ) {
-  const cook = tokens.freezer.cook;
-  for (const part of cook.parts) {
+  const cook = tokens.freezer.cook,
+    pose = cook.poses[poseIndex]!;
+  for (const part of pose.parts) {
     const [x, y, width, height] = part.geometry,
       sx = flip < 0 ? -x - width : x;
     g.rect(cx + sx * u, cy + y * u, width * u, height * u).fill(
@@ -1969,14 +2003,17 @@ function drawFrozenCook(
     );
   }
   const eye = cook.eye;
-  for (const ex of cook.eyes) {
-    const x = cx + (flip < 0 ? -ex : ex) * u;
-    g.moveTo(x - eye.size * u, cy + eye.y0 * u)
-      .lineTo(x + eye.size * u, cy + eye.y1 * u)
-      .moveTo(x + eye.size * u, cy + eye.y0 * u)
-      .lineTo(x - eye.size * u, cy + eye.y1 * u)
+  for (const [ex, ey] of pose.eyes) {
+    const x = cx + (flip < 0 ? -ex : ex) * u,
+      y = cy + ey * u;
+    g.moveTo(x - eye.size * u, y + eye.y0 * u)
+      .lineTo(x + eye.size * u, y + eye.y1 * u)
+      .moveTo(x + eye.size * u, y + eye.y0 * u)
+      .lineTo(x - eye.size * u, y + eye.y1 * u)
       .stroke({ color: colors.ink, width: Math.max(1, u * eye.width) });
   }
+  const bounds = g.getLocalBounds();
+  return { width: bounds.width, height: bounds.height };
 }
 function formatElapsed(elapsed: number) {
   const seconds = Math.floor(elapsed / 1000),
