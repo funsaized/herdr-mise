@@ -94,6 +94,8 @@ type MotionMetrics = {
     window: number;
     shelf: number;
     pass: number;
+    contact: number;
+    freezer: number;
   };
   materials: {
     wallPlanes: number;
@@ -324,7 +326,8 @@ test("reduced motion is static before blocked-scene startup in light and dinner 
 test("atmosphere switches off room extras without changing blocked truth", async ({
   page,
 }) => {
-  const errors = watchErrors(page);
+  const errors = watchErrors(page),
+    passTreatments: number[] = [];
   await page.emulateMedia({ reducedMotion: "reduce" });
   for (const theme of ["light", "dinner"]) {
     await page.goto(`/?preset=blocked&agents=1&theme=${theme}&stats`);
@@ -339,6 +342,7 @@ test("atmosphere switches off room extras without changing blocked truth", async
     const initial = await sceneMetrics(page);
     expect(initial?.atmosphere.window).toBeGreaterThan(0);
     expect(initial?.atmosphere.pass).toBeGreaterThan(0);
+    passTreatments.push(initial!.atmosphere.pass);
 
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("switch", { name: "Atmosphere" }).click();
@@ -357,6 +361,7 @@ test("atmosphere switches off room extras without changing blocked truth", async
         },
       });
   }
+  expect(passTreatments[1]).toBeGreaterThan(passTreatments[0]!);
   expect(errors).toEqual([]);
 });
 
@@ -668,6 +673,23 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       .poll(async () => (await sceneMetrics(page))?.stationVisuals["p-11"])
       .toMatchObject({ accent: "#667a9e", idlePose: null });
     await expect
+      .poll(async () => (await sceneMetrics(page))?.motion.activeParticles)
+      .toBeGreaterThan(0);
+    expect((await sceneMetrics(page))?.atmosphere.contact).toBe(1);
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("switch", { name: "Atmosphere" }).click();
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        atmosphere: { contact: 0 },
+        motion: { activeParticles: 0 },
+      });
+    await page.getByRole("switch", { name: "Atmosphere" }).click();
+    await page.keyboard.press("Escape");
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.motion.activeParticles)
+      .toBeGreaterThan(0);
+    await expect
       .poll(async () => (await sceneMetrics(page))?.stationVisuals["p-8"])
       .toMatchObject({ accent: "#997f5e", prepStep: null });
     expect(
@@ -699,6 +721,8 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         stateIndicators: { blocked: 1 },
+        atmosphere: { contact: 0 },
+        motion: { activeParticles: 0 },
         stationVisuals: {
           "fictional-pane-19": {
             accent: "#8f9a6f",
@@ -813,6 +837,8 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         endedEntries: 3,
+        atmosphere: { contact: 0 },
+        motion: { activeParticles: 0 },
         board: {
           headers: ["COOK", "MISE TIME"],
           rows: [{}, {}, {}],
@@ -866,7 +892,14 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
         view: "freezer",
         endedEntries: 3,
         visibleSpirits: 3,
+        atmosphere: { freezer: 6 },
+        motion: { activeParticles: 0 },
       });
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("switch", { name: "Atmosphere" }).click();
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.atmosphere.freezer)
+      .toBe(0);
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();
@@ -1020,7 +1053,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
     await page.getByRole("switch", { name: "Atmosphere" }).click();
     await expect
       .poll(async () => (await sceneMetrics(page))?.atmosphere)
-      .toEqual({ window: 0, shelf: 0, pass: 0 });
+      .toEqual({ window: 0, shelf: 0, pass: 0, contact: 0, freezer: 0 });
     expect((await sceneMetrics(page))?.materials).toEqual(workingOn.materials);
 
     await page.goto(`${appUrl}/?stats&theme=dinner`);

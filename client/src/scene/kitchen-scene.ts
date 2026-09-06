@@ -126,6 +126,8 @@ export interface SceneMetrics {
     window: number;
     shelf: number;
     pass: number;
+    contact: number;
+    freezer: number;
   };
   materials: {
     wallPlanes: number;
@@ -248,6 +250,8 @@ export class KitchenScene {
     window: 0,
     shelf: 0,
     pass: 0,
+    contact: 0,
+    freezer: 0,
   };
   private materialMetrics: Omit<
     SceneMetrics["materials"],
@@ -496,6 +500,11 @@ export class KitchenScene {
   }
   reconcile(force = false) {
     const snapshot = this.store.snapshot();
+    if (this.reducedMotion || !this.atmosphereHasWork(snapshot)) {
+      this.lastSteam.clear();
+      this.particles.releaseAll();
+      this.drawParticles();
+    }
     if (document.hidden) {
       this.ticker.stop();
       return;
@@ -558,7 +567,13 @@ export class KitchenScene {
     this.particleLayer.visible = kitchen;
     this.escalationLayer.visible = kitchen;
     this.busserLayer.visible = kitchen;
-    this.atmosphereMetrics = { window: 0, shelf: 0, pass: 0 };
+    this.atmosphereMetrics = {
+      window: 0,
+      shelf: 0,
+      pass: 0,
+      contact: 0,
+      freezer: 0,
+    };
     this.materialMetrics = {
       wallPlanes: 0,
       floorSeams: 0,
@@ -710,6 +725,18 @@ export class KitchenScene {
         color: p.scene.steel[1][index],
         alpha: tokens.freezer.frost.alpha,
       });
+    if (this.lastAtmosphere) {
+      for (const [snowX, snowY] of tokens.freezer.snow.points)
+        g.circle(
+          layout.inner.x + snowX * layout.inner.width,
+          layout.inner.y + snowY * layout.inner.height,
+          tokens.freezer.snow.radius,
+        ).fill({
+          color: tokens.freezer.ice[index],
+          alpha: tokens.freezer.snow.alpha,
+        });
+      this.atmosphereMetrics.freezer = tokens.freezer.snow.points.length;
+    }
     for (
       let x = tokens.freezer.rivet.start;
       x < layout.room.width;
@@ -1084,7 +1111,8 @@ export class KitchenScene {
       u = this.layout.unit,
       pass = this.layout.pass,
       g = new Graphics(),
-      poolAlpha = atmosphereTokens.poolAlpha[index];
+      poolAlpha = atmosphereTokens.poolAlpha[index],
+      light = atmosphereTokens.light[index];
     const atmosphere = this.lastAtmosphere;
     if (atmosphere && index === 1) {
       const [poolY, poolWidth, poolHeight, poolOpacity] =
@@ -1125,10 +1153,10 @@ export class KitchenScene {
             bulbWidth * u,
             bulbHeight * u,
           )
-          .fill(index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten)
+          .fill(light)
           .ellipse(x, pass.y + lightY * u, lightWidth * u, lightHeight * u)
           .fill({
-            color: index === 1 ? p.semantic.tungstenDark : p.semantic.tungsten,
+            color: light,
             alpha: poolAlpha,
           });
         this.atmosphereMetrics.pass += 2;
@@ -1201,6 +1229,13 @@ export class KitchenScene {
     const snapshot = this.store.snapshot(),
       index = paletteIndex(this.resolvedTheme()),
       active = new Set<string>();
+    this.atmosphereMetrics.contact =
+      this.lastAtmosphere &&
+      (snapshot.mode === "live" || snapshot.mode === "demo")
+        ? [...snapshot.agents.values()].filter(
+            (agent) => agent.targetState === "working",
+          ).length
+        : 0;
     for (const id of this.retainedBlocked.keys()) {
       const agent = snapshot.agents.get(id);
       if (!agent || (this.reducedMotion && agent.targetState !== "blocked"))
@@ -1494,7 +1529,7 @@ export class KitchenScene {
         nameCharacters,
         state === "blocked" ? placement : undefined,
       ),
-      dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}`,
+      dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}:${this.lastAtmosphere}`,
       dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`,
       exitComplete =
         state !== "blocked" &&
@@ -1587,7 +1622,22 @@ export class KitchenScene {
       drawStatePose(g, state, cookX, cookY + bob, u, poseColors);
     if (state === "working") {
       const flicker = prepSample.prepStep,
-        potX = rect.width / 2 + 5 * u;
+        potX = rect.width / 2 + 5 * u,
+        [glowWidth, glowHeight, glowY, glowAlpha, dimFrame] =
+          p.scene.atmosphere.working.contactGlow;
+      if (
+        this.lastAtmosphere &&
+        (snapshot.mode === "live" || snapshot.mode === "demo")
+      )
+        g.ellipse(
+          potX,
+          counterY + glowY * u,
+          glowWidth * u,
+          glowHeight * u,
+        ).fill({
+          color: p.scene.atmosphere.pass.light[index],
+          alpha: glowAlpha[index] * (flicker ? 1 : dimFrame),
+        });
       g.rect(potX - 5 * u, counterY - 4 * u, 10 * u, 4 * u)
         .fill(p.scene.ink)
         .rect(potX - 4 * u, counterY - 5 * u, 8 * u, u)
@@ -1711,7 +1761,7 @@ export class KitchenScene {
       this.lastVisualUpdate = now;
       this.store.reconcileRendered();
       const motion = sceneMotionPolicy(this.reducedMotion);
-      if (motion.steam) {
+      if (motion.steam && this.atmosphereHasWork(snapshot)) {
         for (const agent of snapshot.agents.values()) {
           if (agent.targetState === "working") {
             const lastSteam = this.lastSteam.get(agent.id) ?? 0;
@@ -1720,9 +1770,13 @@ export class KitchenScene {
               (item) => item.id === agent.id,
             );
             if (rect) {
+              const [steamX, steamY] =
+                getTheme().palette.scene.atmosphere.working.steamAnchor;
               this.particles.acquire(
-                rect.x + rect.width / 2,
-                rect.y + rect.height * 0.35,
+                rect.x +
+                  rect.width / 2 +
+                  steamX * this.layout.unit * rect.scale,
+                rect.y + steamY * this.layout.unit * rect.scale,
               );
               this.lastSteam.set(agent.id, now);
             }
@@ -1893,6 +1947,16 @@ export class KitchenScene {
           alpha: Math.max(0, 1 - particle.age / particle.life),
         });
     }
+  }
+  private atmosphereHasWork(snapshot = this.store.snapshot()) {
+    return (
+      this.view === "kitchen" &&
+      snapshot.settings.atmosphere &&
+      (snapshot.mode === "live" || snapshot.mode === "demo") &&
+      [...snapshot.agents.values()].some(
+        (agent) => agent.targetState === "working",
+      )
+    );
   }
   private onMotionPreference(reduced: boolean) {
     if (this.reducedMotion === reduced) return;

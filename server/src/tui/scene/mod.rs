@@ -210,7 +210,11 @@ fn draw_sprite(canvas: &mut PixelCanvas, station: PixelRect, agent: &AgentRecord
         right_fire,
     );
 
-    for particle in particles::steam_at_tick(tick, (pot_x + 1) as i16, (pot_y - 1) as i16) {
+    for particle in particles::steam_at_tick(
+        tick,
+        (pot_x + theme::POT_WIDTH / 2) as i16,
+        (pot_y - 1) as i16,
+    ) {
         put_inside(
             canvas,
             station,

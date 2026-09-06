@@ -126,12 +126,17 @@ export const tokens = {
         lampCount: 3,
         ambientPool: [22, 0.5, 11, 0.18],
         poolAlpha: [0.18, 0.42],
+        light: ["#cfd6dd", "#ffd76e"],
         stem: [-0.5, -14, 1, 6],
         shadeTop: [-2, -8, 4, 1.6],
         shade: [-3, -6.5, 6, 2.5],
         rim: [-3, -4, 6, 1],
         bulb: [-1.2, -3, 2.4, 1],
         pool: [7, 9, 3],
+      },
+      working: {
+        steamAnchor: [5, 14],
+        contactGlow: [8, 2, 1, [0.08, 0.14], 0.72],
       },
     },
     cook: {
@@ -365,6 +370,18 @@ export const tokens = {
       door: { x: 10, y: 8, height: 18 },
       rack: { x: 6, y: 10, height: 18 },
       alpha: 0.78,
+    },
+    snow: {
+      points: [
+        [0.08, 0.14],
+        [0.24, 0.3],
+        [0.42, 0.12],
+        [0.61, 0.25],
+        [0.78, 0.1],
+        [0.92, 0.34],
+      ],
+      radius: 1.2,
+      alpha: 0.48,
     },
     rivet: { start: 10, y: 7, radius: 2, pitch: 42 },
     spirit: {
