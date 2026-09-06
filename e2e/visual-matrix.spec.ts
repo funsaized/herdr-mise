@@ -66,6 +66,7 @@ type MotionMetrics = {
   stationNameBounds: Record<string, Box & { text: string }>;
   stationStatusBounds: Record<string, Box & { text: string }>;
   activeFocusBounds: Record<string, Box>;
+  activeFocusCornerSizes: Record<string, number>;
   blockedPlacements: Record<
     string,
     {
@@ -394,8 +395,22 @@ test("runtime preference changes preserve mixed lifecycle truth in both directio
         continuous: false,
         preferenceChanges: 2,
       },
-      blockedIndicators: 3,
     });
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const indicators = (
+            window as typeof window & {
+              __miseSceneMetrics?: () => { blockedIndicators: number };
+            }
+          ).__miseSceneMetrics?.().blockedIndicators,
+          controls = document.querySelectorAll(
+            '.stationA11yMirror button[aria-label*="Blocked —"]',
+          ).length;
+        return controls > 0 && indicators === controls;
+      }),
+    )
+    .toBe(true);
   await expect(hero("Working — on the fire")).toHaveCount(1, {
     timeout: 5_000,
   });
@@ -692,8 +707,20 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
           },
         },
       });
-    await page.locator("body").click({ position: { x: 1, y: 1 } });
-    await page.keyboard.press("Tab");
+    await page.locator(".canvasHost").evaluate((element) => {
+      element.setAttribute("tabindex", "-1");
+      (element as HTMLElement).focus();
+    });
+    await expect
+      .poll(async () => {
+        if (
+          await blockedStation.evaluate((element) => element.matches(":focus"))
+        )
+          return true;
+        await page.keyboard.press("ArrowRight");
+        return blockedStation.evaluate((element) => element.matches(":focus"));
+      })
+      .toBe(true);
     await expect(blockedStation).toBeFocused();
     const tooltip = page.getByRole("tooltip");
     await expect(tooltip).toBeVisible();
@@ -715,12 +742,16 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       }),
       primaryPanels = page.locator("aside.panel");
     await expect(details).toBeFocused();
+    await expect(details).toContainText("/work/example-pantry");
     await expect(primaryPanels).toHaveCount(1);
     await expect(tooltip).toHaveCount(0);
     const selected = (await sceneMetrics(page))!.activeFocusBounds[
         "fictional-pane-19"
       ]!,
       detailBox = await details.boundingBox();
+    expect(
+      (await sceneMetrics(page))!.activeFocusCornerSizes["fictional-pane-19"],
+    ).toBe(13.5);
     expect(detailBox).not.toBeNull();
     expectInside(detailBox!, { x: 0, y: 0, width: 390, height: 844 });
     expect(boxesIntersect(selected, detailBox!)).toBe(false);

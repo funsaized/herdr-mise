@@ -687,7 +687,7 @@ select:focus-visible {
 }
 @media (max-width: 340px) {
   .panel {
-    max-height: 14vh;
+    max-height: 11vh;
   }
 }
 .rendererFallback {

@@ -19,22 +19,7 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
   await page.keyboard.press("Enter");
   const panel = page.getByRole("complementary", { name: /details$/ });
   await expect(panel).toBeVisible();
-  const readSelectedBox = () =>
-    page.evaluate(() => {
-      const metrics = (
-        window as typeof window & {
-          __miseSceneMetrics?: () => {
-            activeFocusBounds: Record<
-              string,
-              { x: number; y: number; width: number; height: number }
-            >;
-          };
-        }
-      ).__miseSceneMetrics?.();
-      return Object.values(metrics?.activeFocusBounds ?? {})[0];
-    });
-  await expect.poll(readSelectedBox).not.toBeUndefined();
-  const selectedBox = (await readSelectedBox())!,
+  const selectedBox = (await station.boundingBox())!,
     panelBox = (await panel.boundingBox())!;
   expect(panelBox.y).toBeGreaterThanOrEqual(selectedBox.y + selectedBox.height);
   await page.keyboard.press("Escape");

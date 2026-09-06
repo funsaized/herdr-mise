@@ -1,7 +1,7 @@
 {
   "version": "0.8.0",
   "protocol": 19,
-  "workspaces": [{"workspace_id": "fictional-pantry", "label": "Example Pantry"}],
+  "workspaces": [{"workspace_id": "fictional-pantry", "label": "/work/example-pantry"}],
   "tabs": [],
   "panes": [],
   "layouts": [],

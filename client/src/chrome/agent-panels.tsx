@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { SceneHit } from "../scene/kitchen-scene";
-import { workspaceDisplayName } from "../scene/geometry";
 import {
   humanStateWords,
   semanticQueueWords,
@@ -157,7 +156,7 @@ export function DetailCard({
       />
       <div className="facts">
         <Fact label="Workspace" mono>
-          {workspaceDisplayName(agent.workspace)}
+          {agent.workspace.trim() || "Unavailable"}
         </Fact>
         <Fact label="Time in state">
           {formatDuration(now - Date.parse(agent.stateEnteredAt))}

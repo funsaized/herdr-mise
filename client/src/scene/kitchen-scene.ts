@@ -107,6 +107,7 @@ export interface SceneMetrics {
   stationNameBounds: Record<string, Rect & { text: string }>;
   stationStatusBounds: Record<string, Rect & { text: string }>;
   activeFocusBounds: Record<string, Rect>;
+  activeFocusCornerSizes: Record<string, number>;
   blockedPlacements: Record<
     string,
     BlockedPlacement & { timerText: string; exiting: boolean }
@@ -156,6 +157,7 @@ interface StationView {
   staticBody: Graphics;
   dynamicBody: Graphics;
   selection: Graphics;
+  selectionCornerSize: number | null;
   name: Text;
   label: Text;
   timer: Text;
@@ -398,6 +400,7 @@ export class KitchenScene {
       stationNameBounds: Record<string, Rect & { text: string }> = {},
       stationStatusBounds: Record<string, Rect & { text: string }> = {},
       activeFocusBounds: Record<string, Rect> = {},
+      activeFocusCornerSizes: Record<string, number> = {},
       snapshot = this.store.snapshot(),
       agents = [...snapshot.agents.values()];
     for (const agent of agents) {
@@ -439,6 +442,8 @@ export class KitchenScene {
           width: focus.width,
           height: focus.height,
         };
+        if (view.selectionCornerSize !== null)
+          activeFocusCornerSizes[station.id] = view.selectionCornerSize;
       }
     }
     const activeParticles = this.particles.activeCount,
@@ -459,6 +464,7 @@ export class KitchenScene {
       stationNameBounds,
       stationStatusBounds,
       activeFocusBounds,
+      activeFocusCornerSizes,
       blockedPlacements: { ...this.blockedPlacementMetrics },
       blockedIndicators,
       stateIndicators,
@@ -1306,6 +1312,7 @@ export class KitchenScene {
       staticBody,
       dynamicBody,
       selection,
+      selectionCornerSize: null,
       name,
       label,
       timer,
@@ -1502,6 +1509,7 @@ export class KitchenScene {
     }
     g.clear();
     selection.clear();
+    view.selectionCornerSize = null;
     const homeTicket = stationTicketGeometry(state, u),
       ticketColor =
         state === "done"
@@ -1656,6 +1664,7 @@ export class KitchenScene {
         ),
         h = Math.max(0, Math.min(rect.height - strokeWidth * 2, 47 * u)),
         size = Math.min(p.scene.layout.selectionCornerSize * u, w / 2, h / 2);
+      view.selectionCornerSize = size;
       selection
         .moveTo(inset, inset + size)
         .lineTo(inset, inset)
