@@ -11,6 +11,7 @@ import {
   ModeTreatment,
   SessionSummary,
   SettingsPanel,
+  Tooltip,
 } from "./Chrome";
 
 afterEach(cleanup);
@@ -225,7 +226,7 @@ describe("chrome interactions", () => {
     expect(toggle).toHaveBeenCalledOnce();
   });
   it.each([
-    ["blocked", "Blocked — at the pass"],
+    ["blocked", "Blocked — waiting"],
     ["working", "Working — on the fire"],
     ["done", "Done — plated"],
   ] as const)(
@@ -260,6 +261,38 @@ describe("chrome interactions", () => {
       cleanup();
     },
   );
+  it("uses current blocked placement in tooltips and details", () => {
+    const agent = {
+        ...record,
+        state: "blocked" as const,
+        targetState: "blocked" as const,
+        renderedState: "blocked" as const,
+        transitionStartedAt: 0,
+        clearAt: null,
+        answerReceivedUntil: null,
+        revision: 1,
+        history: [{ state: "blocked" as const, startedAt: Date.now() }],
+      },
+      hit = {
+        kind: "station" as const,
+        id: "a",
+        rect: { x: 10, y: 100, width: 80, height: 50 },
+        blockedPlacement: {
+          kind: "station" as const,
+          queueOrdinal: 6,
+          queueTotal: 12,
+        },
+      };
+    const { unmount } = render(<Tooltip agent={agent} hit={hit} />);
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "Blocked — waiting at station · queue 6 of 12",
+    );
+    unmount();
+    render(<DetailCard agent={agent} hit={hit} onClose={() => {}} />);
+    expect(
+      screen.getByText("BLOCKED — WAITING AT STATION · QUEUE 6 OF 12"),
+    ).toBeTruthy();
+  });
   it("renders live-agent facts and history without a Herdr action or attach hint", () => {
     const now = Date.now(),
       close = vi.fn();

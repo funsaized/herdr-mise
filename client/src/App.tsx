@@ -15,6 +15,7 @@ import { isGlobalEscape, isInteractiveKeyboardTarget } from "./keyboard";
 import {
   semanticAgents,
   semanticAgentsEqual,
+  semanticStateWords,
   type SemanticAgent,
 } from "./state/semantic-stations";
 import { SemanticStationControls } from "./chrome/SemanticStationControls";
@@ -159,11 +160,23 @@ export function App() {
       .flatMap((hit) => {
         const entry = boardEntries.find((item) => item.id === hit.id);
         return entry
-          ? [{ id: entry.id, name: entry.name, targetState: "ended" as const }]
+          ? [
+              {
+                id: entry.id,
+                name: entry.name,
+                targetState: "ended" as const,
+                stateEnteredAt: new Date(entry.endedAt).toISOString(),
+              },
+            ]
           : [];
       }),
     kitchenControls = [
-      ...agents,
+      ...agents.map((agent) => ({
+        ...agent,
+        blockedPlacement: hits.find(
+          (hit) => hit.kind === "station" && hit.id === agent.id,
+        )?.blockedPlacement,
+      })),
       ...hits
         .filter((hit) => hit.kind === "board")
         .flatMap((hit) => {
@@ -174,6 +187,7 @@ export function App() {
                   id: entry.id,
                   name: entry.name,
                   targetState: "ended" as const,
+                  stateEnteredAt: new Date(entry.endedAt).toISOString(),
                 },
               ]
             : [];
@@ -317,8 +331,7 @@ export function App() {
                     clientStore.select(agent.id);
                   }}
                 >
-                  {agent.name}:{" "}
-                  {agent.stateKnown === false ? "unknown" : agent.targetState}
+                  {agent.name}: {semanticStateWords(agent)}
                 </button>
               </li>
             ))}
