@@ -617,9 +617,10 @@ fn draw_kitchen(
     render_line(
         frame,
         area,
-        2,
+        theme::KITCHEN_GUTTER,
         1,
-        area.width.saturating_sub(4),
+        area.width
+            .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2)),
         Line::from(vec![Span::styled(
             title,
             Style::default()
@@ -627,25 +628,14 @@ fn draw_kitchen(
                 .add_modifier(Modifier::BOLD),
         )]),
     );
-    let tick_text = format!("10Hz · tick {}", motion_tick(tick, reduced_motion));
-    render_line(
-        frame,
-        area,
-        area.width
-            .saturating_sub(tick_text.chars().count() as u16 + 2),
-        1,
-        tick_text.chars().count() as u16,
-        Line::styled(
-            tick_text,
-            Style::default().fg(mapped(theme::DIM, color_mode)),
-        ),
-    );
-    let source_width = area.width.saturating_sub(4);
+    let source_width = area
+        .width
+        .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2));
     let (source_first, source_overflow) = split_line(&source, usize::from(source_width));
     render_line(
         frame,
         area,
-        2,
+        theme::KITCHEN_GUTTER,
         2,
         source_width,
         Line::styled(
@@ -657,9 +647,12 @@ fn draw_kitchen(
         render_line(
             frame,
             area,
-            2,
+            theme::KITCHEN_GUTTER,
             3,
-            layout.board.x.saturating_sub(4),
+            layout
+                .board
+                .x
+                .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2)),
             Line::styled(
                 source_overflow,
                 Style::default().fg(mapped(theme::DIM, color_mode)),
@@ -677,7 +670,7 @@ fn draw_kitchen(
                     .fg(mapped(theme::BRASS, color_mode))
                     .add_modifier(Modifier::BOLD),
             ))
-            .border_style(Style::default().fg(mapped(theme::BRASS, color_mode))),
+            .border_style(Style::default().fg(mapped(theme::FRAME, color_mode))),
         pane_rect(area, board_area),
     );
     if !table.board().is_empty() {
@@ -721,7 +714,7 @@ fn draw_kitchen(
         render_line(
             frame,
             area,
-            4,
+            theme::KITCHEN_GUTTER.saturating_add(2),
             layout.pass.y / 2,
             layout.pass.width.saturating_sub(2),
             Line::styled(
@@ -739,7 +732,7 @@ fn draw_kitchen(
         render_line(
             frame,
             area,
-            4,
+            theme::KITCHEN_GUTTER.saturating_add(2),
             layout.pass.y / 2,
             layout.pass.width.saturating_sub(2),
             Line::styled(
@@ -886,9 +879,10 @@ fn draw_kitchen(
             render_line(
                 frame,
                 area,
-                2,
+                theme::KITCHEN_GUTTER,
                 area.height.saturating_sub(3) + row as u16,
-                area.width.saturating_sub(4),
+                area.width
+                    .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2)),
                 Line::styled(
                     facts,
                     Style::default()
@@ -910,7 +904,7 @@ fn draw_kitchen(
     render_line(
         frame,
         area,
-        2,
+        theme::KITCHEN_GUTTER,
         area.height.saturating_sub(1),
         connection_width,
         Line::styled(
@@ -921,7 +915,8 @@ fn draw_kitchen(
     render_line(
         frame,
         area,
-        area.width.saturating_sub(keys.chars().count() as u16 + 2),
+        area.width
+            .saturating_sub(keys.chars().count() as u16 + theme::KITCHEN_GUTTER),
         area.height.saturating_sub(1),
         keys.chars().count() as u16,
         Line::styled(keys, Style::default().fg(mapped(theme::DIM, color_mode))),

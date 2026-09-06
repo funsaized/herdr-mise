@@ -2,8 +2,6 @@ use super::super::theme;
 
 pub const MIN_SCENE_WIDTH: u16 = 80;
 pub const MIN_SCENE_PIXEL_HEIGHT: u16 = 48;
-const MIN_STATION_PITCH: u16 = 4;
-const MAX_STATION_PITCH: u16 = 28;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PixelRect {
@@ -77,47 +75,61 @@ pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> Layo
         width,
         height: pixel_height,
     };
-    let pass = PixelRect {
-        x: 2,
-        y: 8,
-        width: width.saturating_sub(32),
-        height: 2,
-    };
-    let board_width = 26.min(width.saturating_sub(4));
+    let gutter = theme::KITCHEN_GUTTER;
+    let board_width = 26.min(width.saturating_sub(gutter.saturating_mul(2)));
     let board = PixelRect {
-        x: width - board_width - 2,
-        y: 6,
+        x: width.saturating_sub(board_width).saturating_sub(gutter),
+        y: theme::KITCHEN_HEADER_BAND,
         width: board_width,
-        height: 14,
+        height: theme::KITCHEN_PASS_BAND,
+    };
+    let pass = PixelRect {
+        x: gutter,
+        y: theme::KITCHEN_HEADER_BAND.saturating_add(2),
+        width: board.x.saturating_sub(gutter.saturating_mul(2)),
+        height: 2,
     };
 
     let mut stations = Vec::new();
     if agent_count > 0 {
         let columns = agent_count.min(3);
         let rows = agent_count.div_ceil(columns);
-        let grid_x = 2_u16;
-        let grid_y = 20_u16;
-        let grid_width = width - 4;
-        let grid_height = pixel_height.saturating_sub(grid_y + 4);
+        let grid_y = theme::KITCHEN_HEADER_BAND.saturating_add(theme::KITCHEN_PASS_BAND);
+        let grid_width = width.saturating_sub(gutter.saturating_mul(2));
+        let grid_height = pixel_height
+            .saturating_sub(grid_y)
+            .saturating_sub(theme::KITCHEN_FOOTER_BAND);
         let Ok(rows_u16) = u16::try_from(rows) else {
             return LayoutDecision::Fallback;
         };
-        let station_height = (grid_height / rows_u16).min(MAX_STATION_PITCH);
-        if station_height < MIN_STATION_PITCH {
+        let station_pitch = (grid_height / rows_u16).min(theme::KITCHEN_STATION_MAX_PITCH);
+        if station_pitch < theme::KITCHEN_STATION_MIN_PITCH {
             return LayoutDecision::Fallback;
         }
+        let block_height = station_pitch.saturating_mul(rows_u16);
+        let block_y = grid_y.saturating_add(grid_height.saturating_sub(block_height) / 2);
+        let column_gap = 1;
+        let station_width = (grid_width.saturating_sub(
+            (columns as u16)
+                .saturating_sub(1)
+                .saturating_mul(column_gap),
+        ) / columns as u16)
+            .min(theme::KITCHEN_STATION_MAX_WIDTH)
+            .max(1);
         stations.reserve(agent_count);
-        let station_width = grid_width / columns as u16;
         for index in 0..agent_count {
             let row = index / columns;
             let column = index % columns;
+            let row_columns = (agent_count - row * columns).min(columns) as u16;
+            let row_width = station_width
+                .saturating_mul(row_columns)
+                .saturating_add(row_columns.saturating_sub(1).saturating_mul(column_gap));
+            let row_x = gutter.saturating_add(grid_width.saturating_sub(row_width) / 2);
             stations.push(PixelRect {
-                x: grid_x + column as u16 * station_width,
-                y: grid_y + row as u16 * station_height,
-                width: station_width.saturating_sub(1).max(1),
-                height: station_height
-                    .saturating_sub(u16::from(rows > 1) * 2)
-                    .max(2),
+                x: row_x + column as u16 * (station_width + column_gap),
+                y: block_y + row as u16 * station_pitch,
+                width: station_width,
+                height: station_pitch.saturating_sub(u16::from(rows > 1) * 2).max(2),
             });
         }
     }
@@ -239,10 +251,14 @@ mod tests {
                             {
                                 let columns = agents.min(3);
                                 let rows = agents.div_ceil(columns);
-                                let grid_height = pixel_height.saturating_sub(24);
+                                let grid_height = pixel_height
+                                    .saturating_sub(theme::KITCHEN_HEADER_BAND)
+                                    .saturating_sub(theme::KITCHEN_PASS_BAND)
+                                    .saturating_sub(theme::KITCHEN_FOOTER_BAND);
                                 assert!(
                                     rows > usize::from(u16::MAX)
-                                        || grid_height / (rows as u16) < MIN_STATION_PITCH
+                                        || grid_height / (rows as u16)
+                                            < theme::KITCHEN_STATION_MIN_PITCH
                                 );
                             } else {
                                 assert!(
@@ -277,40 +293,63 @@ mod tests {
     }
 
     #[test]
-    fn responsive_contract_has_three_across_and_six_as_three_by_two() {
-        let LayoutDecision::Scene(minimum) = compute_layout(80, 48, 3) else {
-            panic!()
-        };
-        assert_eq!(minimum.stations.len(), 3);
-        assert!(minimum.stations.iter().all(|station| station.y == 20));
-        assert!(minimum.stations.iter().all(|station| station.height >= 24));
-
-        let LayoutDecision::Scene(full) = compute_layout(110, 80, 6) else {
-            panic!()
-        };
-        assert_eq!(
-            full.stations
+    fn responsive_contract_centers_bounded_complete_and_incomplete_rows() {
+        let cases = [
+            (80, 48, 1, vec![(23, 20, 34, 24)]),
+            (80, 48, 2, vec![(5, 20, 34, 24), (40, 20, 34, 24)]),
+            (
+                80,
+                48,
+                6,
+                vec![
+                    (3, 20, 24, 10),
+                    (28, 20, 24, 10),
+                    (53, 20, 24, 10),
+                    (3, 32, 24, 10),
+                    (28, 32, 24, 10),
+                    (53, 32, 24, 10),
+                ],
+            ),
+            (
+                110,
+                80,
+                4,
+                vec![
+                    (3, 20, 34, 26),
+                    (38, 20, 34, 26),
+                    (73, 20, 34, 26),
+                    (38, 48, 34, 26),
+                ],
+            ),
+        ];
+        for (width, height, count, expected) in cases {
+            let LayoutDecision::Scene(layout) = compute_layout(width, height, count) else {
+                panic!("{width}x{height} with {count} agents must be a scene")
+            };
+            let actual = layout
+                .stations
                 .iter()
-                .map(|station| station.y)
-                .collect::<Vec<_>>(),
-            [20, 20, 20, 48, 48, 48]
-        );
-        assert!(full.stations.iter().all(|station| station.width >= 34));
-        assert!(full.stations.iter().all(|station| station.height >= 26));
+                .map(|station| (station.x, station.y, station.width, station.height))
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected);
+        }
     }
 
     #[test]
-    fn first_unusable_dense_rows_fall_back() {
+    fn readable_density_decisions_match_supported_terminal_sizes() {
         assert!(matches!(
-            compute_layout(80, 48, 18),
+            compute_layout(80, 48, 6),
             LayoutDecision::Scene(_)
         ));
-        assert_eq!(compute_layout(80, 48, 19), LayoutDecision::Fallback);
+        assert_eq!(compute_layout(80, 48, 12), LayoutDecision::Fallback);
         assert!(matches!(
-            compute_layout(110, 80, 42),
+            compute_layout(110, 80, 12),
             LayoutDecision::Scene(_)
         ));
-        assert_eq!(compute_layout(110, 80, 43), LayoutDecision::Fallback);
+        assert!(matches!(
+            compute_layout(160, 96, 12),
+            LayoutDecision::Scene(_)
+        ));
         assert_eq!(
             compute_layout(300, 160, usize::MAX),
             LayoutDecision::Fallback

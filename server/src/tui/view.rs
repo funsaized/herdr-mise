@@ -143,7 +143,7 @@ pub fn draw(
     table: &AgentTable,
     warning: Option<&str>,
     now: DateTime<Utc>,
-    tick: u64,
+    _tick: u64,
     selected_id: Option<&str>,
 ) {
     let compact = frame.area().height < 20;
@@ -168,30 +168,32 @@ pub fn draw(
     if !compact {
         header = header.block(Block::default().borders(Borders::BOTTOM));
     }
-    let mut constraints = if compact {
-        vec![
-            Constraint::Length(header_height),
-            Constraint::Min(3),
-            Constraint::Length(3),
-            Constraint::Length(2),
-        ]
-    } else {
-        vec![
-            Constraint::Length(header_height),
-            Constraint::Min(8),
-            Constraint::Length(6),
-            Constraint::Length(2),
-        ]
-    };
+    let table_height = u16::try_from(agent_count)
+        .unwrap_or(u16::MAX)
+        .saturating_add(3);
+    let board_height = u16::try_from(table.board().len().min(3))
+        .unwrap_or(3)
+        .saturating_add(2);
+    let mut constraints = vec![
+        Constraint::Length(header_height),
+        Constraint::Length(table_height),
+        Constraint::Length(board_height),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ];
     let selected = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id));
     if selected.is_some() {
-        constraints.insert(3, Constraint::Length(2));
+        constraints.insert(4, Constraint::Length(2));
     }
     let areas = Layout::default()
         .direction(Direction::Vertical)
         .constraints(constraints)
         .split(frame.area());
     frame.render_widget(header, areas[0]);
+    let available_width = areas[1].width.saturating_sub(2);
+    let show_workspace = available_width >= theme::KITCHEN_TABLE_WORKSPACE_MIN_WIDTH;
+    let show_tickets = available_width >= theme::KITCHEN_TABLE_TICKETS_MIN_WIDTH;
+    let show_runtime = available_width >= theme::KITCHEN_TABLE_RUNTIME_MIN_WIDTH;
     let rows = table.agents().map(|agent| {
         let selected_row = selected_id == Some(agent.id.as_str());
         let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
@@ -207,7 +209,7 @@ pub fn draw(
         } else {
             Style::default()
         };
-        Row::new(vec![
+        let mut cells = vec![
             Cell::from(if selected_row {
                 format!("> {}", sanitize_external(&agent.name))
             } else {
@@ -217,41 +219,47 @@ pub fn draw(
             Cell::from(record_state_label(agent))
                 .style(Style::default().fg(theme::compact_state_color(&agent.state))),
             Cell::from(format_duration(elapsed)),
-            Cell::from(sanitize_external(workspace_display_name(&agent.workspace))),
-            Cell::from(agent.session.tickets_text()),
-            Cell::from(format_duration(agent.session.runtime_ms)),
-        ])
-        .style(style)
+        ];
+        if show_workspace {
+            cells.push(Cell::from(sanitize_external(workspace_display_name(
+                &agent.workspace,
+            ))));
+        }
+        if show_tickets {
+            cells.push(Cell::from(agent.session.tickets_text()));
+        }
+        if show_runtime {
+            cells.push(Cell::from(format_duration(agent.session.runtime_ms)));
+        }
+        Row::new(cells).style(style)
     });
+    let mut widths = vec![
+        Constraint::Length(16),
+        Constraint::Length(22),
+        Constraint::Min(9),
+    ];
+    let mut headings = vec!["AGENT", "STATE", "ELAPSED"];
+    if show_workspace {
+        widths.push(Constraint::Length(16));
+        headings.push("WORKSPACE");
+    }
+    if show_tickets {
+        widths.push(Constraint::Length(7));
+        headings.push("TICKETS");
+    }
+    if show_runtime {
+        widths.push(Constraint::Min(9));
+        headings.push("RUNTIME");
+    }
     frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(16),
-                Constraint::Length(22),
-                Constraint::Length(9),
-                Constraint::Length(16),
-                Constraint::Length(7),
-                Constraint::Min(9),
-            ],
-        )
-        .header(
-            Row::new([
-                "AGENT",
-                "STATE",
-                "ELAPSED",
-                "WORKSPACE",
-                "TICKETS",
-                "RUNTIME",
-            ])
-            .style(Style::default().add_modifier(Modifier::BOLD)),
-        )
-        .column_spacing(1)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Kitchen status"),
-        ),
+        Table::new(rows, widths)
+            .header(Row::new(headings).style(Style::default().add_modifier(Modifier::BOLD)))
+            .column_spacing(1)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Kitchen status"),
+            ),
         areas[1],
     );
     let board_rows = table.board().iter().rev().take(3).map(|entry| {
@@ -275,11 +283,11 @@ pub fn draw(
     let status_area = if let Some(agent) = selected {
         frame.render_widget(
             Paragraph::new(inspect_facts(agent).map(Line::from).to_vec()),
-            areas[3],
+            areas[4],
         );
-        areas[4]
+        areas[5]
     } else {
-        areas[3]
+        areas[4]
     };
     let keys = if selected.is_some() {
         "Tab / Shift+Tab inspect · Esc close · q quit"
@@ -288,13 +296,8 @@ pub fn draw(
     };
     let board = format!("86 {}/{BOARD_CAP}", table.board().len());
     let status = warning.map_or_else(
-        || format!("{keys} · tick {tick} · {board}"),
-        |warning| {
-            format!(
-                "{} · {keys} · tick {tick} · {board}",
-                sanitize_external(warning)
-            )
-        },
+        || format!("{keys} · {board}"),
+        |warning| format!("{} · {keys} · {board}", sanitize_external(warning)),
     );
     frame.render_widget(Paragraph::new(Line::from(status)), status_area);
 }
@@ -473,6 +476,9 @@ mod tests {
             "{}/tests/goldens/tui-{name}.txt",
             env!("CARGO_MANIFEST_DIR")
         );
+        if std::env::var_os("UPDATE_SCENE_GOLDENS").is_some() {
+            std::fs::write(&path, &first).unwrap();
+        }
         let expected = std::fs::read_to_string(&path).unwrap();
         if first != expected {
             let line = first
@@ -741,7 +747,7 @@ mod tests {
         let freezer = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
         let freezer_fallback = render_scene(&table, 79, 23, selected.as_deref(), scene_view, false);
         assert!(freezer_fallback.contains("> example-cook"));
-        assert!(freezer_fallback.contains("tick 0"));
+        assert!(!freezer_fallback.contains("tick "));
         for output in [&kitchen, &freezer, &compact] {
             for line in HELP_LINES {
                 assert!(output.contains(line), "missing {line:?} in {output:?}");
@@ -1000,7 +1006,7 @@ mod tests {
         assert!(rendered.contains("MISE — DEMO SERVICE"));
         assert!(rendered.contains("bind warning"));
         assert!(rendered.contains("q / Esc quit"));
-        assert!(rendered.contains("tick 7"));
+        assert!(!rendered.contains("tick "));
     }
 
     #[test]
