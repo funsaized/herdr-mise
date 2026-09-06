@@ -574,6 +574,19 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
         ),
       ),
     ),
+    blocked = JSON.stringify({
+      result: {
+        snapshot: JSON.parse(
+          await readFile(
+            join(
+              process.cwd(),
+              "server/tests/fixtures/snapshot-herdr-0.8.0-p19.json",
+            ),
+            "utf8",
+          ),
+        ),
+      },
+    }),
     empty = JSON.stringify(
       JSON.parse(
         await readFile(
@@ -657,6 +670,24 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       await page.setViewportSize(viewport);
       await assertResponsiveScene(page, 2, false);
     }
+    snapshot = blocked;
+    await expect(
+      page.getByRole("button", {
+        name: /example-reviewer, Blocked — at the pass.*open details/,
+      }),
+    ).toBeAttached({ timeout: 10_000 });
+    await expect
+      .poll(async () => sceneMetrics(page))
+      .toMatchObject({
+        stateIndicators: { blocked: 1 },
+        stationVisuals: {
+          "fictional-pane-19": {
+            accent: "#8f9a6f",
+            idlePose: null,
+            prepStep: null,
+          },
+        },
+      });
     snapshot = empty;
     await expect(
       page.getByRole("button", {
@@ -670,14 +701,17 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
+        endedEntries: 3,
         board: {
           headers: ["COOK", "MISE TIME"],
+          rows: [{}, {}, {}],
         },
       });
     const rows = (await sceneMetrics(page))?.board.rows
       .map((row) => row.text)
       .sort(([left], [right]) => left!.localeCompare(right!));
     expect(rows?.map(([name]) => name)).toEqual([
+      "EXAMPLE-REVIEWER",
       "FIXTURE-IDLE",
       "FIXTURE-WORKING",
     ]);
@@ -693,14 +727,18 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     await page.getByRole("button", { name: "Freezer" }).click();
     await expect(
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
-    ).toHaveCount(2);
+    ).toHaveCount(3);
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         view: "freezer",
-        endedEntries: 2,
-        visibleSpirits: 2,
-        spiritAccents: { "p-11": "#667a9e", "p-8": "#997f5e" },
+        endedEntries: 3,
+        visibleSpirits: 3,
+        spiritAccents: {
+          "p-11": "#667a9e",
+          "p-8": "#997f5e",
+          "fictional-pane-19": "#8f9a6f",
+        },
       });
   } finally {
     app.kill("SIGTERM");

@@ -5,6 +5,7 @@ import {
   assignedIdlePose,
   drawIdlePose,
   drawPrepPose,
+  drawStatePose,
   idleAnimationFrame,
   idlePoseIsAnimated,
   IDLE_POSES,
@@ -349,5 +350,40 @@ describe("idle pose animation", () => {
     expect(
       new Set(tokens.scene.cook.prep.foods.map((food) => food.fill)).size,
     ).toBe(3);
+  });
+});
+
+describe("shared operational pose geometry", () => {
+  const drawState = (state: "blocked" | "done") => {
+    const graphics = new RecordingGraphics();
+    drawStatePose(graphics as unknown as Graphics, state, 14, 19, 1, colors);
+    return graphics;
+  };
+
+  it("keeps blocked and done on the standing baseline", () => {
+    for (const state of ["blocked", "done"] as const) {
+      const graphics = drawState(state);
+      expect(Math.min(...horizontalBounds(graphics))).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...horizontalBounds(graphics))).toBeLessThanOrEqual(28);
+      expect(
+        graphics.rects.filter((rect) => rect.fill === colors.accent),
+      ).toEqual([{ x: 10, y: 7, width: 8, height: 2, fill: colors.accent }]);
+      expect(graphics.rects.filter((rect) => rect.fill === colors.ink)).toEqual(
+        expect.arrayContaining([
+          { x: 9, y: 17, width: 4, height: 2, fill: colors.ink },
+          { x: 15, y: 17, width: 4, height: 2, fill: colors.ink },
+        ]),
+      );
+    }
+  });
+
+  it("distinguishes blocked raised arms from the done presentation gesture", () => {
+    const blocked = drawState("blocked"),
+      done = drawState("done"),
+      blockedHands = blocked.rects.filter((rect) => rect.fill === colors.skin),
+      doneHands = done.rects.filter((rect) => rect.fill === colors.skin);
+    expect(blockedHands.some((rect) => rect.y === -3)).toBe(true);
+    expect(doneHands.some((rect) => rect.x + rect.width > 22)).toBe(true);
+    expect(blocked.rects).not.toEqual(done.rects);
   });
 });
