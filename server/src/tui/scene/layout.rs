@@ -108,14 +108,13 @@ pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> Layo
         }
         let block_height = station_pitch.saturating_mul(rows_u16);
         let block_y = grid_y.saturating_add(grid_height.saturating_sub(block_height) / 2);
-        let column_gap = 1;
+        let column_gap = theme::KITCHEN_STATION_COLUMN_GAP;
         let station_width = (grid_width.saturating_sub(
             (columns as u16)
                 .saturating_sub(1)
                 .saturating_mul(column_gap),
         ) / columns as u16)
-            .min(theme::KITCHEN_STATION_MAX_WIDTH)
-            .max(1);
+            .clamp(1, theme::KITCHEN_STATION_MAX_WIDTH);
         stations.reserve(agent_count);
         for index in 0..agent_count {
             let row = index / columns;
