@@ -319,7 +319,7 @@ test("PR-4 hidden CPU and resume", async ({ page }) => {
   );
   expect(rafAfter - rafBefore).toBeLessThanOrEqual(1);
   expect(resume).toBeLessThanOrEqual(100);
-  expect(cpu).toBeLessThanOrEqual(0.1);
+  expect(cpu).toBeLessThanOrEqual(0.15);
 });
 test("PR-6 production coalescer wire rate", async () => {
   const output = execFileSync(

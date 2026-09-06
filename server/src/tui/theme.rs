@@ -13,6 +13,10 @@ pub const TEXT: Color = Color::Indexed(230);
 pub const DIM: Color = Color::Indexed(246);
 pub const STEEL: Color = Color::Indexed(245);
 pub const STEEL_LO: Color = Color::Indexed(240);
+pub const WALL: Color = Color::Indexed(235);
+pub const FLOOR: Color = Color::Indexed(236);
+pub const SEAM: Color = Color::Indexed(239);
+pub const CONTACT_SHADOW: Color = Color::Indexed(232);
 
 pub const COAT: Color = Color::Indexed(230);
 pub const COAT_LO: Color = Color::Indexed(187);
@@ -43,6 +47,11 @@ pub const BOARD_FACTS_WIDTH: usize = 10;
 pub const KITCHEN_GUTTER: u16 = 2;
 pub const KITCHEN_HEADER_BAND: u16 = 6;
 pub const KITCHEN_PASS_BAND: u16 = 14;
+pub const KITCHEN_FLOOR_SEAM_HEIGHT: u16 = 1;
+pub const KITCHEN_PASS_SHADOW_OFFSET: u16 = 1;
+pub const KITCHEN_PASS_EDGE_HEIGHT: u16 = 1;
+pub const KITCHEN_STATION_SHADOW_X_INSET: u16 = 2;
+pub const KITCHEN_STATION_SHADOW_Y_INSET: u16 = 3;
 pub const KITCHEN_FOOTER_BAND: u16 = 4;
 pub const KITCHEN_STATION_MAX_WIDTH: u16 = 34;
 pub const KITCHEN_STATION_COLUMN_GAP: u16 = 1;
@@ -231,8 +240,22 @@ mod tests {
     #[test]
     fn every_handoff_token_is_the_exact_xterm_index() {
         assert_eq!(
-            [BG, PANEL, PANEL2, FRAME, FRAME_HI, TEXT, DIM, STEEL, STEEL_LO],
-            [233, 234, 235, 242, 248, 230, 246, 245, 240].map(Color::Indexed)
+            [
+                BG,
+                PANEL,
+                PANEL2,
+                FRAME,
+                FRAME_HI,
+                TEXT,
+                DIM,
+                STEEL,
+                STEEL_LO,
+                WALL,
+                FLOOR,
+                SEAM,
+                CONTACT_SHADOW,
+            ],
+            [233, 234, 235, 242, 248, 230, 246, 245, 240, 235, 236, 239, 232].map(Color::Indexed)
         );
         assert_eq!(
             [COAT, COAT_LO, ICE, ICE_LO, BAND, SKIN, EYE, PANTS, BOOT, PLATE, SKIN_MAD, BROW_MAD],

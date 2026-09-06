@@ -586,7 +586,7 @@ fn fixture_backed_responsive_composition_matrix() {
 }
 
 #[test]
-fn real_fixture_keeps_capped_tall_scene_and_state_chrome() {
+fn real_fixture_keeps_material_depth_and_state_chrome() {
     let value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
     ))
@@ -611,6 +611,22 @@ fn real_fixture_keeps_capped_tall_scene_and_state_chrome() {
     assert!(compact_text.contains("AT THE PASS"));
     assert!(compact.content.iter().any(|cell| cell.symbol() == "▀"));
     assert!(compact.content.iter().any(|cell| cell.fg == theme::COAT));
+    for material in [
+        theme::WALL,
+        theme::FLOOR,
+        theme::SEAM,
+        theme::CONTACT_SHADOW,
+        theme::STEEL,
+    ] {
+        assert!(
+            compact
+                .content
+                .iter()
+                .flat_map(|cell| [cell.fg, cell.bg])
+                .any(|color| color == material),
+            "missing material {material:?}"
+        );
+    }
     assert!(compact
         .content
         .iter()
@@ -737,6 +753,10 @@ fn xterm_scene_emits_only_indexed_handoff_colors_and_rendered_accent_pairs() {
         theme::TEXT,
         theme::DIM,
         theme::STEEL_LO,
+        theme::WALL,
+        theme::FLOOR,
+        theme::SEAM,
+        theme::CONTACT_SHADOW,
         theme::COAT,
         theme::COAT_LO,
         theme::SKIN,
