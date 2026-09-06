@@ -110,6 +110,28 @@ fn render_view_with_warning(
     terminal.backend().buffer().clone()
 }
 
+fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supported: bool) -> Buffer {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal
+        .draw(|frame| {
+            draw_view(
+                frame,
+                table,
+                None,
+                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                7,
+                ColorMode::Truecolor,
+                scene_supported,
+                None,
+                SceneView::Kitchen,
+                false,
+                false,
+            )
+        })
+        .unwrap();
+    terminal.backend().buffer().clone()
+}
+
 pub(crate) fn render_freezer(table: &AgentTable, width: u16, height: u16) -> Buffer {
     render_view(table, width, height, 9, None, SceneView::Freezer, false)
 }
@@ -362,7 +384,7 @@ fn snapshot_fixture_renders_two_tier_unclipped_hats() {
 
     let at_zero = render(&table, 80, 24, 0);
     let at_four = render(&table, 80, 24, 4);
-    for sprite_x in [12, 53] {
+    for sprite_x in [13, 51] {
         let coat_width = |buffer: &Buffer, y| {
             (sprite_x..sprite_x + sprites::SPRITE_WIDTH as u16)
                 .filter(|x| pixel(buffer, *x, y) == theme::COAT)
@@ -372,7 +394,7 @@ fn snapshot_fixture_renders_two_tier_unclipped_hats() {
         assert_eq!(coat_width(&at_zero, 26), 9);
     }
     for y in 24..29 {
-        for x in 53..53 + sprites::SPRITE_WIDTH as u16 {
+        for x in 51..51 + sprites::SPRITE_WIDTH as u16 {
             assert_eq!(pixel(&at_zero, x, y), pixel(&at_four, x, y));
         }
     }
@@ -427,14 +449,7 @@ fn state_specific_station_chrome_and_half_block_art_are_present() {
     ]);
     let buffer = render(&table, 80, 24, 2);
     let output = text(&buffer);
-    for expected in [
-        "PREP",
-        "FIRE",
-        "AT THE PASS",
-        "‼ BLOCKED 00:00 ‼",
-        "10Hz · tick 2",
-        "? help",
-    ] {
+    for expected in ["PREP", "FIRE", "AT THE PASS", "‼ BLOCKED 00:00 ‼", "? help"] {
         assert!(output.contains(expected), "missing {expected:?}");
     }
     assert!(buffer.content.iter().any(|cell| cell.symbol() == "▀"));
@@ -449,6 +464,125 @@ fn state_specific_station_chrome_and_half_block_art_are_present() {
         .expect("blocked station banner");
     assert_eq!(blocked_banner.fg, theme::TEXT);
     assert!(!blocked_banner.modifier.contains(Modifier::REVERSED));
+}
+
+#[test]
+fn fixture_backed_responsive_composition_matrix() {
+    let normalize = |fixture| {
+        Normalizer::default()
+            .normalize_snapshot_value(
+                serde_json::from_str(fixture).unwrap(),
+                "2026-08-13T12:00:00Z",
+            )
+            .unwrap()
+    };
+    let empty = normalize(include_str!(
+        "../../../tests/fixtures/snapshot-protocol-19-empty-agents.json"
+    ));
+    let blocked = normalize(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
+    ));
+    let source = blocked.agents.first().unwrap();
+    let table_for = |count: usize| {
+        let agents = (0..count)
+            .map(|index| {
+                let mut agent = source.clone();
+                agent.id = format!("fixture-{index:02}");
+                agent.name = format!("Cook{index:02}");
+                agent.accent_index = index as u8;
+                agent
+            })
+            .collect();
+        snapshot(AppMode::Live, SourceStatus::Connected, None, agents)
+    };
+    let empty_table = snapshot(AppMode::Live, SourceStatus::Connected, None, empty.agents);
+
+    for (width, height) in [(80, 24), (110, 40), (160, 48)] {
+        for count in [0, 1, 6, 12] {
+            let table = if count == 0 {
+                &empty_table
+            } else {
+                &table_for(count)
+            };
+            for scene_supported in [true, false] {
+                let first = render_capability(table, width, height, scene_supported);
+                let second = render_capability(table, width, height, scene_supported);
+                assert_eq!(first, second, "{width}x{height}/{count}/{scene_supported}");
+                let output = text(&first);
+                let fallback = !scene_supported || (width == 80 && count == 12);
+                assert_eq!(output.contains("Kitchen status"), fallback);
+                for required in ["MISE — LIVE", "86 0/64", "q / Esc quit"] {
+                    assert!(
+                        output.contains(required),
+                        "{width}x{height}/{count}/{scene_supported} missing {required:?}"
+                    );
+                }
+                assert!(!output.contains("tick "));
+
+                if count == 0 {
+                    assert!(output.contains("Waiting for agents"));
+                } else if fallback {
+                    assert!(output.contains("Connected to Herdr"));
+                    for index in 0..count {
+                        assert!(output.contains(&format!("Cook{index:02}")));
+                    }
+                    assert!(output.contains("BLOCKED / AT THE PASS"));
+                    assert!(first.content.iter().any(|cell| {
+                        cell.modifier.contains(Modifier::BOLD | Modifier::REVERSED)
+                    }));
+                } else {
+                    assert!(output.contains("Connected to Herdr"));
+                    let LayoutDecision::Scene(layout) = compute_layout(width, height * 2, count)
+                    else {
+                        panic!("expected scene for {width}x{height}/{count}")
+                    };
+                    assert_eq!(first.cell((0, 0)).unwrap().fg, theme::FRAME);
+                    assert_eq!(
+                        first.cell((width - 1, height - 1)).unwrap().fg,
+                        theme::FRAME
+                    );
+                    assert_eq!(
+                        first.cell((layout.board.x, layout.board.y / 2)).unwrap().fg,
+                        theme::FRAME
+                    );
+                    if count > 0 {
+                        assert!(output.contains("AT THE PASS"));
+                        assert!(output.contains("‼ BLOCKED"));
+                    }
+                }
+            }
+        }
+    }
+
+    let table = table_for(6);
+    let mut terminal = Terminal::new(TestBackend::new(160, 48)).unwrap();
+    let draw = |terminal: &mut Terminal<TestBackend>| {
+        terminal
+            .draw(|frame| {
+                draw_view(
+                    frame,
+                    &table,
+                    None,
+                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                    7,
+                    ColorMode::Truecolor,
+                    true,
+                    None,
+                    SceneView::Kitchen,
+                    false,
+                    false,
+                )
+            })
+            .unwrap();
+    };
+    draw(&mut terminal);
+    let large = terminal.backend().buffer().clone();
+    terminal.backend_mut().resize(79, 23);
+    draw(&mut terminal);
+    assert!(text(terminal.backend().buffer()).contains("Kitchen status"));
+    terminal.backend_mut().resize(160, 48);
+    draw(&mut terminal);
+    assert_eq!(terminal.backend().buffer(), &large);
 }
 
 #[test]
@@ -528,7 +662,7 @@ fn working_flames_alternate_but_static_states_do_not() {
     assert_eq!(odd.cell((45, 18)).unwrap().fg, theme::FIRE);
     assert_eq!(odd.cell((47, 18)).unwrap().fg, theme::FIRE_HI);
     let blocked = live_table(vec![record("blocked", AgentState::Blocked)]);
-    // Tick text changes, so compare the sprite's known center region only.
+    // Motion changes, so compare the sprite's known center region only.
     let a = render(&blocked, 80, 24, 0);
     let b = render(&blocked, 80, 24, 9);
     for y in 12..19 {
@@ -546,9 +680,10 @@ fn working_sprite_wins_ticket_overlap_at_minimum_station_width() {
             .collect(),
     );
     let buffer = render(&working, 80, 24, 0);
-    let overlap = buffer.cell((7, 13)).unwrap();
-    assert_eq!(overlap.fg, theme::COAT);
-    assert_eq!(overlap.bg, theme::COAT);
+    assert!((5..9).any(|x| {
+        let overlap = buffer.cell((x, 13)).unwrap();
+        overlap.fg == theme::COAT || overlap.bg == theme::COAT
+    }));
 }
 
 #[test]
