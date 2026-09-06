@@ -40,6 +40,7 @@ import {
   assignedIdlePose,
   drawIdlePose,
   drawPrepPose,
+  drawStatePose,
   idleAnimationFrame,
   IdlePoseAssignments,
   prepFrameInterval,
@@ -1541,18 +1542,8 @@ export class KitchenScene {
       drawIdlePose(g, idlePose, sample, cookX, cookY, u, poseColors);
     } else if (state === "working")
       drawPrepPose(g, prepSample, cookX, cookY, u, poseColors);
-    else
-      drawCookSilhouette(
-        g,
-        cookX,
-        cookY + bob,
-        u,
-        p.scene.coat[index],
-        p.scene.skin,
-        p.scene.ink,
-        accent,
-        state,
-      );
+    else if (state === "blocked" || state === "done")
+      drawStatePose(g, state, cookX, cookY + bob, u, poseColors);
     if (state === "working") {
       const flicker = prepSample.prepStep,
         potX = rect.width / 2 + 5 * u;
@@ -1913,68 +1904,6 @@ export class KitchenScene {
       drawArrays(...args);
     };
   }
-}
-function drawCookSilhouette(
-  g: Graphics,
-  cx: number,
-  base: number,
-  u: number,
-  coat: string,
-  skin: string,
-  ink: string,
-  accent: string,
-  state: AgentMachine["targetState"],
-) {
-  // A connected 14x21-unit cook: shoes/legs, apron body, arms, face and
-  // two-tier toque. Each tier is independently legible at the 0.8x banquet scale.
-  g.rect(cx - 5 * u, base - 2 * u, 3 * u, 2 * u)
-    .fill(ink)
-    .rect(cx + 2 * u, base - 2 * u, 3 * u, 2 * u)
-    .fill(ink)
-    .rect(cx - 4 * u, base - 6 * u, 3 * u, 5 * u)
-    .fill(ink)
-    .rect(cx + u, base - 6 * u, 3 * u, 5 * u)
-    .fill(ink)
-    .rect(cx - 6 * u, base - 15 * u, 12 * u, 10 * u)
-    .fill(ink)
-    .rect(cx - 5 * u, base - 14 * u, 10 * u, 9 * u)
-    .fill(coat)
-    .rect(cx - 4 * u, base - 12 * u, 8 * u, 2 * u)
-    .fill(accent)
-    .rect(cx - 3 * u, base - 10 * u, 6 * u, 5 * u)
-    .fill(coat)
-    .rect(cx - 6 * u, base - 13 * u, 2 * u, 6 * u)
-    .fill(coat)
-    .rect(cx + 4 * u, base - 13 * u, 2 * u, 6 * u)
-    .fill(coat)
-    .rect(cx - 6 * u, base - 8 * u, 2 * u, 2 * u)
-    .fill(skin)
-    .rect(cx + 4 * u, base - 8 * u, 2 * u, 2 * u)
-    .fill(skin)
-    .rect(cx - 4 * u, base - 19 * u, 8 * u, 5 * u)
-    .fill(ink)
-    .rect(cx - 3 * u, base - 18 * u, 6 * u, 4 * u)
-    .fill(skin);
-  if (state === "ended") {
-    for (const eye of [-1.5, 1.5])
-      g.moveTo(cx + (eye - 0.6) * u, base - 17.8 * u)
-        .lineTo(cx + (eye + 0.6) * u, base - 16.2 * u)
-        .moveTo(cx + (eye + 0.6) * u, base - 17.8 * u)
-        .lineTo(cx + (eye - 0.6) * u, base - 16.2 * u)
-        .stroke({ color: ink, width: Math.max(1, u * 0.55) });
-  } else
-    g.rect(cx - 2 * u, base - 17 * u, u, u)
-      .fill(ink)
-      .rect(cx + u, base - 17 * u, u, u)
-      .fill(ink);
-  g.rect(cx - 6 * u, base - 22 * u, 12 * u, 3 * u)
-    .fill(ink)
-    .rect(cx - 5 * u, base - 23 * u, 10 * u, 3 * u)
-    .fill(coat)
-    .rect(cx - 3 * u, base - 25 * u, 6 * u, 3 * u)
-    .fill(coat);
-  if (state === "done")
-    g.rect(cx - 7 * u, base - 11 * u, 4 * u, 2 * u).fill(coat);
 }
 function drawShelfFood(
   g: Graphics,

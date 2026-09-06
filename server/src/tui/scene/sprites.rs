@@ -111,30 +111,30 @@ pub const PLATED: &[&str] = &[
     ".HHHHHHHHH.",
     "..HhHhHhH..",
     "...ooooo...",
-    ".oSSSSSo...",
-    "..SeSeS....",
-    "..SSSSS....",
-    ".CaaaaaCC..",
-    "CCCCCCCC...",
-    "CCCCKWWGWWW",
-    "KCAAAAAC...",
-    "..AAAAA....",
-    "..D...D....",
-    "..D...D....",
-    ".BB...BB...",
+    "..oSSSSSo..",
+    "...SeSeS...",
+    "...SSSSS...",
+    "..CaaaaaCC.",
+    ".CCCCCCCCC.",
+    ".CCAAAAACGW",
+    "..CAAAAACKW",
+    "...AAAAA...",
+    "...D...D...",
+    "...D...D...",
+    "..BB...BB..",
 ];
 pub const BLOCKED: &[&str] = &[
     "...HHHHH...",
     "..HHhHhHH..",
     ".HHHHHHHHH.",
     "..HhHhHhH..",
-    ".K.ooooo.K.",
-    ".C.RRRRR.C.",
-    ".C.RbRbR.C.",
-    ".C.ReReR.C.",
+    "K..ooooo..K",
+    "CC.oRRRRRo.",
+    ".C..RbRbR.C",
+    ".C..ReReR.C",
     ".CCRRRRRCC.",
     "..CaaaaaC..",
-    "..CCCCCCC..",
+    "..CAAAAAC..",
     "..CAAAAAC..",
     "...AAAAA...",
     "...D...D...",
@@ -146,22 +146,56 @@ pub const SPIRIT_A: &[&str] = &[
     "...HHHHH...",
     "..HHhHhHH..",
     ".HHHHHHHHH.",
-    "..HhHhHhH..",
     "...ooooo...",
-    "..oSSSSSo..",
-    "...SeSeS...",
     "...SSSSS...",
+    "...SX.XS...",
+    "...SStSS...",
     "..CaaaaaC..",
-    ".CCCCCCCCC.",
-    ".CCAAAAACC.",
-    ".KCAAAAACK.",
+    "..CCCCCCC..",
     "...AAAAA...",
-    "...D...D...",
-    "...D...D...",
-    "..BB...BB..",
+    "...AAAAA...",
+    "....D.D....",
+    "....D.D....",
+    "...BB.BB...",
+    "...........",
+    "...........",
 ];
-pub const SPIRIT_B: &[&str] = SPIRIT_A;
-pub const SPIRIT_C: &[&str] = SPIRIT_A;
+pub const SPIRIT_B: &[&str] = &[
+    "..HHHHH....",
+    ".HHhHhHH...",
+    "HHHHHHHHH..",
+    "..ooooo....",
+    "..SSSSS....",
+    "..SX.XS....",
+    "..SStSS....",
+    ".CaaaaaC...",
+    ".CCCCCCC...",
+    "..AAAAA....",
+    "...AAAAA...",
+    "...D.D.....",
+    "...D.D.....",
+    "..BB.BB....",
+    "...........",
+    "...........",
+];
+pub const SPIRIT_C: &[&str] = &[
+    "....HHHHH..",
+    "...HHhHhHH.",
+    "..HHHHHHHHH",
+    "....ooooo..",
+    "....SSSSS..",
+    "....SX.XS..",
+    "....SStSS..",
+    "...CaaaaaC.",
+    "...CCCCCCC.",
+    "....AAAAA..",
+    "...AAAAA...",
+    ".....D.D...",
+    ".....D.D...",
+    "....BB.BB..",
+    "...........",
+    "...........",
+];
 const SPIRIT_POSES: [&[&str]; 3] = [SPIRIT_A, SPIRIT_B, SPIRIT_C];
 
 pub fn spirit_sprite(pose: u8) -> Sprite {
@@ -195,8 +229,9 @@ mod tests {
             assert!(rows[14].contains('D'));
             assert!(rows[15].contains('B'));
         }
-        assert_eq!(BLOCKED[6], ".C.RbRbR.C.");
-        assert_eq!(BLOCKED[7], ".C.ReReR.C.");
+        assert_eq!(BLOCKED[4], "K..ooooo..K");
+        assert_eq!(BLOCKED[6], ".C..RbRbR.C");
+        assert_eq!(BLOCKED[7], ".C..ReReR.C");
         assert_ne!(PLATED, WORK);
     }
 
@@ -211,7 +246,8 @@ mod tests {
         }
         assert_eq!(&PREP_A[..5], &PREP_B[..5]);
         assert!(PLATED[..5].iter().all(|row| !row.contains(['W', 'G'])));
-        assert!(PLATED[10].contains("WWGWWW"));
+        assert!(PLATED[10].ends_with("GW"));
+        assert!(PLATED[11].ends_with("KW"));
     }
 
     #[test]
@@ -240,13 +276,23 @@ mod tests {
             assert_eq!(rows.len(), SPRITE_HALF_ROWS);
             assert!(rows.iter().all(|row| row.len() == SPRITE_WIDTH));
         }
-        assert_eq!(
-            SPIRIT_A
-                .iter()
-                .map(|row| row.matches('e').count())
-                .sum::<usize>(),
-            2
-        );
+        for rows in [SPIRIT_A, SPIRIT_B, SPIRIT_C] {
+            assert_eq!(
+                rows.iter()
+                    .map(|row| row.matches('X').count())
+                    .sum::<usize>(),
+                2
+            );
+        }
+        let silhouette = |rows: &[&str]| {
+            rows.iter()
+                .map(|row| row.replace(|key: char| key != '.', "#"))
+                .collect::<Vec<_>>()
+        };
+        assert_ne!(silhouette(BLOCKED), silhouette(WORK));
+        assert_ne!(silhouette(PLATED), silhouette(WORK));
+        assert_ne!(silhouette(SPIRIT_A), silhouette(SPIRIT_B));
+        assert_ne!(silhouette(SPIRIT_B), silhouette(SPIRIT_C));
         assert_eq!(spirit_sprite(0).rows, SPIRIT_A);
         assert_eq!(spirit_sprite(1).rows, SPIRIT_B);
         assert_eq!(spirit_sprite(3).rows, SPIRIT_A);

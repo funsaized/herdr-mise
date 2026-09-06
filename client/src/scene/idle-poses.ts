@@ -138,7 +138,7 @@ function relativeRect(
   return g.rect(cx + x * u, base + y * u, width * u, height * u).fill(color);
 }
 
-function standingCook(
+export function drawStandingCook(
   g: Graphics,
   cx: number,
   base: number,
@@ -179,7 +179,7 @@ export function drawIdlePose(
       relativeRect(g, cx, base, u, part.geometry, leanColors[part.color]);
     return;
   }
-  const y = standingCook(
+  const y = drawStandingCook(
     g,
     cx,
     base,
@@ -266,7 +266,7 @@ export function drawPrepPose(
   colors: IdlePoseColors,
 ) {
   const prep = tokens.scene.cook.prep,
-    y = standingCook(g, cx, base, u, colors, sample.bobUnits),
+    y = drawStandingCook(g, cx, base, u, colors, sample.bobUnits),
     handY = y - prep.handY[sample.prepStep] * u;
   g.rect(cx + prep.handX * u, handY, prep.handWidth * u, prep.handHeight * u)
     .fill(colors.skin)
@@ -286,4 +286,17 @@ export function drawPrepPose(
     .fill(colors.wood);
   for (const food of prep.foods)
     relativeRect(g, cx, base, u, food.geometry, food.fill);
+}
+
+export function drawStatePose(
+  g: Graphics,
+  state: "blocked" | "done",
+  cx: number,
+  base: number,
+  u: number,
+  colors: IdlePoseColors,
+) {
+  const y = drawStandingCook(g, cx, base, u, colors);
+  for (const part of tokens.scene.cook[state].parts)
+    relativeRect(g, cx, y, u, part.geometry, colors[part.color]);
 }
