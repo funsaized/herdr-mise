@@ -742,7 +742,9 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       }),
       primaryPanels = page.locator("aside.panel");
     await expect(details).toBeFocused();
-    await expect(details).toContainText("/work/example-pantry");
+    await expect(
+      details.locator(".fact", { hasText: "Workspace" }).locator("b"),
+    ).toHaveText("example-pantry");
     await expect(primaryPanels).toHaveCount(1);
     await expect(tooltip).toHaveCount(0);
     const selected = (await sceneMetrics(page))!.activeFocusBounds[

@@ -335,7 +335,7 @@ describe("chrome interactions", () => {
     );
     expect(screen.getByRole("heading", { name: "refactor-auth" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "app" })).toBeNull();
-    expect(screen.getByText("/work/app")).toBeTruthy();
+    expect(screen.getByText("app")).toBeTruthy();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
     const history = screen.getByLabelText("Session history");
     expect(history.querySelectorAll(".historyStrip i")).toHaveLength(2);

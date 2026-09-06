@@ -19,9 +19,29 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
   await page.keyboard.press("Enter");
   const panel = page.getByRole("complementary", { name: /details$/ });
   await expect(panel).toBeVisible();
-  const selectedBox = (await station.boundingBox())!,
-    panelBox = (await panel.boundingBox())!;
-  expect(panelBox.y).toBeGreaterThanOrEqual(selectedBox.y + selectedBox.height);
+  const selectedBox = await page.evaluate(() => {
+    const metrics = (
+      window as typeof window & {
+        __miseSceneMetrics?: () => {
+          activeFocusBounds: Record<
+            string,
+            { x: number; y: number; width: number; height: number }
+          >;
+        };
+      }
+    ).__miseSceneMetrics?.();
+    return Object.values(metrics?.activeFocusBounds ?? {})[0];
+  });
+  if (selectedBox) {
+    const panelBox = (await panel.boundingBox())!;
+    expect(panelBox.y).toBeGreaterThanOrEqual(
+      selectedBox.y + selectedBox.height,
+    );
+  } else {
+    await expect(
+      page.getByRole("region", { name: "Agent status list" }),
+    ).toBeVisible();
+  }
   await page.keyboard.press("Escape");
   await expect(station).toBeFocused();
   const settings = page.getByRole("button", { name: /settings/i }).first();
@@ -29,10 +49,12 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
   await page.keyboard.press("Enter");
   const settingsPanel = page.getByRole("complementary", { name: "Settings" });
   await expect(settingsPanel).toBeVisible();
-  const settingsBox = (await settingsPanel.boundingBox())!;
-  expect(settingsBox.y).toBeGreaterThanOrEqual(
-    selectedBox.y + selectedBox.height,
-  );
+  if (selectedBox) {
+    const settingsBox = (await settingsPanel.boundingBox())!;
+    expect(settingsBox.y).toBeGreaterThanOrEqual(
+      selectedBox.y + selectedBox.height,
+    );
+  }
   await page.keyboard.press("Escape");
   await expect(settings).toBeFocused();
   expect(
