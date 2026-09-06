@@ -7,6 +7,9 @@ export const humanStateWords = {
   done: "Done — plated",
   ended: "Ended — 86'd",
 } as const;
+export function freezerAnnouncement(visible: number, total: number) {
+  return `Freezer, ${visible} of ${total} ended chefs shown`;
+}
 export type SemanticAgent = Pick<
   AgentMachine,
   "id" | "name" | "targetState" | "stateKnown" | "stateEnteredAt"

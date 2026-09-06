@@ -36,6 +36,7 @@ export interface FreezerLayout {
   emptyPill: Rect;
   floor: Rect;
   spirits: readonly (Rect & { id: string })[];
+  totalSpirits: number;
 }
 export function columnCount(count: number) {
   if (count <= 4) return Math.max(1, count);
@@ -173,16 +174,16 @@ export function computeFreezerLayout(
     ],
     frost = [
       {
-        x: frame,
+        x: frame + freezer.rack.inset,
         y: frame,
-        width: inner.width,
+        width: rackWidth,
         height: freezer.frost.topHeight,
       },
       {
-        x: frame,
-        y: height - frame - freezer.frost.bottomHeight,
-        width: inner.width,
-        height: freezer.frost.bottomHeight,
+        x: width - frame - freezer.rack.inset - rackWidth,
+        y: frame,
+        width: rackWidth,
+        height: freezer.frost.topHeight,
       },
       {
         x: door.x - freezer.frost.door.x,
@@ -220,22 +221,22 @@ export function computeFreezerLayout(
     },
     slotWidth = freezer.slot.width,
     slotHeight = freezer.slot.height,
-    columns = Math.max(0, Math.floor(floor.width / slotWidth)),
+    sideColumns = Math.max(
+      0,
+      Math.floor((floor.width - freezer.slot.aisleWidth) / (slotWidth * 2)),
+    ),
+    columns = sideColumns * 2 || (floor.width >= slotWidth ? 1 : 0),
     rows = Math.max(0, Math.floor(floor.height / slotHeight)),
     capacity = columns * rows,
     visible = capacity ? boardIds.slice(-capacity) : [],
-    usedColumns = Math.min(columns, Math.max(1, visible.length)),
     spirits = visible.map((id, index) => {
-      const row = Math.floor(index / usedColumns),
-        count = Math.min(usedColumns, visible.length - row * usedColumns),
-        column = index % usedColumns,
-        extraGap =
-          row % 2 && count > 1
-            ? Math.min(12, (floor.width - count * slotWidth) / (count - 1))
-            : 0,
-        pitch = slotWidth + Math.max(0, extraGap),
-        rowWidth = slotWidth + (count - 1) * pitch,
-        x = floor.x + (floor.width - rowWidth) / 2 + column * pitch;
+      const row = Math.floor(index / columns),
+        column = index % columns,
+        depth = Math.floor(column / 2),
+        x =
+          column % 2 === 0
+            ? floor.x + depth * slotWidth
+            : floor.x + floor.width - (depth + 1) * slotWidth;
       return {
         id,
         x,
@@ -253,5 +254,6 @@ export function computeFreezerLayout(
     emptyPill,
     floor,
     spirits,
+    totalSpirits: boardIds.length,
   };
 }

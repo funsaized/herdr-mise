@@ -157,8 +157,8 @@ pub const SPIRIT_A: &[&str] = &[
     "....D.D....",
     "....D.D....",
     "...BB.BB...",
-    "...........",
-    "...........",
+    "...BB.BB...",
+    "...BB.BB...",
 ];
 pub const SPIRIT_B: &[&str] = &[
     "..HHHHH....",
@@ -168,33 +168,33 @@ pub const SPIRIT_B: &[&str] = &[
     "..SSSSS....",
     "..SX.XS....",
     "..SStSS....",
-    ".CaaaaaC...",
-    ".CCCCCCC...",
-    "..AAAAA....",
-    "...AAAAA...",
-    "...D.D.....",
-    "...D.D.....",
+    "...CaaaaaC.",
+    "...CCCCCCC.",
+    "....AAAAA..",
+    ".....AAAAA.",
+    "......D.D..",
+    ".....D.D...",
+    "....BB.BB..",
+    "...BB.BB...",
     "..BB.BB....",
-    "...........",
-    "...........",
 ];
 pub const SPIRIT_C: &[&str] = &[
-    "....HHHHH..",
-    "...HHhHhHH.",
-    "..HHHHHHHHH",
-    "....ooooo..",
+    ".....HHHHH.",
+    "....HHhHhHH",
+    "...HHHHHHH.",
+    ".....ooooo.",
     "....SSSSS..",
     "....SX.XS..",
     "....SStSS..",
     "...CaaaaaC.",
-    "...CCCCCCC.",
-    "....AAAAA..",
-    "...AAAAA...",
-    ".....D.D...",
-    ".....D.D...",
-    "....BB.BB..",
+    "..CCCCCCC..",
+    "..AAAAAAA..",
+    ".AAAAA.....",
+    ".D...DD....",
+    "BB...BBBB..",
     "...........",
-    "...........",
+    "...BBBBB...",
+    "..BBBBBBB..",
 ];
 const SPIRIT_POSES: [&[&str]; 3] = [SPIRIT_A, SPIRIT_B, SPIRIT_C];
 
@@ -275,6 +275,7 @@ mod tests {
         for rows in [SPIRIT_A, SPIRIT_B, SPIRIT_C] {
             assert_eq!(rows.len(), SPRITE_HALF_ROWS);
             assert!(rows.iter().all(|row| row.len() == SPRITE_WIDTH));
+            assert!(rows[15].contains('B'));
         }
         for rows in [SPIRIT_A, SPIRIT_B, SPIRIT_C] {
             assert_eq!(

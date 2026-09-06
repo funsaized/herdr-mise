@@ -232,15 +232,10 @@ fn draw_spirit(canvas: &mut PixelCanvas, slot: PixelRect, pose: u8) {
     for (row, pixels) in sprite.rows.iter().enumerate() {
         for (column, key) in pixels.bytes().enumerate() {
             let color = match key {
-                b'H' | b'C' => Some(theme::COAT),
-                b'h' | b'c' => Some(theme::COAT_LO),
-                b'S' | b'K' => Some(theme::ICE),
+                b'H' | b'C' | b'S' | b'K' | b'a' => Some(theme::SPIRIT),
+                b'h' | b'c' | b'A' | b'D' | b'B' => Some(theme::SPIRIT_DIM),
                 b'X' | b'e' => Some(theme::EYE),
                 b't' => Some(theme::SKIN_MAD),
-                b'a' => Some(theme::SPIRIT),
-                b'A' => Some(theme::SPIRIT_DIM),
-                b'D' => Some(theme::PANTS),
-                b'B' => Some(theme::BOOT),
                 b'o' => Some(theme::BAND),
                 _ => None,
             };
@@ -389,6 +384,22 @@ fn board_line(entry: &BoardEntry, width: usize) -> String {
         &runtime,
         width,
     )
+}
+
+fn spirit_label(name: &str) -> String {
+    let chars = view::sanitize_external(name)
+        .to_uppercase()
+        .chars()
+        .collect::<Vec<_>>();
+    if chars.len() <= theme::SPIRIT_LABEL_CHARS {
+        return chars.into_iter().collect();
+    }
+    let mut label = chars[..theme::SPIRIT_LABEL_CHARS - 4]
+        .iter()
+        .collect::<String>();
+    label.push('…');
+    label.extend(&chars[chars.len() - 3..]);
+    label
 }
 
 fn board_columns(name: &str, mise: &str, width: usize) -> String {
@@ -1015,7 +1026,7 @@ fn draw_freezer(
         layout.floor.height.into(),
         theme::FREEZER_FLOOR,
     );
-    for rack in layout.racks {
+    for (rack_index, rack) in layout.racks.into_iter().enumerate() {
         canvas.fill_rect(
             rack.x.into(),
             rack.y.into(),
@@ -1055,7 +1066,12 @@ fn draw_freezer(
                     },
                 ),
             ];
-            for (x, color) in bins {
+            for (bin_index, (x, color)) in bins.into_iter().enumerate() {
+                if (rack_index + shelf as usize + bin_index)
+                    .is_multiple_of(theme::FREEZER_STOCK_CADENCE)
+                {
+                    continue;
+                }
                 for layer in 0..theme::FREEZER_BIN_STACK {
                     canvas.fill_rect(
                         x + i32::from(layer),
@@ -1141,7 +1157,8 @@ fn draw_freezer(
     if !reduced_motion {
         draw_gravestone(&mut canvas, layout.floor);
     }
-    for (_, (slot, pose)) in table.board().iter().zip(&layout.spirits) {
+    let visible_board = &table.board()[table.board().len() - layout.spirits.len()..];
+    for (_, (slot, pose)) in visible_board.iter().zip(&layout.spirits) {
         draw_spirit(&mut canvas, *slot, *pose);
     }
     frame.render_widget(&canvas, area);
@@ -1202,12 +1219,8 @@ fn draw_freezer(
             ),
         );
     }
-    for (entry, (slot, _)) in table.board().iter().zip(&layout.spirits) {
-        let name = view::sanitize_external(&entry.name)
-            .to_uppercase()
-            .chars()
-            .take(theme::SPIRIT_LABEL_CHARS)
-            .collect::<String>();
+    for (entry, (slot, _)) in visible_board.iter().zip(&layout.spirits) {
+        let name = spirit_label(&entry.name);
         render_line(
             frame,
             area,
@@ -1222,19 +1235,22 @@ fn draw_freezer(
             ),
         );
     }
-    let caption = table
-        .board()
-        .iter()
-        .rev()
-        .map(|entry| view::sanitize_external(&entry.name))
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let shown = layout.spirits.len();
+    let total = table.board().len();
+    let caption = if total == 0 {
+        format!("FREEZER EMPTY · {}", board_count_text(table))
+    } else {
+        format!(
+            "FROZEN {shown}/{total} · {} MORE ON 86 BOARD",
+            total - shown
+        )
+    };
     render_line(
         frame,
         area,
-        layout.floor.x,
-        layout.floor.bottom().saturating_sub(1) / 2,
-        layout.floor.width,
+        layout.status.x,
+        layout.status.y / 2,
+        layout.status.width,
         Line::styled(
             caption,
             Style::default().fg(mapped(theme::TEXT, color_mode)),

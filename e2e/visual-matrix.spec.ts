@@ -61,6 +61,7 @@ type MotionMetrics = {
     { accent: string; idlePose: string | null; prepStep: 0 | 1 | null }
   >;
   spiritAccents: Record<string, string>;
+  spiritPoseBounds: Record<string, Pick<Box, "width" | "height">>;
   stationCells: Record<string, Box>;
   stationNameBounds: Record<string, Box & { text: string }>;
   stationStatusBounds: Record<string, Box & { text: string }>;
@@ -484,6 +485,9 @@ test("native freezer control renders only visible board spirits and preserves Es
   await expect(
     page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
   ).toHaveCount(12);
+  await expect(page.getByLabel("Agent state announcements")).toHaveText(
+    "Freezer, 12 of 12 ended chefs shown",
+  );
   await page.evaluate(() =>
     (document.activeElement as HTMLElement | null)?.blur(),
   );
@@ -724,21 +728,20 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       page.locator('aside[aria-label$="session summary" i]'),
     ).toBeVisible();
     await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 390, height: 500 });
     await page.getByRole("button", { name: "Freezer" }).click();
     await expect(
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
-    ).toHaveCount(3);
+    ).toHaveCount(2);
+    await expect(page.getByLabel("Agent state announcements")).toHaveText(
+      "Freezer, 2 of 3 ended chefs shown",
+    );
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         view: "freezer",
         endedEntries: 3,
-        visibleSpirits: 3,
-        spiritAccents: {
-          "p-11": "#667a9e",
-          "p-8": "#997f5e",
-          "fictional-pane-19": "#8f9a6f",
-        },
+        visibleSpirits: 2,
       });
   } finally {
     app.kill("SIGTERM");
@@ -746,6 +749,54 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("freezer matrix discloses empty full and bounded overflow scenes", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  for (const [viewport, capacity] of [
+    [{ width: 1280, height: 720 }, 20],
+    [{ width: 800, height: 500 }, 4],
+    [{ width: 390, height: 844 }, 6],
+    [{ width: 320, height: 640 }, 2],
+  ] as const) {
+    for (const total of [0, 1, 12]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`/?preset=ended&agents=${total}&stats`);
+      await page.getByRole("button", { name: "Freezer" }).click();
+      await expect
+        .poll(async () => sceneMetrics(page))
+        .toMatchObject({
+          view: "freezer",
+          endedEntries: total,
+          visibleSpirits: Math.min(total, capacity),
+        });
+      const visible = Math.min(total, capacity);
+      await expect(
+        page
+          .getByRole("navigation", { name: "Ended chefs" })
+          .getByRole("button"),
+      ).toHaveCount(visible);
+      await expect(page.getByLabel("Agent state announcements")).toHaveText(
+        `Freezer, ${visible} of ${total} ended chefs shown`,
+      );
+      if (total === 12 && viewport.width === 1280) {
+        const bounds = Object.values(
+          (await sceneMetrics(page))!.spiritPoseBounds,
+        );
+        expect(
+          new Set(
+            bounds.map(
+              ({ width, height }) =>
+                `${Math.round(width)}:${Math.round(height)}`,
+            ),
+          ).size,
+        ).toBe(3);
+      }
+    }
+  }
+  expect(errors).toEqual([]);
 });
 
 test("fixture-driven kitchen materials", async ({ page }) => {

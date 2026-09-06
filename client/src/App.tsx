@@ -13,6 +13,7 @@ import { tokens } from "./theme/tokens";
 import { clientStore, hintPersistence } from "./runtime";
 import { isGlobalEscape, isInteractiveKeyboardTarget } from "./keyboard";
 import {
+  freezerAnnouncement,
   semanticAgents,
   semanticAgentsEqual,
   semanticStateWords,
@@ -382,7 +383,7 @@ export function App() {
         aria-atomic="true"
       >
         {view === "freezer"
-          ? `Freezer, ${spiritAgents.length} ended chefs`
+          ? freezerAnnouncement(spiritAgents.length, boardEntries.length)
           : announcement}
       </div>
     </main>

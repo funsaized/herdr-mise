@@ -317,20 +317,30 @@ fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
     assert!(text(&buffer).contains("WALK-IN FREEZER"));
     assert!(text(&buffer).contains("MISE — LIVE"));
     assert!(text(&buffer).contains("86 64/64"));
+    assert!(text(&buffer).contains("FROZEN 4/64 · 60 MORE ON 86 BOARD"));
+    for name in ["COOK EX…-58", "COOK EX…-59", "COOK EX…-60", "COOK EX…-61"] {
+        assert!(text(&buffer).contains(name));
+    }
+    let ids = table
+        .board()
+        .iter()
+        .map(|entry| entry.id.as_str())
+        .collect::<Vec<_>>();
+    for (count, expected) in [(0, 0), (1, 1), (12, 4), (64, 4)] {
+        assert_eq!(
+            layout::compute_freezer_layout(80, 48, &ids[..count])
+                .unwrap()
+                .spirits
+                .len(),
+            expected
+        );
+    }
     assert_eq!(
-        layout::compute_freezer_layout(
-            80,
-            48,
-            &table
-                .board()
-                .iter()
-                .map(|entry| entry.id.as_str())
-                .collect::<Vec<_>>()
-        )
-        .unwrap()
-        .spirits
-        .len(),
-        BOARD_CAP
+        layout::compute_freezer_layout(110, 80, &ids[..12])
+            .unwrap()
+            .spirits
+            .len(),
+        12
     );
 
     let compact = text(&render_view(
@@ -365,6 +375,7 @@ fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
         "observed 23",
         "upgrade or downgrade Herdr",
         "Nothing here",
+        "FREEZER EMPTY · 86 0/64",
     ] {
         assert!(
             output.contains(expected),
