@@ -1,38 +1,28 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   copyFile,
+  cp,
   mkdir,
   mkdtemp,
   readFile,
   rm,
   writeFile,
 } from "node:fs/promises";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import {
+  parseLastJson,
+  runJson,
+  startServe,
+  stopChild,
+} from "./lib/swamp-test-process.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const fixtures = join(root, "scripts", "fixtures");
 const maxBuffer = 32 * 1024 * 1024;
-
-function parseLastJson(text) {
-  const plain = text;
-  for (
-    let index = plain.lastIndexOf("{");
-    index >= 0;
-    index = plain.lastIndexOf("{", index - 1)
-  ) {
-    try {
-      return JSON.parse(plain.slice(index));
-    } catch {
-      // Swamp can emit progress or definition-created JSON before the result.
-    }
-  }
-  throw new Error(`No JSON result in:\n${plain}`);
-}
 
 function run(repo, args, input) {
   const result = spawnSync("swamp", [...args, "--json", "--no-color"], {
@@ -59,82 +49,16 @@ function runRemote(repo, server, args, input) {
 }
 
 function runRemoteAsync(repo, server, args, input) {
-  return new Promise((resolve) => {
-    const child = spawn(
-      "swamp",
-      [...args, "--server", server, "--json", "--no-color"],
-      {
-        cwd: repo,
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => (stdout += chunk));
-    child.stderr.on("data", (chunk) => (stderr += chunk));
-    child.on("close", (status) =>
-      resolve({
-        status,
-        stdout,
-        stderr,
-        json: parseLastJson(stdout || stderr),
-      }),
-    );
-    child.stdin.end(input);
-  });
-}
-
-async function freePort() {
-  const socket = createServer();
-  await new Promise((resolve) => socket.listen(0, "127.0.0.1", resolve));
-  const { port } = socket.address();
-  await new Promise((resolve) => socket.close(resolve));
-  return port;
-}
-
-async function startServe(repo, port) {
-  const child = spawn(
+  return runJson(
     "swamp",
-    [
-      "serve",
-      "--repo-dir",
-      repo,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--auth-mode",
-      "none",
-      "--no-schedule",
-    ],
-    { cwd: repo, stdio: ["ignore", "pipe", "pipe"] },
+    [...args, "--server", server, "--json", "--no-color"],
+    { cwd: repo },
+    input,
   );
-  let logs = "";
-  child.stdout.on("data", (chunk) => (logs += chunk));
-  child.stderr.on("data", (chunk) => (logs += chunk));
-  const server = `ws://127.0.0.1:${port}`;
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const ready = runRemote(repo, server, [
-      "workflow",
-      "validate",
-      "phase0-factory-instance-create",
-    ]);
-    if (ready.status === 0) return { child, server, logs: () => logs };
-    if (child.exitCode !== null) break;
-  }
-  child.kill("SIGTERM");
-  throw new Error(`swamp serve failed to start:\n${logs}`);
 }
 
 async function stopServe(server) {
-  if (server.child.exitCode !== null) return;
-  server.child.kill("SIGTERM");
-  await Promise.race([
-    new Promise((resolve) => server.child.once("exit", resolve)),
-    new Promise((resolve) => setTimeout(resolve, 5_000)),
-  ]);
-  if (server.child.exitCode === null) server.child.kill("SIGKILL");
+  await stopChild(server.child);
 }
 
 function create(repo, server, modelName, workItem) {
@@ -180,7 +104,31 @@ test(
         join(repo, "extensions", "models", "upstream_extensions.json"),
         `${JSON.stringify({ "@swamp/software-factory": lock["@swamp/software-factory"] }, null, 2)}\n`,
       );
+      // Seed installed extension inputs (never runtime data) from a provisioned
+      // checkout. Swamp still owns restoration and type/version validation.
+      const provisionedRoot = process.env.SWAMP_TEST_EXTENSION_REPO ?? root;
+      for (const path of lock["@swamp/software-factory"].files) {
+        if (path.startsWith("/") || path.split("/").includes(".."))
+          throw new Error("unsafe extension lock path");
+        try {
+          await mkdir(dirname(join(repo, path)), { recursive: true });
+          await cp(join(provisionedRoot, path), join(repo, path), {
+            recursive: true,
+          });
+        } catch (error) {
+          if (error.code !== "ENOENT" || process.env.SWAMP_TEST_EXTENSION_REPO)
+            throw error;
+        }
+      }
       expectOk(run(repo, ["extension", "install"]));
+      const installed = expectOk(
+        run(repo, ["model", "type", "describe", "@swamp/software-factory"]),
+      );
+      assert.equal(
+        installed.version,
+        lock["@swamp/software-factory"].version,
+        "factory provisioning must resolve the pinned version before testing",
+      );
 
       await mkdir(join(repo, "models", "@swamp", "software-factory"), {
         recursive: true,
@@ -211,8 +159,7 @@ test(
       expectOk(
         run(repo, ["workflow", "validate", "phase0-factory-instance-repair"]),
       );
-      const port = await freePort();
-      serve = await startServe(repo, port);
+      serve = await startServe(repo);
 
       expectOk(
         method(repo, serve.server, "phase0-factory-template", "validate"),
@@ -499,7 +446,7 @@ test(
       assert.equal(report.json.factoryName, "phase0-runtime-main");
 
       await stopServe(serve);
-      serve = await startServe(repo, port);
+      serve = await startServe(repo);
       const persisted = expectOk(
         runRemote(repo, serve.server, ["model", "get", "phase0-runtime-main"]),
       );

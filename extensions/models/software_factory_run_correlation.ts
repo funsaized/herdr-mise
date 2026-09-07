@@ -267,7 +267,16 @@ export async function checkCorrelatedWorkflowRun(
   }
   const slug = workItemSlug(workItem);
   const state = State.safeParse(await latestJson(context, `state-${slug}`));
-  if (!state.success) return { pass: true };
+  if (!state.success)
+    return fail(
+      "cannot correlate workflow run: persisted state is missing or malformed",
+    );
+  const enteredAt = Date.parse(state.data.enteredAt);
+  if (!Number.isFinite(enteredAt)) {
+    return fail(
+      "cannot correlate workflow run: persisted state enteredAt timestamp is invalid",
+    );
+  }
   const stage = factory.data.stages.find(
     (item) => item.id === state.data.stageId,
   );
@@ -316,7 +325,7 @@ export async function checkCorrelatedWorkflowRun(
   let records: StoredData[];
   try {
     records = (await query(
-      'name == "report-swamp-workflow-summary-json" && modelType == "workflow" && version > 0',
+      `name == "report-swamp-workflow-summary-json" && modelType == "workflow" && version > 0 && has(attributes.workflowRunId) && attributes.workflowRunId == ${JSON.stringify(runId)} && has(attributes.workflowName) && attributes.workflowName == ${JSON.stringify(workflow)}`,
     )) as StoredData[];
   } catch (error) {
     return fail(
@@ -334,8 +343,10 @@ export async function checkCorrelatedWorkflowRun(
       ) {
         matches.push({ record, summary });
       }
-    } catch {
-      continue;
+    } catch (error) {
+      return fail(
+        `cannot read workflow '${workflow}' runId '${runId}' summary: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   if (matches.length !== 1) {
@@ -349,10 +360,13 @@ export async function checkCorrelatedWorkflowRun(
       `workflow '${workflow}' runId '${runId}' has status '${summary.status}'`,
     );
   }
-  if (
-    record.createdAt &&
-    Date.parse(record.createdAt) < Date.parse(state.data.enteredAt)
-  ) {
+  const createdAt = Date.parse(record.createdAt ?? "");
+  if (!Number.isFinite(createdAt)) {
+    return fail(
+      `workflow '${workflow}' runId '${runId}' has a missing or invalid createdAt timestamp`,
+    );
+  }
+  if (createdAt < enteredAt) {
     return fail(
       `workflow '${workflow}' runId '${runId}' predates the current stage cycle`,
     );

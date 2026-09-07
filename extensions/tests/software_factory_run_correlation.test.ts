@@ -260,3 +260,100 @@ Deno.test("legacy factory freezes intake while preserving history and active dra
   );
   if (terminal.pass) throw new Error("terminal legacy history was mutated");
 });
+
+Deno.test("workflow freshness rejects missing, malformed and stale summary timestamps", async () => {
+  for (const createdAt of [
+    undefined,
+    "",
+    "not-a-date",
+    "2026-08-29T23:59:59Z",
+  ]) {
+    const base = context("run-67", ["run-67"]);
+    const result = await checkCorrelatedWorkflowRun({
+      ...base,
+      queryData: async (predicate: string) =>
+        (await base.queryData(predicate)).map((record) => ({
+          ...record,
+          createdAt,
+        })),
+    });
+    if (result.pass)
+      throw new Error(`unverifiable timestamp accepted: ${createdAt}`);
+    if (!result.errors?.[0].match(/timestamp|predates/))
+      throw new Error("freshness failure lacks a diagnostic");
+  }
+  for (const createdAt of ["2026-08-30T00:00:00Z", "2026-08-30T00:01:00Z"]) {
+    const base = context("run-67", ["run-67"]);
+    const result = await checkCorrelatedWorkflowRun({
+      ...base,
+      queryData: async (predicate: string) =>
+        (await base.queryData(predicate)).map((record) => ({
+          ...record,
+          createdAt,
+        })),
+    });
+    if (!result.pass) throw new Error(result.errors?.join("\n"));
+  }
+});
+
+Deno.test("workflow correlation rejects malformed persisted state", async () => {
+  for (const state of [
+    null,
+    {},
+    { stageId: "planning", cycles: { planning: 1 }, enteredAt: "not-a-date" },
+  ]) {
+    const base = context("run-67", ["run-67"]);
+    const result = await checkCorrelatedWorkflowRun({
+      ...base,
+      dataRepository: {
+        ...base.dataRepository,
+        getContent: async (type: string, id: string, name: string) =>
+          name === "state-67"
+            ? encoder.encode(JSON.stringify(state))
+            : await base.dataRepository.getContent(type, id, name),
+      },
+    });
+    if (result.pass)
+      throw new Error("malformed persisted state bypassed correlation");
+    if (!result.errors?.[0].includes("state"))
+      throw new Error("state failure lacks a diagnostic");
+  }
+});
+
+Deno.test("correlation queries historical payload identity without reading unrelated summaries", async () => {
+  const base = context("old-run", ["old-run"]);
+  let summaryQueries = 0;
+  const result = await checkCorrelatedWorkflowRun({
+    ...base,
+    queryData: async (predicate: string) => {
+      if (predicate.includes('name == "artifact-67-plan"')) return [{}];
+      summaryQueries++;
+      if (
+        !predicate.includes('attributes.workflowRunId == "old-run"') ||
+        !predicate.includes('attributes.workflowName == "nightshift-plan"') ||
+        !predicate.includes("version > 0")
+      ) {
+        throw new Error("query failed to bound historical payload identity");
+      }
+      // Historical summaries have no workflowRunId metadata. Content is canonical.
+      return base.queryData(predicate);
+    },
+  });
+  if (!result.pass || summaryQueries !== 1)
+    throw new Error(result.errors?.join("\n") ?? "duplicate query");
+});
+
+Deno.test("correlation diagnoses unreadable target summaries and duplicate exact runs", async () => {
+  const base = context("run-67", ["run-67"]);
+  const malformed = await checkCorrelatedWorkflowRun({
+    ...base,
+    queryData: async () => [{ content: "{bad-json" }],
+  });
+  if (malformed.pass || !malformed.errors?.[0].includes("cannot read workflow"))
+    throw new Error("target corruption was silently discarded");
+  const duplicate = await checkCorrelatedWorkflowRun(
+    context("run-67", ["run-67", "run-67"]),
+  );
+  if (duplicate.pass || !duplicate.errors?.[0].includes("found 2"))
+    throw new Error("duplicate run accepted");
+});
