@@ -1142,15 +1142,19 @@ fn draw_freezer(
             theme::COAT_LO,
         );
     }
-    let snow_tick = if !reduced_motion { tick } else { 0 };
+    let snow_tick = motion_tick(tick, reduced_motion);
+    let snow_x = theme::FREEZER_SHELL_INSET as u16 + 1;
+    let snow_y = theme::FREEZER_RACK_MARGIN_Y;
+    let snow_width = area.width.saturating_sub(snow_x.saturating_mul(2));
+    let snow_height = layout.floor.y.saturating_sub(snow_y);
     for particle in particles::snow_at_tick(
         snow_tick,
-        area.width.min(i16::MAX as u16) as i16,
-        layout.room.height.min(i16::MAX as u16) as i16,
+        snow_width.min(i16::MAX as u16) as i16,
+        snow_height.min(i16::MAX as u16) as i16,
     ) {
         canvas.put(
-            i32::from(particle.x),
-            i32::from(particle.y),
+            i32::from(snow_x) + i32::from(particle.x),
+            i32::from(snow_y) + i32::from(particle.y),
             if particle.shade == 0 {
                 theme::ICE
             } else {

@@ -53,7 +53,10 @@ export function SettingsPanel({
           onChange={toggleSound}
         />
       </SettingRow>
-      <SettingRow title="Atmosphere" note="Window, shelf, and pass decor">
+      <SettingRow
+        title="Atmosphere"
+        note="Working steam, warm light, and freezer frost"
+      >
         <Toggle
           label="Atmosphere"
           on={settings.atmosphere}

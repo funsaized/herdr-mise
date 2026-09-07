@@ -957,10 +957,31 @@ fn kitchen_and_freezer_stay_separate_and_respect_reduced_motion() {
         render_view(&table, 79, 23, 9, None, SceneView::Kitchen, true)
     );
 
-    assert_ne!(
-        render_view(&table, 80, 24, 0, None, SceneView::Freezer, false),
-        render_view(&table, 80, 24, 9, None, SceneView::Freezer, false)
-    );
+    let freezer_zero = render_view(&table, 80, 24, 0, None, SceneView::Freezer, false);
+    let freezer_nine = render_view(&table, 80, 24, 9, None, SceneView::Freezer, false);
+    assert_ne!(freezer_zero, freezer_nine);
+    let ids = table
+        .board()
+        .iter()
+        .map(|entry| entry.id.as_str())
+        .collect::<Vec<_>>();
+    let freezer_layout = compute_freezer_layout(80, 48, &ids).unwrap();
+    let snow_x = theme::FREEZER_SHELL_INSET as u16 + 1;
+    let snow_top = theme::FREEZER_RACK_MARGIN_Y / 2;
+    let snow_bottom = freezer_layout.floor.y.div_ceil(2);
+    for (index, (at_zero, at_nine)) in freezer_zero
+        .content
+        .iter()
+        .zip(&freezer_nine.content)
+        .enumerate()
+    {
+        if at_zero != at_nine {
+            let x = index as u16 % 80;
+            let y = index as u16 / 80;
+            assert!(x >= snow_x && x < 80 - snow_x);
+            assert!(y >= snow_top && y < snow_bottom);
+        }
+    }
     assert_eq!(
         render_view(&table, 80, 24, 0, None, SceneView::Freezer, true),
         render_view(&table, 80, 24, 9, None, SceneView::Freezer, true)

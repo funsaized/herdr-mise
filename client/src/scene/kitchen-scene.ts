@@ -126,8 +126,8 @@ export interface SceneMetrics {
     window: number;
     shelf: number;
     pass: number;
-    contact: number;
-    freezer: number;
+    workingContact: number;
+    freezerAccents: number;
   };
   materials: {
     wallPlanes: number;
@@ -250,8 +250,8 @@ export class KitchenScene {
     window: 0,
     shelf: 0,
     pass: 0,
-    contact: 0,
-    freezer: 0,
+    workingContact: 0,
+    freezerAccents: 0,
   };
   private materialMetrics: Omit<
     SceneMetrics["materials"],
@@ -571,8 +571,8 @@ export class KitchenScene {
       window: 0,
       shelf: 0,
       pass: 0,
-      contact: 0,
-      freezer: 0,
+      workingContact: 0,
+      freezerAccents: 0,
     };
     this.materialMetrics = {
       wallPlanes: 0,
@@ -720,12 +720,12 @@ export class KitchenScene {
         }
       }
     }
-    for (const frost of layout.frost)
-      g.rect(frost.x, frost.y, frost.width, frost.height).fill({
-        color: p.scene.steel[1][index],
-        alpha: tokens.freezer.frost.alpha,
-      });
     if (this.lastAtmosphere) {
+      for (const frost of layout.frost)
+        g.rect(frost.x, frost.y, frost.width, frost.height).fill({
+          color: p.scene.steel[1][index],
+          alpha: tokens.freezer.frost.alpha,
+        });
       for (const [snowX, snowY] of tokens.freezer.snow.points)
         g.circle(
           layout.inner.x + snowX * layout.inner.width,
@@ -735,7 +735,8 @@ export class KitchenScene {
           color: tokens.freezer.ice[index],
           alpha: tokens.freezer.snow.alpha,
         });
-      this.atmosphereMetrics.freezer = tokens.freezer.snow.points.length;
+      this.atmosphereMetrics.freezerAccents =
+        layout.frost.length + tokens.freezer.snow.points.length;
     }
     for (
       let x = tokens.freezer.rivet.start;
@@ -1229,7 +1230,7 @@ export class KitchenScene {
     const snapshot = this.store.snapshot(),
       index = paletteIndex(this.resolvedTheme()),
       active = new Set<string>();
-    this.atmosphereMetrics.contact =
+    this.atmosphereMetrics.workingContact =
       this.lastAtmosphere &&
       (snapshot.mode === "live" || snapshot.mode === "demo")
         ? [...snapshot.agents.values()].filter(
@@ -1623,8 +1624,9 @@ export class KitchenScene {
     if (state === "working") {
       const flicker = prepSample.prepStep,
         potX = rect.width / 2 + 5 * u,
-        [glowWidth, glowHeight, glowY, glowAlpha, dimFrame] =
-          p.scene.atmosphere.working.contactGlow;
+        [glowWidth, glowHeight, glowY, glowAlpha] =
+          p.scene.atmosphere.working.contactGlow[index],
+        dimFrame = p.scene.atmosphere.working.contactGlowDimFrame;
       if (
         this.lastAtmosphere &&
         (snapshot.mode === "live" || snapshot.mode === "demo")
@@ -1636,7 +1638,7 @@ export class KitchenScene {
           glowHeight * u,
         ).fill({
           color: p.scene.atmosphere.pass.light[index],
-          alpha: glowAlpha[index] * (flicker ? 1 : dimFrame),
+          alpha: glowAlpha * (flicker ? 1 : dimFrame),
         });
       g.rect(potX - 5 * u, counterY - 4 * u, 10 * u, 4 * u)
         .fill(p.scene.ink)
@@ -1944,7 +1946,9 @@ export class KitchenScene {
       if (particle.active)
         dot.circle(particle.x, particle.y, Math.max(1, this.layout.unit)).fill({
           color: p.scene.cloud,
-          alpha: Math.max(0, 1 - particle.age / particle.life),
+          alpha:
+            Math.max(0, 1 - particle.age / particle.life) *
+            p.scene.atmosphere.working.steamAlpha,
         });
     }
   }

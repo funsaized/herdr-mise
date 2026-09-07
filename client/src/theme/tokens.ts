@@ -136,7 +136,12 @@ export const tokens = {
       },
       working: {
         steamAnchor: [5, 14],
-        contactGlow: [8, 2, 1, [0.08, 0.14], 0.72],
+        steamAlpha: 0.42,
+        contactGlow: [
+          [8, 2, 1, 0.08],
+          [9, 2.5, 1, 0.14],
+        ],
+        contactGlowDimFrame: 0.72,
       },
     },
     cook: {

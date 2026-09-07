@@ -94,8 +94,8 @@ type MotionMetrics = {
     window: number;
     shelf: number;
     pass: number;
-    contact: number;
-    freezer: number;
+    workingContact: number;
+    freezerAccents: number;
   };
   materials: {
     wallPlanes: number;
@@ -349,7 +349,13 @@ test("atmosphere switches off room extras without changing blocked truth", async
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
-        atmosphere: { window: 0, shelf: 0, pass: 0 },
+        atmosphere: {
+          window: 0,
+          shelf: 0,
+          pass: 0,
+          workingContact: 0,
+          freezerAccents: 0,
+        },
         blockedIndicators: 1,
         board: { headers: ["COOK", "MISE TIME"] },
         motion: {
@@ -439,7 +445,7 @@ test("runtime preference changes preserve mixed lifecycle truth in both directio
   expect(errors).toEqual([]);
 });
 
-test("reduced startup preserves idle working blocked waiting and ended state indicators", async ({
+test("reduced motion startup preserves idle working blocked waiting and ended state indicators", async ({
   page,
 }) => {
   const errors = watchErrors(page);
@@ -458,10 +464,15 @@ test("reduced startup preserves idle working blocked waiting and ended state ind
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
-        motion: { reduced: true, continuous: false },
+        motion: { reduced: true, activeParticles: 0, continuous: false },
         stateIndicators: { [preset]: 1 },
         endedEntries: 0,
       });
+    if (preset === "working") {
+      const visuals = (await sceneMetrics(page))?.stationVisuals;
+      await page.waitForTimeout(300);
+      expect((await sceneMetrics(page))?.stationVisuals).toEqual(visuals);
+    }
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=ended&agents=1&stats");
@@ -675,15 +686,37 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     await expect
       .poll(async () => (await sceneMetrics(page))?.motion.activeParticles)
       .toBeGreaterThan(0);
-    expect((await sceneMetrics(page))?.atmosphere.contact).toBe(1);
+    expect((await sceneMetrics(page))?.atmosphere.workingContact).toBe(1);
+    expect(
+      (await sceneMetrics(page))?.motion.activeParticles,
+    ).toBeLessThanOrEqual(48);
+    const workingTruth = await sceneMetrics(page);
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("switch", { name: "Atmosphere" }).click();
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
-        atmosphere: { contact: 0 },
+        atmosphere: {
+          window: 0,
+          shelf: 0,
+          pass: 0,
+          workingContact: 0,
+          freezerAccents: 0,
+        },
         motion: { activeParticles: 0 },
       });
+    const atmosphereOff = await sceneMetrics(page);
+    expect(atmosphereOff?.stationCells).toEqual(workingTruth?.stationCells);
+    expect(atmosphereOff?.stationNameBounds).toEqual(
+      workingTruth?.stationNameBounds,
+    );
+    expect(atmosphereOff?.stationStatusBounds).toEqual(
+      workingTruth?.stationStatusBounds,
+    );
+    expect(atmosphereOff?.stateIndicators).toEqual(
+      workingTruth?.stateIndicators,
+    );
+    expect(atmosphereOff?.board).toEqual(workingTruth?.board);
     await page.getByRole("switch", { name: "Atmosphere" }).click();
     await page.keyboard.press("Escape");
     await expect
@@ -721,7 +754,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         stateIndicators: { blocked: 1 },
-        atmosphere: { contact: 0 },
+        atmosphere: { workingContact: 0 },
         motion: { activeParticles: 0 },
         stationVisuals: {
           "fictional-pane-19": {
@@ -837,7 +870,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         endedEntries: 3,
-        atmosphere: { contact: 0 },
+        atmosphere: { workingContact: 0 },
         motion: { activeParticles: 0 },
         board: {
           headers: ["COOK", "MISE TIME"],
@@ -892,14 +925,20 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
         view: "freezer",
         endedEntries: 3,
         visibleSpirits: 3,
-        atmosphere: { freezer: 6 },
+        atmosphere: { freezerAccents: 11 },
         motion: { activeParticles: 0 },
       });
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("switch", { name: "Atmosphere" }).click();
     await expect
-      .poll(async () => (await sceneMetrics(page))?.atmosphere.freezer)
-      .toBe(0);
+      .poll(async () => (await sceneMetrics(page))?.atmosphere)
+      .toEqual({
+        window: 0,
+        shelf: 0,
+        pass: 0,
+        workingContact: 0,
+        freezerAccents: 0,
+      });
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();
@@ -1053,7 +1092,13 @@ test("fixture-driven kitchen materials", async ({ page }) => {
     await page.getByRole("switch", { name: "Atmosphere" }).click();
     await expect
       .poll(async () => (await sceneMetrics(page))?.atmosphere)
-      .toEqual({ window: 0, shelf: 0, pass: 0, contact: 0, freezer: 0 });
+      .toEqual({
+        window: 0,
+        shelf: 0,
+        pass: 0,
+        workingContact: 0,
+        freezerAccents: 0,
+      });
     expect((await sceneMetrics(page))?.materials).toEqual(workingOn.materials);
 
     await page.goto(`${appUrl}/?stats&theme=dinner`);
