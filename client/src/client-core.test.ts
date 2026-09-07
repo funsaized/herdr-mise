@@ -743,14 +743,20 @@ describe("layout, transitions and resources", () => {
     expect(plate.rays.every((ray) => ray.y >= 10)).toBe(true);
     expect(plate.rays.every((ray) => ray.y + ray.height <= 19)).toBe(true);
   });
-  it("reuses a fixed particle pool", () => {
+  it("reuses and clears a fixed bounded particle pool", () => {
     const pool = new ParticlePool(2),
-      first = pool.acquire(1, 2);
+      first = pool.acquire(1, 2),
+      other = pool.acquire(2, 3);
+    expect(pool.acquire(3, 4)).toBeNull();
+    expect(pool.activeCount).toBe(2);
     pool.update(1000);
     const second = pool.acquire(3, 4);
     expect(second).toBe(first);
+    expect(other).not.toBeNull();
     expect(pool.particles).toHaveLength(2);
-    expect(pool.reused).toBe(2);
+    expect(pool.reused).toBe(3);
+    pool.releaseAll();
+    expect(pool.activeCount).toBe(0);
   });
   it("sweeps deterministically across the affected station before expiring", () => {
     const rect = { x: 100, y: 200, width: 200, height: 100 },
