@@ -1,0 +1,106 @@
+diff --git a/software-factory/extensions/models/software_factory.ts b/software-factory/extensions/models/software_factory.ts
+index 4433086..40a324f 100644
+--- a/software-factory/extensions/models/software_factory.ts
++++ b/software-factory/extensions/models/software_factory.ts
+@@ -496,0 +497,10 @@ async function stageExecutionDiagnostics(
++function stageExecuted(
++  args: FactoryArguments,
++  stage: StageSpec,
++  state: RunState,
++  transitionName: string,
++): boolean {
++  return !requiresDispatch(args, stage, transitionName) ||
++    dispatchAttempts(state, stage.id, currentCycle(state)) >= 1;
++}
++
+@@ -569,0 +580 @@ async function buildStatus(
++    const executed = stageExecuted(args, stage, state, t.name);
+@@ -574 +585 @@ async function buildStatus(
+-      satisfied: evaluated.pass && limit.allowed,
++      satisfied: evaluated.pass && limit.allowed && executed,
+@@ -576,5 +587,16 @@ async function buildStatus(
+-      gates: evaluated.results.map((r) => ({
+-        type: r.gate.type,
+-        pass: r.pass,
+-        reasons: r.reasons,
+-      })),
++      gates: [
++        ...evaluated.results.map((r) => ({
++          type: r.gate.type,
++          pass: r.pass,
++          reasons: r.reasons,
++        })),
++        ...(requiresDispatch(args, stage, t.name)
++          ? [{
++            type: "stage-executed",
++            pass: executed,
++            reasons: executed
++              ? []
++              : [stageNotExecutedError(stage.id, workItem)],
++          }]
++          : []),
++      ],
+@@ -1043 +1065 @@ export const model = {
+-        if (dispatchAttempts(state, stage.id, currentCycle(state)) < 1) {
++        if (!stageExecuted(args, stage, state, name)) {
+@@ -1754,2 +1776 @@ export const model = {
+-          requiresDispatch(args, stage, transition.name) &&
+-          dispatchAttempts(state, stage.id, currentCycle(state)) < 1
++          !stageExecuted(args, stage, state, transition.name)
+diff --git a/software-factory/extensions/models/software_factory_test.ts b/software-factory/extensions/models/software_factory_test.ts
+index 0b96ffe..792163d 100644
+--- a/software-factory/extensions/models/software_factory_test.ts
++++ b/software-factory/extensions/models/software_factory_test.ts
+@@ -1458,0 +1459 @@ Deno.test("status: persists a queryable record, not just a log line", async () =
++  await dispatch(harness);
+@@ -1497,0 +1499 @@ Deno.test("status: documented data-query projections evaluate", async () => {
++  await dispatch(harness);
+@@ -1590,0 +1593 @@ Deno.test("status: self-describing packet with gates, manifest, and bindings", a
++  await dispatch(harness);
+@@ -1786,0 +1790,46 @@ Deno.test("summary: unknown work items fail with the start hint", async () => {
++
++Deno.test("status: dispatch eligibility agrees with advance and preserves human escape gates", async () => {
++  const harness = buildHarness();
++  await startRun(harness);
++  await recordPlan(harness);
++  await model.methods.status.execute({ workItem: WI }, harness.context);
++  const transitions = statusJson(harness).transitions as {
++    name: string;
++    satisfied: boolean;
++    gates: { type: string; pass: boolean }[];
++  }[];
++  const submit = transitions.find((t) => t.name === "submit")!;
++  assertEquals(submit.satisfied, false);
++  assert(submit.gates.some((g) => g.type === "stage-executed" && !g.pass));
++  await assertRejects(
++    () =>
++      model.methods.advance.execute(
++        { workItem: WI, transition: "submit" },
++        harness.context,
++      ),
++    Error,
++    "record_dispatch",
++  );
++  await dispatch(harness);
++  await model.methods.status.execute({ workItem: WI }, harness.context);
++  assert(
++    (statusJson(harness).transitions as { name: string; satisfied: boolean }[])
++      .find((t) => t.name === "submit")!.satisfied,
++  );
++  const fresh = buildHarness();
++  await startRun(fresh);
++  await model.methods.approve.execute({
++    workItem: WI,
++    gateId: "abort-confirmation",
++    actor: "human",
++  }, fresh.context);
++  await model.methods.status.execute({ workItem: WI }, fresh.context);
++  assert(
++    (statusJson(fresh).transitions as { name: string; satisfied: boolean }[])
++      .find((t) => t.name === "abort")!.satisfied,
++  );
++  await model.methods.advance.execute(
++    { workItem: WI, transition: "abort" },
++    fresh.context,
++  );
++});

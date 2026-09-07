@@ -8,6 +8,7 @@ async function git(cwd: string, ...args: string[]) {
   const result = await new Deno.Command("git", {
     args,
     cwd,
+    env: { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
     stdout: "piped",
     stderr: "piped",
   }).output();
