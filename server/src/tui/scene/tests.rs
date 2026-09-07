@@ -966,7 +966,7 @@ fn kitchen_and_freezer_stay_separate_and_respect_reduced_motion() {
         .map(|entry| entry.id.as_str())
         .collect::<Vec<_>>();
     let freezer_layout = compute_freezer_layout(80, 48, &ids).unwrap();
-    let snow_x = theme::FREEZER_SHELL_INSET as u16 + 1;
+    let snow_x = theme::FREEZER_SNOW_X_INSET;
     let snow_top = theme::FREEZER_RACK_MARGIN_Y / 2;
     let snow_bottom = freezer_layout.floor.y.div_ceil(2);
     for (index, (at_zero, at_nine)) in freezer_zero

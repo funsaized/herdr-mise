@@ -133,6 +133,7 @@ pub const FREEZER_HANDLE_WIDTH: u16 = 3;
 pub const FREEZER_HANDLE_HEIGHT: u16 = 2;
 pub const FREEZER_HINGE_HEIGHT: u16 = 2;
 pub const FREEZER_RIVET_STEP: u16 = 8;
+pub const FREEZER_SNOW_X_INSET: u16 = 3;
 pub const SNOW_SLOT_PHASE: u64 = 7;
 pub const SNOW_SLOT_X: u64 = 13;
 pub const SNOW_PHASE_X_DIV: u64 = 6;

@@ -1143,7 +1143,7 @@ fn draw_freezer(
         );
     }
     let snow_tick = motion_tick(tick, reduced_motion);
-    let snow_x = theme::FREEZER_SHELL_INSET as u16 + 1;
+    let snow_x = theme::FREEZER_SNOW_X_INSET;
     let snow_y = theme::FREEZER_RACK_MARGIN_Y;
     let snow_width = area.width.saturating_sub(snow_x.saturating_mul(2));
     let snow_height = layout.floor.y.saturating_sub(snow_y);
