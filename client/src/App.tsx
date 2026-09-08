@@ -83,7 +83,7 @@ export function App() {
     settingsRestorePendingRef = useRef(false);
   const [coarse, setCoarse] = useState<CoarseSlice>(() => clientStore.coarse()),
     [agents, setAgents] = useState<readonly SemanticAgent[]>(() =>
-      semanticAgents(clientStore.snapshot().agents),
+      semanticAgents(clientStore.snapshot().visibleAgents),
     ),
     [hits, setHits] = useState<readonly SceneHit[]>([]),
     [hoveredId, setHoveredId] = useState<string | null>(null),
@@ -103,7 +103,7 @@ export function App() {
     () =>
       clientStore.subscribe(() =>
         setAgents((previous) => {
-          const next = semanticAgents(clientStore.snapshot().agents);
+          const next = semanticAgents(clientStore.snapshot().visibleAgents);
           return semanticAgentsEqual(previous, next) ? previous : next;
         }),
       ),
@@ -112,9 +112,19 @@ export function App() {
   useEffect(
     () =>
       clientStore.onEvent((event) => {
-        if (event.type !== "state" || event.from === undefined) return;
+        if (event.type === "reveal") {
+          setAnnouncement(
+            `${event.count} plated cook${event.count === 1 ? "" : "s"} revealed`,
+          );
+          return;
+        }
+        if (event.type !== "busser" && event.type !== "state") return;
         const agent = clientStore.snapshot().agents.get(event.agentId);
-        if (agent)
+        if (event.type === "busser" && agent) {
+          setAnnouncement(`${agent.name} cleared from the kitchen`);
+          return;
+        }
+        if (event.type === "state" && event.from !== undefined && agent)
           setAnnouncement(
             `${agent.name} ${event.to}${event.to === "blocked" ? ", just now" : ""}`,
           );
@@ -417,6 +427,7 @@ export function App() {
           onDismissHint={dismissHint}
           view={view}
           onToggleFreezer={toggleFreezer}
+          onRevealCleared={() => clientStore.revealCleared()}
         />
       </div>
       <div

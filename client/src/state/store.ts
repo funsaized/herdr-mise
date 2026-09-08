@@ -43,6 +43,7 @@ export interface AgentMachine extends AgentRecord {
 }
 export interface StoreSnapshot {
   agents: ReadonlyMap<string, AgentMachine>;
+  visibleAgents: ReadonlyMap<string, AgentMachine>;
   board: readonly BoardEntry[];
   mode: AppMode;
   feedMode: FeedMode;
@@ -53,7 +54,9 @@ export interface StoreSnapshot {
   lastUpdateAt: number;
 }
 export interface CoarseSlice {
-  count: number;
+  sourceCount: number;
+  visibleCount: number;
+  clearedCount: number;
   blocked: number;
   done: number;
   mode: AppMode;
@@ -64,6 +67,7 @@ export interface CoarseSlice {
 }
 export type StoreEvent =
   | { type: "clear" | "busser"; agentId: string }
+  | { type: "reveal"; count: number }
   | { type: "ended"; entry: BoardEntry }
   | {
       type: "state";
@@ -119,6 +123,7 @@ export class AgentStore {
   snapshot(): StoreSnapshot {
     return {
       agents: this.agents,
+      visibleAgents: this.visibleAgents(),
       board: this.board,
       mode: this.mode,
       feedMode: this.feedMode,
@@ -130,9 +135,11 @@ export class AgentStore {
     };
   }
   coarse(): CoarseSlice {
-    const values = [...this.agents.values()];
+    const values = [...this.visibleAgents().values()];
     return {
-      count: values.length,
+      sourceCount: this.agents.size,
+      visibleCount: values.length,
+      clearedCount: this.dismissedDone.size,
       blocked: values.filter((a) => a.targetState === "blocked").length,
       done: values.filter((a) => a.targetState === "done").length,
       mode: this.mode,
@@ -166,6 +173,14 @@ export class AgentStore {
     this.emitCoarse();
     this.emitChange();
   }
+  revealCleared() {
+    const count = this.dismissedDone.size;
+    if (!count) return;
+    this.dismissedDone.clear();
+    this.emitEvent({ type: "reveal", count });
+    this.emitCoarse();
+    this.emitChange();
+  }
   setSettings(patch: Partial<Settings>) {
     this.settings = { ...this.settings, ...patch };
     saveSettings(this.settingsStorage, this.settings);
@@ -193,14 +208,11 @@ export class AgentStore {
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
       const incoming = new Set(event.agents.map((agent) => agent.id));
-      for (const id of this.dismissedDone.keys())
-        if (!incoming.has(id)) this.dismissedDone.delete(id);
       for (const id of this.agents.keys())
         if (!incoming.has(id)) this.remove(id);
       for (const agent of event.agents) this.upsert(agent);
     } else if (event.operation === "upsert") this.upsert(event.agent);
     else {
-      this.dismissedDone.delete(event.agentId);
       this.remove(event.agentId);
     }
     this.mode =
@@ -227,12 +239,6 @@ export class AgentStore {
     this.eventListeners.clear();
   }
   private upsert(agent: AgentRecord) {
-    if (
-      agent.state === "done" &&
-      this.dismissedDone.get(agent.id) === agent.stateEnteredAt
-    )
-      return;
-    this.dismissedDone.delete(agent.id);
     const prior = this.agents.get(agent.id);
     const now = this.scheduler.now();
     if (agent.state === "ended") {
@@ -240,6 +246,11 @@ export class AgentStore {
       return;
     }
     const stateChanged = prior?.targetState !== agent.state;
+    const periodChanged = prior?.stateEnteredAt !== agent.stateEnteredAt;
+    const remainsDismissed =
+      agent.state === "done" &&
+      this.dismissedDone.get(agent.id) === agent.stateEnteredAt;
+    if (!remainsDismissed) this.dismissedDone.delete(agent.id);
     const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
       ? Date.parse(agent.stateEnteredAt)
       : now;
@@ -274,7 +285,9 @@ export class AgentStore {
         : (prior?.transitionStartedAt ?? now),
       clearAt:
         agent.state === "done"
-          ? (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
+          ? stateChanged || periodChanged
+            ? now + this.settings.doneTimeoutMs
+            : (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
           : null,
       answerReceivedUntil,
       revision: (prior?.revision ?? 0) + 1,
@@ -288,22 +301,17 @@ export class AgentStore {
         from: prior?.targetState,
         to: agent.state,
       });
-    if (stateChanged) {
+    if (stateChanged || periodChanged) {
       this.cancelDone(agent.id);
-      if (agent.state === "done")
+      if (agent.state === "done" && !remainsDismissed)
         this.doneTimers.set(
           agent.id,
           this.scheduler.setTimeout(() => {
+            this.doneTimers.delete(agent.id);
             this.dismissedDone.set(agent.id, agent.stateEnteredAt);
             this.emitEvent({ type: "busser", agentId: agent.id });
-            this.remove(agent.id);
-            if (this.mode !== "disconnected")
-              this.mode =
-                this.agents.size === 0 &&
-                this.feedMode === "live" &&
-                this.sourceStatus === "connected"
-                  ? "empty"
-                  : this.feedMode;
+            this.emitEvent({ type: "clear", agentId: agent.id });
+            if (this.selectedId === agent.id) this.selectedId = null;
             this.emitChange();
             this.emitCoarse();
           }, this.settings.doneTimeoutMs),
@@ -332,6 +340,7 @@ export class AgentStore {
   }
   private remove(id: string) {
     this.cancelDone(id);
+    this.dismissedDone.delete(id);
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
     if (this.selectedId === id) this.selectedId = null;
   }
@@ -350,6 +359,13 @@ export class AgentStore {
   private emitEvent(event: StoreEvent) {
     for (const listener of this.eventListeners) listener(event);
   }
+  private visibleAgents() {
+    return new Map(
+      [...this.agents].filter(
+        ([id, agent]) => this.dismissedDone.get(id) !== agent.stateEnteredAt,
+      ),
+    );
+  }
 }
 function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
   const prefix = `${paneId}:`;
@@ -361,7 +377,9 @@ function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
 }
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
-    a.count === b.count &&
+    a.sourceCount === b.sourceCount &&
+    a.visibleCount === b.visibleCount &&
+    a.clearedCount === b.clearedCount &&
     a.blocked === b.blocked &&
     a.done === b.done &&
     a.mode === b.mode &&

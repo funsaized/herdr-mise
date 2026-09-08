@@ -183,7 +183,7 @@ describe("agent store machines", () => {
     store.reconcileRendered();
     expect(store.snapshot().agents.get("a")?.renderedState).toBe("blocked");
   });
-  it("emits busser and clear at the configured done timeout", () => {
+  it("retains authoritative done agents while clearing and revealing presentation", () => {
     const clock = new FakeClock(),
       store = new AgentStore(clock, { doneTimeoutMs: 50 }),
       events: string[] = [];
@@ -192,8 +192,29 @@ describe("agent store machines", () => {
     clock.advance(49);
     expect(store.snapshot().agents.size).toBe(1);
     clock.advance(1);
-    expect(store.snapshot().agents.size).toBe(0);
+    expect(store.coarse()).toMatchObject({
+      sourceCount: 1,
+      visibleCount: 0,
+      clearedCount: 1,
+      done: 0,
+      mode: "live",
+    });
+    expect(store.snapshot().agents.get("a")?.targetState).toBe("done");
     expect(events.slice(-2)).toEqual(["busser", "clear"]);
+    store.apply(snapshot(agent("done")));
+    expect(store.coarse().visibleCount).toBe(0);
+    store.revealCleared();
+    expect(store.coarse()).toMatchObject({ visibleCount: 1, clearedCount: 0 });
+    expect(events.at(-1)).toBe("reveal");
+    clock.advance(50);
+    expect(store.coarse().visibleCount).toBe(1);
+  });
+  it("scopes blocked and done totals to visible agents", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 });
+    store.apply(snapshot(agent("done"), agent("blocked", "b")));
+    clock.advance(50);
+    expect(store.coarse()).toMatchObject({ blocked: 1, done: 0 });
   });
   it("does not extend a done deadline for progress deltas", () => {
     const clock = new FakeClock(),
@@ -202,7 +223,33 @@ describe("agent store machines", () => {
     clock.advance(40);
     store.apply(upsert(agent("done", "a", 0.9)));
     clock.advance(10);
-    expect(store.snapshot().agents.size).toBe(0);
+    expect(store.coarse()).toMatchObject({ sourceCount: 1, visibleCount: 0 });
+  });
+  it("clears stale dismissal only for resumption, removal, end, or a new period", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 }),
+      done = agent("done");
+    store.apply(snapshot(done));
+    clock.advance(50);
+    store.apply(upsert({ ...done, state: "working" }));
+    expect(store.coarse()).toMatchObject({ visibleCount: 1, clearedCount: 0 });
+    store.apply(upsert({ ...done, stateEnteredAt: "2026-07-31T00:01:00Z" }));
+    expect(store.coarse().visibleCount).toBe(1);
+    clock.advance(50);
+    expect(store.coarse().visibleCount).toBe(0);
+    store.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "remove",
+      agentId: done.id,
+    });
+    expect(store.coarse()).toMatchObject({ sourceCount: 0, clearedCount: 0 });
+    store.apply(upsert({ ...done, state: "ended" }));
+    expect(store.coarse()).toMatchObject({ sourceCount: 0, clearedCount: 0 });
+    const fresh = new AgentStore(clock, { doneTimeoutMs: 50 });
+    fresh.apply(snapshot(done));
+    expect(fresh.coarse()).toMatchObject({ sourceCount: 1, visibleCount: 1 });
   });
   it("does not notify coarse subscribers for progress-only deltas", () => {
     const store = new AgentStore(),

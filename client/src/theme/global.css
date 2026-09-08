@@ -385,12 +385,10 @@ select:focus-visible {
   border-color: var(--text);
   font-weight: var(--fontRowLabelWeight);
 }
-.emptyPill {
+.emptyPill,
+.revealCleared {
   position: absolute;
   z-index: 8;
-  left: 50%;
-  bottom: 18%;
-  transform: translateX(-50%);
   padding: 11px 18px;
   color: var(--textWarm);
   background: var(--panelSoft);
@@ -398,6 +396,16 @@ select:focus-visible {
   border-radius: var(--radiusControl);
   box-shadow: var(--shadowSmall);
   font-size: var(--fontRowLabelSize);
+}
+.emptyPill {
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+}
+.revealCleared {
+  left: 14px;
+  bottom: 12px;
+  cursor: pointer;
 }
 .demoPlacard {
   position: absolute;
@@ -652,6 +660,9 @@ select:focus-visible {
   }
 }
 @media (max-width: 480px) {
+  .revealCleared {
+    bottom: 104px;
+  }
   .panel {
     inset: auto 8px 52px;
     width: auto;

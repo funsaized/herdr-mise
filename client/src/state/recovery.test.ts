@@ -136,14 +136,16 @@ it("notifies all subscribers on expiry and preserves dismissal until state reent
   expect(changed).toHaveBeenCalledTimes(1);
   expect(coarse).toHaveBeenCalledTimes(1);
   expect(store.coarse()).toMatchObject({
-    count: 0,
-    mode: "empty",
+    sourceCount: 1,
+    visibleCount: 0,
+    clearedCount: 1,
+    mode: "live",
     selectedId: null,
   });
   store.apply(upsert(agent));
-  expect(store.coarse().count).toBe(0);
+  expect(store.coarse().visibleCount).toBe(0);
   store.apply(upsert({ ...agent, state: "working" }));
-  expect(store.coarse().count).toBe(1);
+  expect(store.coarse()).toMatchObject({ visibleCount: 1, clearedCount: 0 });
   store.destroy();
 });
 it("retains only recent history under sustained state churn", () => {

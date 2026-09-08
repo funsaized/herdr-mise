@@ -947,6 +947,210 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
   }
 });
 
+test("authoritative fixture keeps live kitchen after done-timeout dismissal and reveal", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-done-clear-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
+    socketPath = join(directory, "herdr.sock"),
+    source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+        ),
+        "utf8",
+      ),
+    ) as {
+      agents: Array<{
+        pane_id: string;
+        workspace_id: string;
+        display_agent: string;
+        agent_status: string;
+        agent_session: { value: string };
+      }>;
+    },
+    empty = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-protocol-19-empty-agents.json",
+        ),
+        "utf8",
+      ),
+    ),
+    makeSnapshot = () => ({
+      ...source,
+      agents: Array.from({ length: 12 }, (_, index) => {
+        const suffix = String(index + 1).padStart(2, "0");
+        return {
+          ...source.agents[0]!,
+          pane_id: `fictional-pane-${suffix}`,
+          display_agent: `example-cook-${suffix}`,
+          agent_status: "working",
+          agent_session: { value: `fictional-session-${suffix}` },
+        };
+      }),
+    }),
+    sockets = new Set<Socket>(),
+    stations = page
+      .getByRole("navigation", { name: "Agent stations" })
+      .getByRole("button"),
+    doneCook = page.getByRole("button", {
+      name: /example-cook-01, Done — plated/,
+    }),
+    workingCook = page.getByRole("button", {
+      name: /example-cook-01, Working — on the fire/,
+    }),
+    reveal = page.getByRole("button", {
+      name: "1 plated cook cleared — reveal",
+    }),
+    emptyStatus = page
+      .getByRole("status")
+      .filter({ hasText: "Waiting for agents" }),
+    announcements = page.getByLabel("Agent state announcements");
+  let snapshot: object = makeSnapshot();
+  const fixtureServer = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    let request = "";
+    socket.on("data", (chunk) => {
+      request += chunk;
+      if (!request.includes("\n")) return;
+      const method = JSON.parse(request).method;
+      if (method === "session.snapshot")
+        socket.end(`${JSON.stringify({ result: { snapshot } })}\n`);
+      else socket.write('{"result":{"type":"subscription_started"}}\n');
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    fixtureServer.once("error", reject);
+    fixtureServer.listen(socketPath, resolve);
+  });
+  const app = spawn("target/debug/herdr-mise", [], {
+    env: {
+      ...process.env,
+      HERDR_MISE_PORT: String(port),
+      HERDR_SOCKET_PATH: socketPath,
+    },
+    stdio: "ignore",
+  });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(appUrl)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.addInitScript(() => {
+      const nativeSetTimeout = window.setTimeout.bind(window),
+        nativeClearTimeout = window.clearTimeout.bind(window),
+        pending = new Map();
+      let nextId = 1e9;
+      window.setTimeout = (handler, timeout, ...args) => {
+        if (timeout === 600000 && typeof handler === "function") {
+          const id = nextId++;
+          pending.set(id, () => {
+            pending.delete(id);
+            handler(...args);
+          });
+          return id;
+        }
+        return nativeSetTimeout(handler, timeout, ...args);
+      };
+      window.clearTimeout = (id) => {
+        if (pending.delete(id)) return;
+        nativeClearTimeout(id);
+      };
+      Object.defineProperty(window, "__miseFlushDoneTimeouts", {
+        configurable: true,
+        value: () => {
+          for (const run of [...pending.values()]) run();
+        },
+      });
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`${appUrl}/?stats`);
+    await expect(stations).toHaveCount(12, { timeout: 10_000 });
+    await expect(workingCook).toBeAttached();
+    snapshot = structuredClone(snapshot);
+    (
+      snapshot as { agents: Array<{ agent_status: string }> }
+    ).agents[0]!.agent_status = "done";
+    await expect(doneCook).toBeAttached({ timeout: 10_000 });
+    await page.evaluate(() =>
+      (
+        window as typeof window & { __miseFlushDoneTimeouts?: () => void }
+      ).__miseFlushDoneTimeouts?.(),
+    );
+    await expect(reveal).toBeVisible();
+    await expect(emptyStatus).toHaveCount(0);
+    await expect(stations).toHaveCount(11);
+    await expect(doneCook).toHaveCount(0);
+    await expect(announcements).toHaveText(
+      "example-cook-01 cleared from the kitchen",
+    );
+    snapshot = structuredClone(snapshot);
+    await page.waitForTimeout(1_500);
+    await expect(reveal).toBeVisible();
+    await expect(stations).toHaveCount(11);
+    await expect(doneCook).toHaveCount(0);
+    await expect(emptyStatus).toHaveCount(0);
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await expect
+        .poll(async () => {
+          const cells = Object.values(
+            (await sceneMetrics(page))?.stationCells ?? {},
+          );
+          return cells.length === 11 && cells.every((cell) => cell.width > 0);
+        })
+        .toBe(true);
+      const revealBox = (await reveal.boundingBox())!,
+        settingsBox = (await page
+          .getByRole("button", { name: "Open settings" })
+          .boundingBox())!,
+        freezerBox = (await page
+          .getByRole("button", { name: "Freezer" })
+          .boundingBox())!;
+      expect(boxesIntersect(revealBox, settingsBox)).toBe(false);
+      expect(boxesIntersect(revealBox, freezerBox)).toBe(false);
+      for (const cell of Object.values(
+        (await sceneMetrics(page))!.stationCells,
+      ))
+        expect(boxesIntersect(revealBox, cell)).toBe(false);
+    }
+    await reveal.click();
+    await expect(announcements).toHaveText("1 plated cook revealed");
+    await expect(doneCook).toBeVisible();
+    await expect(reveal).toHaveCount(0);
+    snapshot = structuredClone(snapshot);
+    (
+      snapshot as { agents: Array<{ agent_status: string }> }
+    ).agents[0]!.agent_status = "working";
+    await expect(workingCook).toBeAttached({ timeout: 10_000 });
+    await page.reload();
+    await expect(stations).toHaveCount(12, { timeout: 10_000 });
+    await expect(workingCook).toBeVisible();
+    snapshot = empty;
+    await expect(emptyStatus).toBeVisible({ timeout: 10_000 });
+    await expect(reveal).toHaveCount(0);
+  } finally {
+    app.kill("SIGTERM");
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("freezer matrix discloses empty full and bounded overflow scenes", async ({
   page,
 }) => {

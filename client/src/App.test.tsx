@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import type { AgentRecord } from "../../protocol/generated/agent-state-event";
+import { App } from "./App";
 import { SemanticStationControls } from "./chrome/SemanticStationControls";
+import { clientStore } from "./runtime";
 import {
   freezerAnnouncement,
   humanStateWords,
@@ -10,6 +13,39 @@ import {
   type SemanticAgent,
 } from "./state/semantic-stations";
 import { isGlobalEscape, isInteractiveKeyboardTarget } from "./keyboard";
+
+vi.mock("./scene/kitchen-scene", () => ({
+  KitchenScene: class {
+    init = async () => {};
+    destroy() {}
+    setView() {}
+    focus() {}
+    hitTest() {
+      return undefined;
+    }
+  },
+}));
+vi.mock("./state/ws-client", () => ({
+  AgentWebSocketClient: class {
+    start() {}
+    stop() {}
+    bytesPerSecond() {
+      return 0;
+    }
+  },
+}));
+
+afterEach(() => {
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [],
+  });
+  clientStore.setSettings({ doneTimeoutMs: 600_000 });
+  vi.useRealTimers();
+});
 
 describe("global keyboard routing", () => {
   it.each(["input", "select", "textarea", "button", "a"])(
@@ -140,6 +176,51 @@ describe("semantic station controls", () => {
         }),
       ).toContain(humanStateWords[targetState]);
   });
+});
+
+it("announces dismissal and reveal while removing the cleared station control", () => {
+  vi.useFakeTimers();
+  clientStore.setSettings({ doneTimeoutMs: 50 });
+  const agent: AgentRecord = {
+    id: "example",
+    name: "Example cook",
+    state: "done",
+    progress: 1,
+    stateEnteredAt: "2026-08-13T12:00:00Z",
+    accentIndex: 0,
+    model: "codex",
+    workspace: "/work",
+    session: { runtimeMs: 1_000, tickets: 1 },
+  };
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [agent],
+  });
+  render(<App />);
+  const station = screen.getByRole("button", {
+    name: /Example cook, Done — plated/,
+  });
+  fireEvent.click(station);
+  act(() => vi.advanceTimersByTime(50));
+  expect(clientStore.coarse().selectedId).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: /Example cook, Done/ }),
+  ).toBeNull();
+  expect(screen.getByLabelText("Agent state announcements").textContent).toBe(
+    "Example cook cleared from the kitchen",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "1 plated cook cleared — reveal" }),
+  );
+  expect(screen.getByLabelText("Agent state announcements").textContent).toBe(
+    "1 plated cook revealed",
+  );
+  expect(
+    screen.getByRole("button", { name: /Example cook, Done — plated/ }),
+  ).toBeTruthy();
 });
 
 it("announces truthful freezer capacity", () => {
