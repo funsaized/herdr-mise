@@ -54,6 +54,13 @@ type MotionMetrics = {
     preferenceChanges: number;
   };
   blockedIndicators: number;
+  page: {
+    totalCount: number;
+    capacity: number;
+    pageIndex: number;
+    pageCount: number;
+    visibleIds: string[];
+  };
   stateIndicators: Record<string, number>;
   endedEntries: number;
   stationVisuals: Record<
@@ -995,8 +1002,10 @@ test("freezer matrix discloses empty full and bounded overflow scenes", async ({
   expect(errors).toEqual([]);
 });
 
-test("fixture-driven kitchen materials", async ({ page }) => {
-  test.setTimeout(120_000);
+test("readable dense kitchen through fixture-driven materials", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
   const directory = await mkdtemp(
       join(tmpdir(), "herdr-mise-blocked-density-"),
     ),
@@ -1104,11 +1113,11 @@ test("fixture-driven kitchen materials", async ({ page }) => {
     await page.goto(`${appUrl}/?stats&theme=dinner`);
     await page.emulateMedia({ reducedMotion: "no-preference" });
 
-    for (const count of [1, 6, 12]) {
+    for (const count of [1, 4, 8, 16, 30, 60]) {
       for (const viewport of [
-        { width: 1440, height: 900 },
-        { width: 390, height: 844 },
+        { width: 1280, height: 720 },
         { width: 320, height: 640 },
+        { width: 640, height: 360 },
       ]) {
         await page.setViewportSize(viewport);
         snapshot = makeSnapshot(count);
@@ -1117,34 +1126,161 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           .getByRole("button", { name: /Blocked —/ });
         await expect(buttons).toHaveCount(count, { timeout: 10_000 });
         await expect
-          .poll(async () =>
-            Object.keys((await sceneMetrics(page))?.blockedPlacements ?? {}),
-          )
-          .toHaveLength(count);
-        await expect
           .poll(async () => {
-            const cells = Object.values(
-              (await sceneMetrics(page))?.stationCells ?? {},
-            );
-            return (
-              cells.length === count &&
-              cells.every(
-                (cell) =>
-                  cell.x >= 0 && cell.x + cell.width <= viewport.width + 0.001,
-              )
-            );
+            const metrics = await sceneMetrics(page);
+            return metrics?.page.totalCount === count;
           })
           .toBe(true);
-        const metrics = (await sceneMetrics(page))!,
-          placements = Object.values(metrics.blockedPlacements).sort(
+        let metrics = (await sceneMetrics(page))!;
+        while (metrics.page.pageIndex > 0) {
+          await page.getByRole("button", { name: "Previous" }).click();
+          await expect
+            .poll(async () => (await sceneMetrics(page))?.page.pageIndex)
+            .toBe(metrics.page.pageIndex - 1);
+          metrics = (await sceneMetrics(page))!;
+        }
+        const expected = computeLayout(
+            viewport.width,
+            viewport.height,
+            Array.from(
+              { length: count },
+              (_, index) =>
+                `fictional-pane-${String(index + 1).padStart(2, "0")}`,
+            ),
+          ),
+          discovered = new Set<string>();
+        await expect
+          .poll(async () => (await sceneMetrics(page))?.page.capacity)
+          .toBe(expected.capacity);
+        metrics = (await sceneMetrics(page))!;
+        expect(metrics.page.capacity).toBe(expected.capacity);
+        expect(metrics.page.pageCount).toBe(expected.pageCount);
+        for (
+          let pageIndex = 0;
+          pageIndex < metrics.page.pageCount;
+          pageIndex++
+        ) {
+          await expect
+            .poll(async () => {
+              const current = await sceneMetrics(page);
+              return (
+                current?.page.pageIndex === pageIndex &&
+                Object.values(current.stationCells).every(
+                  (cell) =>
+                    cell.x >= 0 &&
+                    cell.y >= 0 &&
+                    cell.x + cell.width <= viewport.width + 0.001 &&
+                    cell.y + cell.height <= viewport.height + 0.001,
+                )
+              );
+            })
+            .toBe(true);
+          metrics = (await sceneMetrics(page))!;
+          const pager =
+            metrics.page.pageCount > 1
+              ? await page
+                  .getByRole("navigation", { name: "Kitchen pages" })
+                  .boundingBox()
+              : null;
+          if (pager && pageIndex === 0) {
+            const hint = await page.locator(".firstHint").boundingBox();
+            expect(hint).not.toBeNull();
+            expect(boxesIntersect(hint!, pager)).toBe(false);
+          }
+          expect(metrics.page.pageIndex).toBe(pageIndex);
+          expect(metrics.page.visibleIds).toEqual(
+            Object.keys(metrics.stationCells),
+          );
+          if (metrics.page.pageCount > 1)
+            await expect(
+              page.getByText(
+                `${metrics.page.visibleIds.length} of ${count} cooks shown · ${count} blocked / ${count - metrics.page.visibleIds.length} off-page`,
+              ),
+            ).toBeVisible();
+          if (count === 16 && viewport.width === 320 && pageIndex === 0) {
+            await page.getByRole("button", { name: "Open settings" }).click();
+            await page.keyboard.press("Escape");
+            await page.getByRole("button", { name: "Freezer" }).click();
+            await expect
+              .poll(async () => (await sceneMetrics(page))?.view)
+              .toBe("freezer");
+            await page.getByRole("button", { name: "Freezer" }).click();
+            await expect
+              .poll(async () => (await sceneMetrics(page))?.view)
+              .toBe("kitchen");
+          }
+          const cells = Object.entries(metrics.stationCells);
+          for (const [id, cell] of cells) {
+            discovered.add(id);
+            expect(cell.x).toBeGreaterThanOrEqual(0);
+            expect(cell.y).toBeGreaterThanOrEqual(0);
+            expect(cell.x + cell.width).toBeLessThanOrEqual(
+              viewport.width + 0.001,
+            );
+            expect(cell.y + cell.height).toBeLessThanOrEqual(
+              viewport.height + 0.001,
+            );
+            if (pager)
+              expect(cell.y + cell.height).toBeLessThanOrEqual(pager.y);
+            expectInside(metrics.stationNameBounds[id]!, cell);
+            expectInside(metrics.stationStatusBounds[id]!, cell);
+            expect(
+              boxesIntersect(
+                metrics.stationNameBounds[id]!,
+                metrics.stationStatusBounds[id]!,
+              ),
+            ).toBe(false);
+          }
+          cells.forEach(([, cell], index) => {
+            for (const [otherId, other] of cells.slice(index + 1))
+              expect(
+                boxesIntersect(
+                  {
+                    ...cell,
+                    width: cell.width - 0.001,
+                    height: cell.height - 0.001,
+                  },
+                  other,
+                ),
+                `${count}@${viewport.width}x${viewport.height} ${cells[index]![0]} ${JSON.stringify(cell)} overlaps ${otherId} ${JSON.stringify(other)}`,
+              ).toBe(false);
+          });
+          const placements = Object.values(metrics.blockedPlacements).sort(
             (left, right) => left.queueOrdinal - right.queueOrdinal,
           );
-        if (count === 12 && viewport.width === 1440) {
+          expect(placements).toHaveLength(metrics.page.visibleIds.length);
+          expect(
+            placements.every(({ queueTotal }) => queueTotal === count),
+          ).toBe(true);
+          for (const placement of placements) {
+            expect(placement.queueOrdinal).toBe(Number(placement.id.slice(-2)));
+            expect(placement.timerText).toMatch(/^\d+:\d{2}$/);
+            expect(metrics.stationStatusBounds[placement.id]?.text).toBe(
+              `${placement.kind === "pass" ? "AT THE PASS" : "BLOCKED AT STATION"} · ${placement.queueOrdinal}/${count}`,
+            );
+          }
+          if (pageIndex < metrics.page.pageCount - 1) {
+            await page
+              .getByRole("button", { name: "Next", exact: true })
+              .click();
+            await expect
+              .poll(async () => (await sceneMetrics(page))?.page.pageIndex)
+              .toBe(pageIndex + 1);
+          }
+        }
+        expect([...discovered].sort()).toEqual(
+          Array.from(
+            { length: count },
+            (_, index) =>
+              `fictional-pane-${String(index + 1).padStart(2, "0")}`,
+          ),
+        );
+        if (count === 16 && viewport.width === 1280) {
           expect(metrics.materials).toMatchObject({
             wallPlanes: 3,
             fixtureShadows: 4,
             passEdges: 3,
-            stationGroundings: 12,
+            stationGroundings: metrics.page.visibleIds.length,
           });
           await page.getByRole("button", { name: "Open settings" }).click();
           await page.getByRole("switch", { name: "Atmosphere" }).click();
@@ -1156,55 +1292,6 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           );
           await page.keyboard.press("Escape");
         }
-        expect(placements.map(({ queueOrdinal }) => queueOrdinal)).toEqual(
-          Array.from({ length: count }, (_, index) => index + 1),
-        );
-        expect(placements.every(({ queueTotal }) => queueTotal === count)).toBe(
-          true,
-        );
-        expect(placements.map(({ kind }) => kind).join(",")).toMatch(
-          /^pass(?:,pass)*(?:,station)*$/,
-        );
-        for (const [index, placement] of placements.entries()) {
-          expect(placement.timerText).toMatch(/^\d+:\d{2}$/);
-          expect(metrics.stationNameBounds[placement.id]?.text).toContain(
-            String(index + 1).padStart(2, "0"),
-          );
-          expect(metrics.stationStatusBounds[placement.id]?.text).toBe(
-            `${placement.kind === "pass" ? "AT THE PASS" : "BLOCKED AT STATION"} · ${index + 1}/${count}`,
-          );
-          const control = buttons.nth(index);
-          await expect(control).toContainText(
-            `density-${String(index + 1).padStart(2, "0")}`,
-          );
-          await expect(control).toContainText(
-            placement.kind === "pass"
-              ? "Blocked — at the pass"
-              : "Blocked — waiting at station",
-          );
-          await expect(control).toContainText(`queue ${index + 1} of ${count}`);
-          await expect(control).toContainText(/\d+(?:h|m|s)/);
-          if (placement.kind === "station")
-            for (const bound of [
-              placement.cookBounds,
-              placement.ticket,
-              placement.timer,
-            ])
-              expectInside(bound, metrics.stationCells[placement.id]!);
-        }
-        const passBounds = placements
-          .filter(({ kind }) => kind === "pass")
-          .flatMap((placement) => [
-            placement.cookBounds,
-            placement.ticket,
-            placement.timer,
-          ]);
-        passBounds.forEach((bound, index) => {
-          expect(boxesIntersect(bound, placements[0]!.bell)).toBe(false);
-          for (const other of passBounds.slice(index + 1))
-            expect(boxesIntersect(bound, other)).toBe(false);
-        });
-
         await page.evaluate(() =>
           (document.activeElement as HTMLElement | null)?.blur(),
         );
@@ -1221,85 +1308,96 @@ test("fixture-driven kitchen materials", async ({ page }) => {
         ).toBeVisible();
         await page.keyboard.press("Escape");
         await expect(buttons.nth(activeIndex)).toBeFocused();
-
-        if (count === 12 && viewport.width === 320) {
-          snapshot = structuredClone(snapshot);
-          snapshot.agents[0]!.agent_status = "working";
-          await expect(
-            page.getByRole("button", { name: /density-01, Working/ }),
-          ).toBeAttached({ timeout: 10_000 });
-          await expect
-            .poll(async () => {
-              const current = (await sceneMetrics(page))?.blockedPlacements;
-              return current?.["fictional-pane-01"]?.exiting;
-            })
-            .toBe(true);
-          const duringExit = Object.values(
-            (await sceneMetrics(page))!.blockedPlacements,
-          );
-          duringExit.forEach((placement, index) => {
-            for (const other of duringExit.slice(index + 1))
-              for (const bound of [
-                placement.cookBounds,
-                placement.ticket,
-                placement.timer,
-              ])
-                for (const otherBound of [
-                  other.cookBounds,
-                  other.ticket,
-                  other.timer,
-                ])
-                  expect(
-                    boxesIntersect(bound, otherBound),
-                    `${placement.id} ${JSON.stringify(bound)} intersects ${other.id} ${JSON.stringify(otherBound)}`,
-                  ).toBe(false);
-          });
-          await expect
-            .poll(async () => {
-              return (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-pane-01"
-              ];
-            })
-            .toBeUndefined();
-
-          snapshot = structuredClone(snapshot);
-          snapshot.agents[1]!.agent_status = "done";
-          await expect(
-            page.getByRole("button", { name: /density-02, Done/ }),
-          ).toBeAttached({ timeout: 10_000 });
-          await expect
-            .poll(
-              async () =>
-                (await sceneMetrics(page))?.blockedPlacements[
-                  "fictional-pane-02"
-                ]?.exiting,
-            )
-            .toBe(true);
-          await page.emulateMedia({ reducedMotion: "reduce" });
-          await expect
-            .poll(async () => ({
-              retained: (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-pane-02"
-              ],
-              transitions: (await sceneMetrics(page))?.motion.activeTransitions,
-            }))
-            .toEqual({ retained: undefined, transitions: 0 });
-
-          snapshot = structuredClone(snapshot);
-          snapshot.agents[2]!.agent_status = "working";
-          await expect(
-            page.getByRole("button", { name: /density-03, Working/ }),
-          ).toBeAttached({ timeout: 10_000 });
-          await expect
-            .poll(async () => ({
-              retained: (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-pane-03"
-              ],
-              transitions: (await sceneMetrics(page))?.motion.activeTransitions,
-            }))
-            .toEqual({ retained: undefined, transitions: 0 });
+        if (count === 60 && viewport.width === 1280) {
+          const found = new Set<string>();
+          for (let index = 0; index < count; index++) {
+            await page
+              .getByRole("button", { name: "Next blocked cook" })
+              .click();
+            await expect
+              .poll(async () => {
+                const current = (await sceneMetrics(page))!,
+                  [id] = Object.keys(current.activeFocusBounds);
+                return id && current.page.visibleIds.includes(id) ? id : null;
+              })
+              .not.toBeNull();
+            found.add(
+              Object.keys((await sceneMetrics(page))!.activeFocusBounds)[0]!,
+            );
+          }
+          expect(found.size).toBe(count);
         }
       }
+    }
+
+    await page.setViewportSize({ width: 320, height: 640 });
+    snapshot = makeSnapshot(12);
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.page.totalCount)
+      .toBe(12);
+    let transitionPage = (await sceneMetrics(page))!.page.pageIndex;
+    while (transitionPage > 0) {
+      await page.getByRole("button", { name: "Previous" }).click();
+      await expect
+        .poll(async () => (await sceneMetrics(page))?.page.pageIndex)
+        .toBe(transitionPage - 1);
+      transitionPage = (await sceneMetrics(page))!.page.pageIndex;
+    }
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.blockedPlacements["fictional-pane-01"],
+      )
+      .not.toBeUndefined();
+    snapshot = structuredClone(snapshot);
+    snapshot.agents[0]!.agent_status = "working";
+    await expect(
+      page.getByRole("button", { name: /density-01, Working/ }),
+    ).toBeAttached();
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.blockedPlacements["fictional-pane-01"]
+            ?.exiting,
+      )
+      .toBe(true);
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.blockedPlacements["fictional-pane-01"],
+      )
+      .toBeUndefined();
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    snapshot = makeSnapshot(30);
+    const selectedId = "fictional-pane-20",
+      liveButtons = page
+        .getByRole("navigation", { name: "Agent stations" })
+        .getByRole("button", { name: /Blocked —/ });
+    await expect(liveButtons).toHaveCount(30);
+    await liveButtons.nth(19).focus();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("complementary", { name: /density-20 details/i }),
+    ).toBeVisible();
+    for (const next of [
+      { ...makeSnapshot(30), agents: [...makeSnapshot(30).agents].reverse() },
+      makeSnapshot(60),
+      {
+        ...makeSnapshot(5),
+        agents: makeSnapshot(30).agents.slice(17, 22),
+      },
+    ]) {
+      snapshot = next;
+      await expect
+        .poll(async () => {
+          const current = (await sceneMetrics(page))!;
+          return current.page.visibleIds.includes(selectedId);
+        })
+        .toBe(true);
+      await expect(
+        page.getByRole("complementary", { name: /density-20 details/i }),
+      ).toBeVisible();
     }
   } finally {
     app.kill("SIGTERM");

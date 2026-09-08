@@ -116,11 +116,12 @@ export function blockedPlacements(
   layout: SceneLayout,
   blockedIds: readonly string[],
   occupied: readonly BlockedPlacement[] = [],
+  globalStationIds: readonly string[] = layout.visibleIds,
 ) {
-  const ordered = layout.stations
-      .filter((station) => blockedIds.includes(station.id))
-      .map((station) => station.id),
-    total = ordered.length,
+  const blockedSet = new Set(blockedIds),
+    ordered = layout.visibleIds.filter((id) => blockedSet.has(id)),
+    globalOrder = globalStationIds.filter((id) => blockedSet.has(id)),
+    total = globalOrder.length,
     placements = new Map<string, BlockedPlacement>(),
     u = layout.unit,
     blocked = tokens.scene.layout.blocked,
@@ -141,7 +142,7 @@ export function blockedPlacements(
     right = bell.x - blocked.passInset * u;
   let cursor = left,
     overflow = false;
-  ordered.forEach((id, index) => {
+  ordered.forEach((id) => {
     const station = layout.stations.find((item) => item.id === id)!,
       scale = station.scale,
       cookWidth = blocked.cookWidth * u * scale,
@@ -177,7 +178,7 @@ export function blockedPlacements(
         return {
           id,
           kind: "station",
-          queueOrdinal: index + 1,
+          queueOrdinal: globalOrder.indexOf(id) + 1,
           queueTotal: total,
           cook,
           cookBounds: {
@@ -207,7 +208,7 @@ export function blockedPlacements(
           next: BlockedPlacement = {
             id,
             kind: "pass",
-            queueOrdinal: index + 1,
+            queueOrdinal: globalOrder.indexOf(id) + 1,
             queueTotal: total,
             cook,
             cookBounds: {

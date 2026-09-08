@@ -6,7 +6,11 @@ import {
   type CSSProperties,
 } from "react";
 import { Chrome, type DebugMetrics } from "./chrome/Chrome";
-import { KitchenScene, type SceneHit } from "./scene/kitchen-scene";
+import {
+  KitchenScene,
+  type PageMetadata,
+  type SceneHit,
+} from "./scene/kitchen-scene";
 import type { CoarseSlice } from "./state/store";
 import { AgentWebSocketClient } from "./state/ws-client";
 import { tokens } from "./theme/tokens";
@@ -73,19 +77,30 @@ const cssTokens = {
   "--fontSectionSize": `${tokens.typography.section.size}px`,
   "--fontSectionWeight": tokens.typography.section.weight,
   "--fontNumericVariant": tokens.typography.numericVariant,
+  "--pagerReservedHeight": `${tokens.scene.layout.pagerReservedHeight}px`,
+  "--compactPagerReservedHeight": `${tokens.scene.layout.compactPagerReservedHeight}px`,
 } as CSSProperties;
 const initialMetrics: DebugMetrics = { drawCalls: 0, socketBytesPerSecond: 0 };
+const initialPage: PageMetadata = {
+  totalCount: 0,
+  capacity: 1,
+  pageIndex: 0,
+  pageCount: 1,
+  visibleIds: [],
+};
 export function App() {
   const host = useRef<HTMLDivElement>(null),
     sceneRef = useRef<KitchenScene | null>(null),
     socketRef = useRef<AgentWebSocketClient | null>(null);
   const semanticRestoreRef = useRef<HTMLButtonElement | null>(null),
-    settingsRestorePendingRef = useRef(false);
+    settingsRestorePendingRef = useRef(false),
+    pageRef = useRef<PageMetadata>(initialPage);
   const [coarse, setCoarse] = useState<CoarseSlice>(() => clientStore.coarse()),
     [agents, setAgents] = useState<readonly SemanticAgent[]>(() =>
       semanticAgents(clientStore.snapshot().agents),
     ),
     [hits, setHits] = useState<readonly SceneHit[]>([]),
+    [page, setPage] = useState<PageMetadata>(initialPage),
     [hoveredId, setHoveredId] = useState<string | null>(null),
     [focusedId, setFocusedId] = useState<string | null>(null),
     [view, setView] = useState<"kitchen" | "freezer">("kitchen"),
@@ -125,6 +140,17 @@ export function App() {
     if (!host.current) return;
     const scene = new KitchenScene(clientStore, host.current, {
       onHitLayout: setHits,
+      onPageLayout: (next) => {
+        if (
+          pageRef.current.totalCount > 0 &&
+          pageRef.current.pageIndex !== next.pageIndex
+        )
+          setAnnouncement(
+            `Kitchen page ${next.pageIndex + 1} of ${next.pageCount}, ${next.visibleIds.length} of ${next.totalCount} cooks shown`,
+          );
+        pageRef.current = next;
+        setPage(next);
+      },
     });
     sceneRef.current = scene;
     if (new URLSearchParams(location.search).has("stats"))
@@ -176,6 +202,11 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [statsOpen]);
   const boardEntries = clientStore.snapshot().board,
+    blockedAgents = agents.filter((agent) => agent.targetState === "blocked"),
+    visibleIds = new Set(page.visibleIds),
+    visibleBlocked = blockedAgents.filter((agent) =>
+      visibleIds.has(agent.id),
+    ).length,
     spiritAgents = hits
       .filter((hit) => hit.kind === "spirit")
       .flatMap((hit) => {
@@ -347,6 +378,18 @@ export function App() {
     setView(next);
     if (next === "kitchen") setAnnouncement("Kitchen");
   };
+  const nextBlocked = () => {
+    if (!blockedAgents.length) return;
+    const current = focusedId ?? coarse.selectedId,
+      currentIndex = blockedAgents.findIndex((agent) => agent.id === current),
+      next = blockedAgents[(currentIndex + 1) % blockedAgents.length]!;
+    setFocusedId(next.id);
+    sceneRef.current?.focus(next.id);
+    const index = agents.findIndex((agent) => agent.id === next.id);
+    document
+      .querySelectorAll<HTMLButtonElement>(".stationA11yMirror button")
+      [index]?.focus();
+  };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
   return (
     <main className="appShell" style={cssTokens}>
@@ -395,8 +438,16 @@ export function App() {
         agents={controls}
         label={view === "freezer" ? "Ended chefs" : undefined}
         tooltipAgentId={tooltipAgentId}
+        page={view === "kitchen" ? page : undefined}
+        blockedTotal={blockedAgents.length}
+        blockedVisible={visibleBlocked}
+        onPreviousPage={() => sceneRef.current?.previousPage()}
+        onNextPage={() => sceneRef.current?.nextPage()}
+        onNextBlocked={nextBlocked}
         onSelect={(id, element) => {
           semanticRestoreRef.current = element;
+          setFocusedId(id);
+          sceneRef.current?.focus(id);
           clientStore.select(id);
         }}
       />

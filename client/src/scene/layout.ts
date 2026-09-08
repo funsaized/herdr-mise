@@ -20,6 +20,11 @@ export interface SceneLayout {
   columns: number;
   rows: number;
   banquet: boolean;
+  totalCount: number;
+  capacity: number;
+  pageIndex: number;
+  pageCount: number;
+  visibleIds: readonly string[];
 }
 export interface StationVisualMetrics {
   cookHeight: number;
@@ -48,6 +53,7 @@ export function computeLayout(
   width: number,
   height: number,
   ids: readonly string[],
+  requestedPage = 0,
 ): SceneLayout {
   // Favor readable pixel clusters at laptop-height viewports. The former floor()
   // dropped 1280x633 to 3px units, leaving almost half the floor unoccupied.
@@ -63,15 +69,74 @@ export function computeLayout(
       sparse ? tokens.scene.layout.sparsePassWidth : 132,
       sceneWidth * 0.52,
     );
-  const columns = columnCount(ids.length),
-    rows = Math.max(1, Math.ceil(ids.length / columns)),
+  const preferredColumns = columnCount(ids.length),
+    preferredRows = Math.max(1, Math.ceil(ids.length / preferredColumns)),
     banquet = ids.length > 8,
-    scale = banquet ? 0.8 : sparse ? tokens.scene.layout.sparseScale : 1,
+    gridTop = wallHeight + 25,
+    sparseScaleFits =
+      sceneHeight - gridTop - 4 >=
+        tokens.scene.layout.stationHeight * tokens.scene.layout.sparseScale &&
+      sceneWidth - 14 >=
+        tokens.scene.layout.stationWidth * tokens.scene.layout.sparseScale,
+    scale = banquet
+      ? tokens.scene.layout.banquetScale
+      : sparse && sparseScaleFits
+        ? tokens.scene.layout.sparseScale
+        : 1,
     gutter = banquet ? 0 : tokens.scene.layout.stationGutter;
-  const gridTop = wallHeight + 25;
-  const availableHeight = Math.max(36 * scale, sceneHeight - gridTop - 4);
+  const fullAvailableHeight = Math.max(
+    tokens.scene.layout.stationHeight * scale,
+    sceneHeight - gridTop - 4,
+  );
+  const preferredCellHeight = Math.min(
+      banquet ? 42 : tokens.scene.layout.stationHeight * scale,
+      fullAvailableHeight / preferredRows,
+    ),
+    preferredCellWidth = Math.min(
+      48 * scale,
+      (sceneWidth - 14 - gutter * (preferredColumns - 1)) / preferredColumns,
+    ),
+    minimumWidth = tokens.scene.layout.stationWidth * scale,
+    minimumHeight = tokens.scene.layout.stationHeight * scale,
+    paged =
+      preferredCellWidth < minimumWidth || preferredCellHeight < minimumHeight,
+    pagerReservedHeight =
+      width >= tokens.scene.layout.compactPagerMinWidth &&
+      height <= tokens.scene.layout.compactPagerMaxHeight
+        ? tokens.scene.layout.compactPagerReservedHeight
+        : tokens.scene.layout.pagerReservedHeight,
+    stationGridTop = paged
+      ? Math.min(
+          gridTop,
+          sceneHeight - pagerReservedHeight / unit - minimumHeight,
+        )
+      : gridTop,
+    availableHeight = Math.max(
+      minimumHeight,
+      sceneHeight - stationGridTop - (paged ? pagerReservedHeight / unit : 4),
+    ),
+    pageColumns = Math.max(
+      1,
+      Math.min(
+        6,
+        Math.floor((sceneWidth - 14 + gutter) / (minimumWidth + gutter)),
+      ),
+    ),
+    pageRows = Math.max(1, Math.floor(availableHeight / minimumHeight)),
+    capacity = paged ? pageColumns * pageRows : Math.max(1, ids.length),
+    pageCount = Math.max(1, Math.ceil(ids.length / capacity)),
+    pageIndex = Math.max(0, Math.min(Math.trunc(requestedPage), pageCount - 1)),
+    visibleIds = ids.slice(pageIndex * capacity, (pageIndex + 1) * capacity),
+    columns = paged
+      ? Math.min(pageColumns, Math.max(1, visibleIds.length))
+      : preferredColumns,
+    rows = Math.max(1, Math.ceil(visibleIds.length / columns));
   const cellHeight = Math.min(
-    banquet ? 42 : 45 * scale,
+    banquet
+      ? 42
+      : (paged
+          ? tokens.scene.layout.pagedStationHeight
+          : tokens.scene.layout.stationHeight) * scale,
     availableHeight / rows,
   );
   const cellWidth = Math.min(
@@ -80,13 +145,13 @@ export function computeLayout(
   );
   const gridWidth = cellWidth * columns + gutter * (columns - 1);
   const left = (sceneWidth - gridWidth) / 2;
-  const stations = ids.map((id, index) => ({
+  const stations = visibleIds.map((id, index) => ({
     id,
     row: Math.floor(index / columns),
     column: index % columns,
     scale,
     x: (left + (index % columns) * (cellWidth + gutter)) * unit,
-    y: (gridTop + Math.floor(index / columns) * cellHeight) * unit,
+    y: (stationGridTop + Math.floor(index / columns) * cellHeight) * unit,
     width: cellWidth * unit,
     height: cellHeight * unit,
   }));
@@ -103,6 +168,11 @@ export function computeLayout(
     columns,
     rows,
     banquet,
+    totalCount: ids.length,
+    capacity,
+    pageIndex,
+    pageCount,
+    visibleIds,
   };
 }
 export function stationVisualMetrics(
