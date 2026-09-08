@@ -146,6 +146,51 @@ it("notifies all subscribers on expiry and preserves dismissal until state reent
   expect(store.coarse().count).toBe(1);
   store.destroy();
 });
+it("keeps a fixture-backed done cook visible until its newest reconnect generation expires", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const decodedSnapshot = (stateEnteredAt: string) =>
+      decodeFeedEvent(
+        JSON.stringify({
+          ...fixture,
+          agents: fixture.agents.map((agent) =>
+            agent.id === "agent-01"
+              ? { ...agent, state: "done", stateEnteredAt }
+              : agent,
+          ),
+        }),
+      )!,
+    store = new AgentStore(undefined, { doneTimeoutMs: 300_000 }),
+    events: string[] = [],
+    visibility: boolean[] = [];
+  store.onEvent((event) => events.push(event.type));
+  store.subscribe(() =>
+    visibility.push(store.snapshot().agents.has("agent-01")),
+  );
+
+  const first = decodedSnapshot("2026-07-31T16:01:00Z");
+  store.apply(first);
+  expect(store.snapshot().agents.get("agent-01")?.clearAt).toBe(300_000);
+  vi.advanceTimersByTime(240_000);
+  store.setDisconnected();
+  store.apply(decodedSnapshot("2026-07-31T16:00:00Z"));
+  expect(store.snapshot().agents.get("agent-01")).toMatchObject({
+    stateEnteredAt: "2026-07-31T16:00:00Z",
+    clearAt: 300_000,
+  });
+  store.apply(decodedSnapshot("2026-07-31T16:02:00Z"));
+  expect(store.snapshot().agents.get("agent-01")?.clearAt).toBe(540_000);
+
+  vi.advanceTimersByTime(60_000);
+  expect(store.snapshot().agents.has("agent-01")).toBe(true);
+  expect(events).not.toContain("clear");
+  expect(visibility).not.toContain(false);
+  vi.advanceTimersByTime(240_000);
+  expect(events.filter((event) => event === "busser")).toHaveLength(1);
+  expect(events.filter((event) => event === "clear")).toHaveLength(1);
+  expect(visibility.filter((visible) => !visible)).toHaveLength(1);
+  store.destroy();
+});
 it("retains only recent history under sustained state churn", () => {
   const store = new AgentStore();
   for (let i = 0; i < 10000; i++)

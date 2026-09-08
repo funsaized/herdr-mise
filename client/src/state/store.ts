@@ -167,7 +167,15 @@ export class AgentStore {
     this.emitChange();
   }
   setSettings(patch: Partial<Settings>) {
+    const oldDoneTimeoutMs = this.settings.doneTimeoutMs;
     this.settings = { ...this.settings, ...patch };
+    if (this.settings.doneTimeoutMs !== oldDoneTimeoutMs)
+      for (const machine of this.agents.values())
+        if (machine.targetState === "done" && machine.clearAt !== null) {
+          machine.clearAt =
+            machine.clearAt - oldDoneTimeoutMs + this.settings.doneTimeoutMs;
+          this.armDone(machine.id, machine.stateEnteredAt, machine.clearAt);
+        }
     saveSettings(this.settingsStorage, this.settings);
     this.emitCoarse();
     this.emitChange();
@@ -243,6 +251,12 @@ export class AgentStore {
     const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
       ? Date.parse(agent.stateEnteredAt)
       : now;
+    const doneGenerationChanged =
+      prior?.targetState === "done" &&
+      agent.state === "done" &&
+      agent.stateEnteredAt !== prior.stateEnteredAt;
+    const newerDoneGeneration =
+      doneGenerationChanged && enteredAt > Date.parse(prior.stateEnteredAt);
     const initialHistory: readonly StatePeriod[] = [
       { state: agent.state, startedAt: enteredAt },
     ];
@@ -269,12 +283,15 @@ export class AgentStore {
       ...agent,
       targetState: agent.state,
       renderedState: prior?.renderedState ?? agent.state,
-      transitionStartedAt: stateChanged
-        ? now
-        : (prior?.transitionStartedAt ?? now),
+      transitionStartedAt:
+        stateChanged || newerDoneGeneration
+          ? now
+          : (prior?.transitionStartedAt ?? now),
       clearAt:
         agent.state === "done"
-          ? (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
+          ? newerDoneGeneration
+            ? now + this.settings.doneTimeoutMs
+            : (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
           : null,
       answerReceivedUntil,
       revision: (prior?.revision ?? 0) + 1,
@@ -288,27 +305,41 @@ export class AgentStore {
         from: prior?.targetState,
         to: agent.state,
       });
-    if (stateChanged) {
+    if (stateChanged || doneGenerationChanged) {
       this.cancelDone(agent.id);
       if (agent.state === "done")
-        this.doneTimers.set(
-          agent.id,
-          this.scheduler.setTimeout(() => {
-            this.dismissedDone.set(agent.id, agent.stateEnteredAt);
-            this.emitEvent({ type: "busser", agentId: agent.id });
-            this.remove(agent.id);
-            if (this.mode !== "disconnected")
-              this.mode =
-                this.agents.size === 0 &&
-                this.feedMode === "live" &&
-                this.sourceStatus === "connected"
-                  ? "empty"
-                  : this.feedMode;
-            this.emitChange();
-            this.emitCoarse();
-          }, this.settings.doneTimeoutMs),
-        );
+        this.armDone(agent.id, machine.stateEnteredAt, machine.clearAt!);
     }
+  }
+  private armDone(id: string, generation: string, clearAt: number) {
+    this.cancelDone(id);
+    this.doneTimers.set(
+      id,
+      this.scheduler.setTimeout(
+        () => {
+          const current = this.agents.get(id);
+          if (
+            current?.targetState !== "done" ||
+            current.stateEnteredAt !== generation ||
+            current.clearAt !== clearAt
+          )
+            return;
+          this.dismissedDone.set(id, generation);
+          this.emitEvent({ type: "busser", agentId: id });
+          this.remove(id);
+          if (this.mode !== "disconnected")
+            this.mode =
+              this.agents.size === 0 &&
+              this.feedMode === "live" &&
+              this.sourceStatus === "connected"
+                ? "empty"
+                : this.feedMode;
+          this.emitChange();
+          this.emitCoarse();
+        },
+        Math.max(0, clearAt - this.scheduler.now()),
+      ),
+    );
   }
   private end(agent: AgentRecord, now: number) {
     const prior = this.agents.get(agent.id),

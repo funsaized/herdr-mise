@@ -60,10 +60,12 @@ class FakeClock implements Scheduler {
   time = 0;
   private next = 1;
   private jobs = new Map<number, { at: number; fn: () => void }>();
+  private callbacks = new Map<number, () => void>();
   now = () => this.time;
   setTimeout(fn: () => void, ms: number) {
     const id = this.next++;
     this.jobs.set(id, { at: this.time + ms, fn });
+    this.callbacks.set(id, fn);
     return id;
   }
   clearTimeout(id: unknown) {
@@ -79,6 +81,12 @@ class FakeClock implements Scheduler {
       this.jobs.delete(job[0]);
       job[1].fn();
     }
+  }
+  latestTimerId() {
+    return this.next - 1;
+  }
+  invoke(id: number) {
+    this.callbacks.get(id)?.();
   }
 }
 const agent = (
@@ -197,12 +205,117 @@ describe("agent store machines", () => {
   });
   it("does not extend a done deadline for progress deltas", () => {
     const clock = new FakeClock(),
-      store = new AgentStore(clock, { doneTimeoutMs: 50 });
+      store = new AgentStore(clock, { doneTimeoutMs: 50 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
     store.apply(snapshot(agent("done")));
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(50);
     clock.advance(40);
     store.apply(upsert(agent("done", "a", 0.9)));
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(50);
     clock.advance(10);
     expect(store.snapshot().agents.size).toBe(0);
+    expect(events.filter((event) => event === "busser")).toHaveLength(1);
+    expect(events.filter((event) => event === "clear")).toHaveLength(1);
+  });
+  it.each([300_000, 600_000, 1_200_000])(
+    "applies the %i ms timeout to an existing done cook",
+    (doneTimeoutMs) => {
+      const clock = new FakeClock(),
+        initialTimeout = doneTimeoutMs === 1_200_000 ? 300_000 : 1_200_000,
+        store = new AgentStore(clock, { doneTimeoutMs: initialTimeout }),
+        events: string[] = [];
+      store.onEvent((event) => events.push(event.type));
+      store.apply(snapshot(agent("done")));
+      clock.advance(120_000);
+      store.setSettings({ doneTimeoutMs });
+
+      expect(store.snapshot().agents.get("a")?.clearAt).toBe(doneTimeoutMs);
+      clock.advance(doneTimeoutMs - 120_000 - 1);
+      expect(store.snapshot().agents.size).toBe(1);
+      clock.advance(1);
+      expect(events.slice(-2)).toEqual(["busser", "clear"]);
+    },
+  );
+  it("expires an existing done cook immediately when the shortened deadline elapsed", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 1_200_000 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
+    store.apply(snapshot(agent("done")));
+    clock.advance(600_000);
+    store.setSettings({ doneTimeoutMs: 300_000 });
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(300_000);
+    clock.advance(0);
+    expect(events.filter((event) => event === "busser")).toHaveLength(1);
+    expect(events.filter((event) => event === "clear")).toHaveLength(1);
+  });
+  it("keeps stale deadline callbacks inert after lengthening a done timeout", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 300_000 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
+    store.apply(snapshot(agent("done")));
+    const staleTimer = clock.latestTimerId();
+    clock.advance(60_000);
+    store.setSettings({ doneTimeoutMs: 1_200_000 });
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(1_200_000);
+    clock.invoke(staleTimer);
+    expect(store.snapshot().agents.size).toBe(1);
+    clock.advance(1_140_000);
+    expect(events.slice(-2)).toEqual(["busser", "clear"]);
+  });
+  it("gives a newer done generation a fresh deadline and rejects its stale callback", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
+    store.apply(snapshot(agent("done")));
+    const staleTimer = clock.latestTimerId();
+    clock.advance(40);
+    store.apply(
+      upsert({
+        ...agent("done", "a", 0.9),
+        stateEnteredAt: "2026-07-31T00:01:00Z",
+      }),
+    );
+    expect(store.snapshot().agents.get("a")).toMatchObject({
+      clearAt: 90,
+      transitionStartedAt: 40,
+    });
+    clock.invoke(staleTimer);
+    clock.advance(10);
+    expect(store.snapshot().agents.size).toBe(1);
+    clock.advance(40);
+    expect(events.filter((event) => event === "busser")).toHaveLength(1);
+    expect(events.filter((event) => event === "clear")).toHaveLength(1);
+  });
+  it("cancels done work and arms a fresh generation after working", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 });
+    store.apply(snapshot(agent("done")));
+    const firstTimer = clock.latestTimerId();
+    clock.advance(40);
+    store.apply(upsert(agent("working")));
+    clock.invoke(firstTimer);
+    expect(store.snapshot().agents.get("a")?.targetState).toBe("working");
+    store.apply(
+      upsert({
+        ...agent("done"),
+        stateEnteredAt: "2026-07-31T00:01:00Z",
+      }),
+    );
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(90);
+    clock.advance(50);
+    expect(store.snapshot().agents.size).toBe(0);
+  });
+  it("does not re-arm done cooks when the timeout value is unchanged", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 600_000 });
+    store.apply(snapshot(agent("done")));
+    const timer = clock.latestTimerId();
+    store.setSettings({ doneTimeoutMs: 600_000, sound: true });
+    expect(clock.latestTimerId()).toBe(timer);
   });
   it("does not notify coarse subscribers for progress-only deltas", () => {
     const store = new AgentStore(),

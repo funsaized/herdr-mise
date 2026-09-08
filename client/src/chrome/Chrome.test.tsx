@@ -149,6 +149,15 @@ describe("chrome interactions", () => {
     expect(change).toHaveBeenCalledWith({ atmosphere: false });
     fireEvent.click(screen.getByRole("button", { name: "Dinner" }));
     expect(change).toHaveBeenCalledWith({ theme: "dark" });
+    expect(
+      screen.getByText(
+        "Also applies to dishes already plated, preserving elapsed time",
+      ),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Done timeout" }), {
+      target: { value: "1200000" },
+    });
+    expect(change).toHaveBeenCalledWith({ doneTimeoutMs: 1_200_000 });
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     expect(close).toHaveBeenCalledOnce();
   });
