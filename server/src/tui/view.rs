@@ -67,6 +67,38 @@ fn format_duration(milliseconds: u64) -> String {
     }
 }
 
+pub(super) fn service_line(table: &AgentTable, now: DateTime<Utc>) -> String {
+    let summary = table.service_summary();
+    let oldest = table.blocked_agents().first().map_or_else(
+        || "None".into(),
+        |agent| {
+            let milliseconds = DateTime::parse_from_rfc3339(&agent.state_entered_at)
+                .ok()
+                .map(|entered| {
+                    now.signed_duration_since(entered.with_timezone(&Utc))
+                        .num_milliseconds()
+                        .max(0) as u64
+                })
+                .unwrap_or(0);
+            format!(
+                "{} {}",
+                sanitize_external(&agent.name),
+                format_duration(milliseconds)
+            )
+        },
+    );
+    format!(
+        "OBSERVED W {} · B {} · P {} · U {} · SHOWN {}/{} · HIDDEN {} · OLDEST BLOCKED {oldest}",
+        summary.working,
+        summary.blocked,
+        summary.plated,
+        summary.unknown,
+        summary.visible,
+        summary.visible + summary.hidden_done,
+        summary.hidden_done,
+    )
+}
+
 fn state_label(state: &AgentState) -> &'static str {
     match state {
         AgentState::Idle => "IDLE / PREPPING",
@@ -160,10 +192,11 @@ pub fn draw(
             Style::default().add_modifier(Modifier::BOLD),
         )),
         Line::from(source_copy),
+        Line::from(service_line(table, now)),
     ])
     .wrap(Wrap { trim: true });
     let content_height = u16::try_from(header.line_count(frame.area().width)).unwrap_or(u16::MAX);
-    let baseline_height = if compact { 2 } else { 4 };
+    let baseline_height = if compact { 3 } else { 5 };
     let header_height = baseline_height.max(content_height + u16::from(!compact));
     if !compact {
         header = header.block(Block::default().borders(Borders::BOTTOM));
@@ -290,9 +323,9 @@ pub fn draw(
         areas[4]
     };
     let keys = if selected.is_some() {
-        "Tab / Shift+Tab inspect · Esc close · q quit"
+        "Tab / Shift+Tab inspect · b next blocked · Esc close · q quit"
     } else {
-        "q / Esc quit"
+        "b next blocked · q / Esc quit"
     };
     let board = format!("86 {}/{BOARD_CAP}", table.board().len());
     let status = warning.map_or_else(

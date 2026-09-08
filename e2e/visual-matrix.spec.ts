@@ -947,6 +947,127 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
   }
 });
 
+test("real fixture service summary cycles every blocked cook without moving stations", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-summary-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
+    socketPath = join(directory, "herdr.sock"),
+    source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.0-p19.json",
+        ),
+        "utf8",
+      ),
+    ),
+    sockets = new Set<Socket>();
+  let snapshot = "";
+  const setRoster = (count: number) => {
+      const states = ["blocked", "working", "idle", "done"];
+      snapshot = JSON.stringify({
+        result: {
+          snapshot: {
+            ...source,
+            agents: Array.from({ length: count }, (_, index) => ({
+              ...source.agents[0],
+              pane_id: `fixture-${String(index).padStart(2, "0")}`,
+              display_agent: `Cook${String(index).padStart(2, "0")}`,
+              agent_status: states[index % states.length],
+            })),
+          },
+        },
+      });
+    },
+    fixtureServer = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      let request = "";
+      socket.on("data", (chunk) => {
+        request += chunk;
+        if (!request.includes("\n")) return;
+        const method = JSON.parse(request).method;
+        if (method === "session.snapshot") socket.end(`${snapshot}\n`);
+        else socket.write('{"result":{"type":"subscription_started"}}\n');
+      });
+    });
+  setRoster(4);
+  await new Promise<void>((resolve, reject) => {
+    fixtureServer.once("error", reject);
+    fixtureServer.listen(socketPath, resolve);
+  });
+  const app = spawn("target/debug/herdr-mise", [], {
+    env: {
+      ...process.env,
+      HERDR_MISE_PORT: String(port),
+      HERDR_SOCKET_PATH: socketPath,
+    },
+    stdio: "ignore",
+  });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(appUrl)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(`${appUrl}/?stats`);
+    for (const count of [4, 16, 30]) {
+      setRoster(count);
+      const blockedCount = Math.ceil(count / 4),
+        summary = page.getByRole("region", {
+          name: "Observed service summary",
+        });
+      await expect(summary).toContainText(`Blocked ${blockedCount}`, {
+        timeout: 10_000,
+      });
+      await expect(summary).toContainText(`Shown ${count} of ${count}`);
+      await expect(summary).toContainText("Hidden plated 0");
+      await expect(summary).toContainText("Oldest blocked: Cook00");
+      const initialMetrics = (await sceneMetrics(page))!;
+      expect(Object.keys(initialMetrics.blockedPlacements)).toHaveLength(
+        blockedCount,
+      );
+      if (count === 30)
+        expect(
+          Object.values(initialMetrics.blockedPlacements).some(
+            (placement) => placement.kind === "station",
+          ),
+        ).toBe(true);
+      const stations = initialMetrics.stationCells,
+        focused = new Set<string>();
+      let firstFocused = "";
+      for (let index = 0; index <= blockedCount; index++) {
+        await page.keyboard.press("b");
+        await expect
+          .poll(async () =>
+            Object.keys((await sceneMetrics(page))!.activeFocusBounds),
+          )
+          .toHaveLength(1);
+        const focusedId = Object.keys(
+          (await sceneMetrics(page))!.activeFocusBounds,
+        )[0]!;
+        if (index === 0) firstFocused = focusedId;
+        else if (index === blockedCount) expect(focusedId).toBe(firstFocused);
+        focused.add(focusedId);
+      }
+      expect(focused.size).toBe(blockedCount);
+      expect((await sceneMetrics(page))!.stationCells).toEqual(stations);
+    }
+  } finally {
+    app.kill("SIGTERM");
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("freezer matrix discloses empty full and bounded overflow scenes", async ({
   page,
 }) => {
@@ -1563,7 +1684,7 @@ test("working cooks drive continuous scene motion", async ({ page }) => {
 
 test("invalid preset and count fall back to mixed x 6", async ({ page }) => {
   const errors = watchErrors(page);
-  await page.goto("/?preset=bogus&agents=13");
+  await page.goto("/?preset=bogus&agents=31");
   await expect(placard(page)).toBeVisible();
   const names = await collectStationNames(page, 6);
   expect([...names].sort()).toEqual([...expectedNames("mixed", 6)].sort());

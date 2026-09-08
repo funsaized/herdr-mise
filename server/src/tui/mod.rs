@@ -147,15 +147,17 @@ fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable) {
 
 pub(super) const KEY_HELP: &str = "? help";
 pub(super) const KEY_INSPECT: &str = "Tab / Shift+Tab inspect";
+pub(super) const KEY_BLOCKED: &str = "b next blocked";
 pub(super) const KEY_FREEZER: &str = "f freezer";
 pub(super) const KEY_ESC_CLOSE: &str = "Esc close";
 pub(super) const KEY_QUIT: &str = "q quit";
 pub(super) const KEY_QUIT_ESC: &str = "q / Esc quit";
 pub(super) const KEY_KITCHEN: &str = "f kitchen";
 pub(super) const KEY_ESC_KITCHEN: &str = "Esc kitchen";
-pub(super) const HELP_LINES: [&str; 5] = [
+pub(super) const HELP_LINES: [&str; 6] = [
     KEY_HELP,
     KEY_INSPECT,
+    KEY_BLOCKED,
     KEY_FREEZER,
     "Esc close / leave / quit",
     KEY_QUIT,
@@ -194,6 +196,21 @@ fn handle_key_with_view(
             SceneView::Kitchen => SceneView::Freezer,
             SceneView::Freezer => SceneView::Kitchen,
         };
+        false
+    } else if code == KeyCode::Char('b') {
+        let agents = table.blocked_agents();
+        if agents.is_empty() {
+            *selected_id = None;
+            return false;
+        }
+        let current = selected_id
+            .as_ref()
+            .and_then(|id| agents.iter().position(|agent| &agent.id == id));
+        *selected_id = Some(
+            agents[current.map_or(0, |index| (index + 1) % agents.len())]
+                .id
+                .clone(),
+        );
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
         let agents = table.agents().collect::<Vec<_>>();
@@ -442,6 +459,63 @@ mod tests {
         });
         retain_selection(&mut selected, &table);
         assert_eq!(selected, None);
+    }
+
+    #[test]
+    fn blocked_key_cycles_oldest_first_and_wraps() {
+        use crate::protocol::{
+            AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats, SourceStatus,
+        };
+        let blocked = |id: &str, entered: &str| AgentRecord {
+            state_known: Some(true),
+            id: id.into(),
+            name: id.into(),
+            state: AgentState::Blocked,
+            progress: None,
+            state_entered_at: entered.into(),
+            accent_index: 0,
+            model: String::new(),
+            workspace: String::new(),
+            session: SessionStats {
+                tickets_available: None,
+                runtime_ms: 0,
+                tickets: 0,
+            },
+        };
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![
+                blocked("newer", "2026-08-01T12:02:00Z"),
+                blocked("oldest", "2026-08-01T12:01:00Z"),
+            ],
+        });
+        let shutdown = CancellationToken::new();
+        let mut selected = None;
+        assert!(!handle_key(
+            KeyCode::Char('b'),
+            &table,
+            &mut selected,
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("oldest"));
+        assert!(!handle_key(
+            KeyCode::Char('b'),
+            &table,
+            &mut selected,
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("newer"));
+        assert!(!handle_key(
+            KeyCode::Char('b'),
+            &table,
+            &mut selected,
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("oldest"));
     }
 
     #[test]

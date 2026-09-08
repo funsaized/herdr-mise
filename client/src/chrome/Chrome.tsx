@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { reducedMotionPreference } from "../runtime";
 import type { SceneHit } from "../scene/kitchen-scene";
 import type { AgentStore, CoarseSlice } from "../state/store";
+import {
+  nextBlockedAgent,
+  orderedBlockedAgents,
+} from "../state/semantic-stations";
 import { DetailCard, SessionSummary, Tooltip } from "./agent-panels";
+import { formatDuration } from "./duration";
 import { SettingsPanel } from "./settings-panel";
+import { useClock } from "./use-clock";
 import {
   ModeTreatment,
   StatsOverlay,
@@ -34,6 +40,7 @@ export interface ChromeProps {
   hintVisible: boolean;
   view: "kitchen" | "freezer";
   onToggleFreezer(): void;
+  onNextBlocked(): void;
 }
 
 export function Chrome(props: ChromeProps) {
@@ -42,7 +49,8 @@ export function Chrome(props: ChromeProps) {
     ),
     [tuiExpanded, setTuiExpanded] = useState(false),
     [tuiRestart, setTuiRestart] = useState(0),
-    tuiExpandToggle = useRef<HTMLButtonElement>(null);
+    tuiExpandToggle = useRef<HTMLButtonElement>(null),
+    now = useClock(props.coarse.blocked > 0);
   useEffect(() => reducedMotionPreference.subscribe(setTuiStopped), []);
   useEffect(() => {
     if (!tuiExpanded) return;
@@ -67,7 +75,12 @@ export function Chrome(props: ChromeProps) {
       : undefined,
     selectedBoard = props.coarse.selectedId
       ? snapshot.board.find((item) => item.id === props.coarse.selectedId)
-      : undefined;
+      : undefined,
+    blocked = orderedBlockedAgents([...snapshot.agents.values()]),
+    nextBlocked = nextBlockedAgent(blocked, props.focusedId),
+    oldestBlocked = blocked.find((agent) =>
+      Number.isFinite(Date.parse(agent.stateEnteredAt)),
+    );
   const hoverHit = props.hits.find(
       (hit) =>
         hit.kind === "station" &&
@@ -128,6 +141,40 @@ export function Chrome(props: ChromeProps) {
           </button>
         </>
       )}
+      <section className="serviceStrip" aria-label="Observed service summary">
+        <div>
+          <strong>Observed</strong>
+          <span>Working {props.coarse.working}</span>
+          <span>Blocked {props.coarse.blocked}</span>
+          <span>Plated {props.coarse.plated}</span>
+          <span>Unknown {props.coarse.unknown}</span>
+        </div>
+        <div>
+          <span>
+            Shown {props.coarse.visible} of {props.coarse.count}
+          </span>
+          <span>Hidden plated {props.coarse.hiddenDone}</span>
+          <span>
+            Oldest blocked: {oldestBlocked?.name ?? "None"}
+            {oldestBlocked
+              ? ` · ${formatDuration(now - Date.parse(oldestBlocked.stateEnteredAt))}`
+              : ""}
+          </span>
+        </div>
+        <button
+          type="button"
+          disabled={!nextBlocked}
+          aria-label={
+            nextBlocked
+              ? `Next blocked: ${nextBlocked.name}`
+              : "Next blocked: none"
+          }
+          title="Next blocked (B)"
+          onClick={props.onNextBlocked}
+        >
+          Next blocked
+        </button>
+      </section>
       <ModeTreatment
         mode={props.coarse.mode}
         sourceStatus={props.coarse.sourceStatus}

@@ -213,6 +213,43 @@ describe("agent store machines", () => {
     expect(listener).not.toHaveBeenCalled();
     expect(store.snapshot().agents.get("a")?.progress).toBe(0.9);
   });
+  it("projects observed states and keeps dismissed done records in the source total", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 }),
+      unknown = { ...agent("blocked", "unknown"), stateKnown: false };
+    store.apply(
+      snapshot(
+        agent("working", "working"),
+        agent("blocked", "blocked"),
+        agent("done", "done"),
+        unknown,
+      ),
+    );
+    expect(store.coarse()).toMatchObject({
+      count: 4,
+      visible: 4,
+      hiddenDone: 0,
+      working: 1,
+      blocked: 1,
+      plated: 1,
+      unknown: 1,
+    });
+    clock.advance(50);
+    expect(store.coarse()).toMatchObject({
+      count: 4,
+      visible: 3,
+      hiddenDone: 1,
+      plated: 1,
+    });
+    expect(store.snapshot().mode).toBe("live");
+    store.apply(snapshot());
+    expect(store.coarse()).toMatchObject({
+      count: 0,
+      visible: 0,
+      hiddenDone: 0,
+    });
+    expect(store.snapshot().mode).toBe("empty");
+  });
   it("records a same-state re-entry observed after reconnect", () => {
     const store = new AgentStore(),
       first = agent("working"),
@@ -514,8 +551,9 @@ describe("layout, transitions and resources", () => {
           (_, index) => `agent-${String(index + 1).padStart(2, "0")}`,
         ),
         layout = computeLayout(width, height, ids),
-        placements = blockedPlacements(layout, [...ids].reverse()),
-        ordered = layout.stations.map((station) => placements.get(station.id)!);
+        callerOrder = [...ids].reverse(),
+        placements = blockedPlacements(layout, callerOrder),
+        ordered = callerOrder.map((id) => placements.get(id)!);
       expect(placements.size).toBe(count);
       expect(ordered.map((placement) => placement.queueOrdinal)).toEqual(
         ids.map((_, index) => index + 1),
@@ -569,15 +607,16 @@ describe("layout, transitions and resources", () => {
       );
       if (firstOverflow >= 0)
         expect(
-          blockedPlacements(layout, ids.slice(0, firstOverflow + 1)).get(
-            ids[firstOverflow]!,
-          )?.kind,
+          blockedPlacements(
+            layout,
+            callerOrder.slice(0, firstOverflow + 1),
+          ).get(callerOrder[firstOverflow]!)?.kind,
         ).toBe("station");
       expect(stationTicketGeometry("blocked", layout.unit)?.blocked).toBe(true);
 
       if (pass.length) {
         const retained = pass[0]!,
-          next = blockedPlacements(layout, ids.slice(1), [retained]);
+          next = blockedPlacements(layout, callerOrder.slice(1), [retained]);
         for (const placement of next.values())
           if (placement.kind === "pass")
             for (const bound of [

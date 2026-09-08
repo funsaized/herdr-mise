@@ -54,8 +54,12 @@ export interface StoreSnapshot {
 }
 export interface CoarseSlice {
   count: number;
+  visible: number;
+  hiddenDone: number;
+  working: number;
   blocked: number;
-  done: number;
+  plated: number;
+  unknown: number;
   mode: AppMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
@@ -131,10 +135,17 @@ export class AgentStore {
   }
   coarse(): CoarseSlice {
     const values = [...this.agents.values()];
+    const known = values.filter((agent) => agent.stateKnown !== false);
     return {
-      count: values.length,
-      blocked: values.filter((a) => a.targetState === "blocked").length,
-      done: values.filter((a) => a.targetState === "done").length,
+      count: values.length + this.dismissedDone.size,
+      visible: values.length,
+      hiddenDone: this.dismissedDone.size,
+      working: known.filter((agent) => agent.targetState === "working").length,
+      blocked: known.filter((agent) => agent.targetState === "blocked").length,
+      plated:
+        known.filter((agent) => agent.targetState === "done").length +
+        this.dismissedDone.size,
+      unknown: values.filter((agent) => agent.stateKnown === false).length,
       mode: this.mode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
@@ -204,7 +215,7 @@ export class AgentStore {
       this.remove(event.agentId);
     }
     this.mode =
-      this.agents.size === 0 &&
+      this.agents.size + this.dismissedDone.size === 0 &&
       event.mode === "live" &&
       this.sourceStatus === "connected"
         ? "empty"
@@ -299,7 +310,7 @@ export class AgentStore {
             this.remove(agent.id);
             if (this.mode !== "disconnected")
               this.mode =
-                this.agents.size === 0 &&
+                this.agents.size + this.dismissedDone.size === 0 &&
                 this.feedMode === "live" &&
                 this.sourceStatus === "connected"
                   ? "empty"
@@ -362,8 +373,12 @@ function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
     a.count === b.count &&
+    a.visible === b.visible &&
+    a.hiddenDone === b.hiddenDone &&
+    a.working === b.working &&
     a.blocked === b.blocked &&
-    a.done === b.done &&
+    a.plated === b.plated &&
+    a.unknown === b.unknown &&
     a.mode === b.mode &&
     a.sourceStatus === b.sourceStatus &&
     a.sourceDiagnostic === b.sourceDiagnostic &&

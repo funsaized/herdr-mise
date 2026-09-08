@@ -65,6 +65,7 @@ import {
   stationWorkspaceLabel,
   type BlockedPlacement,
 } from "./geometry";
+import { orderedBlockedAgents } from "../state/semantic-stations";
 
 export {
   blockedPlacements,
@@ -1242,12 +1243,9 @@ export class KitchenScene {
       if (!agent || (this.reducedMotion && agent.targetState !== "blocked"))
         this.retainedBlocked.delete(id);
     }
-    const blockedIds = this.layout.stations
-        .filter(
-          (station) =>
-            snapshot.agents.get(station.id)?.targetState === "blocked",
-        )
-        .map((station) => station.id),
+    const blockedIds = orderedBlockedAgents([...snapshot.agents.values()]).map(
+        (agent) => agent.id,
+      ),
       exiting = [...this.retainedBlocked.values()].filter(
         (retained) =>
           snapshot.agents.get(retained.id)?.targetState !== "blocked",

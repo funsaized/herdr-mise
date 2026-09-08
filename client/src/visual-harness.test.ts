@@ -57,12 +57,12 @@ describe("visual harness configuration", () => {
       theme: "dark",
     });
     expect(parseVisualConfig("?preset=ended&agents=0").agents).toBe(0);
-    expect(parseVisualConfig("?preset=mixed&agents=12&theme=light")).toEqual({
+    expect(parseVisualConfig("?preset=mixed&agents=30&theme=light")).toEqual({
       preset: "mixed",
-      agents: 12,
+      agents: 30,
       theme: "light",
     });
-    for (let agents = 1; agents <= 12; agents += 1) {
+    for (let agents = 1; agents <= 30; agents += 1) {
       expect(parseVisualConfig(`?agents=${agents}`).agents).toBe(agents);
     }
   });
@@ -70,15 +70,15 @@ describe("visual harness configuration", () => {
   it("uses deterministic defaults for absent and unsupported values", () => {
     const fallback = { preset: "mixed", agents: 6, theme: "light" };
     expect(parseVisualConfig("")).toEqual(fallback);
-    for (const agents of ["nope", "1.5", "Infinity", "13"]) {
+    for (const agents of ["nope", "1.5", "Infinity", "31"]) {
       expect(parseVisualConfig(`?preset=nope&agents=${agents}`)).toEqual(
         fallback,
       );
     }
   });
 
-  it("generates feeds matching intermediate agent counts", () => {
-    for (const agents of [3, 4, 5, 7, 11] as const) {
+  it("creates static acceptance rosters at 4, 16, and 30 agents", () => {
+    for (const agents of [4, 16, 30]) {
       const [event] = buildVisualFeed({
         preset: "mixed",
         agents,

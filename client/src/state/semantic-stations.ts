@@ -66,3 +66,31 @@ export function semanticAgents(
     }),
   );
 }
+
+export function orderedBlockedAgents<T extends SemanticAgent>(
+  agents: readonly T[],
+): T[] {
+  return agents
+    .filter(
+      (agent) => agent.targetState === "blocked" && agent.stateKnown !== false,
+    )
+    .sort((a, b) => {
+      const aTime = Date.parse(a.stateEnteredAt),
+        bTime = Date.parse(b.stateEnteredAt),
+        aValid = Number.isFinite(aTime),
+        bValid = Number.isFinite(bTime);
+      if (aValid !== bValid) return aValid ? -1 : 1;
+      return aValid && aTime !== bTime
+        ? aTime - bTime
+        : a.id.localeCompare(b.id);
+    });
+}
+
+export function nextBlockedAgent<T extends SemanticAgent>(
+  agents: readonly T[],
+  focusedId: string | null,
+) {
+  const blocked = orderedBlockedAgents(agents),
+    index = blocked.findIndex((agent) => agent.id === focusedId);
+  return blocked[index < 0 ? 0 : (index + 1) % blocked.length];
+}

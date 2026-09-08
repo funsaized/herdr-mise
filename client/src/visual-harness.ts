@@ -7,20 +7,7 @@ import {
 import type { ThemeChoice } from "./theme/theme";
 
 export type VisualPreset = AgentState | "mixed";
-export type VisualAgentCount =
-  | 0
-  | 1
-  | 2
-  | 3
-  | 4
-  | 5
-  | 6
-  | 7
-  | 8
-  | 9
-  | 10
-  | 11
-  | 12;
+export type VisualAgentCount = number;
 export interface VisualConfig {
   preset: VisualPreset;
   agents: VisualAgentCount;
@@ -59,7 +46,7 @@ export function parseVisualConfig(search: string): VisualConfig {
       countValue !== null &&
       Number.isInteger(count) &&
       count >= 0 &&
-      count <= 12
+      count <= 30
         ? (count as VisualAgentCount)
         : defaultVisualConfig.agents,
     theme: query.get("theme") === "dinner" ? "dark" : "light",

@@ -381,10 +381,13 @@ defensive and stores the truthful final state, which is what
   | - StatsOverlay              |        | - Escalation (bell glow,      |
   | - First-run hint            |        |   screen-edge vignette)       |
   | - Semantic station controls |        |                               |
+  | - Observed service summary  |        |                               |
   | - Live state announcements  |        | One ticker. One canvas.       |
   |                             |        | Reads from AgentStore inside |
   | Reads coarse slices only:   |        | the ticker. Per-frame values |
-  |   - count, blocked, done,   |        | bypass React.                 |
+  |   - source/visible/hidden,  |        | bypass React.                 |
+  |   - working/blocked/plated, |        |                               |
+  |   - unknown,                |        |                               |
   |   - mode, selectedId,       |        |                               |
   |   - settings                |        |                               |
   +--------------+--------------+        +---------------+---------------+
@@ -401,6 +404,13 @@ the browser projection plus local selection, settings, observed history, done
 timers, and the 86 board. Within an agent machine, `targetState` is feed truth and
 `renderedState` is only an interruptible animation projection. The WebSocket client
 will not apply deltas until that connection has received a fresh snapshot.
+
+The renderer-local service summary counts only observed states in its
+working/blocked/plated buckets. Explicitly unknown records have their own bucket;
+locally dismissed done records remain in the source total and plated count until
+the source removes or changes them. `B` / the native **Next blocked** button uses
+oldest valid `stateEnteredAt`, then stable agent ID, and changes semantic/canvas
+focus without changing selection or station layout.
 
 `scripts/audit-pixi-architecture.mjs` enforces the boundary in CI by
 forbidding direct WebGL, custom renderer, or shader imports in the

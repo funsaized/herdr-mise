@@ -117,9 +117,8 @@ export function blockedPlacements(
   blockedIds: readonly string[],
   occupied: readonly BlockedPlacement[] = [],
 ) {
-  const ordered = layout.stations
-      .filter((station) => blockedIds.includes(station.id))
-      .map((station) => station.id),
+  const stationIds = new Set(layout.stations.map((station) => station.id)),
+    ordered = blockedIds.filter((id) => stationIds.has(id)),
     total = ordered.length,
     placements = new Map<string, BlockedPlacement>(),
     u = layout.unit,

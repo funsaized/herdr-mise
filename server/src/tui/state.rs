@@ -2,6 +2,7 @@ use crate::protocol::{
     AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic,
     SourceStatus,
 };
+use chrono::DateTime;
 
 pub(crate) const BOARD_CAP: usize = 64;
 
@@ -21,6 +22,16 @@ pub struct AgentTable {
     source_diagnostic: Option<SourceDiagnostic>,
     agents: Vec<AgentRecord>,
     board: Vec<BoardEntry>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ServiceSummary {
+    pub working: usize,
+    pub blocked: usize,
+    pub plated: usize,
+    pub unknown: usize,
+    pub visible: usize,
+    pub hidden_done: usize,
 }
 
 impl Default for AgentTable {
@@ -105,6 +116,50 @@ impl AgentTable {
     }
     pub fn board(&self) -> &[BoardEntry] {
         &self.board
+    }
+    pub fn service_summary(&self) -> ServiceSummary {
+        let known = self
+            .agents
+            .iter()
+            .filter(|agent| agent.state_known != Some(false));
+        ServiceSummary {
+            working: known
+                .clone()
+                .filter(|agent| agent.state == AgentState::Working)
+                .count(),
+            blocked: known
+                .clone()
+                .filter(|agent| agent.state == AgentState::Blocked)
+                .count(),
+            plated: known
+                .filter(|agent| agent.state == AgentState::Done)
+                .count(),
+            unknown: self
+                .agents
+                .iter()
+                .filter(|agent| agent.state_known == Some(false))
+                .count(),
+            visible: self.agents.len(),
+            hidden_done: 0,
+        }
+    }
+    pub fn blocked_agents(&self) -> Vec<&AgentRecord> {
+        let mut blocked = self
+            .agents
+            .iter()
+            .filter(|agent| agent.state == AgentState::Blocked && agent.state_known != Some(false))
+            .collect::<Vec<_>>();
+        blocked.sort_by(|a, b| {
+            let a_time = DateTime::parse_from_rfc3339(&a.state_entered_at).ok();
+            let b_time = DateTime::parse_from_rfc3339(&b.state_entered_at).ok();
+            match (a_time, b_time) {
+                (Some(a_time), Some(b_time)) => a_time.cmp(&b_time).then_with(|| a.id.cmp(&b.id)),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => a.id.cmp(&b.id),
+            }
+        });
+        blocked
     }
 
     fn upsert(&mut self, agent: AgentRecord) {
@@ -307,6 +362,48 @@ mod tests {
                 .map(|agent| agent.id.as_str())
                 .collect::<Vec<_>>(),
             ["a"]
+        );
+    }
+
+    #[test]
+    fn service_summary_excludes_unknown_and_orders_blocked_oldest_then_id() {
+        let mut unknown = record("unknown", AgentState::Blocked, 0, 0);
+        unknown.state_known = Some(false);
+        let mut newer = record("z", AgentState::Blocked, 0, 0);
+        newer.state_entered_at = "2026-07-31T16:02:00Z".into();
+        let mut tied_b = record("b", AgentState::Blocked, 0, 0);
+        tied_b.state_entered_at = "2026-07-31T16:01:00Z".into();
+        let mut tied_a = record("a", AgentState::Blocked, 0, 0);
+        tied_a.state_entered_at = tied_b.state_entered_at.clone();
+        let mut table = AgentTable::default();
+        for agent in [
+            record("working", AgentState::Working, 0, 0),
+            record("done", AgentState::Done, 0, 0),
+            newer,
+            tied_b,
+            tied_a,
+            unknown,
+        ] {
+            table.apply(upsert(agent));
+        }
+        assert_eq!(
+            table.service_summary(),
+            ServiceSummary {
+                working: 1,
+                blocked: 3,
+                plated: 1,
+                unknown: 1,
+                visible: 6,
+                hidden_done: 0,
+            }
+        );
+        assert_eq!(
+            table
+                .blocked_agents()
+                .iter()
+                .map(|agent| agent.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b", "z"]
         );
     }
 

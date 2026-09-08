@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -16,6 +17,7 @@ import {
   freezerAnnouncement,
   semanticAgents,
   semanticAgentsEqual,
+  nextBlockedAgent,
   semanticStateWords,
   type SemanticAgent,
 } from "./state/semantic-stations";
@@ -224,6 +226,25 @@ export function App() {
     )
       ? tooltipAgentIdCandidate
       : null;
+  const focusState = useRef({ controls, agents, focusedId });
+  useLayoutEffect(() => {
+    focusState.current = { controls, agents, focusedId };
+  }, [agents, controls, focusedId]);
+  const focusSemantic = useCallback((id: string) => {
+      setFocusedId(id);
+      sceneRef.current?.focus(id);
+      const index = focusState.current.controls.findIndex(
+        (control) => control.id === id,
+      );
+      document
+        .querySelectorAll<HTMLButtonElement>(".stationA11yMirror button")
+        [index]?.focus();
+    }, []),
+    nextBlocked = useCallback(() => {
+      const { agents, focusedId } = focusState.current,
+        next = nextBlockedAgent(agents, focusedId);
+      if (next) focusSemantic(next.id);
+    }, [focusSemantic]);
   useLayoutEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (isGlobalEscape(event)) {
@@ -254,6 +275,11 @@ export function App() {
       if (event.key.toLowerCase() === "s" && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         setStatsOpen((value) => !value);
+        return;
+      }
+      if (event.key.toLowerCase() === "b" && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        nextBlocked();
         return;
       }
       const stationIds = controls.map((agent) => agent.id);
@@ -287,9 +313,7 @@ export function App() {
                 : stationIds.length - 1
               : (index + direction + stationIds.length) % stationIds.length,
           next = stationIds[nextIndex]!;
-        setFocusedId(next);
-        sceneRef.current?.focus(next);
-        buttons[nextIndex]?.focus();
+        focusSemantic(next);
         return;
       }
       if (event.key === "Enter" && focusedId) {
@@ -302,7 +326,15 @@ export function App() {
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
-  }, [coarse.selectedId, controls, focusedId, settingsOpen, view]);
+  }, [
+    coarse.selectedId,
+    controls,
+    focusSemantic,
+    focusedId,
+    nextBlocked,
+    settingsOpen,
+    view,
+  ]);
   useEffect(() => {
     if (coarse.selectedId === null && semanticRestoreRef.current) {
       semanticRestoreRef.current.focus();
@@ -384,8 +416,7 @@ export function App() {
               ".stationA11yMirror button",
             )[index] ?? null;
           if (hit) {
-            setFocusedId(hit.id);
-            sceneRef.current?.focus(hit.id);
+            focusSemantic(hit.id);
           }
         }}
         onPointerMove={pointerMove}
@@ -417,6 +448,7 @@ export function App() {
           onDismissHint={dismissHint}
           view={view}
           onToggleFreezer={toggleFreezer}
+          onNextBlocked={nextBlocked}
         />
       </div>
       <div

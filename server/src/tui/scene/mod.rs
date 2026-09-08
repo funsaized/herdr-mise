@@ -714,6 +714,36 @@ fn draw_kitchen(
             ),
         );
     }
+    let service_width = layout
+        .board
+        .x
+        .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2));
+    let (service_first, service_overflow) =
+        split_line(&view::service_line(table, now), usize::from(service_width));
+    render_line(
+        frame,
+        area,
+        theme::KITCHEN_GUTTER,
+        5,
+        service_width,
+        Line::styled(
+            service_first,
+            Style::default().fg(mapped(theme::TEXT, color_mode)),
+        ),
+    );
+    if !service_overflow.is_empty() {
+        render_line(
+            frame,
+            area,
+            theme::KITCHEN_GUTTER,
+            6,
+            service_width,
+            Line::styled(
+                service_overflow,
+                Style::default().fg(mapped(theme::TEXT, color_mode)),
+            ),
+        );
+    }
 
     let board_area = cell_rect(layout.board);
     frame.render_widget(
@@ -760,11 +790,7 @@ fn draw_kitchen(
         }
     }
 
-    let blocked = agents
-        .iter()
-        .filter(|agent| agent.state == AgentState::Blocked)
-        .copied()
-        .collect::<Vec<_>>();
+    let blocked = table.blocked_agents();
     if blocked.is_empty() {
         render_line(
             frame,
@@ -1227,6 +1253,17 @@ fn draw_freezer(
             ),
         );
     }
+    render_line(
+        frame,
+        area,
+        2,
+        4,
+        source_width,
+        Line::styled(
+            view::service_line(table, now),
+            Style::default().fg(mapped(theme::TEXT, color_mode)),
+        ),
+    );
     for (entry, (slot, _)) in visible_board.iter().zip(&layout.spirits) {
         let name = spirit_label(&entry.name);
         render_line(

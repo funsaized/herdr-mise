@@ -385,6 +385,43 @@ select:focus-visible {
   border-color: var(--text);
   font-weight: var(--fontRowLabelWeight);
 }
+.serviceStrip {
+  position: absolute;
+  z-index: 8;
+  left: 14px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: var(--spaceRow);
+  max-width: calc(100vw - 220px);
+  padding: 7px 10px;
+  color: var(--textMuted);
+  background: var(--panelSoft);
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusSmall);
+  font-size: var(--fontSecondarySize);
+}
+.serviceStrip div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+}
+.serviceStrip strong {
+  color: var(--text);
+}
+.serviceStrip button {
+  flex: none;
+  padding: 5px 8px;
+  color: var(--buttonText);
+  background: var(--text);
+  border: 1px solid var(--text);
+  border-radius: var(--radiusSmall);
+  cursor: pointer;
+}
+.serviceStrip button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
 .emptyPill {
   position: absolute;
   z-index: 8;
@@ -652,6 +689,22 @@ select:focus-visible {
   }
 }
 @media (max-width: 480px) {
+  .serviceStrip {
+    right: 8px;
+    bottom: 48px;
+    left: 8px;
+    max-width: none;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .serviceStrip button {
+    align-self: flex-start;
+  }
+  .panel ~ .serviceStrip {
+    top: 112px;
+    bottom: auto;
+  }
   .panel {
     inset: auto 8px 52px;
     width: auto;

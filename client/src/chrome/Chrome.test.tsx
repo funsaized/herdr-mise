@@ -185,6 +185,7 @@ describe("chrome interactions", () => {
         onDismissHint: dismiss,
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onNextBlocked: () => {},
       },
       { rerender } = render(<Chrome {...props} />);
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -232,12 +233,64 @@ describe("chrome interactions", () => {
         onDismissHint={() => {}}
         view="freezer"
         onToggleFreezer={toggle}
+        onNextBlocked={() => {}}
       />,
     );
     const button = screen.getByRole("button", { name: "Freezer" });
     expect(button.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(button);
     expect(toggle).toHaveBeenCalledOnce();
+  });
+  it("shows observed service counts and names the next blocked target", () => {
+    const store = new AgentStore(),
+      next = vi.fn(),
+      oldest = {
+        ...record,
+        id: "oldest",
+        name: "Oldest cook",
+        state: "blocked" as const,
+        stateEnteredAt: new Date(Date.now() - 60_000).toISOString(),
+      };
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "live",
+      sourceStatus: "connected",
+      agents: [oldest, { ...record, id: "newer" }],
+    });
+    render(
+      <Chrome
+        store={store}
+        coarse={store.coarse()}
+        hoveredId={null}
+        focusedId={null}
+        hits={[]}
+        settingsOpen={false}
+        statsOpen={false}
+        lastUpdateSeconds={0}
+        metrics={{ drawCalls: 0, socketBytesPerSecond: 0 }}
+        onCloseSettings={() => {}}
+        onOpenSettings={() => {}}
+        hintVisible={false}
+        onDismissHint={() => {}}
+        view="kitchen"
+        onToggleFreezer={() => {}}
+        onNextBlocked={next}
+      />,
+    );
+    const summary = screen.getByRole("region", {
+      name: "Observed service summary",
+    });
+    expect(summary.textContent).toContain("Working 1");
+    expect(summary.textContent).toContain("Blocked 1");
+    expect(summary.textContent).toContain("Shown 2 of 2");
+    expect(summary.textContent).toContain("Oldest blocked: Oldest cook");
+    const button = screen.getByRole("button", {
+      name: "Next blocked: Oldest cook",
+    });
+    expect(button.closest("[aria-live]")).toBeNull();
+    fireEvent.click(button);
+    expect(next).toHaveBeenCalledOnce();
   });
   it.each([
     ["blocked", "Blocked — waiting"],
