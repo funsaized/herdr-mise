@@ -234,8 +234,8 @@ it("notifies all subscribers on expiry and preserves dismissal until state reent
 it("keeps a fixture-backed done cook visible until its newest reconnect generation expires", () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
-  const decodedSnapshot = (stateEnteredAt: string) =>
-      decodeFeedEvent(
+  const decodedSnapshot = (stateEnteredAt: string) => {
+      const outcome = decodeFeedEvent(
         JSON.stringify({
           ...fixture,
           agents: fixture.agents.map((agent) =>
@@ -244,7 +244,10 @@ it("keeps a fixture-backed done cook visible until its newest reconnect generati
               : agent,
           ),
         }),
-      )!,
+      );
+      if (outcome.kind !== "accepted") throw new Error("fixture was rejected");
+      return outcome.event;
+    },
     store = new AgentStore(undefined, { doneTimeoutMs: 300_000 }),
     events: string[] = [],
     visibility: boolean[] = [];
@@ -263,6 +266,8 @@ it("keeps a fixture-backed done cook visible until its newest reconnect generati
     stateEnteredAt: "2026-07-31T16:00:00Z",
     clearAt: 300_000,
   });
+  store.apply(decodedSnapshot("2026-07-31T16:01:00Z"));
+  expect(store.snapshot().agents.get("agent-01")?.clearAt).toBe(300_000);
   store.apply(decodedSnapshot("2026-07-31T16:02:00Z"));
   expect(store.snapshot().agents.get("agent-01")?.clearAt).toBe(540_000);
 
@@ -274,6 +279,41 @@ it("keeps a fixture-backed done cook visible until its newest reconnect generati
   expect(events.filter((event) => event === "busser")).toHaveLength(1);
   expect(events.filter((event) => event === "clear")).toHaveLength(1);
   expect(visibility.filter((visible) => !visible)).toHaveLength(1);
+  store.destroy();
+});
+it("does not resurrect an expired done generation from stale snapshots", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const decodedSnapshot = (stateEnteredAt: string) => {
+      const outcome = decodeFeedEvent(
+        JSON.stringify({
+          ...fixture,
+          agents: fixture.agents
+            .filter((agent) => agent.id === "agent-01")
+            .map((agent) => ({ ...agent, state: "done", stateEnteredAt })),
+        }),
+      );
+      if (outcome.kind !== "accepted") throw new Error("fixture was rejected");
+      return outcome.event;
+    },
+    store = new AgentStore(undefined, { doneTimeoutMs: 300_000 }),
+    events: string[] = [];
+  store.onEvent((event) => events.push(event.type));
+
+  store.apply(decodedSnapshot("2026-07-31T16:01:00Z"));
+  vi.advanceTimersByTime(300_000);
+  store.apply(decodedSnapshot("2026-07-31T16:00:00Z"));
+  store.apply(decodedSnapshot("2026-07-31T16:01:00Z"));
+  expect(store.snapshot().agents.has("agent-01")).toBe(false);
+
+  store.apply(decodedSnapshot("2026-07-31T16:02:00Z"));
+  expect(store.snapshot().agents.get("agent-01")).toMatchObject({
+    stateEnteredAt: "2026-07-31T16:02:00Z",
+    clearAt: 600_000,
+  });
+  vi.advanceTimersByTime(300_000);
+  expect(events.filter((event) => event === "busser")).toHaveLength(2);
+  expect(events.filter((event) => event === "clear")).toHaveLength(2);
   store.destroy();
 });
 it("retains only recent history under sustained state churn", () => {

@@ -283,6 +283,7 @@ describe("agent store machines", () => {
       }),
     );
     expect(store.snapshot().agents.get("a")).toMatchObject({
+      stateEnteredAt: "2026-07-31T00:01:00Z",
       clearAt: 90,
       transitionStartedAt: 40,
     });

@@ -109,6 +109,7 @@ export class AgentStore {
   private changeListeners = new Set<() => void>();
   private eventListeners = new Set<Listener<StoreEvent>>();
   private doneTimers = new Map<string, unknown>();
+  private doneGenerations = new Map<string, string>();
   private dismissedDone = new Map<string, string>();
   constructor(
     private scheduler: Scheduler = nativeScheduler,
@@ -180,7 +181,11 @@ export class AgentStore {
         if (machine.targetState === "done" && machine.clearAt !== null) {
           machine.clearAt =
             machine.clearAt - oldDoneTimeoutMs + this.settings.doneTimeoutMs;
-          this.armDone(machine.id, machine.stateEnteredAt, machine.clearAt);
+          this.armDone(
+            machine.id,
+            this.doneGenerations.get(machine.id) ?? machine.stateEnteredAt,
+            machine.clearAt,
+          );
         }
     saveSettings(this.settingsStorage, this.settings);
     this.emitCoarse();
@@ -246,34 +251,37 @@ export class AgentStore {
     for (const timer of this.doneTimers.values())
       this.scheduler.clearTimeout(timer);
     this.doneTimers.clear();
+    this.doneGenerations.clear();
     this.dismissedDone.clear();
     this.coarseListeners.clear();
     this.changeListeners.clear();
     this.eventListeners.clear();
   }
   private upsert(agent: AgentRecord) {
+    const prior = this.agents.get(agent.id);
+    const now = this.scheduler.now();
+    const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
+      ? Date.parse(agent.stateEnteredAt)
+      : now;
+    const dismissedGeneration = this.dismissedDone.get(agent.id);
     if (
       agent.state === "done" &&
-      this.dismissedDone.get(agent.id) === agent.stateEnteredAt
+      dismissedGeneration !== undefined &&
+      enteredAt <= Date.parse(dismissedGeneration)
     )
       return;
     this.dismissedDone.delete(agent.id);
-    const prior = this.agents.get(agent.id);
-    const now = this.scheduler.now();
     if (agent.state === "ended") {
       this.end(agent, now);
       return;
     }
     const stateChanged = prior?.targetState !== agent.state;
-    const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
-      ? Date.parse(agent.stateEnteredAt)
-      : now;
-    const doneGenerationChanged =
-      prior?.targetState === "done" &&
-      agent.state === "done" &&
-      agent.stateEnteredAt !== prior.stateEnteredAt;
+    const sameDoneState =
+      prior?.targetState === "done" && agent.state === "done";
+    const currentDoneGeneration = this.doneGenerations.get(agent.id);
     const newerDoneGeneration =
-      doneGenerationChanged && enteredAt > Date.parse(prior.stateEnteredAt);
+      sameDoneState &&
+      enteredAt > Date.parse(currentDoneGeneration ?? prior.stateEnteredAt);
     const initialHistory: readonly StatePeriod[] = [
       { state: agent.state, startedAt: enteredAt },
     ];
@@ -322,14 +330,16 @@ export class AgentStore {
         from: prior?.targetState,
         to: agent.state,
       });
-    if (stateChanged || doneGenerationChanged) {
+    if (stateChanged || newerDoneGeneration) {
       this.cancelDone(agent.id);
       if (agent.state === "done")
         this.armDone(agent.id, machine.stateEnteredAt, machine.clearAt!);
+      else this.doneGenerations.delete(agent.id);
     }
   }
   private armDone(id: string, generation: string, clearAt: number) {
     this.cancelDone(id);
+    this.doneGenerations.set(id, generation);
     this.doneTimers.set(
       id,
       this.scheduler.setTimeout(
@@ -337,7 +347,7 @@ export class AgentStore {
           const current = this.agents.get(id);
           if (
             current?.targetState !== "done" ||
-            current.stateEnteredAt !== generation ||
+            this.doneGenerations.get(id) !== generation ||
             current.clearAt !== clearAt
           )
             return;
@@ -380,6 +390,7 @@ export class AgentStore {
   }
   private remove(id: string) {
     this.cancelDone(id);
+    this.doneGenerations.delete(id);
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
     if (this.selectedId === id) this.selectedId = null;
   }
