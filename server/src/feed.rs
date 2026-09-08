@@ -754,6 +754,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn demo_history_does_not_survive_live_recovery() {
+        let mut normalizer = Normalizer::default();
+        let live = normalizer
+            .normalize_snapshot_value(
+                serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json"))
+                    .unwrap(),
+                "2026-08-13T12:00:00Z",
+            )
+            .unwrap();
+        let demo_agent = live.agents[0].clone();
+        let feed = Feed::fixed(AppMode::Demo, vec![demo_agent.clone()]).await;
+        let mut changes = feed.subscribe();
+        let mut table = AgentTable::default();
+        table.apply(feed.snapshot().await);
+
+        let mut ended = demo_agent;
+        ended.state = AgentState::Ended;
+        feed.replace_demo(vec![ended]).await;
+        table.apply(changes.recv().await.unwrap());
+        assert_eq!(table.board()[0].id, "p-1");
+
+        feed.transition_to_live(live.agents.clone(), live.ended_ids.clone())
+            .await;
+        table.apply(changes.recv().await.unwrap());
+        assert!(table.board().is_empty());
+        assert_eq!(table.agents().next().unwrap().id, "p-1");
+
+        feed.apply_live(vec![], vec!["p-1".into()]).await;
+        table.apply(changes.recv().await.unwrap());
+        assert_eq!(table.board()[0].id, "p-1");
+        feed.transition_to_live(live.agents, live.ended_ids).await;
+        table.apply(changes.recv().await.unwrap());
+        assert_eq!(table.board()[0].id, "p-1");
+    }
+
+    #[tokio::test]
     async fn twelve_record_chatty_source_stays_below_wire_budget() {
         let initial = (0..12)
             .map(|i| {

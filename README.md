@@ -127,7 +127,9 @@ all-day use. The detailed browser/TUI representation audit is in
 - **Live:** a compatible snapshot atomically replaces the demo roster without a
   process or browser restart.
 - **Disconnected:** browser silence surfaces `GAS LEAK — SERVICE SUSPENDED`,
-  then reconnects through a fresh snapshot.
+  then reconnects through a fresh snapshot. Rejected state frames take the same
+  recovery path; a repeated rejection is labeled as an incompatible
+  browser-to-Mise feed rather than a Herdr failure.
 - **Empty:** a live source with no agents shows `Waiting for agents — start one
 in herdr.`
 
