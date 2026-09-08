@@ -20,12 +20,16 @@ export function ModeTreatment({
   sourceDiagnostic = null,
   disconnectReason = null,
   lastUpdateSeconds,
+  clearedCount,
+  onRevealCleared,
 }: {
   mode: CoarseSlice["mode"];
   sourceStatus: CoarseSlice["sourceStatus"];
   sourceDiagnostic?: SourceDiagnostic | null;
   disconnectReason?: CoarseSlice["disconnectReason"];
   lastUpdateSeconds: number;
+  clearedCount?: number;
+  onRevealCleared?(): void;
 }) {
   const detail =
     sourceStatus === "unsupportedProtocol" && sourceDiagnostic
@@ -78,6 +82,13 @@ export function ModeTreatment({
           </small>
         </div>
       </div>
+    );
+  if (mode === "live" && clearedCount)
+    return (
+      <button className="revealCleared" type="button" onClick={onRevealCleared}>
+        {clearedCount} plated cook{clearedCount === 1 ? "" : "s"} cleared —
+        reveal
+      </button>
     );
   return null;
 }

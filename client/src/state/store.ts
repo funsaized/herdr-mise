@@ -44,6 +44,7 @@ export interface AgentMachine extends AgentRecord {
 }
 export interface StoreSnapshot {
   agents: ReadonlyMap<string, AgentMachine>;
+  visibleAgents: ReadonlyMap<string, AgentMachine>;
   board: readonly BoardEntry[];
   mode: AppMode;
   feedMode: FeedMode;
@@ -55,7 +56,9 @@ export interface StoreSnapshot {
   lastUpdateAt: number;
 }
 export interface CoarseSlice {
-  count: number;
+  sourceCount: number;
+  visibleCount: number;
+  clearedCount: number;
   blocked: number;
   done: number;
   mode: AppMode;
@@ -67,6 +70,7 @@ export interface CoarseSlice {
 }
 export type StoreEvent =
   | { type: "clear" | "busser"; agentId: string }
+  | { type: "reveal"; count: number }
   | { type: "ended"; entry: BoardEntry }
   | {
       type: "state";
@@ -124,6 +128,7 @@ export class AgentStore {
   snapshot(): StoreSnapshot {
     return {
       agents: this.agents,
+      visibleAgents: this.visibleAgents(),
       board: this.board,
       mode: this.mode,
       feedMode: this.feedMode,
@@ -136,9 +141,11 @@ export class AgentStore {
     };
   }
   coarse(): CoarseSlice {
-    const values = [...this.agents.values()];
+    const values = [...this.visibleAgents().values()];
     return {
-      count: values.length,
+      sourceCount: this.agents.size,
+      visibleCount: values.length,
+      clearedCount: this.dismissedDone.size,
       blocked: values.filter((a) => a.targetState === "blocked").length,
       done: values.filter((a) => a.targetState === "done").length,
       mode: this.mode,
@@ -173,18 +180,31 @@ export class AgentStore {
     this.emitCoarse();
     this.emitChange();
   }
+  revealCleared() {
+    const count = this.dismissedDone.size;
+    if (!count) return;
+    this.dismissedDone.clear();
+    this.emitEvent({ type: "reveal", count });
+    this.emitCoarse();
+    this.emitChange();
+  }
   setSettings(patch: Partial<Settings>) {
     const oldDoneTimeoutMs = this.settings.doneTimeoutMs;
     this.settings = { ...this.settings, ...patch };
     if (this.settings.doneTimeoutMs !== oldDoneTimeoutMs)
       for (const machine of this.agents.values())
-        if (machine.targetState === "done" && machine.clearAt !== null) {
+        if (
+          machine.targetState === "done" &&
+          machine.clearAt !== null &&
+          this.doneTimers.has(machine.id)
+        ) {
           machine.clearAt =
             machine.clearAt - oldDoneTimeoutMs + this.settings.doneTimeoutMs;
           this.armDone(
             machine.id,
             this.doneGenerations.get(machine.id) ?? machine.stateEnteredAt,
             machine.clearAt,
+            Math.max(0, machine.clearAt - this.scheduler.now()),
           );
         }
     saveSettings(this.settingsStorage, this.settings);
@@ -223,14 +243,11 @@ export class AgentStore {
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
       const incoming = new Set(event.agents.map((agent) => agent.id));
-      for (const id of this.dismissedDone.keys())
-        if (!incoming.has(id)) this.dismissedDone.delete(id);
       for (const id of this.agents.keys())
         if (!incoming.has(id)) this.remove(id);
       for (const agent of event.agents) this.upsert(agent);
     } else if (event.operation === "upsert") this.upsert(event.agent);
     else {
-      this.dismissedDone.delete(event.agentId);
       this.remove(event.agentId);
     }
     this.mode =
@@ -264,13 +281,11 @@ export class AgentStore {
       ? Date.parse(agent.stateEnteredAt)
       : now;
     const dismissedGeneration = this.dismissedDone.get(agent.id);
-    if (
+    const remainsDismissed =
       agent.state === "done" &&
       dismissedGeneration !== undefined &&
-      enteredAt <= Date.parse(dismissedGeneration)
-    )
-      return;
-    this.dismissedDone.delete(agent.id);
+      enteredAt <= Date.parse(dismissedGeneration);
+    if (!remainsDismissed) this.dismissedDone.delete(agent.id);
     if (agent.state === "ended") {
       this.end(agent, now);
       return;
@@ -314,7 +329,7 @@ export class AgentStore {
           : (prior?.transitionStartedAt ?? now),
       clearAt:
         agent.state === "done"
-          ? newerDoneGeneration
+          ? stateChanged || newerDoneGeneration
             ? now + this.settings.doneTimeoutMs
             : (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
           : null,
@@ -333,39 +348,41 @@ export class AgentStore {
     if (stateChanged || newerDoneGeneration) {
       this.cancelDone(agent.id);
       if (agent.state === "done")
-        this.armDone(agent.id, machine.stateEnteredAt, machine.clearAt!);
+        this.armDone(
+          agent.id,
+          machine.stateEnteredAt,
+          machine.clearAt!,
+          this.settings.doneTimeoutMs,
+        );
       else this.doneGenerations.delete(agent.id);
     }
   }
-  private armDone(id: string, generation: string, clearAt: number) {
+  private armDone(
+    id: string,
+    generation: string,
+    clearAt: number,
+    delay: number,
+  ) {
     this.cancelDone(id);
     this.doneGenerations.set(id, generation);
     this.doneTimers.set(
       id,
-      this.scheduler.setTimeout(
-        () => {
-          const current = this.agents.get(id);
-          if (
-            current?.targetState !== "done" ||
-            this.doneGenerations.get(id) !== generation ||
-            current.clearAt !== clearAt
-          )
-            return;
-          this.dismissedDone.set(id, generation);
-          this.emitEvent({ type: "busser", agentId: id });
-          this.remove(id);
-          if (this.mode !== "disconnected")
-            this.mode =
-              this.agents.size === 0 &&
-              this.feedMode === "live" &&
-              this.sourceStatus === "connected"
-                ? "empty"
-                : this.feedMode;
-          this.emitChange();
-          this.emitCoarse();
-        },
-        Math.max(0, clearAt - this.scheduler.now()),
-      ),
+      this.scheduler.setTimeout(() => {
+        const current = this.agents.get(id);
+        if (
+          current?.targetState !== "done" ||
+          this.doneGenerations.get(id) !== generation ||
+          current.clearAt !== clearAt
+        )
+          return;
+        this.doneTimers.delete(id);
+        this.dismissedDone.set(id, generation);
+        this.emitEvent({ type: "busser", agentId: id });
+        this.emitEvent({ type: "clear", agentId: id });
+        if (this.selectedId === id) this.selectedId = null;
+        this.emitChange();
+        this.emitCoarse();
+      }, delay),
     );
   }
   private end(agent: AgentRecord, now: number) {
@@ -390,6 +407,7 @@ export class AgentStore {
   }
   private remove(id: string) {
     this.cancelDone(id);
+    this.dismissedDone.delete(id);
     this.doneGenerations.delete(id);
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
     if (this.selectedId === id) this.selectedId = null;
@@ -409,6 +427,18 @@ export class AgentStore {
   private emitEvent(event: StoreEvent) {
     for (const listener of this.eventListeners) listener(event);
   }
+  private visibleAgents() {
+    return new Map(
+      [...this.agents].filter(([id, agent]) => {
+        const dismissedGeneration = this.dismissedDone.get(id);
+        return (
+          agent.targetState !== "done" ||
+          dismissedGeneration === undefined ||
+          Date.parse(agent.stateEnteredAt) > Date.parse(dismissedGeneration)
+        );
+      }),
+    );
+  }
 }
 function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
   const prefix = `${paneId}:`;
@@ -420,7 +450,9 @@ function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
 }
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
-    a.count === b.count &&
+    a.sourceCount === b.sourceCount &&
+    a.visibleCount === b.visibleCount &&
+    a.clearedCount === b.clearedCount &&
     a.blocked === b.blocked &&
     a.done === b.done &&
     a.mode === b.mode &&

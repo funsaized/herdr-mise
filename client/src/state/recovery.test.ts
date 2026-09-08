@@ -221,14 +221,16 @@ it("notifies all subscribers on expiry and preserves dismissal until state reent
   expect(changed).toHaveBeenCalledTimes(1);
   expect(coarse).toHaveBeenCalledTimes(1);
   expect(store.coarse()).toMatchObject({
-    count: 0,
-    mode: "empty",
+    sourceCount: 1,
+    visibleCount: 0,
+    clearedCount: 1,
+    mode: "live",
     selectedId: null,
   });
   store.apply(upsert(agent));
-  expect(store.coarse().count).toBe(0);
+  expect(store.coarse().visibleCount).toBe(0);
   store.apply(upsert({ ...agent, state: "working" }));
-  expect(store.coarse().count).toBe(1);
+  expect(store.coarse()).toMatchObject({ visibleCount: 1, clearedCount: 0 });
   store.destroy();
 });
 it("keeps a fixture-backed done cook visible until its newest reconnect generation expires", () => {
@@ -253,7 +255,7 @@ it("keeps a fixture-backed done cook visible until its newest reconnect generati
     visibility: boolean[] = [];
   store.onEvent((event) => events.push(event.type));
   store.subscribe(() =>
-    visibility.push(store.snapshot().agents.has("agent-01")),
+    visibility.push(store.snapshot().visibleAgents.has("agent-01")),
   );
 
   const first = decodedSnapshot("2026-07-31T16:01:00Z");
@@ -281,16 +283,21 @@ it("keeps a fixture-backed done cook visible until its newest reconnect generati
   expect(visibility.filter((visible) => !visible)).toHaveLength(1);
   store.destroy();
 });
-it("does not resurrect an expired done generation from stale snapshots", () => {
+it("updates authoritative data without resurrecting an expired done generation", () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
-  const decodedSnapshot = (stateEnteredAt: string) => {
+  const decodedSnapshot = (stateEnteredAt: string, name?: string) => {
       const outcome = decodeFeedEvent(
         JSON.stringify({
           ...fixture,
           agents: fixture.agents
             .filter((agent) => agent.id === "agent-01")
-            .map((agent) => ({ ...agent, state: "done", stateEnteredAt })),
+            .map((agent) => ({
+              ...agent,
+              name: name ?? agent.name,
+              state: "done",
+              stateEnteredAt,
+            })),
         }),
       );
       if (outcome.kind !== "accepted") throw new Error("fixture was rejected");
@@ -303,8 +310,18 @@ it("does not resurrect an expired done generation from stale snapshots", () => {
   store.apply(decodedSnapshot("2026-07-31T16:01:00Z"));
   vi.advanceTimersByTime(300_000);
   store.apply(decodedSnapshot("2026-07-31T16:00:00Z"));
+  store.apply(decodedSnapshot("2026-07-31T16:01:00Z", "Updated example cook"));
+  expect(store.snapshot().agents.get("agent-01")?.name).toBe(
+    "Updated example cook",
+  );
+  expect(store.snapshot().visibleAgents.has("agent-01")).toBe(false);
+  store.revealCleared();
+  expect(store.snapshot().visibleAgents.get("agent-01")?.name).toBe(
+    "Updated example cook",
+  );
   store.apply(decodedSnapshot("2026-07-31T16:01:00Z"));
-  expect(store.snapshot().agents.has("agent-01")).toBe(false);
+  expect(store.snapshot().agents.has("agent-01")).toBe(true);
+  expect(store.snapshot().visibleAgents.has("agent-01")).toBe(true);
 
   store.apply(decodedSnapshot("2026-07-31T16:02:00Z"));
   expect(store.snapshot().agents.get("agent-01")).toMatchObject({

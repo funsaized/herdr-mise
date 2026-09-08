@@ -389,7 +389,8 @@ defensive and stores the truthful final state, which is what
   | - Live state announcements  |        | One ticker. One canvas.       |
   |                             |        | Reads from AgentStore inside |
   | Reads coarse slices only:   |        | the ticker. Per-frame values |
-  |   - count, blocked, done,   |        | bypass React.                 |
+  |   - source/visible/cleared, |        | bypass React.                 |
+  |   - blocked, done,          |        |                               |
   |   - mode, selectedId,       |        |                               |
   |   - settings                |        |                               |
   +--------------+--------------+        +---------------+---------------+
@@ -408,6 +409,9 @@ timers, and the 86 board. Within an agent machine, `targetState` is feed truth a
 will not apply deltas or extend its snapshot deadline until that connection has
 received a fresh snapshot. Decoder rejection invalidates that projection and
 re-enters the same snapshot-first reconnect path.
+The coarse slice reports non-ended source records, the locally visible projection,
+and done records cleared from presentation separately. Blocked and done totals are
+visible-only; connected live empty mode requires a zero-record source snapshot.
 
 `scripts/audit-pixi-architecture.mjs` enforces the boundary in CI by
 forbidding direct WebGL, custom renderer, or shader imports in the

@@ -600,6 +600,44 @@ fn fixture_backed_responsive_composition_matrix() {
 }
 
 #[test]
+fn authoritative_done_fixture_stays_plated_until_the_source_is_empty() {
+    let mut raw = serde_json::from_str::<serde_json::Value>(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+    ))
+    .unwrap();
+    raw["agents"][0]["agent_status"] = "done".into();
+    let normalized = Normalizer::default()
+        .normalize_snapshot_value(raw, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let event = AgentStateEvent::Snapshot {
+        version: 1,
+        mode: AppMode::Live,
+        source_status: SourceStatus::Connected,
+        source_diagnostic: None,
+        agents: normalized.agents,
+    };
+    let mut table = AgentTable::default();
+    table.apply(event.clone());
+    table.apply(event);
+    assert_eq!(table.agents().count(), 1);
+    let output = text(&render(&table, 80, 24, 0));
+    assert!(output.contains("PLATED"));
+    assert!(!output.contains("Waiting for agents"));
+
+    let empty = Normalizer::default()
+        .normalize_snapshot_value(
+            serde_json::from_str(include_str!(
+                "../../../tests/fixtures/snapshot-protocol-19-empty-agents.json"
+            ))
+            .unwrap(),
+            "2026-08-13T12:00:00Z",
+        )
+        .unwrap();
+    let empty_table = snapshot(AppMode::Live, SourceStatus::Connected, None, empty.agents);
+    assert!(text(&render(&empty_table, 80, 24, 0)).contains("Waiting for agents"));
+}
+
+#[test]
 fn real_fixture_keeps_material_depth_and_state_chrome() {
     let value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"

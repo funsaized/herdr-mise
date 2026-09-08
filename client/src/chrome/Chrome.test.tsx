@@ -215,6 +215,7 @@ describe("chrome interactions", () => {
         onDismissHint: dismiss,
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onRevealCleared: () => {},
       },
       { rerender } = render(<Chrome {...props} />);
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -262,12 +263,40 @@ describe("chrome interactions", () => {
         onDismissHint={() => {}}
         view="freezer"
         onToggleFreezer={toggle}
+        onRevealCleared={() => {}}
       />,
     );
     const button = screen.getByRole("button", { name: "Freezer" });
     expect(button.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(button);
     expect(toggle).toHaveBeenCalledOnce();
+  });
+  it("reveals locally cleared plated cooks with a native live-only control", () => {
+    const reveal = vi.fn(),
+      { rerender } = render(
+        <ModeTreatment
+          mode="live"
+          sourceStatus="connected"
+          lastUpdateSeconds={0}
+          clearedCount={1}
+          onRevealCleared={reveal}
+        />,
+      );
+    fireEvent.click(
+      screen.getByRole("button", { name: "1 plated cook cleared — reveal" }),
+    );
+    expect(reveal).toHaveBeenCalledOnce();
+    rerender(
+      <ModeTreatment
+        mode="demo"
+        sourceStatus="connected"
+        lastUpdateSeconds={0}
+        clearedCount={2}
+        onRevealCleared={reveal}
+      />,
+    );
+    expect(screen.queryByText(/plated cooks cleared/)).toBeNull();
+    expect(screen.getByText("DEMO SERVICE")).toBeTruthy();
   });
   it("closes a selected demo session summary on live recovery", () => {
     const store = new AgentStore();
@@ -302,6 +331,7 @@ describe("chrome interactions", () => {
         onDismissHint: () => {},
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onRevealCleared: () => {},
       },
       { rerender } = render(<Chrome {...props} />);
     expect(screen.getByLabelText("refactor-auth session summary")).toBeTruthy();

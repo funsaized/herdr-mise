@@ -34,6 +34,7 @@ export interface ChromeProps {
   hintVisible: boolean;
   view: "kitchen" | "freezer";
   onToggleFreezer(): void;
+  onRevealCleared(): void;
 }
 
 export function Chrome(props: ChromeProps) {
@@ -64,9 +65,11 @@ export function Chrome(props: ChromeProps) {
   }, [tuiExpanded]);
 
   const snapshot = props.store.snapshot(),
-    selectedAgent = props.coarse.selectedId
-      ? snapshot.agents.get(props.coarse.selectedId)
-      : undefined,
+    selectedAgent =
+      props.coarse.selectedId &&
+      snapshot.visibleAgents.has(props.coarse.selectedId)
+        ? snapshot.agents.get(props.coarse.selectedId)
+        : undefined,
     selectedBoard = props.coarse.selectedId
       ? snapshot.board.find((item) => item.id === props.coarse.selectedId)
       : undefined;
@@ -75,7 +78,10 @@ export function Chrome(props: ChromeProps) {
         hit.kind === "station" &&
         hit.id === (props.hoveredId ?? props.focusedId),
     ),
-    hoverAgent = hoverHit ? snapshot.agents.get(hoverHit.id) : undefined,
+    hoverAgent =
+      hoverHit && snapshot.visibleAgents.has(hoverHit.id)
+        ? snapshot.agents.get(hoverHit.id)
+        : undefined,
     selectedHit = props.hits.find(
       (hit) => hit.kind === "station" && hit.id === selectedAgent?.id,
     ),
@@ -146,6 +152,8 @@ export function Chrome(props: ChromeProps) {
         sourceDiagnostic={props.coarse.sourceDiagnostic}
         disconnectReason={props.coarse.disconnectReason}
         lastUpdateSeconds={props.lastUpdateSeconds}
+        clearedCount={props.coarse.clearedCount}
+        onRevealCleared={props.onRevealCleared}
       />
       {import.meta.env.MODE === "visual" && (
         <figure
