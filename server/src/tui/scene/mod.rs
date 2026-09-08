@@ -486,6 +486,7 @@ pub(crate) fn draw_view(
     color_mode: ColorMode,
     scene_supported: bool,
     selected_id: Option<&str>,
+    table_offset: usize,
     scene_view: SceneView,
     help_open: bool,
     reduced_motion: bool,
@@ -498,6 +499,7 @@ pub(crate) fn draw_view(
             now,
             motion_tick(tick, reduced_motion),
             selected_id,
+            table_offset,
         );
         if help_open {
             draw_help(frame, color_mode);
@@ -515,6 +517,7 @@ pub(crate) fn draw_view(
             tick,
             color_mode,
             selected_id,
+            table_offset,
             reduced_motion,
         ),
         SceneView::Kitchen => draw_kitchen(
@@ -526,6 +529,7 @@ pub(crate) fn draw_view(
             tick,
             color_mode,
             selected_id,
+            table_offset,
             reduced_motion,
         ),
     }
@@ -544,6 +548,7 @@ fn draw_kitchen(
     tick: u64,
     color_mode: ColorMode,
     selected_id: Option<&str>,
+    table_offset: usize,
     reduced_motion: bool,
 ) {
     let agents = table.agents().collect::<Vec<_>>();
@@ -558,6 +563,7 @@ fn draw_kitchen(
                 now,
                 motion_tick(tick, reduced_motion),
                 selected_id,
+                table_offset,
             );
         }
         return;
@@ -988,6 +994,7 @@ fn draw_freezer(
     tick: u64,
     color_mode: ColorMode,
     selected_id: Option<&str>,
+    table_offset: usize,
     reduced_motion: bool,
 ) {
     let ids = table
@@ -1005,6 +1012,7 @@ fn draw_freezer(
                 now,
                 motion_tick(tick, reduced_motion),
                 selected_id,
+                table_offset,
             );
         }
         return;

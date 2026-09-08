@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
@@ -138,6 +138,83 @@ pub(crate) fn status_lines(
     (title.into(), status)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct TableWindow {
+    pub(crate) offset: usize,
+    pub(crate) end: usize,
+}
+
+struct FallbackLayout {
+    areas: Vec<Rect>,
+    window: TableWindow,
+}
+
+fn fallback_layout(
+    area: Rect,
+    table: &AgentTable,
+    selected_id: Option<&str>,
+    requested_offset: usize,
+) -> FallbackLayout {
+    let compact = area.height < 20;
+    let agent_count = table.agents().count();
+    let (title, source_copy) = status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        agent_count,
+    );
+    let header =
+        Paragraph::new(vec![Line::from(title), Line::from(source_copy)]).wrap(Wrap { trim: true });
+    let content_height = u16::try_from(header.line_count(area.width)).unwrap_or(u16::MAX);
+    let baseline_height = if compact { 2 } else { 4 };
+    let header_height = baseline_height.max(content_height + u16::from(!compact));
+    let table_height = u16::try_from(agent_count)
+        .unwrap_or(u16::MAX)
+        .saturating_add(3);
+    let board_height = u16::try_from(table.board().len().min(3))
+        .unwrap_or(3)
+        .saturating_add(2);
+    let selected_index = selected_id.and_then(|id| table.agents().position(|agent| agent.id == id));
+    let mut constraints = vec![
+        Constraint::Length(header_height),
+        Constraint::Length(table_height),
+        Constraint::Length(board_height),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ];
+    if selected_index.is_some() {
+        constraints.insert(4, Constraint::Length(2));
+    }
+    let areas = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(area)
+        .to_vec();
+    let capacity = usize::from(areas[1].height.saturating_sub(3));
+    let mut offset = requested_offset.min(agent_count.saturating_sub(capacity));
+    if let Some(index) = selected_index {
+        if index < offset {
+            offset = index;
+        } else if index >= offset.saturating_add(capacity) {
+            offset = index.saturating_add(1).saturating_sub(capacity);
+        }
+    }
+    let end = offset.saturating_add(capacity).min(agent_count);
+    FallbackLayout {
+        areas,
+        window: TableWindow { offset, end },
+    }
+}
+
+pub(crate) fn table_window(
+    area: Rect,
+    table: &AgentTable,
+    selected_id: Option<&str>,
+    requested_offset: usize,
+) -> TableWindow {
+    fallback_layout(area, table, selected_id, requested_offset).window
+}
+
 pub fn draw(
     frame: &mut Frame<'_>,
     table: &AgentTable,
@@ -145,6 +222,7 @@ pub fn draw(
     now: DateTime<Utc>,
     _tick: u64,
     selected_id: Option<&str>,
+    table_offset: usize,
 ) {
     let compact = frame.area().height < 20;
     let agent_count = table.agents().count();
@@ -162,77 +240,60 @@ pub fn draw(
         Line::from(source_copy),
     ])
     .wrap(Wrap { trim: true });
-    let content_height = u16::try_from(header.line_count(frame.area().width)).unwrap_or(u16::MAX);
-    let baseline_height = if compact { 2 } else { 4 };
-    let header_height = baseline_height.max(content_height + u16::from(!compact));
     if !compact {
         header = header.block(Block::default().borders(Borders::BOTTOM));
     }
-    let table_height = u16::try_from(agent_count)
-        .unwrap_or(u16::MAX)
-        .saturating_add(3);
-    let board_height = u16::try_from(table.board().len().min(3))
-        .unwrap_or(3)
-        .saturating_add(2);
-    let mut constraints = vec![
-        Constraint::Length(header_height),
-        Constraint::Length(table_height),
-        Constraint::Length(board_height),
-        Constraint::Min(0),
-        Constraint::Length(1),
-    ];
     let selected = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id));
-    if selected.is_some() {
-        constraints.insert(4, Constraint::Length(2));
-    }
-    let areas = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(constraints)
-        .split(frame.area());
+    let layout = fallback_layout(frame.area(), table, selected_id, table_offset);
+    let areas = layout.areas;
     frame.render_widget(header, areas[0]);
     let available_width = areas[1].width.saturating_sub(2);
     let show_workspace = available_width >= theme::KITCHEN_TABLE_WORKSPACE_MIN_WIDTH;
     let show_tickets = available_width >= theme::KITCHEN_TABLE_TICKETS_MIN_WIDTH;
     let show_runtime = available_width >= theme::KITCHEN_TABLE_RUNTIME_MIN_WIDTH;
-    let rows = table.agents().map(|agent| {
-        let selected_row = selected_id == Some(agent.id.as_str());
-        let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
-            .ok()
-            .map(|d| d.with_timezone(&Utc));
-        let elapsed = entered
-            .map(|d| now.signed_duration_since(d).num_milliseconds().max(0) as u64)
-            .unwrap_or(0);
-        let style = if agent.state == AgentState::Blocked {
-            Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
-        } else if selected_row {
-            Style::default().add_modifier(Modifier::BOLD)
-        } else {
-            Style::default()
-        };
-        let mut cells = vec![
-            Cell::from(if selected_row {
-                format!("> {}", sanitize_external(&agent.name))
+    let rows = table
+        .agents()
+        .skip(layout.window.offset)
+        .take(layout.window.end.saturating_sub(layout.window.offset))
+        .map(|agent| {
+            let selected_row = selected_id == Some(agent.id.as_str());
+            let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
+                .ok()
+                .map(|d| d.with_timezone(&Utc));
+            let elapsed = entered
+                .map(|d| now.signed_duration_since(d).num_milliseconds().max(0) as u64)
+                .unwrap_or(0);
+            let style = if agent.state == AgentState::Blocked {
+                Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
+            } else if selected_row {
+                Style::default().add_modifier(Modifier::BOLD)
             } else {
-                sanitize_external(&agent.name)
-            })
-            .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
-            Cell::from(record_state_label(agent))
-                .style(Style::default().fg(theme::compact_state_color(&agent.state))),
-            Cell::from(format_duration(elapsed)),
-        ];
-        if show_workspace {
-            cells.push(Cell::from(sanitize_external(workspace_display_name(
-                &agent.workspace,
-            ))));
-        }
-        if show_tickets {
-            cells.push(Cell::from(agent.session.tickets_text()));
-        }
-        if show_runtime {
-            cells.push(Cell::from(format_duration(agent.session.runtime_ms)));
-        }
-        Row::new(cells).style(style)
-    });
+                Style::default()
+            };
+            let mut cells = vec![
+                Cell::from(if selected_row {
+                    format!("> {}", sanitize_external(&agent.name))
+                } else {
+                    sanitize_external(&agent.name)
+                })
+                .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
+                Cell::from(record_state_label(agent))
+                    .style(Style::default().fg(theme::compact_state_color(&agent.state))),
+                Cell::from(format_duration(elapsed)),
+            ];
+            if show_workspace {
+                cells.push(Cell::from(sanitize_external(workspace_display_name(
+                    &agent.workspace,
+                ))));
+            }
+            if show_tickets {
+                cells.push(Cell::from(agent.session.tickets_text()));
+            }
+            if show_runtime {
+                cells.push(Cell::from(format_duration(agent.session.runtime_ms)));
+            }
+            Row::new(cells).style(style)
+        });
     let mut widths = vec![
         Constraint::Length(16),
         Constraint::Length(22),
@@ -251,15 +312,20 @@ pub fn draw(
         widths.push(Constraint::Min(9));
         headings.push("RUNTIME");
     }
+    let blocked_count = table
+        .agents()
+        .filter(|agent| agent.state == AgentState::Blocked)
+        .count();
+    let range_start = usize::from(agent_count > 0 && layout.window.end > layout.window.offset)
+        .saturating_add(layout.window.offset);
     frame.render_widget(
         Table::new(rows, widths)
             .header(Row::new(headings).style(Style::default().add_modifier(Modifier::BOLD)))
             .column_spacing(1)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Kitchen status"),
-            ),
+            .block(Block::default().borders(Borders::ALL).title(format!(
+                "Kitchen status · {range_start}-{}/{agent_count} · {blocked_count} blocked",
+                layout.window.end
+            ))),
         areas[1],
     );
     let board_rows = table.board().iter().rev().take(3).map(|entry| {
@@ -393,6 +459,7 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected_id,
+                    0,
                     scene_view,
                     help_open,
                     false,
@@ -461,7 +528,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         terminal
-            .draw(|frame| draw(frame, table, warning, now, 9, None))
+            .draw(|frame| draw(frame, table, warning, now, 9, None, 0))
             .unwrap();
         buffer_dump(terminal.backend().buffer())
     }
@@ -549,6 +616,7 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
+                    0,
                     SceneView::Kitchen,
                     false,
                     false,
@@ -601,6 +669,7 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
+                    0,
                     SceneView::Kitchen,
                     false,
                     false,
@@ -624,6 +693,126 @@ mod tests {
         assert_eq!(selected, None);
         assert!(handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn real_herdr_fixtures_keep_fallback_rows_reachable() {
+        let normalize = |fixture| {
+            Normalizer::default()
+                .normalize_snapshot_value(
+                    serde_json::from_str(fixture).unwrap(),
+                    "2026-08-13T12:00:00Z",
+                )
+                .unwrap()
+                .agents
+                .into_iter()
+                .next()
+                .unwrap()
+        };
+        let working = normalize(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ));
+        let blocked = normalize(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
+        ));
+        assert_eq!(blocked.state, AgentState::Blocked);
+        let agents = (0..30)
+            .map(|index| {
+                let mut agent = if index == 29 {
+                    blocked.clone()
+                } else {
+                    working.clone()
+                };
+                agent.id = format!("fixture-{index:02}");
+                agent.name = format!("Cook{index:02}");
+                agent
+            })
+            .collect();
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents,
+        });
+        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let render = |width, height, selected: Option<&str>, offset: &mut usize| {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal
+                .draw(|frame| {
+                    *offset = table_window(frame.area(), &table, selected, *offset).offset;
+                    scene::draw_view(
+                        frame,
+                        &table,
+                        None,
+                        now,
+                        0,
+                        super::super::canvas::ColorMode::Xterm256,
+                        true,
+                        selected,
+                        *offset,
+                        SceneView::Kitchen,
+                        false,
+                        false,
+                    )
+                })
+                .unwrap();
+            buffer_text(&terminal)
+        };
+        let shutdown = CancellationToken::new();
+
+        for (width, height) in [(60, 12), (80, 24)] {
+            let mut offset = 0;
+            let initial = render(width, height, None, &mut offset);
+            assert!(
+                initial.contains("/30 · 1 blocked"),
+                "{width}x{height}: {initial:?}"
+            );
+            assert!(!initial.contains("Cook29"));
+
+            let mut selected = None;
+            for index in 0..30 {
+                assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+                let output = render(width, height, selected.as_deref(), &mut offset);
+                assert!(
+                    output.contains(&format!("> Cook{index:02}")),
+                    "{width}x{height} could not show {selected:?}: {output:?}"
+                );
+            }
+
+            selected = None;
+            assert!(!handle_key(
+                KeyCode::BackTab,
+                &table,
+                &mut selected,
+                &shutdown
+            ));
+            assert_eq!(selected.as_deref(), Some("fixture-29"));
+            assert!(render(width, height, selected.as_deref(), &mut offset).contains("> Cook29"));
+
+            selected = None;
+            assert!(!handle_key(
+                KeyCode::Char('b'),
+                &table,
+                &mut selected,
+                &shutdown
+            ));
+            assert_eq!(selected.as_deref(), Some("fixture-29"));
+            assert!(render(width, height, selected.as_deref(), &mut offset).contains("> Cook29"));
+        }
+
+        let selected = Some("fixture-29".to_owned());
+        let mut offset = 0;
+        render(60, 12, selected.as_deref(), &mut offset);
+        let narrow_offset = offset;
+        let resized = render(80, 24, selected.as_deref(), &mut offset);
+        assert_eq!(selected.as_deref(), Some("fixture-29"));
+        assert!(resized.contains("> Cook29"));
+        assert!(offset < narrow_offset);
+        assert!(resized.contains(&format!("{}-30/30", offset + 1)));
     }
 
     #[test]
@@ -657,7 +846,12 @@ mod tests {
             &shutdown,
         ));
         assert!(help_open);
-        for code in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Char('f')] {
+        for code in [
+            KeyCode::Tab,
+            KeyCode::BackTab,
+            KeyCode::Char('b'),
+            KeyCode::Char('f'),
+        ] {
             assert!(!handle_key_with_view(
                 code,
                 &table,
@@ -731,7 +925,12 @@ mod tests {
             &mut help_open,
             &shutdown,
         ));
-        for code in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Char('f')] {
+        for code in [
+            KeyCode::Tab,
+            KeyCode::BackTab,
+            KeyCode::Char('b'),
+            KeyCode::Char('f'),
+        ] {
             assert!(!handle_key_with_view(
                 code,
                 &table,
@@ -888,7 +1087,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         terminal
-            .draw(|frame| draw(frame, &table, None, now, 9, None))
+            .draw(|frame| draw(frame, &table, None, now, 9, None, 0))
             .unwrap();
         let text = buffer_text(&terminal);
         for expected in [
@@ -993,6 +1192,7 @@ mod tests {
                     now,
                     7,
                     None,
+                    0,
                 )
             })
             .unwrap();
@@ -1021,7 +1221,7 @@ mod tests {
             let backend = TestBackend::new(width, height);
             let mut terminal = Terminal::new(backend).unwrap();
             terminal
-                .draw(|frame| draw(frame, &table, None, now, 7, None))
+                .draw(|frame| draw(frame, &table, None, now, 7, None, 0))
                 .unwrap();
             let rendered = terminal
                 .backend()
@@ -1081,7 +1281,7 @@ mod tests {
 
         let mut terminal = Terminal::new(TestBackend::new(79, 23)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &table, None, Utc::now(), 0, Some("agent-02")))
+            .draw(|frame| draw(frame, &table, None, Utc::now(), 0, Some("agent-02"), 0))
             .unwrap();
         let output = buffer_text(&terminal);
         assert!(output.contains("[31mSAFE"));
