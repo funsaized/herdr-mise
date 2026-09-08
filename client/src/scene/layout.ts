@@ -20,6 +20,11 @@ export interface SceneLayout {
   columns: number;
   rows: number;
   banquet: boolean;
+  totalCount: number;
+  capacity: number;
+  pageIndex: number;
+  pageCount: number;
+  visibleIds: readonly string[];
 }
 export interface StationVisualMetrics {
   cookHeight: number;
@@ -85,6 +90,7 @@ export function computeLayout(
   width: number,
   height: number,
   ids: readonly (string | null)[],
+  requestedPage = 0,
 ): SceneLayout {
   // Favor readable pixel clusters at laptop-height viewports. The former floor()
   // dropped 1280x633 to 3px units, leaving almost half the floor unoccupied.
@@ -95,21 +101,91 @@ export function computeLayout(
   const sceneWidth = width / unit,
     sceneHeight = height / unit;
   const wallHeight = Math.min(56, Math.max(42, sceneHeight * 0.3));
-  const capacity = ids.length,
-    sparse = capacity <= 2,
+  const occupiedIds = ids.filter((id): id is string => id !== null),
+    slotCount = ids.length,
+    sparse = slotCount <= 2,
     passWidth = Math.min(
       sparse ? tokens.scene.layout.sparsePassWidth : 132,
       sceneWidth * 0.52,
     );
-  const columns = columnCount(capacity),
-    rows = Math.max(1, Math.ceil(capacity / columns)),
-    banquet = capacity > 6,
-    scale = banquet ? 0.8 : sparse ? tokens.scene.layout.sparseScale : 1,
+  const preferredColumns = columnCount(Math.max(1, slotCount)),
+    preferredRows = Math.max(
+      1,
+      Math.ceil(Math.max(1, slotCount) / preferredColumns),
+    ),
+    banquet = slotCount > 6,
+    gridTop = wallHeight + 25,
+    sparseScaleFits =
+      sceneHeight - gridTop - 4 >=
+        tokens.scene.layout.stationHeight * tokens.scene.layout.sparseScale &&
+      sceneWidth - 14 >=
+        tokens.scene.layout.stationWidth * tokens.scene.layout.sparseScale,
+    scale = banquet
+      ? tokens.scene.layout.banquetScale
+      : sparse && sparseScaleFits
+        ? tokens.scene.layout.sparseScale
+        : 1,
     gutter = banquet ? 0 : tokens.scene.layout.stationGutter;
-  const gridTop = wallHeight + 25;
-  const availableHeight = Math.max(36 * scale, sceneHeight - gridTop - 4);
+  const fullAvailableHeight = Math.max(
+    tokens.scene.layout.stationHeight * scale,
+    sceneHeight - gridTop - 4,
+  );
+  const preferredCellHeight = Math.min(
+      banquet ? 42 : tokens.scene.layout.stationHeight * scale,
+      fullAvailableHeight / preferredRows,
+    ),
+    preferredCellWidth = Math.min(
+      48 * scale,
+      (sceneWidth - 14 - gutter * (preferredColumns - 1)) / preferredColumns,
+    ),
+    minimumWidth = tokens.scene.layout.stationWidth * scale,
+    minimumHeight = tokens.scene.layout.stationHeight * scale,
+    paged =
+      slotCount > 0 &&
+      (preferredCellWidth < minimumWidth ||
+        preferredCellHeight < minimumHeight),
+    pagerReservedHeight =
+      width >= tokens.scene.layout.compactPagerMinWidth &&
+      height <= tokens.scene.layout.compactPagerMaxHeight
+        ? tokens.scene.layout.compactPagerReservedHeight
+        : tokens.scene.layout.pagerReservedHeight,
+    stationGridTop = paged
+      ? Math.min(
+          gridTop,
+          sceneHeight - pagerReservedHeight / unit - minimumHeight,
+        )
+      : gridTop,
+    availableHeight = Math.max(
+      minimumHeight,
+      sceneHeight - stationGridTop - (paged ? pagerReservedHeight / unit : 4),
+    ),
+    pageColumns = Math.max(
+      1,
+      Math.min(
+        6,
+        Math.floor((sceneWidth - 14 + gutter) / (minimumWidth + gutter)),
+      ),
+    ),
+    pageRows = Math.max(1, Math.floor(availableHeight / minimumHeight)),
+    capacity = paged ? pageColumns * pageRows : Math.max(1, occupiedIds.length),
+    pageCount = Math.max(1, Math.ceil(occupiedIds.length / capacity)),
+    pageIndex = Math.max(0, Math.min(Math.trunc(requestedPage), pageCount - 1)),
+    visibleIds = occupiedIds.slice(
+      pageIndex * capacity,
+      (pageIndex + 1) * capacity,
+    ),
+    columns = paged
+      ? Math.min(pageColumns, Math.max(1, visibleIds.length))
+      : preferredColumns,
+    rows = paged
+      ? Math.max(1, Math.ceil(visibleIds.length / columns))
+      : Math.max(1, Math.ceil(Math.max(1, slotCount) / columns));
   const cellHeight = Math.min(
-    banquet ? 42 : 45 * scale,
+    banquet
+      ? 42
+      : (paged
+          ? tokens.scene.layout.pagedStationHeight
+          : tokens.scene.layout.stationHeight) * scale,
     availableHeight / rows,
   );
   const cellWidth = Math.min(
@@ -117,8 +193,9 @@ export function computeLayout(
     (sceneWidth - 14 - gutter * (columns - 1)) / columns,
   );
   const gridWidth = cellWidth * columns + gutter * (columns - 1);
-  const left = (sceneWidth - gridWidth) / 2;
-  const stations = ids.flatMap((id, index) =>
+  const left = (sceneWidth - gridWidth) / 2,
+    originTop = paged ? stationGridTop : gridTop;
+  const stations = (paged ? visibleIds : ids).flatMap((id, index) =>
     id === null
       ? []
       : [
@@ -128,7 +205,7 @@ export function computeLayout(
             column: index % columns,
             scale,
             x: (left + (index % columns) * (cellWidth + gutter)) * unit,
-            y: (gridTop + Math.floor(index / columns) * cellHeight) * unit,
+            y: (originTop + Math.floor(index / columns) * cellHeight) * unit,
             width: cellWidth * unit,
             height: cellHeight * unit,
           },
@@ -147,6 +224,11 @@ export function computeLayout(
     columns,
     rows,
     banquet,
+    totalCount: occupiedIds.length,
+    capacity,
+    pageIndex,
+    pageCount,
+    visibleIds,
   };
 }
 export function stationVisualMetrics(

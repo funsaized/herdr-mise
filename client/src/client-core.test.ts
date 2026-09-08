@@ -28,6 +28,7 @@ import {
   shouldReconcileBusserClear,
 } from "./scene/kitchen-scene";
 import {
+  columnCount,
   computeFreezerLayout,
   computeLayout,
   reconcileStationSlots,
@@ -726,6 +727,65 @@ describe("layout, transitions and resources", () => {
       }
     }
   });
+  it("pages dense kitchens without shrinking or losing stations", () => {
+    for (const [width, height] of [
+      [1280, 720],
+      [320, 640],
+      [640, 360],
+    ] as const)
+      for (const count of [1, 4, 8, 16, 30, 60]) {
+        const ids = Array.from(
+            { length: count },
+            (_, index) => `cook-${index}`,
+          ),
+          first = computeLayout(width, height, ids),
+          visible = new Set<string>();
+        expect(first.totalCount).toBe(count);
+        expect(first.pageCount).toBe(Math.ceil(count / first.capacity));
+        for (let page = 0; page < first.pageCount; page++) {
+          const layout = computeLayout(width, height, ids, page);
+          expect(layout.pageIndex).toBe(page);
+          for (const station of layout.stations) {
+            visible.add(station.id);
+            expect(station.width).toBeGreaterThanOrEqual(
+              tokens.scene.layout.stationWidth * station.scale * layout.unit,
+            );
+            expect(station.height).toBeGreaterThanOrEqual(
+              tokens.scene.layout.stationHeight * station.scale * layout.unit,
+            );
+            expect(station.x).toBeGreaterThanOrEqual(0);
+            expect(station.y).toBeGreaterThanOrEqual(0);
+            expect(station.x + station.width).toBeLessThanOrEqual(width);
+            expect(station.y + station.height).toBeLessThanOrEqual(height);
+            if (layout.pageCount > 1)
+              expect(station.y + station.height).toBeLessThanOrEqual(
+                height -
+                  (width >= tokens.scene.layout.compactPagerMinWidth &&
+                  height <= tokens.scene.layout.compactPagerMaxHeight
+                    ? tokens.scene.layout.compactPagerReservedHeight
+                    : tokens.scene.layout.pagerReservedHeight),
+              );
+          }
+        }
+        expect([...visible]).toEqual(ids);
+        if (width === 1280 && count <= 8) {
+          expect(first.pageCount).toBe(1);
+          expect(first.columns).toBe(columnCount(count));
+          expect(first.stations).toHaveLength(count);
+        }
+      }
+  });
+  it("keeps global blocked queue positions on later pages", () => {
+    const ids = Array.from({ length: 30 }, (_, index) => `cook-${index}`),
+      layout = computeLayout(1280, 720, ids, 1),
+      placements = blockedPlacements(layout, ids, [], ids);
+    expect([...placements.values()].map((item) => item.queueOrdinal)).toEqual(
+      layout.visibleIds.map((id) => ids.indexOf(id) + 1),
+    );
+    expect(
+      [...placements.values()].every((item) => item.queueTotal === 30),
+    ).toBe(true);
+  });
   it("applies configured gutters and sparse composition dimensions", () => {
     const dense = computeLayout(
         390,
@@ -783,7 +843,9 @@ describe("layout, transitions and resources", () => {
       }
       expect(
         Math.max(...metrics.map((metric) => metric.stationBottom)),
-      ).toBeGreaterThanOrEqual(count <= 2 ? 500 : 600);
+      ).toBeGreaterThanOrEqual(
+        count <= 2 ? 500 : layout.rows === 1 ? 480 : 600,
+      );
       expect(
         Math.max(...metrics.map((metric) => metric.stationBottom)),
       ).toBeLessThanOrEqual(633);
@@ -818,9 +880,9 @@ describe("layout, transitions and resources", () => {
         layout = computeLayout(width, height, ids),
         placements = blockedPlacements(layout, [...ids].reverse()),
         ordered = layout.stations.map((station) => placements.get(station.id)!);
-      expect(placements.size).toBe(count);
+      expect(placements.size).toBe(layout.stations.length);
       expect(ordered.map((placement) => placement.queueOrdinal)).toEqual(
-        ids.map((_, index) => index + 1),
+        layout.stations.map((_, index) => index + 1),
       );
       expect(ordered.map((placement) => placement.kind).join(",")).toMatch(
         /^pass(?:,pass)*(?:,station)*$/,
