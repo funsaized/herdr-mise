@@ -42,7 +42,9 @@ export function Chrome(props: ChromeProps) {
     ),
     [tuiExpanded, setTuiExpanded] = useState(false),
     [tuiRestart, setTuiRestart] = useState(0),
-    tuiExpandToggle = useRef<HTMLButtonElement>(null);
+    tuiExpandToggle = useRef<HTMLButtonElement>(null),
+    openSettings = useRef<HTMLButtonElement>(null),
+    previousSelectedId = useRef(props.coarse.selectedId);
   useEffect(() => reducedMotionPreference.subscribe(setTuiStopped), []);
   useEffect(() => {
     if (!tuiExpanded) return;
@@ -85,6 +87,15 @@ export function Chrome(props: ChromeProps) {
     const frame = requestAnimationFrame(() => setTuiExpanded(false));
     return () => cancelAnimationFrame(frame);
   }, [primaryPanelOpen, tuiExpanded]);
+  useEffect(() => {
+    if (
+      previousSelectedId.current !== null &&
+      props.coarse.selectedId === null &&
+      document.activeElement === document.body
+    )
+      openSettings.current?.focus();
+    previousSelectedId.current = props.coarse.selectedId;
+  }, [props.coarse.selectedId]);
   return (
     <>
       {!primaryPanelOpen && hoverAgent && hoverHit && (
@@ -120,6 +131,7 @@ export function Chrome(props: ChromeProps) {
             Freezer
           </button>
           <button
+            ref={openSettings}
             className="settingsTrigger"
             onClick={props.onOpenSettings}
             aria-label="Open settings"
@@ -132,6 +144,7 @@ export function Chrome(props: ChromeProps) {
         mode={props.coarse.mode}
         sourceStatus={props.coarse.sourceStatus}
         sourceDiagnostic={props.coarse.sourceDiagnostic}
+        disconnectReason={props.coarse.disconnectReason}
         lastUpdateSeconds={props.lastUpdateSeconds}
       />
       {import.meta.env.MODE === "visual" && (
