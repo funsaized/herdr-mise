@@ -9,6 +9,7 @@ import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings } from "./settings-storage";
 
 export type AppMode = FeedMode | "empty" | "disconnected" | "connecting";
+export type ClientDisconnectReason = "incompatibleFeed" | null;
 export const HISTORY_LIMIT = 256;
 export interface Settings {
   sound: boolean;
@@ -48,6 +49,7 @@ export interface StoreSnapshot {
   feedMode: FeedMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
+  disconnectReason: ClientDisconnectReason;
   selectedId: string | null;
   settings: Settings;
   lastUpdateAt: number;
@@ -59,6 +61,7 @@ export interface CoarseSlice {
   mode: AppMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
+  disconnectReason: ClientDisconnectReason;
   selectedId: string | null;
   settings: Settings;
 }
@@ -98,6 +101,7 @@ export class AgentStore {
   private feedMode: FeedMode = "live";
   private sourceStatus: SourceStatus = "connected";
   private sourceDiagnostic: SourceDiagnostic | null = null;
+  private disconnectReason: ClientDisconnectReason = null;
   private selectedId: string | null = null;
   private settings: Settings;
   private lastUpdateAt = 0;
@@ -124,6 +128,7 @@ export class AgentStore {
       feedMode: this.feedMode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
+      disconnectReason: this.disconnectReason,
       selectedId: this.selectedId,
       settings: this.settings,
       lastUpdateAt: this.lastUpdateAt,
@@ -138,6 +143,7 @@ export class AgentStore {
       mode: this.mode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
+      disconnectReason: this.disconnectReason,
       selectedId: this.selectedId,
       settings: this.settings,
     };
@@ -172,9 +178,11 @@ export class AgentStore {
     this.emitCoarse();
     this.emitChange();
   }
-  setDisconnected() {
-    if (this.mode !== "disconnected") {
+  setDisconnected(reason: ClientDisconnectReason = null) {
+    const nextReason = reason ?? this.disconnectReason;
+    if (this.mode !== "disconnected" || this.disconnectReason !== nextReason) {
       this.mode = "disconnected";
+      this.disconnectReason = nextReason;
       this.emitCoarse();
       this.emitChange();
     }
@@ -190,6 +198,7 @@ export class AgentStore {
     this.feedMode = event.mode;
     this.lastUpdateAt = this.scheduler.now();
     if (event.type === "snapshot") {
+      this.disconnectReason = null;
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
       const incoming = new Set(event.agents.map((agent) => agent.id));
@@ -367,6 +376,7 @@ function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
     a.mode === b.mode &&
     a.sourceStatus === b.sourceStatus &&
     a.sourceDiagnostic === b.sourceDiagnostic &&
+    a.disconnectReason === b.disconnectReason &&
     a.selectedId === b.selectedId &&
     a.settings === b.settings
   );

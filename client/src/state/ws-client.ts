@@ -26,6 +26,7 @@ export class AgentWebSocketClient {
   private generation = 0;
   private bytes: { at: number; count: number }[] = [];
   private invalidMessages = 0;
+  private recoveringRejectedState = false;
   constructor(
     private url: string,
     private store: AgentStore,
@@ -44,6 +45,7 @@ export class AgentWebSocketClient {
     this.socket?.close();
     this.socket = null;
     this.bytes = [];
+    this.recoveringRejectedState = false;
   }
   private connect() {
     // Snapshot eligibility is per connection and resets on every reconnect.
@@ -52,14 +54,14 @@ export class AgentWebSocketClient {
     const socket = this.factory(this.url);
     let hasSnapshot = false;
     this.socket = socket;
-    const lose = () => {
+    const lose = (incompatible = false) => {
       if (generation !== this.generation || this.stopped) return;
       this.generation++;
       this.socket = null;
       socket.close();
       this.scheduler.clearTimeout(this.staleTimer);
       this.staleTimer = null;
-      this.store.setDisconnected();
+      this.store.setDisconnected(incompatible ? "incompatibleFeed" : null);
       if (this.reconnectTimer === null)
         this.reconnectTimer = this.scheduler.setTimeout(() => {
           this.reconnectTimer = null;
@@ -80,20 +82,26 @@ export class AgentWebSocketClient {
         const bucket = this.bytes.at(-1);
         if (bucket?.at === at) bucket.count += count;
         else this.bytes.push({ at, count });
-        const parsed = decodeFeedEvent(raw);
-        if (!parsed) {
+        const outcome = decodeFeedEvent(raw);
+        if (outcome.kind === "rejected") {
           this.invalidMessages = Math.min(
             this.invalidMessages + 1,
             Number.MAX_SAFE_INTEGER,
           );
+          const incompatible = this.recoveringRejectedState;
+          this.recoveringRejectedState = true;
+          lose(incompatible);
           return;
         }
+        if (outcome.kind === "noise") return;
+        const parsed = outcome.event;
         if (parsed.type === "snapshot") {
           this.store.apply(parsed);
           hasSnapshot = true;
+          this.recoveringRejectedState = false;
         } else if (parsed.type === "delta" && hasSnapshot)
           this.store.apply(parsed);
-        this.armStale(lose);
+        if (hasSnapshot) this.armStale(lose);
       } catch {
         /* malformed feed messages are isolated */
       }
