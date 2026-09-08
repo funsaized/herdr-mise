@@ -4,7 +4,7 @@ STYLE 00 000..019 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 01 "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19, 20; upgrade or downgrade Herdr to "
 TEXT 02 "a tested release, then retry. Nothing here is real.                                                           "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
-TEXT 04 "┌Kitchen status──────────────────────────────────────────────────────────────────────────────────────────────┐"
+TEXT 04 "┌Kitchen status · 0-0/0 · 0 blocked──────────────────────────────────────────────────────────────────────────┐"
 TEXT 05 "│AGENT            STATE                  ELAPSED               WORKSPACE        TICKETS RUNTIME              │"
 STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 06 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"

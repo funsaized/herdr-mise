@@ -3,6 +3,9 @@ import type {
   AgentRecord,
   AgentStateEvent,
 } from "../../protocol/generated/agent-state-event";
+import fixtureRemove from "../../protocol/fixtures/delta-remove.v1.json";
+import fixtureUpsert from "../../protocol/fixtures/delta-upsert.v1.json";
+import fixtureDemoUnsupported from "../../protocol/fixtures/snapshot-demo-unsupported.v1.json";
 import fixtureSnapshot from "../../protocol/fixtures/snapshot.v1.json";
 import {
   blockedPlacements,
@@ -31,7 +34,7 @@ import {
 } from "./scene/layout";
 import { ParticlePool } from "./scene/particles";
 import { TransitionEngine } from "./scene/transition";
-import { BellController, SharedBellAudio } from "./sound/bell";
+import { BELL_LOG_LIMIT, BellController, SharedBellAudio } from "./sound/bell";
 import { AgentStore, type Scheduler } from "./state/store";
 import { AgentWebSocketClient, type SocketLike } from "./state/ws-client";
 import {
@@ -60,10 +63,12 @@ class FakeClock implements Scheduler {
   time = 0;
   private next = 1;
   private jobs = new Map<number, { at: number; fn: () => void }>();
+  private callbacks = new Map<number, () => void>();
   now = () => this.time;
   setTimeout(fn: () => void, ms: number) {
     const id = this.next++;
     this.jobs.set(id, { at: this.time + ms, fn });
+    this.callbacks.set(id, fn);
     return id;
   }
   clearTimeout(id: unknown) {
@@ -79,6 +84,12 @@ class FakeClock implements Scheduler {
       this.jobs.delete(job[0]);
       job[1].fn();
     }
+  }
+  latestTimerId() {
+    return this.next - 1;
+  }
+  invoke(id: number) {
+    this.callbacks.get(id)?.();
   }
 }
 const agent = (
@@ -206,6 +217,9 @@ describe("agent store machines", () => {
     store.revealCleared();
     expect(store.coarse()).toMatchObject({ visibleCount: 1, clearedCount: 0 });
     expect(events.at(-1)).toBe("reveal");
+    store.setSettings({ doneTimeoutMs: 100 });
+    clock.advance(50);
+    expect(store.coarse().visibleCount).toBe(1);
     clock.advance(50);
     expect(store.coarse().visibleCount).toBe(1);
   });
@@ -218,12 +232,18 @@ describe("agent store machines", () => {
   });
   it("does not extend a done deadline for progress deltas", () => {
     const clock = new FakeClock(),
-      store = new AgentStore(clock, { doneTimeoutMs: 50 });
+      store = new AgentStore(clock, { doneTimeoutMs: 50 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
     store.apply(snapshot(agent("done")));
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(50);
     clock.advance(40);
     store.apply(upsert(agent("done", "a", 0.9)));
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(50);
     clock.advance(10);
     expect(store.coarse()).toMatchObject({ sourceCount: 1, visibleCount: 0 });
+    expect(events.filter((event) => event === "busser")).toHaveLength(1);
+    expect(events.filter((event) => event === "clear")).toHaveLength(1);
   });
   it("clears stale dismissal only for resumption, removal, end, or a new period", () => {
     const clock = new FakeClock(),
@@ -250,6 +270,107 @@ describe("agent store machines", () => {
     const fresh = new AgentStore(clock, { doneTimeoutMs: 50 });
     fresh.apply(snapshot(done));
     expect(fresh.coarse()).toMatchObject({ sourceCount: 1, visibleCount: 1 });
+  });
+  it.each([300_000, 600_000, 1_200_000])(
+    "applies the %i ms timeout to an existing done cook",
+    (doneTimeoutMs) => {
+      const clock = new FakeClock(),
+        initialTimeout = doneTimeoutMs === 1_200_000 ? 300_000 : 1_200_000,
+        store = new AgentStore(clock, { doneTimeoutMs: initialTimeout }),
+        events: string[] = [];
+      store.onEvent((event) => events.push(event.type));
+      store.apply(snapshot(agent("done")));
+      clock.advance(120_000);
+      store.setSettings({ doneTimeoutMs });
+
+      expect(store.snapshot().agents.get("a")?.clearAt).toBe(doneTimeoutMs);
+      clock.advance(doneTimeoutMs - 120_000 - 1);
+      expect(store.coarse().visibleCount).toBe(1);
+      clock.advance(1);
+      expect(store.coarse()).toMatchObject({ sourceCount: 1, visibleCount: 0 });
+      expect(events.slice(-2)).toEqual(["busser", "clear"]);
+    },
+  );
+  it("expires an existing done cook immediately when the shortened deadline elapsed", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 1_200_000 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
+    store.apply(snapshot(agent("done")));
+    clock.advance(600_000);
+    store.setSettings({ doneTimeoutMs: 300_000 });
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(300_000);
+    clock.advance(0);
+    expect(events.filter((event) => event === "busser")).toHaveLength(1);
+    expect(events.filter((event) => event === "clear")).toHaveLength(1);
+  });
+  it("keeps stale deadline callbacks inert after lengthening a done timeout", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 300_000 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
+    store.apply(snapshot(agent("done")));
+    const staleTimer = clock.latestTimerId();
+    clock.advance(60_000);
+    store.setSettings({ doneTimeoutMs: 1_200_000 });
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(1_200_000);
+    clock.invoke(staleTimer);
+    expect(store.coarse().visibleCount).toBe(1);
+    clock.advance(1_140_000);
+    expect(events.slice(-2)).toEqual(["busser", "clear"]);
+  });
+  it("gives a newer done generation a fresh deadline and rejects its stale callback", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 }),
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
+    store.apply(snapshot(agent("done")));
+    const staleTimer = clock.latestTimerId();
+    clock.advance(40);
+    store.apply(
+      upsert({
+        ...agent("done", "a", 0.9),
+        stateEnteredAt: "2026-07-31T00:01:00Z",
+      }),
+    );
+    expect(store.snapshot().agents.get("a")).toMatchObject({
+      stateEnteredAt: "2026-07-31T00:01:00Z",
+      clearAt: 90,
+      transitionStartedAt: 40,
+    });
+    clock.invoke(staleTimer);
+    clock.advance(10);
+    expect(store.coarse().visibleCount).toBe(1);
+    clock.advance(40);
+    expect(events.filter((event) => event === "busser")).toHaveLength(1);
+    expect(events.filter((event) => event === "clear")).toHaveLength(1);
+  });
+  it("cancels done work and arms a fresh generation after working", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 });
+    store.apply(snapshot(agent("done")));
+    const firstTimer = clock.latestTimerId();
+    clock.advance(40);
+    store.apply(upsert(agent("working")));
+    clock.invoke(firstTimer);
+    expect(store.snapshot().agents.get("a")?.targetState).toBe("working");
+    store.apply(
+      upsert({
+        ...agent("done"),
+        stateEnteredAt: "2026-07-31T00:01:00Z",
+      }),
+    );
+    expect(store.snapshot().agents.get("a")?.clearAt).toBe(90);
+    clock.advance(50);
+    expect(store.coarse()).toMatchObject({ sourceCount: 1, visibleCount: 0 });
+  });
+  it("does not re-arm done cooks when the timeout value is unchanged", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 600_000 });
+    store.apply(snapshot(agent("done")));
+    const timer = clock.latestTimerId();
+    store.setSettings({ doneTimeoutMs: 600_000, sound: true });
+    expect(clock.latestTimerId()).toBe(timer);
   });
   it("does not notify coarse subscribers for progress-only deltas", () => {
     const store = new AgentStore(),
@@ -881,41 +1002,167 @@ describe("theme boundary and bell", () => {
     expect(accentIndexForId("agent-a")).toBeGreaterThanOrEqual(0);
     expect(accentIndexForId("agent-a")).toBeLessThan(12);
   });
-  it("logs exactly enter and the two escalation threshold dings", () => {
+  it("reconciles fixture-backed bell episodes across lifecycle churn", () => {
+    type SnapshotEvent = Extract<AgentStateEvent, { type: "snapshot" }>;
+    type UpsertEvent = Extract<
+      AgentStateEvent,
+      { type: "delta"; operation: "upsert" }
+    >;
+    type RemoveEvent = Extract<
+      AgentStateEvent,
+      { type: "delta"; operation: "remove" }
+    >;
     const clock = new FakeClock(),
       store = new AgentStore(clock, {
         sound: true,
         escalationFastMs: 100,
         escalationVignetteMs: 500,
       }),
+      sockets: FakeSocket[] = [],
+      client = new AgentWebSocketClient(
+        "ws://test",
+        store,
+        () => {
+          const socket = new FakeSocket();
+          sockets.push(socket);
+          return socket;
+        },
+        clock,
+      ),
       ding = vi.fn(),
-      bell = new BellController(store, ding, clock.now);
-    store.apply(snapshot(agent("working")));
-    store.apply(upsert(agent("blocked")));
+      bell = new BellController(store, ding, clock.now),
+      upsertFixture = fixtureUpsert as UpsertEvent,
+      removeFixture = fixtureRemove as RemoveEvent,
+      demoFixture = fixtureDemoUnsupported as SnapshotEvent,
+      liveFixture = fixtureSnapshot as SnapshotEvent,
+      record = (
+        id: string,
+        state: AgentRecord["state"],
+        enteredAt = clock.time,
+      ): AgentRecord => ({
+        ...upsertFixture.agent,
+        id,
+        state,
+        stateEnteredAt: new Date(enteredAt).toISOString(),
+      }),
+      sendUpsert = (
+        socket: FakeSocket,
+        id: string,
+        state: AgentRecord["state"],
+        enteredAt = clock.time,
+      ) =>
+        socket.message({
+          ...upsertFixture,
+          agent: record(id, state, enteredAt),
+        }),
+      sendRemove = (socket: FakeSocket, id: string) =>
+        socket.message({ ...removeFixture, agentId: id });
+
+    clock.time = Date.parse(upsertFixture.agent.stateEnteredAt);
+    client.start();
+    sockets[0]!.open();
+    sockets[0]!.message(liveFixture);
+
+    sendUpsert(sockets[0]!, "agent-01", "blocked");
+    sendUpsert(sockets[0]!, "agent-01", "blocked", clock.time + 500);
+    bell.tick();
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter"]);
     clock.advance(99);
     bell.tick();
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter"]);
     clock.advance(1);
     bell.tick();
-    clock.advance(400);
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter", "fast"]);
+    sendRemove(sockets[0]!, "agent-01");
+    clock.advance(500);
     bell.tick();
-    expect(bell.log.map((item) => item.reason)).toEqual([
-      "enter",
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter", "fast"]);
+
+    sendUpsert(sockets[0]!, "ended-agent", "blocked");
+    sendUpsert(sockets[0]!, "ended-agent", "ended");
+    clock.advance(500);
+    bell.tick();
+    expect(bell.log.at(-1)?.reason).toBe("enter");
+
+    const replacementId = "replacement-agent";
+    sockets[0]!.message({
+      ...demoFixture,
+      agents: [record(replacementId, "blocked", clock.time - 1_001)],
+    });
+    const beforeReplacement = bell.log.length;
+    sockets[0]!.message({
+      ...liveFixture,
+      agents: [record(replacementId, "blocked")],
+    });
+    bell.tick();
+    expect(bell.log).toHaveLength(beforeReplacement + 1);
+    expect(bell.log.at(-1)?.reason).toBe("enter");
+    clock.advance(100);
+    bell.tick();
+    expect(bell.log.at(-1)?.reason).toBe("fast");
+
+    sendRemove(sockets[0]!, replacementId);
+    sendUpsert(sockets[0]!, "reconnect-agent", "blocked");
+    const beforeDisconnect = bell.log.length;
+    sockets[0]!.closeEvent();
+    clock.advance(999);
+    bell.tick();
+    expect(bell.log).toHaveLength(beforeDisconnect);
+    clock.advance(1);
+    sockets[1]!.open();
+    sockets[1]!.message({
+      ...liveFixture,
+      agents: [record("reconnect-agent", "blocked", clock.time - 1_000)],
+    });
+    bell.tick();
+    expect(bell.log.slice(-2).map(({ reason }) => reason)).toEqual([
       "fast",
       "vignette",
     ]);
-    expect(ding).toHaveBeenCalledTimes(3);
-    bell.destroy();
-  });
-  it("stays silent when sound is disabled", () => {
-    const clock = new FakeClock(),
-      store = new AgentStore(clock),
-      ding = vi.fn(),
-      bell = new BellController(store, ding, clock.now);
-    store.apply(snapshot(agent("blocked")));
-    clock.advance(600_000);
+
+    clock.advance(1);
+    const beforeReuse = bell.log.length;
+    sockets[1]!.message({
+      ...liveFixture,
+      agents: [record("reconnect-agent", "blocked")],
+    });
     bell.tick();
-    expect(ding).not.toHaveBeenCalled();
-    expect(bell.log).toEqual([]);
+    expect(bell.log).toHaveLength(beforeReuse + 1);
+    expect(bell.log.at(-1)?.reason).toBe("enter");
+    clock.advance(100);
+    bell.tick();
+    expect(bell.log.at(-1)?.reason).toBe("fast");
+    expect(
+      bell.log.filter(
+        ({ agentId, reason }) =>
+          agentId === "reconnect-agent" && reason === "enter",
+      ),
+    ).toHaveLength(2);
+
+    sendRemove(sockets[1]!, "reconnect-agent");
+    store.setSettings({ sound: false });
+    sendUpsert(sockets[1]!, "muted-agent", "blocked");
+    sendRemove(sockets[1]!, "muted-agent");
+    store.setSettings({ sound: true });
+    const beforeChurn = bell.log.length;
+    clock.advance(500);
+    bell.tick();
+    expect(bell.log).toHaveLength(beforeChurn);
+
+    for (let index = 0; index <= BELL_LOG_LIMIT; index++) {
+      const id = `churn-${index}`;
+      sendUpsert(sockets[1]!, id, "blocked");
+      sendRemove(sockets[1]!, id);
+    }
+    expect(bell.log).toHaveLength(BELL_LOG_LIMIT);
+    expect(bell.log.every(({ reason }) => reason === "enter")).toBe(true);
+    clock.advance(500);
+    bell.tick();
+    expect(bell.log).toHaveLength(BELL_LOG_LIMIT);
+    expect(ding).toHaveBeenCalledTimes(beforeChurn + BELL_LOG_LIMIT + 1);
+
+    client.stop();
+    bell.destroy();
   });
   it("lazily creates, resumes, and reuses one audio context", async () => {
     const oscillator = {

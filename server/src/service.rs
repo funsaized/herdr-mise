@@ -235,7 +235,10 @@ mod tests {
         );
     }
     use super::*;
-    use crate::protocol::{AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats};
+    use crate::{
+        adapter::Normalizer,
+        protocol::{AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats},
+    };
     use axum::body::to_bytes;
     use std::{ffi::OsString, future::IntoFuture};
     use tokio::{
@@ -675,6 +678,39 @@ mod tests {
             serde_json::from_str::<AgentStateEvent>(&second).unwrap(),
             AgentStateEvent::Delta { .. }
         ));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn fixture_normalizer_snapshot_crosses_real_websocket_boundary() {
+        let raw =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        let normalized = Normalizer::default()
+            .normalize_snapshot_value(raw, "2026-07-31T00:00:00Z")
+            .unwrap();
+        let feed = Feed::fixed(AppMode::Live, normalized.agents).await;
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return,
+            Err(error) => panic!("bind test server: {error}"),
+        };
+        let address = listener.local_addr().unwrap();
+        let server =
+            tokio::spawn(axum::serve(listener, router(feed, address.port())).into_future());
+        let mut socket = connect_websocket(address).await;
+        let first = read_server_text(&mut socket).await;
+        let AgentStateEvent::Snapshot { agents, .. } =
+            serde_json::from_str::<AgentStateEvent>(&first).unwrap()
+        else {
+            panic!("first websocket event was not a snapshot");
+        };
+
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].id, "p-1");
+        assert!(!agents[0].name.is_empty());
+        for value in [&agents[0].id, &agents[0].name, &agents[0].workspace] {
+            assert!(value.encode_utf16().count() <= 4096);
+        }
         server.abort();
     }
 

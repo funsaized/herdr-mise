@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentRecord } from "../../../protocol/generated/agent-state-event";
+import type {
+  AgentRecord,
+  AgentStateEvent,
+} from "../../../protocol/generated/agent-state-event";
+import snapshot from "../../../protocol/fixtures/snapshot.v1.json";
 import unsupported from "../../../protocol/fixtures/snapshot-demo-unsupported.v1.json";
 import { AgentStore, defaultSettings } from "../state/store";
 import { AgentWebSocketClient, type SocketLike } from "../state/ws-client";
@@ -88,6 +92,23 @@ describe("chrome interactions", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "last update 14s ago",
     );
+    rerender(
+      <ModeTreatment
+        mode="disconnected"
+        sourceStatus="connected"
+        disconnectReason="incompatibleFeed"
+        lastUpdateSeconds={14}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Browser received an incompatible Mise feed",
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Waiting for a compatible snapshot",
+    );
+    expect(screen.getByRole("alert").textContent).not.toContain(
+      "Lost connection to Mise",
+    );
   });
   it("shows an actionable unsupported protocol diagnostic without conflating malformed input", () => {
     const { rerender } = render(
@@ -149,6 +170,15 @@ describe("chrome interactions", () => {
     expect(change).toHaveBeenCalledWith({ atmosphere: false });
     fireEvent.click(screen.getByRole("button", { name: "Dinner" }));
     expect(change).toHaveBeenCalledWith({ theme: "dark" });
+    expect(
+      screen.getByText(
+        "Also applies to dishes already plated, preserving elapsed time",
+      ),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Done timeout" }), {
+      target: { value: "1200000" },
+    });
+    expect(change).toHaveBeenCalledWith({ doneTimeoutMs: 1_200_000 });
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     expect(close).toHaveBeenCalledOnce();
   });
@@ -267,6 +297,53 @@ describe("chrome interactions", () => {
     );
     expect(screen.queryByText(/plated cooks cleared/)).toBeNull();
     expect(screen.getByText("DEMO SERVICE")).toBeTruthy();
+  });
+  it("closes a selected demo session summary on live recovery", () => {
+    const store = new AgentStore();
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "demo",
+      sourceStatus: "unavailableSocket",
+      agents: [record],
+    });
+    store.apply({
+      version: 1,
+      type: "delta",
+      mode: "demo",
+      operation: "upsert",
+      agent: { ...record, state: "ended" },
+    });
+    store.select(record.id);
+    const props = {
+        store,
+        coarse: store.coarse(),
+        hoveredId: null,
+        focusedId: null,
+        hits: [],
+        settingsOpen: false,
+        statsOpen: false,
+        lastUpdateSeconds: 0,
+        metrics: { drawCalls: 0, socketBytesPerSecond: 0 },
+        onCloseSettings: () => {},
+        onOpenSettings: () => {},
+        hintVisible: false,
+        onDismissHint: () => {},
+        view: "kitchen" as const,
+        onToggleFreezer: () => {},
+        onRevealCleared: () => {},
+      },
+      { rerender } = render(<Chrome {...props} />);
+    expect(screen.getByLabelText("refactor-auth session summary")).toBeTruthy();
+
+    store.apply(snapshot as AgentStateEvent);
+    rerender(<Chrome {...props} coarse={store.coarse()} />);
+    expect(screen.queryByLabelText("refactor-auth session summary")).toBeNull();
+    expect(store.coarse().selectedId).toBeNull();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBe(
+      document.activeElement,
+    );
+    store.destroy();
   });
   it.each([
     ["blocked", "Blocked — waiting"],

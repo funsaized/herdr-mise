@@ -272,7 +272,7 @@ WebSocket snapshot-before-delta contract.
   ----------------                                       -------
   tokio::time::interval(1s) ----------Text "heartbeat"--> AgentWebSocketClient
                                                           onmessage
-                                                          |  parsed.type === "heartbeat"
+                                                          |  accepted snapshot?
                                                           v
                                                         armStale()  // 2.9 s
                                                           (store NOT mutated,
@@ -280,15 +280,20 @@ WebSocket snapshot-before-delta contract.
 ```
 
 The server emits a typed `AgentStateEvent::Heartbeat` once per second
-on every connected WebSocket. The client treats it as liveness only;
-it does not apply it to the `AgentStore`. This is what stops the
+on every connected WebSocket. After that connection accepts a snapshot, the
+client treats heartbeats as liveness only; it does not apply them to the
+`AgentStore`. Before a snapshot, heartbeats and deltas cannot postpone the 2.9
+second snapshot deadline. This is what stops the
 "quiet live feed -> disconnect flapping" defect that would otherwise
 re-trigger the disconnected overlay on a kitchen where nothing was
 happening.
 
-The client still surfaces `disconnected` after a 2.9 s silence — that
-is the agreed liveness budget for genuinely stale data — and
-reconnects in 1 s.
+The client also closes immediately when the decoder rejects a state-bearing or
+unsupported event, surfaces `disconnected`, and reconnects in 1 second through
+the existing generation fence. One recovery attempt spans reconnects. A second
+rejection before an accepted snapshot sets the client-local `incompatibleFeed`
+disconnect reason; an accepted snapshot clears it. Ordinary socket-loss copy is
+unchanged, and rejected payloads are neither partially applied nor logged.
 
 ## Coalescing of bursty production events
 
@@ -401,7 +406,9 @@ live agent truth; `Feed` owns the normalized server projection; `AgentStore` own
 the browser projection plus local selection, settings, observed history, done
 timers, and the 86 board. Within an agent machine, `targetState` is feed truth and
 `renderedState` is only an interruptible animation projection. The WebSocket client
-will not apply deltas until that connection has received a fresh snapshot.
+will not apply deltas or extend its snapshot deadline until that connection has
+received a fresh snapshot. Decoder rejection invalidates that projection and
+re-enters the same snapshot-first reconnect path.
 The coarse slice reports non-ended source records, the locally visible projection,
 and done records cleared from presentation separately. Blocked and done totals are
 visible-only; connected live empty mode requires a zero-record source snapshot.

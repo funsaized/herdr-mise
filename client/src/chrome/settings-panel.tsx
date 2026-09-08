@@ -83,7 +83,10 @@ export function SettingsPanel({
           ))}
         </div>
       </section>
-      <SettingRow title="Done timeout" note="Busser clears plated dishes after">
+      <SettingRow
+        title="Done timeout"
+        note="Also applies to dishes already plated, preserving elapsed time"
+      >
         <select
           aria-label="Done timeout"
           value={settings.doneTimeoutMs}

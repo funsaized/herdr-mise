@@ -18,6 +18,7 @@ export function ModeTreatment({
   mode,
   sourceStatus,
   sourceDiagnostic = null,
+  disconnectReason = null,
   lastUpdateSeconds,
   clearedCount,
   onRevealCleared,
@@ -25,6 +26,7 @@ export function ModeTreatment({
   mode: CoarseSlice["mode"];
   sourceStatus: CoarseSlice["sourceStatus"];
   sourceDiagnostic?: SourceDiagnostic | null;
+  disconnectReason?: CoarseSlice["disconnectReason"];
   lastUpdateSeconds: number;
   clearedCount?: number;
   onRevealCleared?(): void;
@@ -62,14 +64,21 @@ export function ModeTreatment({
       <div className="disconnectScrim">
         <div className="disconnectCard" role="alert">
           <h2>GAS LEAK — SERVICE SUSPENDED</h2>
-          <strong>Lost connection to Mise</strong>
+          <strong>
+            {disconnectReason === "incompatibleFeed"
+              ? "Browser received an incompatible Mise feed"
+              : "Lost connection to Mise"}
+          </strong>
           <p>
             <i />
-            Retrying — last update {lastUpdateSeconds}s ago
+            {disconnectReason === "incompatibleFeed"
+              ? "Waiting for a compatible snapshot"
+              : `Retrying — last update ${lastUpdateSeconds}s ago`}
           </p>
           <small>
-            The kitchen will reopen on its own. Check that Mise is running; Mise
-            will reconnect to Herdr when its local source is available.
+            {disconnectReason === "incompatibleFeed"
+              ? "The browser rejected repeated state updates from Mise. Update or restart Mise; no malformed state was applied."
+              : "The kitchen will reopen on its own. Check that Mise is running; Mise will reconnect to Herdr when its local source is available."}
           </small>
         </div>
       </div>
