@@ -195,6 +195,14 @@ export class AgentStore {
   apply(event: AgentStateEvent) {
     if (event.type === "heartbeat") return;
     const before = this.coarse();
+    const modeChanged =
+      event.type === "snapshot" && event.mode !== this.feedMode;
+    if (modeChanged) {
+      for (const id of this.agents.keys()) this.remove(id);
+      this.board = [];
+      this.selectedId = null;
+      this.dismissedDone.clear();
+    }
     this.feedMode = event.mode;
     this.lastUpdateAt = this.scheduler.now();
     if (event.type === "snapshot") {
