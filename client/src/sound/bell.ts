@@ -1,5 +1,11 @@
-import type { AgentStore, StoreEvent } from "../state/store";
+import type {
+  AgentMachine,
+  AgentStore,
+  StoreEvent,
+  StoreSnapshot,
+} from "../state/store";
 export type BellReason = "enter" | "fast" | "vignette";
+export const BELL_LOG_LIMIT = 256;
 export interface BellLogEntry {
   agentId: string;
   reason: BellReason;
@@ -56,7 +62,12 @@ export class BellController {
   readonly log: BellLogEntry[] = [];
   private blocked = new Map<
     string,
-    { enteredAt: number; fast: boolean; vignette: boolean }
+    {
+      enteredAt: number;
+      feedMode: StoreSnapshot["feedMode"];
+      fast: boolean;
+      vignette: boolean;
+    }
   >();
   private unsubscribe: () => void;
   constructor(
@@ -67,7 +78,34 @@ export class BellController {
     this.unsubscribe = store.onEvent((event) => this.onEvent(event));
   }
   tick(now = this.now()) {
-    const settings = this.store.snapshot().settings;
+    const snapshot = this.store.snapshot(),
+      settings = snapshot.settings,
+      entered: string[] = [];
+    for (const agentId of this.blocked.keys()) {
+      const agent = snapshot.agents.get(agentId);
+      if (agent?.targetState !== "blocked") this.blocked.delete(agentId);
+    }
+    for (const agent of snapshot.agents.values()) {
+      if (agent.targetState !== "blocked") continue;
+      const enteredAt = observedEnteredAt(agent),
+        tracked = this.blocked.get(agent.id);
+      if (
+        !tracked ||
+        tracked.enteredAt !== enteredAt ||
+        tracked.feedMode !== snapshot.feedMode
+      ) {
+        this.blocked.set(agent.id, {
+          enteredAt,
+          feedMode: snapshot.feedMode,
+          fast: false,
+          vignette: false,
+        });
+        entered.push(agent.id);
+      }
+    }
+    if (snapshot.mode === "connecting" || snapshot.mode === "disconnected")
+      return;
+    for (const agentId of entered) this.ring(agentId, "enter", now);
     for (const [agentId, state] of this.blocked) {
       const elapsed = now - state.enteredAt;
       if (!state.fast && elapsed >= settings.escalationFastMs) {
@@ -85,20 +123,34 @@ export class BellController {
     this.blocked.clear();
   }
   private onEvent(event: StoreEvent) {
+    if (event.type === "clear") {
+      this.blocked.delete(event.agentId);
+      return;
+    }
     if (event.type !== "state") return;
     if (event.to === "blocked") {
-      const enteredAt = this.now();
+      const snapshot = this.store.snapshot(),
+        agent = snapshot.agents.get(event.agentId);
+      if (!agent) return;
+      const enteredAt = observedEnteredAt(agent);
       this.blocked.set(event.agentId, {
         enteredAt,
+        feedMode: snapshot.feedMode,
         fast: false,
         vignette: false,
       });
-      this.ring(event.agentId, "enter", enteredAt);
+      this.ring(event.agentId, "enter", this.now());
     } else this.blocked.delete(event.agentId);
   }
   private ring(agentId: string, reason: BellReason, at: number) {
     if (!this.store.snapshot().settings.sound) return;
     this.log.push({ agentId, reason, at });
+    if (this.log.length > BELL_LOG_LIMIT)
+      this.log.splice(0, this.log.length - BELL_LOG_LIMIT);
     this.ding();
   }
+}
+
+function observedEnteredAt(agent: AgentMachine) {
+  return agent.history.at(-1)?.startedAt ?? agent.transitionStartedAt;
 }
