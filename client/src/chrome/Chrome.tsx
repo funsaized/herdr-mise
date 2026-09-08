@@ -132,6 +132,7 @@ export function Chrome(props: ChromeProps) {
         mode={props.coarse.mode}
         sourceStatus={props.coarse.sourceStatus}
         sourceDiagnostic={props.coarse.sourceDiagnostic}
+        disconnectReason={props.coarse.disconnectReason}
         lastUpdateSeconds={props.lastUpdateSeconds}
       />
       {import.meta.env.MODE === "visual" && (

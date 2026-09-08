@@ -92,6 +92,23 @@ describe("chrome interactions", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "last update 14s ago",
     );
+    rerender(
+      <ModeTreatment
+        mode="disconnected"
+        sourceStatus="connected"
+        disconnectReason="incompatibleFeed"
+        lastUpdateSeconds={14}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Browser received an incompatible Mise feed",
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Waiting for a compatible snapshot",
+    );
+    expect(screen.getByRole("alert").textContent).not.toContain(
+      "Lost connection to Mise",
+    );
   });
   it("shows an actionable unsupported protocol diagnostic without conflating malformed input", () => {
     const { rerender } = render(
