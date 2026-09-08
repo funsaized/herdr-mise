@@ -301,6 +301,9 @@ describe("chrome interactions", () => {
     rerender(<Chrome {...props} coarse={store.coarse()} />);
     expect(screen.queryByLabelText("refactor-auth session summary")).toBeNull();
     expect(store.coarse().selectedId).toBeNull();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBe(
+      document.activeElement,
+    );
     store.destroy();
   });
   it.each([
