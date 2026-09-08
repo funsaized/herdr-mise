@@ -79,8 +79,27 @@ export class BellController {
   }
   tick(now = this.now()) {
     const snapshot = this.store.snapshot(),
-      settings = snapshot.settings,
-      entered: string[] = [];
+      settings = snapshot.settings;
+    this.reconcile(snapshot, now);
+    if (snapshot.mode === "connecting" || snapshot.mode === "disconnected")
+      return;
+    for (const [agentId, state] of this.blocked) {
+      const elapsed = now - state.enteredAt;
+      if (!state.fast && elapsed >= settings.escalationFastMs) {
+        state.fast = true;
+        this.ring(agentId, "fast", now);
+      }
+      if (!state.vignette && elapsed >= settings.escalationVignetteMs) {
+        state.vignette = true;
+        this.ring(agentId, "vignette", now);
+      }
+    }
+  }
+  destroy() {
+    this.unsubscribe();
+    this.blocked.clear();
+  }
+  private reconcile(snapshot: StoreSnapshot, now: number) {
     for (const agentId of this.blocked.keys()) {
       const agent = snapshot.agents.get(agentId);
       if (agent?.targetState !== "blocked") this.blocked.delete(agentId);
@@ -100,27 +119,10 @@ export class BellController {
           fast: false,
           vignette: false,
         });
-        entered.push(agent.id);
+        if (snapshot.mode !== "connecting" && snapshot.mode !== "disconnected")
+          this.ring(agent.id, "enter", now);
       }
     }
-    if (snapshot.mode === "connecting" || snapshot.mode === "disconnected")
-      return;
-    for (const agentId of entered) this.ring(agentId, "enter", now);
-    for (const [agentId, state] of this.blocked) {
-      const elapsed = now - state.enteredAt;
-      if (!state.fast && elapsed >= settings.escalationFastMs) {
-        state.fast = true;
-        this.ring(agentId, "fast", now);
-      }
-      if (!state.vignette && elapsed >= settings.escalationVignetteMs) {
-        state.vignette = true;
-        this.ring(agentId, "vignette", now);
-      }
-    }
-  }
-  destroy() {
-    this.unsubscribe();
-    this.blocked.clear();
   }
   private onEvent(event: StoreEvent) {
     if (event.type === "clear") {
@@ -128,19 +130,7 @@ export class BellController {
       return;
     }
     if (event.type !== "state") return;
-    if (event.to === "blocked") {
-      const snapshot = this.store.snapshot(),
-        agent = snapshot.agents.get(event.agentId);
-      if (!agent) return;
-      const enteredAt = observedEnteredAt(agent);
-      this.blocked.set(event.agentId, {
-        enteredAt,
-        feedMode: snapshot.feedMode,
-        fast: false,
-        vignette: false,
-      });
-      this.ring(event.agentId, "enter", this.now());
-    } else this.blocked.delete(event.agentId);
+    this.reconcile(this.store.snapshot(), this.now());
   }
   private ring(agentId: string, reason: BellReason, at: number) {
     if (!this.store.snapshot().settings.sound) return;
