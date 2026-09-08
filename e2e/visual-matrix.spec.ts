@@ -1386,6 +1386,80 @@ test("atmosphere persists across the production fixture runtime", async ({
   }
 });
 
+test("rejected state update resynchronizes through a fresh snapshot", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-rejection-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
+    snapshot = await readFile(
+      join(process.cwd(), "protocol/fixtures/snapshot.v1.json"),
+      "utf8",
+    ),
+    delta = JSON.parse(
+      await readFile(
+        join(process.cwd(), "protocol/fixtures/delta-upsert.v1.json"),
+        "utf8",
+      ),
+    ) as { agent: { name: string } },
+    heartbeat = await readFile(
+      join(process.cwd(), "protocol/fixtures/heartbeat.v1.json"),
+      "utf8",
+    ),
+    rejected = JSON.stringify({
+      ...delta,
+      agent: { ...delta.agent, name: "x".repeat(4097) },
+    }),
+    app = spawn("target/debug/herdr-mise", [], {
+      env: {
+        ...process.env,
+        HERDR_MISE_PORT: String(port),
+        HERDR_SOCKET_PATH: join(directory, "herdr.sock"),
+      },
+      stdio: "ignore",
+    });
+  let connections = 0;
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(appUrl)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.routeWebSocket("**/ws", (webSocket) => {
+      connections++;
+      if (connections === 1) {
+        webSocket.send(snapshot);
+        webSocket.send(rejected);
+        webSocket.send(heartbeat);
+      } else if (connections === 2) webSocket.send(rejected);
+      else webSocket.send(snapshot);
+    });
+    await page.goto(appUrl);
+
+    await expect(page.getByRole("alert")).toContainText(
+      "Browser received an incompatible Mise feed",
+      { timeout: 10_000 },
+    );
+    await expect(
+      page.getByRole("button", { name: /refactor-agent, Blocked/ }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", {
+        name: "refactor-agent, Working — on the fire, open details",
+      }),
+    ).toBeAttached({ timeout: 10_000 });
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    expect(connections).toBeGreaterThanOrEqual(3);
+  } finally {
+    app.kill("SIGTERM");
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // Keyboard-cycle station focus and collect tooltip names until every
 // expected station has been seen. Hit regions appear only after scene init,
 // so the loop tolerates early presses that produce no tooltip.

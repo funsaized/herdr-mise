@@ -25,4 +25,14 @@ one second in at most ten 100 ms buckets. Neither implies complete history.
 
 The client additionally rejects messages over 4 MiB of string characters,
 rosters over 4096 records, duplicate IDs, unsafe integers, and strings over
-4096 characters. These are resource limits beyond the shared shape schema.
+4096 UTF-16 units. The adapter rejects empty, oversized, or duplicate pane IDs
+before changing normalization history and truncates display-only names and
+workspace labels to that same string ceiling. IDs are never truncated, and an
+aggregate normalized snapshot that would exceed the browser frame limit is
+rejected atomically.
+
+A schema-rejected state event invalidates browser synchronization: the socket
+closes, reconnects, and waits at most 2.9 seconds for a fresh snapshot. Deltas
+and heartbeats do not extend that initial wait. A second rejection before an
+accepted snapshot is shown as an incompatible browser-to-Mise feed; Feed v1 and
+Herdr compatibility are unchanged.
