@@ -3,6 +3,9 @@ import type {
   AgentRecord,
   AgentStateEvent,
 } from "../../protocol/generated/agent-state-event";
+import fixtureRemove from "../../protocol/fixtures/delta-remove.v1.json";
+import fixtureUpsert from "../../protocol/fixtures/delta-upsert.v1.json";
+import fixtureDemoUnsupported from "../../protocol/fixtures/snapshot-demo-unsupported.v1.json";
 import fixtureSnapshot from "../../protocol/fixtures/snapshot.v1.json";
 import {
   blockedPlacements,
@@ -31,7 +34,7 @@ import {
 } from "./scene/layout";
 import { ParticlePool } from "./scene/particles";
 import { TransitionEngine } from "./scene/transition";
-import { BellController, SharedBellAudio } from "./sound/bell";
+import { BELL_LOG_LIMIT, BellController, SharedBellAudio } from "./sound/bell";
 import { AgentStore, type Scheduler } from "./state/store";
 import { AgentWebSocketClient, type SocketLike } from "./state/ws-client";
 import {
@@ -834,41 +837,167 @@ describe("theme boundary and bell", () => {
     expect(accentIndexForId("agent-a")).toBeGreaterThanOrEqual(0);
     expect(accentIndexForId("agent-a")).toBeLessThan(12);
   });
-  it("logs exactly enter and the two escalation threshold dings", () => {
+  it("reconciles fixture-backed bell episodes across lifecycle churn", () => {
+    type SnapshotEvent = Extract<AgentStateEvent, { type: "snapshot" }>;
+    type UpsertEvent = Extract<
+      AgentStateEvent,
+      { type: "delta"; operation: "upsert" }
+    >;
+    type RemoveEvent = Extract<
+      AgentStateEvent,
+      { type: "delta"; operation: "remove" }
+    >;
     const clock = new FakeClock(),
       store = new AgentStore(clock, {
         sound: true,
         escalationFastMs: 100,
         escalationVignetteMs: 500,
       }),
+      sockets: FakeSocket[] = [],
+      client = new AgentWebSocketClient(
+        "ws://test",
+        store,
+        () => {
+          const socket = new FakeSocket();
+          sockets.push(socket);
+          return socket;
+        },
+        clock,
+      ),
       ding = vi.fn(),
-      bell = new BellController(store, ding, clock.now);
-    store.apply(snapshot(agent("working")));
-    store.apply(upsert(agent("blocked")));
+      bell = new BellController(store, ding, clock.now),
+      upsertFixture = fixtureUpsert as UpsertEvent,
+      removeFixture = fixtureRemove as RemoveEvent,
+      demoFixture = fixtureDemoUnsupported as SnapshotEvent,
+      liveFixture = fixtureSnapshot as SnapshotEvent,
+      record = (
+        id: string,
+        state: AgentRecord["state"],
+        enteredAt = clock.time,
+      ): AgentRecord => ({
+        ...upsertFixture.agent,
+        id,
+        state,
+        stateEnteredAt: new Date(enteredAt).toISOString(),
+      }),
+      sendUpsert = (
+        socket: FakeSocket,
+        id: string,
+        state: AgentRecord["state"],
+        enteredAt = clock.time,
+      ) =>
+        socket.message({
+          ...upsertFixture,
+          agent: record(id, state, enteredAt),
+        }),
+      sendRemove = (socket: FakeSocket, id: string) =>
+        socket.message({ ...removeFixture, agentId: id });
+
+    clock.time = Date.parse(upsertFixture.agent.stateEnteredAt);
+    client.start();
+    sockets[0]!.open();
+    sockets[0]!.message(liveFixture);
+
+    sendUpsert(sockets[0]!, "agent-01", "blocked");
+    sendUpsert(sockets[0]!, "agent-01", "blocked", clock.time + 500);
+    bell.tick();
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter"]);
     clock.advance(99);
     bell.tick();
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter"]);
     clock.advance(1);
     bell.tick();
-    clock.advance(400);
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter", "fast"]);
+    sendRemove(sockets[0]!, "agent-01");
+    clock.advance(500);
     bell.tick();
-    expect(bell.log.map((item) => item.reason)).toEqual([
-      "enter",
+    expect(bell.log.map(({ reason }) => reason)).toEqual(["enter", "fast"]);
+
+    sendUpsert(sockets[0]!, "ended-agent", "blocked");
+    sendUpsert(sockets[0]!, "ended-agent", "ended");
+    clock.advance(500);
+    bell.tick();
+    expect(bell.log.at(-1)?.reason).toBe("enter");
+
+    const replacementId = "replacement-agent";
+    sockets[0]!.message({
+      ...demoFixture,
+      agents: [record(replacementId, "blocked", clock.time - 1_001)],
+    });
+    const beforeReplacement = bell.log.length;
+    sockets[0]!.message({
+      ...liveFixture,
+      agents: [record(replacementId, "blocked")],
+    });
+    bell.tick();
+    expect(bell.log).toHaveLength(beforeReplacement + 1);
+    expect(bell.log.at(-1)?.reason).toBe("enter");
+    clock.advance(100);
+    bell.tick();
+    expect(bell.log.at(-1)?.reason).toBe("fast");
+
+    sendRemove(sockets[0]!, replacementId);
+    sendUpsert(sockets[0]!, "reconnect-agent", "blocked");
+    const beforeDisconnect = bell.log.length;
+    sockets[0]!.closeEvent();
+    clock.advance(999);
+    bell.tick();
+    expect(bell.log).toHaveLength(beforeDisconnect);
+    clock.advance(1);
+    sockets[1]!.open();
+    sockets[1]!.message({
+      ...liveFixture,
+      agents: [record("reconnect-agent", "blocked", clock.time - 1_000)],
+    });
+    bell.tick();
+    expect(bell.log.slice(-2).map(({ reason }) => reason)).toEqual([
       "fast",
       "vignette",
     ]);
-    expect(ding).toHaveBeenCalledTimes(3);
-    bell.destroy();
-  });
-  it("stays silent when sound is disabled", () => {
-    const clock = new FakeClock(),
-      store = new AgentStore(clock),
-      ding = vi.fn(),
-      bell = new BellController(store, ding, clock.now);
-    store.apply(snapshot(agent("blocked")));
-    clock.advance(600_000);
+
+    clock.advance(1);
+    const beforeReuse = bell.log.length;
+    sockets[1]!.message({
+      ...liveFixture,
+      agents: [record("reconnect-agent", "blocked")],
+    });
     bell.tick();
-    expect(ding).not.toHaveBeenCalled();
-    expect(bell.log).toEqual([]);
+    expect(bell.log).toHaveLength(beforeReuse + 1);
+    expect(bell.log.at(-1)?.reason).toBe("enter");
+    clock.advance(100);
+    bell.tick();
+    expect(bell.log.at(-1)?.reason).toBe("fast");
+    expect(
+      bell.log.filter(
+        ({ agentId, reason }) =>
+          agentId === "reconnect-agent" && reason === "enter",
+      ),
+    ).toHaveLength(2);
+
+    sendRemove(sockets[1]!, "reconnect-agent");
+    store.setSettings({ sound: false });
+    sendUpsert(sockets[1]!, "muted-agent", "blocked");
+    sendRemove(sockets[1]!, "muted-agent");
+    store.setSettings({ sound: true });
+    const beforeChurn = bell.log.length;
+    clock.advance(500);
+    bell.tick();
+    expect(bell.log).toHaveLength(beforeChurn);
+
+    for (let index = 0; index <= BELL_LOG_LIMIT; index++) {
+      const id = `churn-${index}`;
+      sendUpsert(sockets[1]!, id, "blocked");
+      sendRemove(sockets[1]!, id);
+    }
+    expect(bell.log).toHaveLength(BELL_LOG_LIMIT);
+    expect(bell.log.every(({ reason }) => reason === "enter")).toBe(true);
+    clock.advance(500);
+    bell.tick();
+    expect(bell.log).toHaveLength(BELL_LOG_LIMIT);
+    expect(ding).toHaveBeenCalledTimes(beforeChurn + BELL_LOG_LIMIT + 1);
+
+    client.stop();
+    bell.destroy();
   });
   it("lazily creates, resumes, and reuses one audio context", async () => {
     const oscillator = {
