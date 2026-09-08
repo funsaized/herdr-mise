@@ -79,6 +79,36 @@ it("rejects a malformed snapshot atomically and keeps deltas locked", () => {
   client.stop();
   store.destroy();
 });
+it("resets demo history on live recovery but retains same-mode live history", () => {
+  const { client, sockets, store } = connection();
+  const send = (event: unknown) =>
+    sockets[0]!.onmessage!({ data: JSON.stringify(event) });
+  send({ ...fixture, mode: "demo" });
+  send({
+    ...upsert({ ...fixture.agents[0], state: "blocked" } as AgentRecord),
+    mode: "demo",
+  });
+  send({
+    ...upsert({ ...fixture.agents[1], state: "ended" } as AgentRecord),
+    mode: "demo",
+  });
+  store.select("agent-02");
+  expect(store.snapshot().board.map(({ id }) => id)).toEqual(["agent-02"]);
+  expect(store.snapshot().agents.get("agent-01")!.history).toHaveLength(2);
+
+  send(fixture);
+  expect([...store.snapshot().agents.keys()]).toEqual(["agent-01", "agent-02"]);
+  expect(store.snapshot().agents.get("agent-01")!.history).toHaveLength(1);
+  expect(store.snapshot().board).toEqual([]);
+  expect(store.snapshot().selectedId).toBeNull();
+
+  send(upsert({ ...fixture.agents[1], state: "ended" } as AgentRecord));
+  send(fixture);
+  expect(store.snapshot().board.map(({ id }) => id)).toEqual(["agent-02"]);
+  expect(store.snapshot().agents.get("agent-01")!.history).toHaveLength(1);
+  client.stop();
+  store.destroy();
+});
 it("validates complete event shapes", () => {
   expect(decodeFeedEvent(JSON.stringify(fixture))).not.toBeNull();
   for (const value of [
