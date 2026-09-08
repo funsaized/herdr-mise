@@ -9,6 +9,7 @@ import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings } from "./settings-storage";
 
 export type AppMode = FeedMode | "empty" | "disconnected" | "connecting";
+export type ClientDisconnectReason = "incompatibleFeed" | null;
 export const HISTORY_LIMIT = 256;
 export interface Settings {
   sound: boolean;
@@ -48,6 +49,7 @@ export interface StoreSnapshot {
   feedMode: FeedMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
+  disconnectReason: ClientDisconnectReason;
   selectedId: string | null;
   settings: Settings;
   lastUpdateAt: number;
@@ -59,6 +61,7 @@ export interface CoarseSlice {
   mode: AppMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
+  disconnectReason: ClientDisconnectReason;
   selectedId: string | null;
   settings: Settings;
 }
@@ -98,6 +101,7 @@ export class AgentStore {
   private feedMode: FeedMode = "live";
   private sourceStatus: SourceStatus = "connected";
   private sourceDiagnostic: SourceDiagnostic | null = null;
+  private disconnectReason: ClientDisconnectReason = null;
   private selectedId: string | null = null;
   private settings: Settings;
   private lastUpdateAt = 0;
@@ -105,6 +109,7 @@ export class AgentStore {
   private changeListeners = new Set<() => void>();
   private eventListeners = new Set<Listener<StoreEvent>>();
   private doneTimers = new Map<string, unknown>();
+  private doneGenerations = new Map<string, string>();
   private dismissedDone = new Map<string, string>();
   constructor(
     private scheduler: Scheduler = nativeScheduler,
@@ -124,6 +129,7 @@ export class AgentStore {
       feedMode: this.feedMode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
+      disconnectReason: this.disconnectReason,
       selectedId: this.selectedId,
       settings: this.settings,
       lastUpdateAt: this.lastUpdateAt,
@@ -138,6 +144,7 @@ export class AgentStore {
       mode: this.mode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
+      disconnectReason: this.disconnectReason,
       selectedId: this.selectedId,
       settings: this.settings,
     };
@@ -167,14 +174,28 @@ export class AgentStore {
     this.emitChange();
   }
   setSettings(patch: Partial<Settings>) {
+    const oldDoneTimeoutMs = this.settings.doneTimeoutMs;
     this.settings = { ...this.settings, ...patch };
+    if (this.settings.doneTimeoutMs !== oldDoneTimeoutMs)
+      for (const machine of this.agents.values())
+        if (machine.targetState === "done" && machine.clearAt !== null) {
+          machine.clearAt =
+            machine.clearAt - oldDoneTimeoutMs + this.settings.doneTimeoutMs;
+          this.armDone(
+            machine.id,
+            this.doneGenerations.get(machine.id) ?? machine.stateEnteredAt,
+            machine.clearAt,
+          );
+        }
     saveSettings(this.settingsStorage, this.settings);
     this.emitCoarse();
     this.emitChange();
   }
-  setDisconnected() {
-    if (this.mode !== "disconnected") {
+  setDisconnected(reason: ClientDisconnectReason = null) {
+    const nextReason = reason ?? this.disconnectReason;
+    if (this.mode !== "disconnected" || this.disconnectReason !== nextReason) {
       this.mode = "disconnected";
+      this.disconnectReason = nextReason;
       this.emitCoarse();
       this.emitChange();
     }
@@ -187,9 +208,18 @@ export class AgentStore {
   apply(event: AgentStateEvent) {
     if (event.type === "heartbeat") return;
     const before = this.coarse();
+    const modeChanged =
+      event.type === "snapshot" && event.mode !== this.feedMode;
+    if (modeChanged) {
+      for (const id of this.agents.keys()) this.remove(id);
+      this.board = [];
+      this.selectedId = null;
+      this.dismissedDone.clear();
+    }
     this.feedMode = event.mode;
     this.lastUpdateAt = this.scheduler.now();
     if (event.type === "snapshot") {
+      this.disconnectReason = null;
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
       const incoming = new Set(event.agents.map((agent) => agent.id));
@@ -221,28 +251,37 @@ export class AgentStore {
     for (const timer of this.doneTimers.values())
       this.scheduler.clearTimeout(timer);
     this.doneTimers.clear();
+    this.doneGenerations.clear();
     this.dismissedDone.clear();
     this.coarseListeners.clear();
     this.changeListeners.clear();
     this.eventListeners.clear();
   }
   private upsert(agent: AgentRecord) {
+    const prior = this.agents.get(agent.id);
+    const now = this.scheduler.now();
+    const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
+      ? Date.parse(agent.stateEnteredAt)
+      : now;
+    const dismissedGeneration = this.dismissedDone.get(agent.id);
     if (
       agent.state === "done" &&
-      this.dismissedDone.get(agent.id) === agent.stateEnteredAt
+      dismissedGeneration !== undefined &&
+      enteredAt <= Date.parse(dismissedGeneration)
     )
       return;
     this.dismissedDone.delete(agent.id);
-    const prior = this.agents.get(agent.id);
-    const now = this.scheduler.now();
     if (agent.state === "ended") {
       this.end(agent, now);
       return;
     }
     const stateChanged = prior?.targetState !== agent.state;
-    const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
-      ? Date.parse(agent.stateEnteredAt)
-      : now;
+    const sameDoneState =
+      prior?.targetState === "done" && agent.state === "done";
+    const currentDoneGeneration = this.doneGenerations.get(agent.id);
+    const newerDoneGeneration =
+      sameDoneState &&
+      enteredAt > Date.parse(currentDoneGeneration ?? prior.stateEnteredAt);
     const initialHistory: readonly StatePeriod[] = [
       { state: agent.state, startedAt: enteredAt },
     ];
@@ -269,12 +308,15 @@ export class AgentStore {
       ...agent,
       targetState: agent.state,
       renderedState: prior?.renderedState ?? agent.state,
-      transitionStartedAt: stateChanged
-        ? now
-        : (prior?.transitionStartedAt ?? now),
+      transitionStartedAt:
+        stateChanged || newerDoneGeneration
+          ? now
+          : (prior?.transitionStartedAt ?? now),
       clearAt:
         agent.state === "done"
-          ? (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
+          ? newerDoneGeneration
+            ? now + this.settings.doneTimeoutMs
+            : (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
           : null,
       answerReceivedUntil,
       revision: (prior?.revision ?? 0) + 1,
@@ -288,27 +330,43 @@ export class AgentStore {
         from: prior?.targetState,
         to: agent.state,
       });
-    if (stateChanged) {
+    if (stateChanged || newerDoneGeneration) {
       this.cancelDone(agent.id);
       if (agent.state === "done")
-        this.doneTimers.set(
-          agent.id,
-          this.scheduler.setTimeout(() => {
-            this.dismissedDone.set(agent.id, agent.stateEnteredAt);
-            this.emitEvent({ type: "busser", agentId: agent.id });
-            this.remove(agent.id);
-            if (this.mode !== "disconnected")
-              this.mode =
-                this.agents.size === 0 &&
-                this.feedMode === "live" &&
-                this.sourceStatus === "connected"
-                  ? "empty"
-                  : this.feedMode;
-            this.emitChange();
-            this.emitCoarse();
-          }, this.settings.doneTimeoutMs),
-        );
+        this.armDone(agent.id, machine.stateEnteredAt, machine.clearAt!);
+      else this.doneGenerations.delete(agent.id);
     }
+  }
+  private armDone(id: string, generation: string, clearAt: number) {
+    this.cancelDone(id);
+    this.doneGenerations.set(id, generation);
+    this.doneTimers.set(
+      id,
+      this.scheduler.setTimeout(
+        () => {
+          const current = this.agents.get(id);
+          if (
+            current?.targetState !== "done" ||
+            this.doneGenerations.get(id) !== generation ||
+            current.clearAt !== clearAt
+          )
+            return;
+          this.dismissedDone.set(id, generation);
+          this.emitEvent({ type: "busser", agentId: id });
+          this.remove(id);
+          if (this.mode !== "disconnected")
+            this.mode =
+              this.agents.size === 0 &&
+              this.feedMode === "live" &&
+              this.sourceStatus === "connected"
+                ? "empty"
+                : this.feedMode;
+          this.emitChange();
+          this.emitCoarse();
+        },
+        Math.max(0, clearAt - this.scheduler.now()),
+      ),
+    );
   }
   private end(agent: AgentRecord, now: number) {
     const prior = this.agents.get(agent.id),
@@ -332,6 +390,7 @@ export class AgentStore {
   }
   private remove(id: string) {
     this.cancelDone(id);
+    this.doneGenerations.delete(id);
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
     if (this.selectedId === id) this.selectedId = null;
   }
@@ -367,6 +426,7 @@ function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
     a.mode === b.mode &&
     a.sourceStatus === b.sourceStatus &&
     a.sourceDiagnostic === b.sourceDiagnostic &&
+    a.disconnectReason === b.disconnectReason &&
     a.selectedId === b.selectedId &&
     a.settings === b.settings
   );

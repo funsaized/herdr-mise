@@ -17,6 +17,9 @@ use tokio::{
 
 use crate::protocol::{AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus};
 
+const MAX_TEXT_UTF16_UNITS: usize = 4096;
+const MAX_FEED_FRAME_UTF16_UNITS: usize = 4 * 1024 * 1024;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CompatibilityManifest {
@@ -174,11 +177,22 @@ impl Normalizer {
                 "snapshot exceeds 4096 agent limit".into(),
             ));
         }
-        let mut current = HashSet::new();
+        let mut current = HashSet::with_capacity(source.len());
+        for agent in &source {
+            if agent.pane_id.is_empty()
+                || agent.pane_id.encode_utf16().count() > MAX_TEXT_UTF16_UNITS
+                || !current.insert(agent.pane_id.clone())
+            {
+                return Err(AdapterError::Remote(
+                    "snapshot contains invalid pane identity".into(),
+                ));
+            }
+        }
         let mut agents = Vec::with_capacity(source.len());
+        let mut entered_at = self.entered_at.clone();
+        let mut first_seen = self.first_seen.clone();
         for agent in source {
             let id = agent.pane_id.clone();
-            current.insert(id.clone());
             let state_known = !matches!(agent.agent_status, RawStatus::Unknown);
             let state = match agent.agent_status {
                 RawStatus::Idle | RawStatus::Unknown => AgentState::Idle,
@@ -186,30 +200,33 @@ impl Normalizer {
                 RawStatus::Blocked => AgentState::Blocked,
                 RawStatus::Done => AgentState::Done,
             };
-            let stamp = match self.entered_at.get(&id) {
+            let stamp = match entered_at.get(&id) {
                 Some((old, known, stamp)) if old == &state && *known == state_known => {
                     stamp.clone()
                 }
                 _ => {
-                    self.entered_at.insert(
+                    entered_at.insert(
                         id.clone(),
                         (state.clone(), state_known, received_at.to_owned()),
                     );
                     received_at.to_owned()
                 }
             };
-            let name = [agent.name, agent.display_agent, agent.agent, agent.title]
-                .into_iter()
-                .flatten()
-                .find(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| format!("agent-{}", agent.pane_id));
-            let workspace = workspaces
-                .get(&agent.workspace_id)
-                .filter(|s| !s.is_empty())
-                .cloned()
-                .unwrap_or(agent.workspace_id);
-            let started = self
-                .first_seen
+            let name = truncate_utf16(
+                [agent.name, agent.display_agent, agent.agent, agent.title]
+                    .into_iter()
+                    .flatten()
+                    .find(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| format!("agent-{}", agent.pane_id)),
+            );
+            let workspace = truncate_utf16(
+                workspaces
+                    .get(&agent.workspace_id)
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+                    .unwrap_or(agent.workspace_id),
+            );
+            let started = first_seen
                 .entry(id.clone())
                 .or_insert_with(|| received_at.to_owned())
                 .clone();
@@ -233,12 +250,31 @@ impl Normalizer {
         agents.sort_by(|a, b| a.id.cmp(&b.id));
         let ended_ids: Vec<String> = self.previous_ids.difference(&current).cloned().collect();
         for id in &ended_ids {
-            self.first_seen.remove(id);
-            self.entered_at.remove(id);
+            first_seen.remove(id);
+            entered_at.remove(id);
         }
+        if serde_json::to_string(&agents)?.encode_utf16().count() > MAX_FEED_FRAME_UTF16_UNITS - 256
+        {
+            return Err(AdapterError::Remote(
+                "normalized snapshot exceeds browser frame limit".into(),
+            ));
+        }
+        self.first_seen = first_seen;
+        self.entered_at = entered_at;
         self.previous_ids = current;
         Ok(NormalizedSnapshot { agents, ended_ids })
     }
+}
+
+fn truncate_utf16(value: String) -> String {
+    let mut units = 0;
+    value
+        .chars()
+        .take_while(|character| {
+            units += character.len_utf16();
+            units <= MAX_TEXT_UTF16_UNITS
+        })
+        .collect()
 }
 
 fn mise_runtime_ms(started_at: &str, received_at: &str) -> u64 {
@@ -438,6 +474,82 @@ mod tests {
         assert_eq!(a.progress, None);
         assert_eq!(a.model, "");
         assert_eq!(a.session.runtime_ms, 0);
+    }
+    #[test]
+    fn rejects_invalid_pane_identity_before_mutating_history() {
+        fn assert_atomic(mut invalid: Value) {
+            let mut normalizer = Normalizer::default();
+            normalizer
+                .normalize_snapshot_value(raw("working"), "2026-07-31T00:00:00Z")
+                .unwrap();
+            let previous_ids = normalizer.previous_ids.clone();
+            let entered_at = normalizer.entered_at.clone();
+            let first_seen = normalizer.first_seen.clone();
+            invalid["agents"][0]["agent_status"] = json!("blocked");
+
+            assert!(matches!(
+                normalizer.normalize_snapshot_value(invalid, "2026-07-31T00:01:00Z"),
+                Err(AdapterError::Remote(message))
+                    if message == "snapshot contains invalid pane identity"
+            ));
+            assert_eq!(normalizer.previous_ids, previous_ids);
+            assert_eq!(normalizer.entered_at, entered_at);
+            assert_eq!(normalizer.first_seen, first_seen);
+        }
+
+        let mut empty = raw("working");
+        empty["agents"].as_array_mut().unwrap().push(json!({
+            "pane_id": "",
+            "agent_status": "idle"
+        }));
+        assert_atomic(empty);
+
+        let mut duplicate = raw("working");
+        let repeated = duplicate["agents"][0].clone();
+        duplicate["agents"].as_array_mut().unwrap().push(repeated);
+        assert_atomic(duplicate);
+
+        let mut oversized = raw("working");
+        oversized["agents"][0]["pane_id"] = json!("😀".repeat(2049));
+        assert_atomic(oversized);
+    }
+
+    #[test]
+    fn bounds_fixture_labels_for_browser_decoding() {
+        let mut snapshot: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        snapshot["result"]["snapshot"]["agents"][0]["name"] = json!("😀".repeat(4096));
+        snapshot["result"]["snapshot"]["workspaces"][0]["label"] =
+            json!("workspace😀".repeat(4096));
+        let normalized = Normalizer::default()
+            .normalize_snapshot_value(snapshot, "2026-07-31T00:00:00Z")
+            .unwrap();
+        let agent = &normalized.agents[0];
+
+        assert_eq!(agent.name.encode_utf16().count(), MAX_TEXT_UTF16_UNITS);
+        assert!(agent.workspace.encode_utf16().count() <= MAX_TEXT_UTF16_UNITS);
+        assert!(!agent.name.is_empty());
+        assert!(serde_json::to_string(agent).unwrap().len() < MAX_FRAME_BYTES);
+
+        let mut amplified: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        amplified["result"]["snapshot"]["workspaces"][0]["label"] = json!("😀".repeat(2048));
+        let template = amplified["result"]["snapshot"]["agents"][0].clone();
+        amplified["result"]["snapshot"]["agents"] = Value::Array(
+            (0..4096)
+                .map(|index| {
+                    let mut agent = template.clone();
+                    agent["pane_id"] = json!(format!("p-{index}"));
+                    agent
+                })
+                .collect(),
+        );
+        assert!(matches!(
+            Normalizer::default()
+                .normalize_snapshot_value(amplified, "2026-07-31T00:00:00Z"),
+            Err(AdapterError::Remote(message))
+                if message == "normalized snapshot exceeds browser frame limit"
+        ));
     }
     #[test]
     fn mise_time_accumulates_from_first_sighting_and_resets_on_end() {

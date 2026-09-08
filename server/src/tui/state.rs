@@ -45,6 +45,9 @@ impl AgentTable {
                 agents,
                 ..
             } => {
+                if mode != self.mode {
+                    self.board.clear();
+                }
                 self.mode = mode;
                 self.source_status = source_status;
                 self.source_diagnostic = source_diagnostic;
