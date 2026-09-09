@@ -205,6 +205,10 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [statsOpen]);
   const boardEntries = clientStore.snapshot().board,
+    agentById = new Map(agents.map((agent) => [agent.id, agent])),
+    renderedIds = new Set(
+      hits.filter((hit) => hit.kind === "station").map((hit) => hit.id),
+    ),
     spiritAgents = hits
       .filter((hit) => hit.kind === "spirit")
       .flatMap((hit) => {
@@ -222,12 +226,15 @@ export function App() {
           : [];
       }),
     kitchenControls = [
-      ...agents.map((agent) => ({
-        ...agent,
-        blockedPlacement: hits.find(
-          (hit) => hit.kind === "station" && hit.id === agent.id,
-        )?.blockedPlacement,
-      })),
+      ...hits
+        .filter((hit) => hit.kind === "station")
+        .flatMap((hit) => {
+          const agent = agentById.get(hit.id);
+          return agent
+            ? [{ ...agent, blockedPlacement: hit.blockedPlacement }]
+            : [];
+        }),
+      ...agents.filter((agent) => !renderedIds.has(agent.id)),
       ...hits
         .filter((hit) => hit.kind === "board")
         .flatMap((hit) => {

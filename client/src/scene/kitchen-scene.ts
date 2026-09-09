@@ -30,6 +30,7 @@ import { tokens } from "../theme/tokens";
 import {
   computeFreezerLayout,
   computeLayout,
+  reconcileStationSlots,
   type FreezerLayout,
   type Rect,
   type SceneLayout,
@@ -263,6 +264,7 @@ export class KitchenScene {
     passEdges: 0,
   };
   private layout!: SceneLayout;
+  private stationSlots: (string | null)[] = [];
   private freezerLayout: FreezerLayout | null = null;
   private view: "kitchen" | "freezer" = "kitchen";
   private lastLiveIds = "";
@@ -551,18 +553,22 @@ export class KitchenScene {
       : null;
     const width = this.host.clientWidth || innerWidth,
       height = this.host.clientHeight || innerHeight,
+      nextSlots = reconcileStationSlots(this.stationSlots, [
+        ...snapshot.visibleAgents.keys(),
+      ]),
+      capacityChanged = nextSlots.length !== this.stationSlots.length,
       layoutChanged =
         this.layout &&
         (this.layout.wall.width !== width ||
-          this.app.renderer.height !== height);
+          this.app.renderer.height !== height ||
+          capacityChanged);
     if (layoutChanged) {
       this.transitions.reconcile();
       this.retainedBlocked.clear();
       this.store.reconcileRendered(undefined, true);
     }
-    this.layout = computeLayout(width, height, [
-      ...snapshot.visibleAgents.keys(),
-    ]);
+    this.stationSlots = nextSlots;
+    this.layout = computeLayout(width, height, this.stationSlots);
     this.app.renderer.resize(width, height);
     const kitchen = this.view === "kitchen";
     this.stationLayer.visible = kitchen;

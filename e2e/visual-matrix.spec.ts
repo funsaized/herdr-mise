@@ -1203,7 +1203,7 @@ test("freezer matrix discloses empty full and bounded overflow scenes", async ({
   expect(errors).toEqual([]);
 });
 
-test("fixture-driven kitchen materials", async ({ page }) => {
+test("fixture-driven kitchen materials and station slots", async ({ page }) => {
   test.setTimeout(120_000);
   const directory = await mkdtemp(
       join(tmpdir(), "herdr-mise-blocked-density-"),
@@ -1229,20 +1229,26 @@ test("fixture-driven kitchen materials", async ({ page }) => {
         agent_session: { value: string };
       }>;
     },
-    makeSnapshot = (count: number, status = "blocked") => ({
+    makeSnapshotFromIds = (ids: readonly string[], status = "blocked") => ({
       ...source,
-      agents: Array.from({ length: count }, (_, index) => {
-        const suffix = String(index + 1).padStart(2, "0");
+      agents: ids.map((id) => {
         return {
           ...source.agents[0]!,
-          terminal_id: `fictional-terminal-${suffix}`,
-          pane_id: `fictional-pane-${suffix}`,
-          display_agent: `density-${suffix}`,
+          terminal_id: `fictional-terminal-${id}`,
+          pane_id: `fictional-pane-${id}`,
+          display_agent: id.startsWith("m") ? id : `density-${id}`,
           agent_status: status,
-          agent_session: { value: `fictional-session-${suffix}` },
+          agent_session: { value: `fictional-session-${id}` },
         };
       }),
     }),
+    makeSnapshot = (count: number, status = "blocked") =>
+      makeSnapshotFromIds(
+        Array.from({ length: count }, (_, index) =>
+          String(index + 1).padStart(2, "0"),
+        ),
+        status,
+      ),
     sockets = new Set<Socket>();
   let snapshot = makeSnapshot(1, "working");
   const fixtureServer = createServer((socket) => {
@@ -1312,6 +1318,146 @@ test("fixture-driven kitchen materials", async ({ page }) => {
     expect((await sceneMetrics(page))?.materials).toEqual(workingOn.materials);
 
     await page.goto(`${appUrl}/?stats&theme=dinner`);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+
+    const setLiveIds = async (ids: readonly string[]) => {
+        snapshot = makeSnapshotFromIds(ids, "working");
+        await expect
+          .poll(async () =>
+            Object.keys((await sceneMetrics(page))?.stationCells ?? {}),
+          )
+          .toEqual(
+            expect.arrayContaining(ids.map((id) => `fictional-terminal-${id}`)),
+          );
+        await expect
+          .poll(
+            async () =>
+              Object.keys((await sceneMetrics(page))?.stationCells ?? {})
+                .length,
+          )
+          .toBe(ids.length);
+        return (await sceneMetrics(page))!.stationCells;
+      },
+      expectSurvivorsStationary = (
+        before: Record<
+          string,
+          { x: number; y: number; width: number; height: number }
+        >,
+        after: Record<
+          string,
+          { x: number; y: number; width: number; height: number }
+        >,
+      ) => {
+        for (const id of Object.keys(before))
+          if (id in after) expect(after[id]).toEqual(before[id]);
+      };
+
+    await setLiveIds([]);
+    const four = await setLiveIds(["a01", "a02", "a03", "a04"]),
+      five = await setLiveIds(["a01", "a02", "a03", "a04", "a05"]);
+    expectSurvivorsStationary(four, five);
+    const fourAgain = await setLiveIds(["a01", "a02", "a03", "a04"]);
+    expectSurvivorsStationary(five, fourAgain);
+
+    const hole = await setLiveIds(["a01", "a03", "a04"]),
+      replacement = await setLiveIds(["a01", "a03", "a04", "a99"]);
+    expect(replacement["fictional-terminal-a99"]).toEqual(
+      five["fictional-terminal-a02"],
+    );
+    expectSurvivorsStationary(hole, replacement);
+    const visualOrder = Object.entries(replacement)
+      .sort(([, left], [, right]) => left.y - right.y || left.x - right.x)
+      .map(([id]) => id);
+    expect(visualOrder.slice(0, 2)).toEqual([
+      "fictional-terminal-a01",
+      "fictional-terminal-a99",
+    ]);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    const replacementControl = page.getByRole("button", {
+      name: /density-a99, Working/,
+    });
+    await expect(replacementControl).toBeFocused();
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.activeFocusBounds[
+            "fictional-terminal-a99"
+          ],
+      )
+      .toBeTruthy();
+    expectInside(
+      (await sceneMetrics(page))!.activeFocusBounds["fictional-terminal-a99"]!,
+      replacement["fictional-terminal-a99"]!,
+    );
+
+    const eight = await setLiveIds([
+        "b01",
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+      ]),
+      nine = await setLiveIds([
+        "b01",
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+        "b09",
+      ]);
+    expectSurvivorsStationary(eight, nine);
+    expectSurvivorsStationary(
+      nine,
+      await setLiveIds([
+        "b01",
+        "b02",
+        "b03",
+        "b04",
+        "b05",
+        "b06",
+        "b07",
+        "b08",
+      ]),
+    );
+
+    await setLiveIds(["c01", "c02", "c03", "c04", "c05", "c06"]);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await page.keyboard.press("ArrowRight");
+    const survivorControl = page.getByRole("button", {
+      name: /density-c01, Working/,
+    });
+    await expect(survivorControl).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("complementary", { name: /density-c01 details/i }),
+    ).toBeVisible();
+    await setLiveIds(["c01", "c02", "c03", "c04", "c05", "c06", "c07"]);
+    await expect(
+      page.getByRole("complementary", { name: /density-c01 details/i }),
+    ).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.activeFocusBounds[
+            "fictional-terminal-c01"
+          ],
+      )
+      .toBeTruthy();
+    await page.keyboard.press("Escape");
+    await expect(survivorControl).toBeFocused();
+
     await page.emulateMedia({ reducedMotion: "no-preference" });
 
     for (const count of [1, 6, 12]) {
@@ -1321,7 +1467,12 @@ test("fixture-driven kitchen materials", async ({ page }) => {
         { width: 320, height: 640 },
       ]) {
         await page.setViewportSize(viewport);
-        snapshot = makeSnapshot(count);
+        snapshot = makeSnapshotFromIds(
+          Array.from(
+            { length: count },
+            (_, index) => `m${String(index + 1).padStart(2, "0")}`,
+          ),
+        );
         const buttons = page
           .getByRole("navigation", { name: "Agent stations" })
           .getByRole("button", { name: /Blocked —/ });
@@ -1385,7 +1536,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           );
           const control = buttons.nth(index);
           await expect(control).toContainText(
-            `density-${String(index + 1).padStart(2, "0")}`,
+            `m${String(index + 1).padStart(2, "0")}`,
           );
           await expect(control).toContainText(
             placement.kind === "pass"
@@ -1415,6 +1566,11 @@ test("fixture-driven kitchen materials", async ({ page }) => {
             expect(boxesIntersect(bound, other)).toBe(false);
         });
 
+        await page.getByRole("button", { name: "Freezer" }).click();
+        await page.getByRole("button", { name: "Freezer" }).click();
+        await expect
+          .poll(async () => (await sceneMetrics(page))?.view)
+          .toBe("kitchen");
         await page.evaluate(() =>
           (document.activeElement as HTMLElement | null)?.blur(),
         );
@@ -1436,12 +1592,12 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           snapshot = structuredClone(snapshot);
           snapshot.agents[0]!.agent_status = "working";
           await expect(
-            page.getByRole("button", { name: /density-01, Working/ }),
+            page.getByRole("button", { name: /m01, Working/ }),
           ).toBeAttached({ timeout: 10_000 });
           await expect
             .poll(async () => {
               const current = (await sceneMetrics(page))?.blockedPlacements;
-              return current?.["fictional-terminal-01"]?.exiting;
+              return current?.["fictional-terminal-m01"]?.exiting;
             })
             .toBe(true);
           const duringExit = Object.values(
@@ -1467,7 +1623,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           await expect
             .poll(async () => {
               return (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-terminal-01"
+                "fictional-terminal-m01"
               ];
             })
             .toBeUndefined();
@@ -1475,13 +1631,13 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           snapshot = structuredClone(snapshot);
           snapshot.agents[1]!.agent_status = "done";
           await expect(
-            page.getByRole("button", { name: /density-02, Done/ }),
+            page.getByRole("button", { name: /m02, Done/ }),
           ).toBeAttached({ timeout: 10_000 });
           await expect
             .poll(
               async () =>
                 (await sceneMetrics(page))?.blockedPlacements[
-                  "fictional-terminal-02"
+                  "fictional-terminal-m02"
                 ]?.exiting,
             )
             .toBe(true);
@@ -1489,7 +1645,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           await expect
             .poll(async () => ({
               retained: (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-terminal-02"
+                "fictional-terminal-m02"
               ],
               transitions: (await sceneMetrics(page))?.motion.activeTransitions,
             }))
@@ -1498,12 +1654,12 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           snapshot = structuredClone(snapshot);
           snapshot.agents[2]!.agent_status = "working";
           await expect(
-            page.getByRole("button", { name: /density-03, Working/ }),
+            page.getByRole("button", { name: /m03, Working/ }),
           ).toBeAttached({ timeout: 10_000 });
           await expect
             .poll(async () => ({
               retained: (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-terminal-03"
+                "fictional-terminal-m03"
               ],
               transitions: (await sceneMetrics(page))?.motion.activeTransitions,
             }))
