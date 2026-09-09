@@ -9,6 +9,7 @@ export interface AgentRecord {
   stateKnown?: boolean;
   id: string;
   paneId?: string;
+  agentKind?: string;
   name: string;
   state: AgentState;
   progress: number | null;

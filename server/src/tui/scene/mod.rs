@@ -786,7 +786,7 @@ fn draw_kitchen(
     } else {
         let names = blocked
             .iter()
-            .map(|agent| view::sanitize_external(&agent.name))
+            .map(|agent| view::station_display_name(agent, &agents, usize::MAX))
             .collect::<Vec<_>>()
             .join(", ");
         let elapsed = blocked_elapsed(blocked[0], now);
@@ -889,10 +889,7 @@ fn draw_kitchen(
         let maximum_name = usize::from(available)
             .saturating_sub(suffix.chars().count() + 2)
             .max(1);
-        let display_name = view::sanitize_external(&agent.name)
-            .chars()
-            .take(maximum_name)
-            .collect::<String>();
+        let display_name = view::station_display_name(agent, &agents, maximum_name);
         render_line(
             frame,
             area,
@@ -936,23 +933,24 @@ fn draw_kitchen(
     }
 
     if let Some(agent) = selected_id.and_then(|id| agents.iter().find(|agent| agent.id == id)) {
-        for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
-            render_line(
-                frame,
-                area,
-                theme::KITCHEN_GUTTER,
-                area.height.saturating_sub(3) + row as u16,
-                area.width
-                    .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2)),
-                Line::styled(
-                    facts,
-                    Style::default()
-                        .fg(mapped(theme::TEXT, color_mode))
-                        .bg(mapped(theme::PANEL2, color_mode))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            );
-        }
+        let width = area
+            .width
+            .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2));
+        let height = view::inspect_height(agent, width).min(area.height.saturating_sub(1));
+        frame.render_widget(
+            view::inspect_paragraph(agent).style(
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .bg(mapped(theme::PANEL2, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Rect::new(
+                area.x + theme::KITCHEN_GUTTER,
+                area.y + area.height.saturating_sub(height.saturating_add(1)),
+                width,
+                height,
+            ),
+        );
     }
 
     let keys = if selected_id.is_some() {
@@ -1273,22 +1271,22 @@ fn draw_freezer(
         ),
     );
     if let Some(agent) = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id)) {
-        for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
-            render_line(
-                frame,
-                area,
-                2,
-                area.height.saturating_sub(3) + row as u16,
-                area.width.saturating_sub(4),
-                Line::styled(
-                    facts,
-                    Style::default()
-                        .fg(mapped(theme::TEXT, color_mode))
-                        .bg(mapped(theme::PANEL2, color_mode))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            );
-        }
+        let width = area.width.saturating_sub(4);
+        let height = view::inspect_height(agent, width).min(area.height.saturating_sub(1));
+        frame.render_widget(
+            view::inspect_paragraph(agent).style(
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .bg(mapped(theme::PANEL2, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Rect::new(
+                area.x.saturating_add(2),
+                area.y + area.height.saturating_sub(height.saturating_add(1)),
+                width,
+                height,
+            ),
+        );
     }
     let keys = format!("{KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}");
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);

@@ -187,6 +187,7 @@ mod tests {
             state_known: None,
             id: id.into(),
             pane_id: None,
+            agent_kind: None,
             name: format!("cook-{id}"),
             state,
             progress: None,

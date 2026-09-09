@@ -9,6 +9,7 @@ fn record(id: &str, state: AgentState) -> AgentRecord {
         state_known: None,
         id: id.into(),
         pane_id: None,
+        agent_kind: None,
         name: format!("Cook {id}"),
         state,
         progress: Some(0.5),

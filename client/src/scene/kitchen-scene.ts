@@ -62,6 +62,7 @@ import {
   passBellGeometry,
   sceneIdentityHash,
   stationIdentityLabels,
+  stationCollisionIds,
   stationTicketGeometry,
   stationWorkspaceLabel,
   type BlockedPlacement,
@@ -1262,6 +1263,9 @@ export class KitchenScene {
       ),
       placements = blockedPlacements(this.layout, blockedIds, exiting);
     this.blockedPlacementMetrics = {};
+    const collisionIds = stationCollisionIds([
+      ...snapshot.visibleAgents.values(),
+    ]);
     for (const [id, placement] of placements) {
       const agent = snapshot.visibleAgents.get(id)!;
       const retained = {
@@ -1296,6 +1300,7 @@ export class KitchenScene {
         index,
         now,
         placements.get(agent.id) ?? this.retainedBlocked.get(agent.id),
+        collisionIds.has(agent.id),
       );
       this.stationLayer.addChild(view.node);
       const placement = placements.get(agent.id);
@@ -1373,6 +1378,7 @@ export class KitchenScene {
     index: number,
     now: number,
     placement?: BlockedPlacement,
+    colliding = false,
   ) {
     const snapshot = this.store.snapshot(),
       p = getTheme().palette,
@@ -1537,6 +1543,7 @@ export class KitchenScene {
         wallNow,
         nameCharacters,
         state === "blocked" ? placement : undefined,
+        colliding,
       ),
       dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}:${this.lastAtmosphere}`,
       dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`,

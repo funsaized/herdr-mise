@@ -2,8 +2,10 @@ import {
   semanticQueueWords,
   semanticStateWords,
   semanticStationLabel,
+  semanticStationName,
   type SemanticAgent,
 } from "../state/semantic-stations";
+import { stationCollisionIds } from "../scene/geometry";
 import { formatDuration } from "./duration";
 import { useClock } from "./use-clock";
 
@@ -19,7 +21,10 @@ export function SemanticStationControls({
   tooltipAgentId?: string | null;
 }) {
   const blocked = agents.some((agent) => agent.targetState === "blocked"),
-    now = useClock(blocked);
+    now = useClock(blocked),
+    collisions = stationCollisionIds(
+      agents.filter((agent) => agent.targetState !== "ended"),
+    );
   return (
     <nav className="stationA11yMirror" aria-label={label}>
       {agents.map((agent) => (
@@ -32,14 +37,17 @@ export function SemanticStationControls({
               : undefined
           }
           aria-label={semanticStationLabel(
-            agent,
+            {
+              ...agent,
+              name: semanticStationName(agent, collisions.has(agent.id)),
+            },
             agent.targetState === "blocked" && agent.stateKnown !== false
               ? `${formatDuration(now - Date.parse(agent.stateEnteredAt))} blocked`
               : undefined,
           )}
           onClick={(event) => onSelect(agent.id, event.currentTarget)}
         >
-          {agent.name}
+          {semanticStationName(agent, collisions.has(agent.id))}
           <span>
             {agent.stateKnown === false
               ? "Unknown — at prep"

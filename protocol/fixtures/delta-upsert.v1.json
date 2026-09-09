@@ -5,6 +5,7 @@
   "operation": "upsert",
   "agent": {
     "id": "agent-01",
+    "agentKind": "codex",
     "name": "refactor-agent",
     "state": "blocked",
     "progress": 0.42,

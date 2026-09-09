@@ -214,6 +214,21 @@ select:focus-visible {
   overflow-wrap: anywhere;
   font-variant-numeric: var(--fontNumericVariant);
 }
+.locatorValue {
+  display: block;
+  user-select: text;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.copyLocator {
+  margin-top: 4px;
+}
+.copyStatus {
+  min-height: 1em;
+  padding: 0 var(--spacePanel);
+  color: var(--secondary);
+  font-size: var(--fontSecondarySize);
+}
 .fact .mono,
 .mono {
   font:

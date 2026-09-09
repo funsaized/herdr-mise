@@ -34,15 +34,32 @@ export function stationWorkspaceLabel(workspace: string) {
 }
 
 export function compactPixelText(value: string, maxCharacters = 30) {
-  const text = value.trim();
-  if (text.length <= maxCharacters) return text;
+  const text = Array.from(value.trim());
+  if (text.length <= maxCharacters) return text.join("");
   if (maxCharacters <= 3) return ".".repeat(Math.max(0, maxCharacters));
-  return `${text.slice(0, maxCharacters - 3)}...`;
+  return `${text.slice(0, maxCharacters - 3).join("")}...`;
+}
+
+export function stationCollisionIds(
+  agents: readonly Pick<AgentMachine, "id" | "name" | "workspace">[],
+) {
+  const identities = agents.map(
+      (agent) =>
+        `${agent.name.toUpperCase()}\0${workspaceDisplayName(agent.workspace).toUpperCase()}`,
+    ),
+    counts = new Map<string, number>();
+  for (const identity of identities)
+    counts.set(identity, (counts.get(identity) ?? 0) + 1);
+  return new Set(
+    agents
+      .filter((_, index) => (counts.get(identities[index]!) ?? 0) > 1)
+      .map((agent) => agent.id),
+  );
 }
 
 export function stationIdentityLabels(
   agent: Pick<AgentMachine, "name" | "workspace"> &
-    Partial<Pick<AgentMachine, "answerReceivedUntil">>,
+    Partial<Pick<AgentMachine, "id" | "paneId" | "answerReceivedUntil">>,
   state: AgentMachine["targetState"],
   now = Date.now(),
   maxCharacters = 30,
@@ -50,15 +67,24 @@ export function stationIdentityLabels(
     BlockedPlacement,
     "kind" | "queueOrdinal" | "queueTotal"
   >,
+  colliding = false,
 ) {
   const workspace = workspaceDisplayName(agent.workspace).toUpperCase(),
     agentName = agent.name.toUpperCase(),
-    compactName =
-      maxCharacters <= agentName.length
-        ? agentName.length <= maxCharacters
-          ? agentName
-          : `${agentName.slice(0, Math.floor((maxCharacters - 3) / 2))}...${agentName.slice(-Math.ceil((maxCharacters - 3) / 2))}`
-        : compactPixelText(`${agentName} · ${workspace}`, maxCharacters),
+    base = `${agentName} · ${workspace}`,
+    identity = colliding ? (agent.paneId ?? agent.id) : undefined,
+    locator = identity ? ` · ${identity}` : "",
+    available = Math.max(1, maxCharacters - Array.from(locator).length),
+    namePoints = Array.from(agentName),
+    compactBase =
+      available <= 3
+        ? ".".repeat(available)
+        : available <= namePoints.length
+          ? namePoints.length <= available
+            ? agentName
+            : `${namePoints.slice(0, Math.floor((available - 3) / 2)).join("")}...${namePoints.slice(-Math.ceil((available - 3) / 2)).join("")}`
+          : compactPixelText(base, available),
+    compactName = `${compactBase}${locator}`,
     labels = {
       idle: "PREP",
       working: "FIRE",
@@ -75,7 +101,7 @@ export function stationIdentityLabels(
   return {
     name: compactName,
     status,
-    signature: `${agent.name}:${agent.workspace}`,
+    signature: `${agent.name}:${agent.workspace}${identity ? `:${identity}` : ""}`,
   };
 }
 

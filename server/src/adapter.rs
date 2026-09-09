@@ -220,6 +220,12 @@ impl Normalizer {
         let mut first_seen = self.first_seen.clone();
         for agent in source {
             let id = agent.terminal_id.clone();
+            let agent_kind = agent
+                .agent
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| truncate_utf16(value.to_owned()));
             let state_known = !matches!(agent.agent_status, RawStatus::Unknown);
             let state = match agent.agent_status {
                 RawStatus::Idle | RawStatus::Unknown => AgentState::Idle,
@@ -252,11 +258,16 @@ impl Normalizer {
                 ),
             );
             let name = truncate_utf16(
-                [agent.name, agent.display_agent, agent.agent, agent.title]
-                    .into_iter()
-                    .flatten()
-                    .find(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| format!("agent-{}", agent.pane_id)),
+                [
+                    agent.name,
+                    agent.display_agent,
+                    agent.agent.clone(),
+                    agent.title,
+                ]
+                .into_iter()
+                .flatten()
+                .find(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| format!("agent-{}", agent.pane_id)),
             );
             let workspace = truncate_utf16(
                 workspaces
@@ -274,6 +285,7 @@ impl Normalizer {
                 accent_index: accent(&id),
                 id,
                 pane_id: Some(agent.pane_id),
+                agent_kind,
                 name,
                 state,
                 progress: None,
@@ -832,6 +844,8 @@ mod tests {
 
         assert_eq!(snapshot.agents.len(), 1);
         assert_eq!(snapshot.agents[0].state, AgentState::Working);
+        assert_eq!(snapshot.agents[0].agent_kind.as_deref(), Some("codex"));
+        assert!(snapshot.agents[0].model.is_empty());
     }
 
     #[test]

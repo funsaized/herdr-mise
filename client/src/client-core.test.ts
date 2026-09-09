@@ -965,6 +965,36 @@ describe("layout, transitions and resources", () => {
       signature: "Claude:/work/payments",
     });
   });
+  it("reserves exact Unicode pane locators only for colliding station identities", () => {
+    const colliding = {
+      name: "料理人",
+      workspace: "/one/台所",
+      paneId: "pane-🥘-二",
+    };
+    expect(
+      stationIdentityLabels(colliding, "working", Date.now(), 18).name,
+    ).toBe("料理人 · 台所");
+    const label = stationIdentityLabels(
+      colliding,
+      "working",
+      Date.now(),
+      18,
+      undefined,
+      true,
+    ).name;
+    expect(label).toContain("pane-🥘-二");
+    expect(Array.from(label).length).toBeLessThanOrEqual(18);
+    expect(
+      stationIdentityLabels(
+        { name: "料理人", workspace: "/one/台所", id: "terminal-one" },
+        "working",
+        Date.now(),
+        30,
+        undefined,
+        true,
+      ).name,
+    ).toContain("terminal-one");
+  });
   it("keeps every banquet status suffix intact within the 18-character bound", () => {
     const base = {
         name: "Claude",

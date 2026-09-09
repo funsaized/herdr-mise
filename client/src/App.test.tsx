@@ -245,6 +245,25 @@ describe("semantic station controls", () => {
       within(navigation).getByRole("button").getAttribute("tabindex"),
     ).toBe("-1");
   });
+  it("keeps colliding controls distinct when pane locators are unavailable", () => {
+    render(
+      <SemanticStationControls
+        agents={[
+          { ...agent, id: "terminal-one", paneId: undefined },
+          { ...agent, id: "terminal-two", paneId: undefined },
+        ]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Codex · terminal-one"),
+        expect.stringContaining("Codex · terminal-two"),
+      ]),
+    );
+  });
   it("deduplicates source updates that do not change the semantic slice", () => {
     const same = [agent],
       copy = [{ ...agent }];

@@ -407,6 +407,7 @@ mod tests {
             state_known: None,
             id: id.into(),
             pane_id: None,
+            agent_kind: None,
             name: id.into(),
             state: AgentState::Working,
             progress: None,

@@ -200,6 +200,7 @@ impl Feed {
                     prior.state != agent.state
                         || prior.state_entered_at != agent.state_entered_at
                         || prior.pane_id != agent.pane_id
+                        || prior.agent_kind != agent.agent_kind
                         || prior.workspace != agent.workspace
                 });
                 if transition {
@@ -503,6 +504,21 @@ mod tests {
         assert!(!feed.inner.pending.lock().await.contains_key("a"));
     }
     #[tokio::test]
+    async fn agent_kind_changes_bypass_metric_coalescing() {
+        let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
+        let mut changes = feed.subscribe();
+        let mut changed = record(0.1);
+        changed.agent_kind = Some("codex".into());
+        feed.apply_live_coalesced(vec![changed], vec![]).await;
+        assert!(matches!(
+            changes.try_recv().unwrap(),
+            AgentStateEvent::Delta {
+                agent: Some(agent),
+                ..
+            } if agent.agent_kind.as_deref() == Some("codex")
+        ));
+    }
+    #[tokio::test]
     async fn cross_workspace_move_preserves_continuity() {
         let mut normalizer = Normalizer::default();
         let before = normalizer
@@ -620,6 +636,7 @@ mod tests {
             state_known: None,
             id: "a".into(),
             pane_id: None,
+            agent_kind: None,
             name: "A".into(),
             state: AgentState::Working,
             progress: Some(progress),
