@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { workspaceDisplayName } from "../scene/geometry";
 import type { SceneHit } from "../scene/kitchen-scene";
 import {
   humanStateWords,
@@ -194,7 +195,7 @@ export function DetailCard({
       />
       <div className="facts">
         <Fact label="Workspace" mono>
-          {inspectionText(agent.workspace)}
+          {inspectionText(workspaceDisplayName(agent.workspace))}
         </Fact>
         <Fact label="Agent kind" mono>
           {inspectionText(agent.agentKind)}

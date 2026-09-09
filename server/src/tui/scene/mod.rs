@@ -495,8 +495,24 @@ pub(crate) fn draw_view(
     let inspection_too_tall = selected_id
         .and_then(|id| table.agents().find(|agent| agent.id == id))
         .is_some_and(|agent| {
-            view::inspect_height(agent, area.width.saturating_sub(4))
-                > area.height.saturating_sub(theme::KITCHEN_HEADER_BAND)
+            let available_height = match scene_view {
+                SceneView::Kitchen => match compute_layout(
+                    area.width,
+                    area.height.saturating_mul(2),
+                    table.agents().count(),
+                ) {
+                    LayoutDecision::Scene(layout) => layout
+                        .stations
+                        .iter()
+                        .map(|station| cell_rect(*station).y)
+                        .min()
+                        .unwrap_or(area.height)
+                        .saturating_sub(cell_rect(layout.pass).bottom()),
+                    LayoutDecision::Fallback => area.height,
+                },
+                SceneView::Freezer => area.height.saturating_sub(theme::KITCHEN_HEADER_BAND),
+            };
+            view::inspect_height(agent, area.width.saturating_sub(4)) > available_height
         });
     if !scene_supported || inspection_too_tall {
         view::draw(

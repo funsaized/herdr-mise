@@ -1119,9 +1119,7 @@ test("fixture-backed duplicate identity inspection", async ({
     ]);
     await first.evaluate((button: HTMLButtonElement) => button.click());
     const details = page.getByLabel("same chef details");
-    await expect(details).toContainText(
-      "/work/料理/very-long-shared-workspace",
-    );
+    await expect(details).toContainText("very-long-shared-workspace");
     await expect(details).toContainText("codex");
     await expect(details).toContainText(locatorOne);
     const copyLocator = details.getByRole("button", { name: "Copy locator" });
@@ -1137,9 +1135,7 @@ test("fixture-backed duplicate identity inspection", async ({
     source.agents[0].pane_id = movedLocator;
     snapshot = JSON.stringify({ result: { snapshot: source } });
     await expect(details).toContainText(movedLocator, { timeout: 5_000 });
-    await expect(details).toContainText(
-      "/work/料理/very-long-shared-workspace",
-    );
+    await expect(details).toContainText("very-long-shared-workspace");
 
     source.agents = [];
     snapshot = JSON.stringify({ result: { snapshot: source } });

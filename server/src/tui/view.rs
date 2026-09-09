@@ -590,13 +590,13 @@ mod tests {
             ["same chef · example-pantry", "same chef · different-pantry"]
         );
         let mut long_agents = normalized.agents.clone();
-        long_agents[0].workspace = format!("/work/{}/example-pantry", "料理🥘/".repeat(100));
+        long_agents[0].workspace = format!("/work/{}/example-pantry", "料理🥘/".repeat(20));
         long_agents[0]
             .pane_id
             .as_mut()
             .unwrap()
-            .push_str(&"-料理🥘".repeat(100));
-        assert!(inspect_height(&long_agents[0], 76) > 5);
+            .push_str(&"-料理🥘".repeat(20));
+        assert!((6..=18).contains(&inspect_height(&long_agents[0], 76)));
         let long_feed = crate::feed::Feed::fixed(AppMode::Live, long_agents).await;
         let mut long_table = AgentTable::default();
         long_table.apply(long_feed.snapshot().await);
@@ -609,6 +609,7 @@ mod tests {
             false,
         );
         assert!(narrow.contains("BLOCKED / AT THE PASS"), "{narrow}");
+        assert!(narrow.contains("Kitchen status"), "{narrow}");
         assert!(narrow.contains("Agent kind: codex"), "{narrow}");
         assert!(narrow.contains("Pane locator:"), "{narrow}");
         assert!(narrow.contains("prefix-19"), "{narrow}");
