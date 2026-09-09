@@ -510,7 +510,15 @@ pub(crate) fn draw_view(
                         .saturating_sub(cell_rect(layout.pass).bottom()),
                     LayoutDecision::Fallback => area.height,
                 },
-                SceneView::Freezer => area.height.saturating_sub(theme::KITCHEN_HEADER_BAND),
+                SceneView::Freezer => {
+                    compute_freezer_layout(area.width, area.height.saturating_mul(2), &[])
+                        .map(|layout| {
+                            area.height
+                                .saturating_sub(layout.status.y / 2)
+                                .saturating_sub(2)
+                        })
+                        .unwrap_or(area.height)
+                }
             };
             view::inspect_height(agent, area.width.saturating_sub(4)) > available_height
         });

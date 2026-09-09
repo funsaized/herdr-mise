@@ -613,6 +613,22 @@ mod tests {
         assert!(narrow.contains("Agent kind: codex"), "{narrow}");
         assert!(narrow.contains("Pane locator:"), "{narrow}");
         assert!(narrow.contains("prefix-19"), "{narrow}");
+        let narrow_freezer = render_scene(
+            &long_table,
+            80,
+            24,
+            Some("fictional-terminal-19"),
+            SceneView::Freezer,
+            false,
+        );
+        assert!(
+            narrow_freezer.contains("Kitchen status"),
+            "{narrow_freezer}"
+        );
+        assert!(
+            !narrow_freezer.contains("FREEZER EMPTY"),
+            "{narrow_freezer}"
+        );
 
         let feed = crate::feed::Feed::fixed(AppMode::Live, normalized.agents).await;
         let mut table = AgentTable::default();
