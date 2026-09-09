@@ -136,7 +136,7 @@ fn panic_restore_install_count() -> usize {
     PANIC_RESTORE_INSTALL_COUNT.load(Ordering::SeqCst)
 }
 
-fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable) {
+pub(crate) fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable) {
     if selected_id
         .as_ref()
         .is_some_and(|id| !table.agents().any(|agent| &agent.id == id))
@@ -406,6 +406,7 @@ mod tests {
         let agent = |id: &str| AgentRecord {
             state_known: None,
             id: id.into(),
+            pane_id: None,
             name: id.into(),
             state: AgentState::Working,
             progress: None,

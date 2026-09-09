@@ -159,6 +159,11 @@ export function DetailCard({
         <Fact label="Workspace" mono>
           {workspaceDisplayName(agent.workspace)}
         </Fact>
+        {agent.paneId && (
+          <Fact label="Pane" mono>
+            {agent.paneId}
+          </Fact>
+        )}
         <Fact label="Time in state">
           {formatDuration(now - Date.parse(agent.stateEnteredAt))}
         </Fact>

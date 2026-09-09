@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Chrome, type DebugMetrics } from "./chrome/Chrome";
 import { KitchenScene, type SceneHit } from "./scene/kitchen-scene";
+import { workspaceDisplayName } from "./scene/geometry";
 import type { CoarseSlice } from "./state/store";
 import { AgentWebSocketClient } from "./state/ws-client";
 import { tokens } from "./theme/tokens";
@@ -80,7 +81,11 @@ export function App() {
     sceneRef = useRef<KitchenScene | null>(null),
     socketRef = useRef<AgentWebSocketClient | null>(null);
   const semanticRestoreRef = useRef<HTMLButtonElement | null>(null),
-    settingsRestorePendingRef = useRef(false);
+    settingsRestorePendingRef = useRef(false),
+    selectedLocationRef = useRef<Pick<
+      SemanticAgent,
+      "id" | "name" | "paneId" | "workspace"
+    > | null>(null);
   const [coarse, setCoarse] = useState<CoarseSlice>(() => clientStore.coarse()),
     [agents, setAgents] = useState<readonly SemanticAgent[]>(() =>
       semanticAgents(clientStore.snapshot().visibleAgents),
@@ -109,6 +114,20 @@ export function App() {
       ),
     [],
   );
+  useEffect(() => {
+    const selected = agents.find((agent) => agent.id === coarse.selectedId),
+      previous = selectedLocationRef.current;
+    selectedLocationRef.current = selected ?? null;
+    if (
+      selected &&
+      previous?.id === selected.id &&
+      (previous.paneId !== selected.paneId ||
+        previous.workspace !== selected.workspace)
+    )
+      setAnnouncement(
+        `${selected.name} moved to ${workspaceDisplayName(selected.workspace)}${selected.paneId ? `, pane ${selected.paneId}` : ""}`,
+      );
+  }, [agents, coarse.selectedId]);
   useEffect(
     () =>
       clientStore.onEvent((event) => {
@@ -148,7 +167,7 @@ export function App() {
     });
     const protocol = location.protocol === "https:" ? "wss:" : "ws:",
       socket = new AgentWebSocketClient(
-        `${protocol}//${location.host}/ws`,
+        `${protocol}//${location.host}/ws?paneId=1`,
         clientStore,
       );
     socketRef.current = socket;
@@ -195,6 +214,7 @@ export function App() {
               {
                 id: entry.id,
                 name: entry.name,
+                workspace: "",
                 targetState: "ended" as const,
                 stateEnteredAt: new Date(entry.endedAt).toISOString(),
               },
@@ -217,6 +237,7 @@ export function App() {
                 {
                   id: entry.id,
                   name: entry.name,
+                  workspace: "",
                   targetState: "ended" as const,
                   stateEnteredAt: new Date(entry.endedAt).toISOString(),
                 },

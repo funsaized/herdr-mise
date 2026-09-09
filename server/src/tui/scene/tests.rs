@@ -8,6 +8,7 @@ fn record(id: &str, state: AgentState) -> AgentRecord {
     AgentRecord {
         state_known: None,
         id: id.into(),
+        pane_id: None,
         name: format!("Cook {id}"),
         state,
         progress: Some(0.5),
@@ -39,7 +40,7 @@ fn render(table: &AgentTable, width: u16, height: u16, tick: u64) -> Buffer {
     render_selected(table, width, height, tick, None)
 }
 
-fn render_selected(
+pub(crate) fn render_selected(
     table: &AgentTable,
     width: u16,
     height: u16,

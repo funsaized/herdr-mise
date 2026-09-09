@@ -1,11 +1,12 @@
 # Feed v1 observation semantics
 
 The binary serves its matching browser client. The optional v1 fields
-`agent.stateKnown` and `session.ticketsAvailable` preserve the existing state
+`agent.stateKnown`, `agent.paneId`, and `session.ticketsAvailable` preserve the existing state
 enum and numeric ticket field while making missing observations explicit.
-Old deployed clients ignore these fields; strict third-party schema consumers
-must adopt the updated v1 schema before consuming them. Existing fixtures with
-neither field still round-trip unchanged.
+Strict decoders must adopt the updated v1 schema before consuming these fields.
+For the additive `paneId` rollout, refreshed browser clients connect to
+`/ws?paneId=1`; legacy `/ws` connections receive the prior field set. Existing
+connections therefore remain decodable until they reload and opt in.
 
 - `stateKnown: false` means Herdr reported unknown. Mise places the agent at
   prep to keep it visible, labels it **Unknown**, and does not assert it is idle.
@@ -14,7 +15,10 @@ neither field still round-trip unchanged.
   nonzero counts remain available and legacy zero remains unavailable.
 - Live Herdr snapshots currently do not supply ticket counts. Demo counts are
   explicitly available within the already labeled demo service.
-- `runtimeMs` is time since this process first observed the pane (Mise time),
+- `id` is Herdr's stable `terminal_id`; `paneId` and `workspace` are mutable
+  locators. Herdr protocols 17, 19, and 20 expose terminal identity and preserve
+  it when moving the attached terminal, so Mise uses no pane-ID fallback.
+- `runtimeMs` is time since this process first observed the terminal identity (Mise time),
   not the upstream session lifetime. Departure or process restart resets it.
   State timestamps likewise describe observations, not unseen history.
 
@@ -22,6 +26,7 @@ neither field still round-trip unchanged.
 records across the decoder, Rust schema round-trip, and detail presentation.
 Browser local history retains the latest 256 transitions; diagnostics retain
 one second in at most ten 100 ms buckets. Neither implies complete history.
+Polling cannot observe an exit and replacement that both occur between snapshots.
 
 The client additionally rejects messages over 4 MiB of string characters,
 rosters over 4096 records, duplicate IDs, unsafe integers, and strings over

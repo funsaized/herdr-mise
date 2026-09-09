@@ -6,6 +6,7 @@
   "panes": [],
   "layouts": [],
   "agents": [{
+    "terminal_id": "fictional-terminal-20",
     "pane_id": "fictional-pane-20",
     "workspace_id": "fictional-kitchen",
     "display_agent": "example-cook",

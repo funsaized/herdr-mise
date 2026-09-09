@@ -31,10 +31,13 @@ export function ModeTreatment({
   clearedCount?: number;
   onRevealCleared?(): void;
 }) {
-  const detail =
-    sourceStatus === "unsupportedProtocol" && sourceDiagnostic
+  const detail = sourceDiagnostic
+    ? sourceStatus === "unsupportedProtocol"
       ? ` — observed ${sourceDiagnostic.observedProtocol}; supported: ${sourceDiagnostic.supportedProtocols.join(", ")}; ${sourceDiagnostic.nextAction}`
-      : "";
+      : sourceStatus === "incompatibleResponse"
+        ? ` — ${sourceDiagnostic.nextAction}`
+        : ""
+    : "";
   if (mode === "connecting")
     return (
       <div className="emptyPill" role="status">
@@ -78,7 +81,7 @@ export function ModeTreatment({
           <small>
             {disconnectReason === "incompatibleFeed"
               ? "The browser rejected repeated state updates from Mise. Update or restart Mise; no malformed state was applied."
-              : "The kitchen will reopen on its own. Check that Mise is running; Mise will reconnect to Herdr when its local source is available."}
+              : `${sourceStatus !== "connected" ? `${sourceStatusText[sourceStatus]}${detail}. ` : ""}The kitchen will reopen on its own. Check that Mise is running; Mise will reconnect to Herdr when its local source is available.`}
           </small>
         </div>
       </div>

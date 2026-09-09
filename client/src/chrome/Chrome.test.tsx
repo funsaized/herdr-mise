@@ -110,7 +110,7 @@ describe("chrome interactions", () => {
       "Lost connection to Mise",
     );
   });
-  it("shows an actionable unsupported protocol diagnostic without conflating malformed input", () => {
+  it("shows actionable source diagnostics without conflating malformed input", () => {
     const { rerender } = render(
       <ModeTreatment
         mode="demo"
@@ -151,6 +151,36 @@ describe("chrome interactions", () => {
       "incompatible response",
     );
     expect(screen.getByRole("status").textContent).not.toContain("observed 23");
+    rerender(
+      <ModeTreatment
+        mode="demo"
+        sourceStatus="incompatibleResponse"
+        sourceDiagnostic={{
+          observedProtocol: 20,
+          supportedProtocols: [17, 19, 20],
+          nextAction: "ensure terminal identities are unique, then retry",
+        }}
+        lastUpdateSeconds={0}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain(
+      "ensure terminal identities are unique, then retry",
+    );
+    rerender(
+      <ModeTreatment
+        mode="disconnected"
+        sourceStatus="incompatibleResponse"
+        sourceDiagnostic={{
+          observedProtocol: 20,
+          supportedProtocols: [17, 19, 20],
+          nextAction: "ensure terminal identities are unique, then retry",
+        }}
+        lastUpdateSeconds={1}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "ensure terminal identities are unique, then retry",
+    );
   });
   it("round-trips settings controls", () => {
     const change = vi.fn(),
