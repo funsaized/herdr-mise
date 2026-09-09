@@ -734,6 +734,8 @@ select:focus-visible {
   .revealCleared {
     bottom: 104px;
   }
+}
+:where(.appShell[data-pager-layout="narrow"]) {
   .kitchenPager {
     left: 8px;
     right: 104px;
@@ -791,7 +793,7 @@ select:focus-visible {
     bottom: 52px;
   }
 }
-@media (min-width: 481px) and (max-height: 400px) {
+:where(.appShell[data-pager-layout="short"]) {
   .kitchenPager {
     display: flex;
     gap: 6px;
@@ -806,7 +808,7 @@ select:focus-visible {
     min-height: 26px;
     padding: 3px 5px;
   }
-  .appShell:has(.kitchenPager) .firstHint {
+  &:has(.kitchenPager) .firstHint {
     bottom: calc(var(--compactPagerReservedHeight) + 8px);
   }
 }

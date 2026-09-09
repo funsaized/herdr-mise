@@ -291,10 +291,11 @@ describe("semantic station controls", () => {
         agents={[agent]}
         page={{
           totalCount: 30,
+          visibleCount: 1,
           capacity: 12,
           pageIndex: 1,
           pageCount: 3,
-          visibleIds: ["a"],
+          pagerLayout: "standard",
         }}
         blockedTotal={7}
         blockedVisible={1}

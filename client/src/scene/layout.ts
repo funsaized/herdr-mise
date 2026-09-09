@@ -25,6 +25,7 @@ export interface SceneLayout {
   pageIndex: number;
   pageCount: number;
   visibleIds: readonly string[];
+  pagerLayout: "standard" | "narrow" | "short";
 }
 export interface StationVisualMetrics {
   cookHeight: number;
@@ -47,7 +48,7 @@ export function columnCount(count: number) {
   if (count <= 4) return Math.max(1, count);
   if (count <= 6) return 3;
   if (count <= 8) return 4;
-  return Math.min(6, count);
+  return Math.min(tokens.scene.layout.maxStationColumns, count);
 }
 
 export function stationSlotCapacity(count: number) {
@@ -118,7 +119,7 @@ export function computeLayout(
     sparseScaleFits =
       sceneHeight - gridTop - 4 >=
         tokens.scene.layout.stationHeight * tokens.scene.layout.sparseScale &&
-      sceneWidth - 14 >=
+      sceneWidth - tokens.scene.layout.stationGridHorizontalInset >=
         tokens.scene.layout.stationWidth * tokens.scene.layout.sparseScale,
     scale = banquet
       ? tokens.scene.layout.banquetScale
@@ -131,12 +132,17 @@ export function computeLayout(
     sceneHeight - gridTop - 4,
   );
   const preferredCellHeight = Math.min(
-      banquet ? 42 : tokens.scene.layout.stationHeight * scale,
+      banquet
+        ? tokens.scene.layout.banquetStationHeight
+        : tokens.scene.layout.stationHeight * scale,
       fullAvailableHeight / preferredRows,
     ),
     preferredCellWidth = Math.min(
-      48 * scale,
-      (sceneWidth - 14 - gutter * (preferredColumns - 1)) / preferredColumns,
+      tokens.scene.layout.stationMaxWidth * scale,
+      (sceneWidth -
+        tokens.scene.layout.stationGridHorizontalInset -
+        gutter * (preferredColumns - 1)) /
+        preferredColumns,
     ),
     minimumWidth = tokens.scene.layout.stationWidth * scale,
     minimumHeight = tokens.scene.layout.stationHeight * scale,
@@ -144,9 +150,14 @@ export function computeLayout(
       slotCount > 0 &&
       (preferredCellWidth < minimumWidth ||
         preferredCellHeight < minimumHeight),
+    pagerLayout =
+      width < tokens.scene.layout.compactPagerMinWidth
+        ? "narrow"
+        : height <= tokens.scene.layout.compactPagerMaxHeight
+          ? "short"
+          : "standard",
     pagerReservedHeight =
-      width >= tokens.scene.layout.compactPagerMinWidth &&
-      height <= tokens.scene.layout.compactPagerMaxHeight
+      pagerLayout === "short"
         ? tokens.scene.layout.compactPagerReservedHeight
         : tokens.scene.layout.pagerReservedHeight,
     stationGridTop = paged
@@ -162,8 +173,13 @@ export function computeLayout(
     pageColumns = Math.max(
       1,
       Math.min(
-        6,
-        Math.floor((sceneWidth - 14 + gutter) / (minimumWidth + gutter)),
+        tokens.scene.layout.maxStationColumns,
+        Math.floor(
+          (sceneWidth -
+            tokens.scene.layout.stationGridHorizontalInset +
+            gutter) /
+            (minimumWidth + gutter),
+        ),
       ),
     ),
     pageRows = Math.max(1, Math.floor(availableHeight / minimumHeight)),
@@ -182,15 +198,18 @@ export function computeLayout(
       : Math.max(1, Math.ceil(Math.max(1, slotCount) / columns));
   const cellHeight = Math.min(
     banquet
-      ? 42
+      ? tokens.scene.layout.banquetStationHeight
       : (paged
           ? tokens.scene.layout.pagedStationHeight
           : tokens.scene.layout.stationHeight) * scale,
     availableHeight / rows,
   );
   const cellWidth = Math.min(
-    48 * scale,
-    (sceneWidth - 14 - gutter * (columns - 1)) / columns,
+    tokens.scene.layout.stationMaxWidth * scale,
+    (sceneWidth -
+      tokens.scene.layout.stationGridHorizontalInset -
+      gutter * (columns - 1)) /
+      columns,
   );
   const gridWidth = cellWidth * columns + gutter * (columns - 1);
   const left = (sceneWidth - gridWidth) / 2,
@@ -229,6 +248,7 @@ export function computeLayout(
     pageIndex,
     pageCount,
     visibleIds,
+    pagerLayout,
   };
 }
 export function stationVisualMetrics(

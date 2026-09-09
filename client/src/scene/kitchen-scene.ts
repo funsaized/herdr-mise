@@ -92,10 +92,11 @@ export interface SceneHit {
 }
 export interface PageMetadata {
   totalCount: number;
+  visibleCount: number;
   capacity: number;
   pageIndex: number;
   pageCount: number;
-  visibleIds: readonly string[];
+  pagerLayout: SceneLayout["pagerLayout"];
 }
 export interface KitchenSceneOptions {
   onHitLayout?: (hits: readonly SceneHit[]) => void;
@@ -124,7 +125,7 @@ export interface SceneMetrics {
     BlockedPlacement & { timerText: string; exiting: boolean }
   >;
   blockedIndicators: number;
-  page: PageMetadata;
+  page: PageMetadata & { visibleIds: readonly string[] };
   stateIndicators: Record<string, number>;
   endedEntries: number;
   view: "kitchen" | "freezer";
@@ -526,7 +527,10 @@ export class KitchenScene {
       activeFocusCornerSizes,
       blockedPlacements: { ...this.blockedPlacementMetrics },
       blockedIndicators,
-      page: this.pageMetadata(),
+      page: {
+        ...this.pageMetadata(),
+        visibleIds: this.layout?.visibleIds ?? [],
+      },
       stateIndicators,
       endedEntries: snapshot.board.length,
       view: this.view,
@@ -1415,15 +1419,16 @@ export class KitchenScene {
   private pageMetadata(): PageMetadata {
     return {
       totalCount: this.layout?.totalCount ?? 0,
+      visibleCount: this.layout?.visibleIds.length ?? 0,
       capacity: this.layout?.capacity ?? 1,
       pageIndex: this.layout?.pageIndex ?? 0,
       pageCount: this.layout?.pageCount ?? 1,
-      visibleIds: this.layout?.visibleIds ?? [],
+      pagerLayout: this.layout?.pagerLayout ?? "standard",
     };
   }
   private publishPage() {
     const page = this.pageMetadata(),
-      signature = `${page.totalCount}:${page.capacity}:${page.pageIndex}:${page.pageCount}:${page.visibleIds.join("|")}`;
+      signature = `${page.totalCount}:${page.visibleCount}:${page.capacity}:${page.pageIndex}:${page.pageCount}:${page.pagerLayout}`;
     if (signature === this.lastPageSignature) return;
     this.lastPageSignature = signature;
     this.options.onPageLayout?.(page);

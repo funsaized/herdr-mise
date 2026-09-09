@@ -115,7 +115,7 @@ export function SemanticStationControls({
             </button>
           </div>
           <span>
-            {page.visibleIds.length} of {page.totalCount} cooks shown ·{" "}
+            {page.visibleCount} of {page.totalCount} cooks shown ·{" "}
             {blockedTotal} blocked / {blockedTotal - blockedVisible} off-page
           </span>
           <button

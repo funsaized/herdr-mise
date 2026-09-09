@@ -84,10 +84,11 @@ const cssTokens = {
 const initialMetrics: DebugMetrics = { drawCalls: 0, socketBytesPerSecond: 0 };
 const initialPage: PageMetadata = {
   totalCount: 0,
+  visibleCount: 0,
   capacity: 1,
   pageIndex: 0,
   pageCount: 1,
-  visibleIds: [],
+  pagerLayout: "standard",
 };
 export function App() {
   const host = useRef<HTMLDivElement>(null),
@@ -175,7 +176,7 @@ export function App() {
           pageRef.current.pageIndex !== next.pageIndex
         )
           setAnnouncement(
-            `Kitchen page ${next.pageIndex + 1} of ${next.pageCount}, ${next.visibleIds.length} of ${next.totalCount} cooks shown`,
+            `Kitchen page ${next.pageIndex + 1} of ${next.pageCount}, ${next.visibleCount} of ${next.totalCount} cooks shown`,
           );
         pageRef.current = next;
         setPage(next);
@@ -236,10 +237,12 @@ export function App() {
       hits.filter((hit) => hit.kind === "station").map((hit) => hit.id),
     ),
     blockedAgents = agents.filter((agent) => agent.targetState === "blocked"),
-    visibleIds = new Set(page.visibleIds),
-    visibleBlocked = blockedAgents.filter((agent) =>
-      visibleIds.has(agent.id),
-    ).length,
+    visibleBlocked = agents
+      .slice(
+        page.pageIndex * page.capacity,
+        (page.pageIndex + 1) * page.capacity,
+      )
+      .filter((agent) => agent.targetState === "blocked").length,
     spiritAgents = hits
       .filter((hit) => hit.kind === "spirit")
       .flatMap((hit) => {
@@ -430,7 +433,11 @@ export function App() {
   };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
   return (
-    <main className="appShell" style={cssTokens}>
+    <main
+      className="appShell"
+      data-pager-layout={page.pagerLayout}
+      style={cssTokens}
+    >
       {rendererFailed && (
         <section className="rendererFallback" aria-label="Agent status list">
           <p role="alert">

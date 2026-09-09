@@ -740,6 +740,13 @@ describe("layout, transitions and resources", () => {
           ),
           first = computeLayout(width, height, ids),
           visible = new Set<string>();
+        expect(first.pagerLayout).toBe(
+          width < tokens.scene.layout.compactPagerMinWidth
+            ? "narrow"
+            : height <= tokens.scene.layout.compactPagerMaxHeight
+              ? "short"
+              : "standard",
+        );
         expect(first.totalCount).toBe(count);
         expect(first.pageCount).toBe(Math.ceil(count / first.capacity));
         for (let page = 0; page < first.pageCount; page++) {

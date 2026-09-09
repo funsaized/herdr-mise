@@ -8,7 +8,10 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeLayout } from "../client/src/scene/layout";
+import {
+  computeLayout,
+  reconcileStationSlots,
+} from "../client/src/scene/layout";
 
 const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const STATE_WORDS = {
@@ -170,20 +173,26 @@ function expectInside(inner: Box, outer: Box, tolerance = 3) {
 async function cycleSceneFocus(page: Page, count: number) {
   const stationIds = new Set<string>(),
     boardIds = new Set<string>();
-  for (let index = 0; index < count; index++) {
+  let previousId: string | undefined;
+  for (
+    let index = 0;
+    index < count * 2 && stationIds.size + boardIds.size < count;
+    index++
+  ) {
     await page.keyboard.press("ArrowRight");
     await expect
       .poll(async () => {
-        const metrics = await sceneMetrics(page);
-        return (
-          Object.keys(metrics?.activeFocusBounds ?? {}).length +
-          (metrics?.board.strokedIds.length ?? 0)
-        );
+        const metrics = await sceneMetrics(page),
+          [stationId] = Object.keys(metrics?.activeFocusBounds ?? {}),
+          [boardId] = metrics?.board.strokedIds ?? [],
+          currentId = stationId ?? boardId;
+        return currentId && currentId !== previousId ? 1 : 0;
       })
       .toBe(1);
     const focused = (await sceneMetrics(page))!,
       [stationId] = Object.keys(focused.activeFocusBounds),
       [boardId] = focused.board.strokedIds;
+    previousId = stationId ?? boardId;
     if (stationId) {
       stationIds.add(stationId);
       expectInside(
@@ -1681,6 +1690,7 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
       for (const viewport of [
         { width: 1280, height: 720 },
         { width: 320, height: 640 },
+        { width: 481, height: 360 },
         { width: 640, height: 360 },
       ]) {
         await page.setViewportSize(viewport);
@@ -1700,6 +1710,28 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
             return metrics?.page.totalCount === count;
           })
           .toBe(true);
+        const expected = computeLayout(
+          viewport.width,
+          viewport.height,
+          reconcileStationSlots(
+            [],
+            Array.from(
+              { length: count },
+              (_, index) =>
+                `fictional-terminal-m${String(index + 1).padStart(2, "0")}`,
+            ),
+          ),
+        );
+        await expect
+          .poll(async () => (await sceneMetrics(page))?.page)
+          .toMatchObject({
+            capacity: expected.capacity,
+            pageCount: expected.pageCount,
+          });
+        await expect(page.locator(".appShell")).toHaveAttribute(
+          "data-pager-layout",
+          expected.pagerLayout,
+        );
         let metrics = (await sceneMetrics(page))!;
         while (metrics.page.pageIndex > 0) {
           await page.getByRole("button", { name: "Previous" }).click();
@@ -1708,19 +1740,7 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
             .toBe(metrics.page.pageIndex - 1);
           metrics = (await sceneMetrics(page))!;
         }
-        const expected = computeLayout(
-            viewport.width,
-            viewport.height,
-            Array.from(
-              { length: count },
-              (_, index) =>
-                `fictional-terminal-${String(index + 1).padStart(2, "0")}`,
-            ),
-          ),
-          discovered = new Set<string>();
-        await expect
-          .poll(async () => (await sceneMetrics(page))?.page.capacity)
-          .toBe(expected.capacity);
+        const discovered = new Set<string>();
         metrics = (await sceneMetrics(page))!;
         expect(metrics.page.capacity).toBe(expected.capacity);
         expect(metrics.page.pageCount).toBe(expected.pageCount);
@@ -1751,6 +1771,14 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
                   .getByRole("navigation", { name: "Kitchen pages" })
                   .boundingBox()
               : null;
+          if (pager)
+            expect(
+              await page
+                .getByRole("navigation", { name: "Kitchen pages" })
+                .evaluate(
+                  (element) => element.scrollWidth <= element.clientWidth,
+                ),
+            ).toBe(true);
           if (pager && pageIndex === 0) {
             const hint = await page.locator(".firstHint").boundingBox();
             expect(hint).not.toBeNull();
@@ -1841,7 +1869,7 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
           Array.from(
             { length: count },
             (_, index) =>
-              `fictional-terminal-${String(index + 1).padStart(2, "0")}`,
+              `fictional-terminal-m${String(index + 1).padStart(2, "0")}`,
           ),
         );
         if (count === 16 && viewport.width === 1280) {
@@ -1862,6 +1890,9 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
           await page.keyboard.press("Escape");
         }
         if (metrics.page.pageCount === 1) {
+          const placements = Object.values(metrics.blockedPlacements).sort(
+            (left, right) => left.queueOrdinal - right.queueOrdinal,
+          );
           expect(placements.map(({ queueOrdinal }) => queueOrdinal)).toEqual(
             Array.from({ length: count }, (_, index) => index + 1),
           );
@@ -1922,8 +1953,9 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
         await page.evaluate(() =>
           (document.activeElement as HTMLElement | null)?.blur(),
         );
-        const focused = await cycleSceneFocus(page, count);
-        expect(focused.stationIds.size).toBe(count);
+        const visibleCount = (await sceneMetrics(page))!.page.visibleIds.length,
+          focused = await cycleSceneFocus(page, visibleCount);
+        expect(focused.stationIds.size).toBe(visibleCount);
         const active = page.locator(".stationA11yMirror button:focus");
         await expect(active).toHaveCount(1);
         const activeIndex = await buttons.evaluateAll((controls) =>
@@ -2054,6 +2086,38 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
         transitions: (await sceneMetrics(page))?.motion.activeTransitions,
       }))
       .toEqual({ retained: undefined, transitions: 0 });
+
+    snapshot = makeSnapshot(12);
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.blockedPlacements[
+            "fictional-terminal-01"
+          ],
+      )
+      .not.toBeUndefined();
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        value: true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    snapshot = structuredClone(snapshot);
+    snapshot.agents[0]!.agent_status = "working";
+    await expect(
+      page.getByRole("button", { name: /density-01, Working/ }),
+    ).toBeAttached();
+    await expect(
+      page.getByText("6 of 12 cooks shown · 11 blocked / 6 off-page"),
+    ).toBeVisible();
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        value: false,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
 
     await page.setViewportSize({ width: 1280, height: 720 });
     snapshot = makeSnapshot(30);
