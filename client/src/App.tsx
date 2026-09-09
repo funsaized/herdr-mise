@@ -148,7 +148,7 @@ export function App() {
     });
     const protocol = location.protocol === "https:" ? "wss:" : "ws:",
       socket = new AgentWebSocketClient(
-        `${protocol}//${location.host}/ws`,
+        `${protocol}//${location.host}/ws?paneId=1`,
         clientStore,
       );
     socketRef.current = socket;
@@ -195,6 +195,7 @@ export function App() {
               {
                 id: entry.id,
                 name: entry.name,
+                workspace: "",
                 targetState: "ended" as const,
                 stateEnteredAt: new Date(entry.endedAt).toISOString(),
               },
@@ -217,6 +218,7 @@ export function App() {
                 {
                   id: entry.id,
                   name: entry.name,
+                  workspace: "",
                   targetState: "ended" as const,
                   stateEnteredAt: new Date(entry.endedAt).toISOString(),
                 },

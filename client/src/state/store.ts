@@ -440,11 +440,11 @@ export class AgentStore {
     );
   }
 }
-function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
-  const prefix = `${paneId}:`;
+function lastBoardIndex(board: readonly BoardEntry[], agentId: string) {
+  const prefix = `${agentId}:`;
   for (let index = board.length - 1; index >= 0; index--) {
     const id = board[index]?.id;
-    if (id === paneId || id?.startsWith(prefix)) return index;
+    if (id === agentId || id?.startsWith(prefix)) return index;
   }
   return -1;
 }

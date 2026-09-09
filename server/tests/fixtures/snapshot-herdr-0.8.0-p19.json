@@ -6,6 +6,7 @@
   "panes": [],
   "layouts": [],
   "agents": [{
+    "terminal_id": "fictional-terminal-19",
     "pane_id": "fictional-pane-19",
     "workspace_id": "fictional-pantry",
     "display_agent": "example-reviewer",

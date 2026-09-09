@@ -8,6 +8,7 @@ export interface SessionStats { runtimeMs: number; tickets: number; ticketsAvail
 export interface AgentRecord {
   stateKnown?: boolean;
   id: string;
+  paneId?: string;
   name: string;
   state: AgentState;
   progress: number | null;

@@ -112,22 +112,22 @@ pub(crate) fn status_lines(
             "Waiting for agents — start one in herdr".into(),
         );
     }
-    let detail = if source_status == &SourceStatus::UnsupportedProtocol {
-        diagnostic.map_or_else(String::new, |diagnostic| {
-            format!(
-                " — observed {}; supported: {}; {}",
-                diagnostic.observed_protocol,
-                diagnostic
-                    .supported_protocols
-                    .iter()
-                    .map(u64::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                sanitize_external(&diagnostic.next_action)
-            )
-        })
-    } else {
-        String::new()
+    let detail = match (source_status, diagnostic) {
+        (SourceStatus::UnsupportedProtocol, Some(diagnostic)) => format!(
+            " — observed {}; supported: {}; {}",
+            diagnostic.observed_protocol,
+            diagnostic
+                .supported_protocols
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+            sanitize_external(&diagnostic.next_action)
+        ),
+        (SourceStatus::IncompatibleResponse, Some(diagnostic)) => {
+            format!(" — {}", sanitize_external(&diagnostic.next_action))
+        }
+        _ => String::new(),
     };
     let condition = format!("{}{}", source_status_text(source_status), detail);
     let status = if mode == AppMode::Demo {
@@ -401,6 +401,7 @@ mod tests {
         AgentRecord {
             state_known: None,
             id: id.into(),
+            pane_id: None,
             name: format!("Cook {id}"),
             state,
             progress: None,
@@ -598,7 +599,7 @@ mod tests {
         let shutdown = CancellationToken::new();
         let mut selected = None;
         assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
-        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -687,7 +688,7 @@ mod tests {
             mode: AppMode::Live,
             operation: DeltaOperation::Remove,
             agent: None,
-            agent_id: Some("fictional-pane-20".into()),
+            agent_id: Some("fictional-terminal-20".into()),
         });
         retain_selection(&mut selected, &table);
         assert_eq!(selected, None);
@@ -890,7 +891,7 @@ mod tests {
             &mut help_open,
             &shutdown,
         ));
-        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
         assert!(!handle_key_with_view(
             KeyCode::Char('?'),
             &table,
@@ -940,7 +941,7 @@ mod tests {
                 &shutdown,
             ));
         }
-        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
         assert_eq!(scene_view, SceneView::Freezer);
 
         let freezer = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
@@ -1032,7 +1033,7 @@ mod tests {
     }
 
     #[test]
-    fn status_copy_is_truthful_for_live_demo_waiting_and_unsupported() {
+    fn status_copy_is_truthful_for_live_demo_and_source_failures() {
         assert_eq!(
             status_lines(AppMode::Live, &SourceStatus::Connected, None, 1),
             ("MISE — LIVE".into(), "Connected to Herdr".into())
@@ -1066,6 +1067,23 @@ mod tests {
             (
                 "MISE — DEMO SERVICE".into(),
                 "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19, 20; upgrade Herdr, then retry. Nothing here is real.".into()
+            )
+        );
+        let incompatible = SourceDiagnostic {
+            observed_protocol: 20,
+            supported_protocols: vec![17, 19, 20],
+            next_action: "ensure terminal identities are unique, then retry".into(),
+        };
+        assert_eq!(
+            status_lines(
+                AppMode::Live,
+                &SourceStatus::IncompatibleResponse,
+                Some(&incompatible),
+                0,
+            ),
+            (
+                "MISE — LIVE".into(),
+                "Herdr returned an incompatible response — ensure terminal identities are unique, then retry".into()
             )
         );
     }

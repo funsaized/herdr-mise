@@ -108,17 +108,19 @@ export function tableFor(entries) {
   ].join("\n");
 }
 
-function checkUpstream(entry, directory, errors) {
+function checkUpstream(entry, requiredAgentFields, directory, errors) {
   const cargoPath = resolve(directory, "Cargo.toml");
   const wirePath = resolve(directory, "src/protocol/wire.rs");
   const sessionPath = resolve(directory, "src/api/schema/session.rs");
+  const agentsPath = resolve(directory, "src/api/schema/agents.rs");
   if (
     !existsSync(cargoPath) ||
     !existsSync(wirePath) ||
-    !existsSync(sessionPath)
+    !existsSync(sessionPath) ||
+    !existsSync(agentsPath)
   ) {
     errors.push(
-      `${entry.release}: upstream checkout lacks Cargo.toml, src/protocol/wire.rs, or src/api/schema/session.rs`,
+      `${entry.release}: upstream checkout lacks Cargo.toml, src/protocol/wire.rs, src/api/schema/session.rs, or src/api/schema/agents.rs`,
     );
     return;
   }
@@ -128,8 +130,11 @@ function checkUpstream(entry, directory, errors) {
   const version = packageSection.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
   const wire = readFileSync(wirePath, "utf8");
   const session = readFileSync(sessionPath, "utf8");
+  const agents = readFileSync(agentsPath, "utf8");
   const snapshot =
     session.match(/pub struct SessionSnapshot\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const agent =
+    agents.match(/pub struct AgentInfo\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
   const protocol = Number(
     wire.match(/PROTOCOL_VERSION\s*:\s*u\d+\s*=\s*(\d+)/)?.[1],
   );
@@ -151,6 +156,10 @@ function checkUpstream(entry, directory, errors) {
     if (!new RegExp(`\\b${field}\\s*:`).test(snapshot))
       errors.push(`${entry.release}: SessionSnapshot field ${field} missing`);
   }
+  for (const field of requiredAgentFields) {
+    if (!new RegExp(`\\b${field}\\s*:`).test(agent))
+      errors.push(`${entry.release}: AgentInfo field ${field} missing`);
+  }
 }
 
 export function checkCompatibility(args = []) {
@@ -162,6 +171,18 @@ export function checkCompatibility(args = []) {
     manifest.supported.length === 0
   ) {
     errors.push("invalid compatibility manifest schema");
+    return errors;
+  }
+  const requiredAgentFields = manifest.requiredAgentFields;
+  if (
+    !Array.isArray(requiredAgentFields) ||
+    requiredAgentFields.length === 0 ||
+    requiredAgentFields.some(
+      (field) => typeof field !== "string" || !/^[a-z][a-z0-9_]*$/.test(field),
+    ) ||
+    new Set(requiredAgentFields).size !== requiredAgentFields.length
+  ) {
+    errors.push("invalid required agent fields");
     return errors;
   }
   const releases = new Set();
@@ -184,6 +205,14 @@ export function checkCompatibility(args = []) {
       errors.push(`${entry.fixture}: version drift`);
     if (fixture.protocol !== entry.protocol)
       errors.push(`${entry.fixture}: protocol drift`);
+    for (const [index, agent] of (fixture.agents ?? []).entries()) {
+      for (const field of requiredAgentFields) {
+        if (typeof agent[field] !== "string" || agent[field].length === 0)
+          errors.push(
+            `${entry.fixture}: agent ${index} field ${field} missing`,
+          );
+      }
+    }
     errors.push(
       ...auditFixture(fixture).map((error) => `${entry.fixture}: ${error}`),
     );
@@ -222,7 +251,12 @@ export function checkCompatibility(args = []) {
     if (upstreamArgs.length && !match)
       errors.push(`${entry.release}: upstream checkout argument missing`);
     if (match)
-      checkUpstream(entry, match.slice(entry.release.length + 1), errors);
+      checkUpstream(
+        entry,
+        requiredAgentFields,
+        match.slice(entry.release.length + 1),
+        errors,
+      );
   }
   return errors;
 }

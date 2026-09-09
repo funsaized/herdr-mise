@@ -43,6 +43,14 @@ ratatui-based TUI that Herdr runs inside a managed pty as a split pane. Both
 renderers read from the same `Feed` broadcast (`server/src/main.rs`,
 `server/src/runtime.rs`, `server/src/feed.rs`).
 
+The normalizer keys records by Herdr `terminal_id`. That identity remains stable
+when a terminal moves; `paneId` and workspace are authoritative mutable locators.
+The pinned protocol 17, 19, and 20 sources all carry the terminal identifier in
+`AgentInfo` from the terminal attached to the pane, and their move paths transfer
+that attached terminal rather than creating a lifecycle. A disappearance still
+ends the observed identity once, while a different terminal identity starts with
+fresh timestamps and accent. Mise never reads `agent_session` as identity.
+
 ```
                 +--------------------------+
                 |  Herdr ecosystem         |
@@ -308,7 +316,7 @@ unchanged, and rejected payloads are neither partially applied nor logged.
       |--- apply_live_coalesced(active_agents, ended_ids)
                 |
                 v
-          observed state/new agent --> immediate broadcast
+          state/new agent/locator change --> immediate broadcast
           metrics-only updates --> pending: HashMap<id, AgentRecord>
                 |
                 v
@@ -320,8 +328,8 @@ unchanged, and rejected payloads are neither partially applied nor logged.
         (cancelled with the shared token; weak ownership for fixed feeds)
 ```
 
-`apply_live_coalesced` publishes observed state/timestamp changes and new agents
-immediately, while progress-like updates land in `pending` and are drained by
+`apply_live_coalesced` publishes observed state/timestamp changes, new agents,
+and pane/workspace locator changes immediately, while progress-like updates land in `pending` and are drained by
 the 1.25 s coalescer task (`server/src/feed.rs`). An urgent transition evicts any
 older pending metric record under the same lock. The test
 `twelve_record_chatty_source_stays_below_wire_budget` enforces
@@ -342,6 +350,11 @@ Upstream frames are capped at 4 MiB, rosters at 4096 records, and each downstrea
 send at two seconds. A stalled connection is dropped rather than retaining its
 task indefinitely. See [observation semantics](../protocol/README.md) for
 unknown state, unavailable metrics, and bounded local history.
+
+Browser clients request `paneId` with `/ws?paneId=1`. The legacy `/ws` shape
+omits that additive v1 field so already-open strict clients remain compatible
+until reload; both shapes come from the same Feed records. Mise time starts when
+this process first observes a terminal identity and resets on process restart.
 
 ## Ended lifecycle
 

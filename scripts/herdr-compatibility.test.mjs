@@ -34,6 +34,11 @@ test("README documents the Herdr 0.8 action invocation with the positional actio
 test("compatibility manifest is the complete supported release authority", () => {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   assert.equal(manifest.schemaVersion, 1);
+  assert.deepEqual(manifest.requiredAgentFields, [
+    "terminal_id",
+    "pane_id",
+    "workspace_id",
+  ]);
   assert.deepEqual(
     manifest.supported.map(({ release, protocol }) => ({ release, protocol })),
     [
@@ -185,7 +190,7 @@ test("workflow audit rejects privileged triggers and additional permission decla
   );
 });
 
-test("upstream checker reads Cargo version, wire protocol, and SessionSnapshot schema from their real split sources", () => {
+test("upstream checker verifies snapshot and stable agent identity schemas", () => {
   const temp = mkdtempSync(join(tmpdir(), "herdr-compatibility-split-source-"));
   const entries = [
     { release: "0.7.5", protocol: 17 },
@@ -218,6 +223,14 @@ pub struct SessionSnapshot {
     pub agents: Vec<AgentInfo>,
 }
 `,
+      );
+      writeFileSync(
+        join(directory, "src/api/schema/agents.rs"),
+        `pub struct AgentInfo {
+    pub terminal_id: String,
+    pub pane_id: String,
+    pub workspace_id: String,
+}\n`,
       );
       return `--upstream=${entry.release}=${directory}`;
     });

@@ -123,6 +123,26 @@ const upsert = (record: AgentRecord): AgentStateEvent => ({
 });
 
 describe("agent store machines", () => {
+  it("keeps selection and history when stable identity moves pane and workspace", () => {
+    const store = new AgentStore();
+    const before = { ...agent(), paneId: "pane-a", workspace: "Kitchen" };
+    store.apply(snapshot(before));
+    store.select(before.id);
+    const history = store.snapshot().agents.get(before.id)!.history;
+    store.apply(
+      upsert({
+        ...before,
+        paneId: "pane-b",
+        workspace: "Pantry",
+        session: { ...before.session, runtimeMs: 2_000 },
+      }),
+    );
+    const moved = store.snapshot();
+    expect(moved.selectedId).toBe(before.id);
+    expect(moved.agents.get(before.id)?.workspace).toBe("Pantry");
+    expect(moved.agents.get(before.id)?.history).toBe(history);
+    expect(moved.board).toHaveLength(0);
+  });
   it("keeps fixture feed identity and layout unchanged when atmosphere is off", () => {
     const store = new AgentStore();
     store.apply(fixtureSnapshot as AgentStateEvent);

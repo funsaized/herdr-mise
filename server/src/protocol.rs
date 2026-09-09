@@ -61,6 +61,8 @@ pub struct AgentRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_known: Option<bool>,
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_id: Option<String>,
     pub name: String,
     pub state: AgentState,
     pub progress: Option<f64>,

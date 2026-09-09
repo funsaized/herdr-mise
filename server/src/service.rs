@@ -75,6 +75,7 @@ pub fn parse_extra_origins(value: &str) -> Result<Vec<String>, String> {
 
 async fn ws(
     State(state): State<Arc<ServiceState>>,
+    uri: Uri,
     headers: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
@@ -82,8 +83,11 @@ async fn ws(
         return StatusCode::FORBIDDEN.into_response();
     }
     let feed = state.feed.clone();
+    let include_pane_id = uri
+        .query()
+        .is_some_and(|query| query.split('&').any(|part| part == "paneId=1"));
     upgrade
-        .on_upgrade(move |socket| client(socket, feed))
+        .on_upgrade(move |socket| client(socket, feed, include_pane_id))
         .into_response()
 }
 fn allowed_origin(headers: &HeaderMap, port: u16, extra_origins: &[String]) -> bool {
@@ -97,15 +101,18 @@ fn allowed_origin(headers: &HeaderMap, port: u16, extra_origins: &[String]) -> b
         || origin == format!("http://127.0.0.1:{port}")
         || extra_origins.iter().any(|extra| extra == origin)
 }
-async fn client(socket: WebSocket, feed: Arc<Feed>) {
-    let (mut changes, initial_snapshot) = feed.subscribe_snapshot().await;
+async fn client(socket: WebSocket, feed: Arc<Feed>, include_pane_id: bool) {
     let mut health = feed.subscribe_health();
+    let (mut changes, initial_snapshot) = feed.subscribe_snapshot().await;
     let (mut output, mut input) = socket.split();
     if !*health.borrow() {
+        if let Ok(snapshot) = serialize_event(&feed.snapshot().await, include_pane_id) {
+            let _ = send_bounded(&mut output, Message::Text(snapshot.into())).await;
+        }
         let _ = send_bounded(&mut output, Message::Close(None)).await;
         return;
     }
-    let Ok(snapshot) = serde_json::to_string(&initial_snapshot) else {
+    let Ok(snapshot) = serialize_event(&initial_snapshot, include_pane_id) else {
         return;
     };
     if !send_bounded(&mut output, Message::Text(snapshot.into())).await {
@@ -115,12 +122,39 @@ async fn client(socket: WebSocket, feed: Arc<Feed>) {
     heartbeat.tick().await;
     loop {
         tokio::select! {
-            changed=health.changed()=>if changed.is_err() || !*health.borrow() { let _=send_bounded(&mut output, Message::Close(None)).await; break },
+            changed=health.changed()=>if changed.is_err() || !*health.borrow() {
+                if let Ok(snapshot) = serialize_event(&feed.snapshot().await, include_pane_id) {
+                    let _ = send_bounded(&mut output, Message::Text(snapshot.into())).await;
+                }
+                let _=send_bounded(&mut output, Message::Close(None)).await;
+                break
+            },
             message=input.next()=>match message { Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break, _=>{} },
-            event=changes.recv()=>match event { Ok(event)=> { let Ok(text)=serde_json::to_string(&event) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=> { let (cursor, snapshot) = feed.subscribe_snapshot().await; changes = cursor; let Ok(text)=serde_json::to_string(&snapshot) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(_)=>break },
-            _=heartbeat.tick()=> { let event=AgentStateEvent::Heartbeat{version:PROTOCOL_VERSION}; let Ok(text)=serde_json::to_string(&event) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }
+            event=changes.recv()=>match event { Ok(event)=> { let Ok(text)=serialize_event(&event, include_pane_id) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=> { let (cursor, snapshot) = feed.subscribe_snapshot().await; changes = cursor; let Ok(text)=serialize_event(&snapshot, include_pane_id) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(_)=>break },
+            _=heartbeat.tick()=> { let event=AgentStateEvent::Heartbeat{version:PROTOCOL_VERSION}; let Ok(text)=serialize_event(&event, include_pane_id) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }
         }
     }
+}
+fn serialize_event(
+    event: &AgentStateEvent,
+    include_pane_id: bool,
+) -> Result<String, serde_json::Error> {
+    let mut value = serde_json::to_value(event)?;
+    if !include_pane_id {
+        if let Some(agents) = value
+            .get_mut("agents")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for agent in agents {
+                agent.as_object_mut().map(|agent| agent.remove("paneId"));
+            }
+        }
+        value
+            .get_mut("agent")
+            .and_then(serde_json::Value::as_object_mut)
+            .map(|agent| agent.remove("paneId"));
+    }
+    serde_json::to_string(&value)
 }
 async fn send_bounded<S: futures_util::Sink<Message> + Unpin>(
     output: &mut S,
@@ -512,7 +546,8 @@ mod tests {
             format!("http://localhost:{}", address.port()),
             "https://mise.example.ts.net".to_string(),
         ] {
-            let (headers, mut socket) = websocket_request(address, &origin).await;
+            let (headers, mut socket) =
+                websocket_request_path(address, &origin, "/ws?paneId=1").await;
             assert!(headers.starts_with("HTTP/1.1 101"), "{origin}: {headers}");
             let first = read_server_text(&mut socket).await;
             assert_eq!(
@@ -548,6 +583,50 @@ mod tests {
         socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: https://mise.example.ts.net\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
         let headers = read_http_headers(&mut socket).await;
         assert!(headers.starts_with("HTTP/1.1 101"), "{headers}");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn websocket_pane_id_requires_capability_query() {
+        let mut agent = AgentRecord {
+            state_known: None,
+            id: "terminal-a".into(),
+            pane_id: Some("pane-a".into()),
+            name: "A".into(),
+            state: AgentState::Working,
+            progress: None,
+            state_entered_at: "2026-07-31T00:00:00Z".into(),
+            accent_index: 0,
+            model: String::new(),
+            workspace: "Kitchen".into(),
+            session: SessionStats {
+                tickets_available: None,
+                runtime_ms: 0,
+                tickets: 0,
+            },
+        };
+        let feed = Feed::fixed(AppMode::Live, vec![agent.clone()]).await;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server =
+            tokio::spawn(axum::serve(listener, router(feed.clone(), address.port())).into_future());
+        let origin = format!("http://localhost:{}", address.port());
+
+        let (_, mut legacy) = websocket_request_path(address, &origin, "/ws").await;
+        let legacy: serde_json::Value =
+            serde_json::from_str(&read_server_text(&mut legacy).await).unwrap();
+        assert!(legacy["agents"][0].get("paneId").is_none());
+
+        let (_, mut capable) = websocket_request_path(address, &origin, "/ws?paneId=1").await;
+        let capable_snapshot: serde_json::Value =
+            serde_json::from_str(&read_server_text(&mut capable).await).unwrap();
+        assert_eq!(capable_snapshot["agents"][0]["paneId"], "pane-a");
+
+        agent.workspace = "Pantry".into();
+        feed.publish(agent).await;
+        let capable_delta: serde_json::Value =
+            serde_json::from_str(&read_server_text(&mut capable).await).unwrap();
+        assert_eq!(capable_delta["agent"]["paneId"], "pane-a");
         server.abort();
     }
 
@@ -654,6 +733,7 @@ mod tests {
         feed.publish(AgentRecord {
             state_known: None,
             id: "a".into(),
+            pane_id: None,
             name: "A".into(),
             state: AgentState::Working,
             progress: Some(0.5),
@@ -706,7 +786,7 @@ mod tests {
         };
 
         assert_eq!(agents.len(), 1);
-        assert_eq!(agents[0].id, "p-1");
+        assert_eq!(agents[0].id, "t-1");
         assert!(!agents[0].name.is_empty());
         for value in [&agents[0].id, &agents[0].name, &agents[0].workspace] {
             assert!(value.encode_utf16().count() <= 4096);
@@ -761,11 +841,23 @@ mod tests {
         })
         .await
         .expect("live source loss publishes error status");
+        let mut refreshed_client = connect_websocket(address).await;
+        let refreshed = read_server_text(&mut refreshed_client).await;
+        assert!(matches!(
+            serde_json::from_str(&refreshed).unwrap(),
+            AgentStateEvent::Snapshot {
+                source_status: crate::protocol::SourceStatus::UnavailableSocket
+                    | crate::protocol::SourceStatus::Timeout,
+                ..
+            }
+        ));
         tokio::time::timeout(Duration::from_secs(6), async {
             let mut header = [0_u8; 2];
+            let mut saw_source_error = false;
             loop {
                 first_client.read_exact(&mut header).await.unwrap();
                 if header[0] & 0x0f == 8 {
+                    assert!(saw_source_error, "source status must precede close");
                     break;
                 }
                 let length = match header[1] & 0x7f {
@@ -783,6 +875,16 @@ mod tests {
                 };
                 let mut payload = vec![0; length];
                 first_client.read_exact(&mut payload).await.unwrap();
+                if header[0] & 0x0f == 1 {
+                    saw_source_error |= matches!(
+                        serde_json::from_slice(&payload).unwrap(),
+                        AgentStateEvent::Snapshot {
+                            source_status: crate::protocol::SourceStatus::UnavailableSocket
+                                | crate::protocol::SourceStatus::Timeout,
+                            ..
+                        }
+                    );
+                }
             }
         })
         .await
@@ -836,6 +938,7 @@ mod tests {
                                         "tabs": [],
                                         "layouts": [],
                                         "agents": [{
+                                            "terminal_id": agent_id,
                                             "pane_id": agent_id,
                                             "agent_status": "working"
                                         }]
@@ -928,8 +1031,16 @@ mod tests {
         address: std::net::SocketAddr,
         origin: &str,
     ) -> (String, tokio::net::TcpStream) {
+        websocket_request_path(address, origin, "/ws").await
+    }
+
+    async fn websocket_request_path(
+        address: std::net::SocketAddr,
+        origin: &str,
+        path: &str,
+    ) -> (String, tokio::net::TcpStream) {
         let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
-        socket.write_all(format!("GET /ws HTTP/1.1\r\nHost: {address}\r\nOrigin: {origin}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
+        socket.write_all(format!("GET {path} HTTP/1.1\r\nHost: {address}\r\nOrigin: {origin}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").as_bytes()).await.unwrap();
         (read_http_headers(&mut socket).await, socket)
     }
 

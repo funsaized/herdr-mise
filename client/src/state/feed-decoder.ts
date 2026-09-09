@@ -31,6 +31,7 @@ function agent(value: unknown): boolean {
   return (
     keys(value, [
       "id",
+      "paneId",
       "name",
       "state",
       "stateKnown",
@@ -46,6 +47,8 @@ function agent(value: unknown): boolean {
     optionalBoolean(value.session.ticketsAvailable) &&
     text(value.id) &&
     value.id.length > 0 &&
+    (value.paneId === undefined ||
+      (text(value.paneId) && value.paneId.length > 0)) &&
     text(value.name) &&
     value.name.length > 0 &&
     text(value.model) &&

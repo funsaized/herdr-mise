@@ -41,6 +41,7 @@ async fn fixed_feed_snapshot_applies_through_real_reducer() {
     let active = AgentRecord {
         state_known: None,
         id: "fixed-a".into(),
+        pane_id: None,
         name: "Fixed A".into(),
         state: AgentState::Blocked,
         progress: None,

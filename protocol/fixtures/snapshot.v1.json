@@ -6,6 +6,7 @@
   "agents": [
     {
       "id": "agent-01",
+      "paneId": "pane-01",
       "name": "refactor-agent",
       "state": "working",
       "progress": 0.42,
