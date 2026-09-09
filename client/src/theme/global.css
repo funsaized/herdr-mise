@@ -237,13 +237,17 @@ select:focus-visible {
 }
 .historyStrip {
   display: flex;
+  gap: 2px;
   width: 100%;
   height: 10px;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   border-radius: 3px;
   background: var(--chip);
+  list-style: none;
 }
-.historyStrip i {
+.historyStrip li {
   display: block;
   min-width: 1px;
   height: 10px;

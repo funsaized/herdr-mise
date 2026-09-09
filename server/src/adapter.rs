@@ -126,6 +126,8 @@ struct RawAgent {
     #[serde(default)]
     title: Option<String>,
     agent_status: RawStatus,
+    #[serde(default)]
+    state_change_seq: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -151,7 +153,7 @@ struct RawSnapshot {
 #[derive(Debug, Default)]
 pub struct Normalizer {
     previous_ids: HashSet<String>,
-    entered_at: HashMap<String, (AgentState, bool, String)>,
+    entered_at: HashMap<String, (AgentState, bool, String, Option<u64>)>,
     first_seen: HashMap<String, String>,
 }
 
@@ -226,17 +228,29 @@ impl Normalizer {
                 RawStatus::Done => AgentState::Done,
             };
             let stamp = match entered_at.get(&id) {
-                Some((old, known, stamp)) if old == &state && *known == state_known => {
-                    stamp.clone()
+                Some((old, known, stamp, previous_sequence))
+                    if old == &state && *known == state_known =>
+                {
+                    if matches!(
+                        (*previous_sequence, agent.state_change_seq),
+                        (Some(previous), Some(current)) if current > previous
+                    ) {
+                        received_at.to_owned()
+                    } else {
+                        stamp.clone()
+                    }
                 }
-                _ => {
-                    entered_at.insert(
-                        id.clone(),
-                        (state.clone(), state_known, received_at.to_owned()),
-                    );
-                    received_at.to_owned()
-                }
+                _ => received_at.to_owned(),
             };
+            entered_at.insert(
+                id.clone(),
+                (
+                    state.clone(),
+                    state_known,
+                    stamp.clone(),
+                    agent.state_change_seq,
+                ),
+            );
             let name = truncate_utf16(
                 [agent.name, agent.display_agent, agent.agent, agent.title]
                     .into_iter()
@@ -484,6 +498,67 @@ mod tests {
             .normalize_snapshot_value(raw("working"), "2026-07-31T00:01:00Z")
             .unwrap();
         assert_eq!(again.agents[0].state_entered_at, "2026-07-31T00:01:00Z");
+    }
+
+    #[test]
+    fn state_sequence_marks_only_verified_same_state_reentry() {
+        let baseline: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ))
+        .unwrap();
+        let advanced: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/snapshot-herdr-0.8.2-p20-state-sequence-advanced.json"
+        ))
+        .unwrap();
+        let mut normalizer = Normalizer::default();
+        let stamp = |normalizer: &mut Normalizer, snapshot: Value, received_at: &str| {
+            normalizer
+                .normalize_snapshot_value(snapshot, received_at)
+                .unwrap()
+                .agents[0]
+                .state_entered_at
+                .clone()
+        };
+
+        assert_eq!(stamp(&mut normalizer, baseline.clone(), "t0"), "t0");
+        assert_eq!(stamp(&mut normalizer, baseline.clone(), "t1"), "t0");
+        assert_eq!(stamp(&mut normalizer, advanced.clone(), "t2"), "t2");
+
+        let mut absent = advanced.clone();
+        absent["agents"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("state_change_seq");
+        assert_eq!(stamp(&mut normalizer, absent, "t3"), "t2");
+        assert_eq!(stamp(&mut normalizer, advanced.clone(), "t4"), "t2");
+
+        let mut regressed = advanced.clone();
+        regressed["agents"][0]["state_change_seq"] = json!(1);
+        assert_eq!(stamp(&mut normalizer, regressed, "t5"), "t2");
+        assert_eq!(stamp(&mut normalizer, baseline.clone(), "t6"), "t6");
+
+        let absent_release: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/snapshot-herdr-0.7.5-p17.json"
+        ))
+        .unwrap();
+        let mut fallback = Normalizer::default();
+        assert_eq!(stamp(&mut fallback, absent_release.clone(), "f0"), "f0");
+        assert_eq!(stamp(&mut fallback, absent_release.clone(), "f1"), "f0");
+
+        let mut blocked = baseline.clone();
+        blocked["agents"][0]["agent_status"] = json!("blocked");
+        assert_eq!(stamp(&mut normalizer, blocked, "t7"), "t7");
+        let mut idle = baseline.clone();
+        idle["agents"][0]["agent_status"] = json!("idle");
+        assert_eq!(stamp(&mut normalizer, idle.clone(), "t8"), "t8");
+        idle["agents"][0]["agent_status"] = json!("unknown");
+        assert_eq!(stamp(&mut normalizer, idle, "t9"), "t9");
+
+        let released = normalizer
+            .normalize_snapshot_value(absent_release, "t10")
+            .unwrap();
+        assert_eq!(released.ended_ids, vec!["fictional-terminal-20"]);
+        assert!(!normalizer.entered_at.contains_key("fictional-terminal-20"));
     }
     fn raw(status: &str) -> Value {
         json!({"version":"0.7.5","protocol":17,"workspaces":[{"workspace_id":"ws-1","label":"demo"}],"tabs":[],"panes":[],"layouts":[],"agents":[{"terminal_id":"t-1","pane_id":"p-1","workspace_id":"ws-1","agent":"codex","agent_status":status,"agent_session":null}]})

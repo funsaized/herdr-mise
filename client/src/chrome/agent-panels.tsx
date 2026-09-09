@@ -92,12 +92,15 @@ function HistoryStrip({
   return (
     <section className="sessionHistory" aria-label="Session history">
       <h3>SESSION HISTORY</h3>
-      <div className="historyStrip">
+      <ul className="historyStrip" aria-label="Observed state periods">
         {history.map((period, index) => {
           const end = history[index + 1]?.startedAt ?? now,
-            width = Math.max(1, ((end - period.startedAt) / total) * 100);
+            width = Math.max(1, ((end - period.startedAt) / total) * 100),
+            boundary = `${new Date(period.startedAt).toISOString()} to ${
+              index + 1 < history.length ? new Date(end).toISOString() : "now"
+            }`;
           return (
-            <i
+            <li
               key={`${period.state}-${period.startedAt}`}
               data-state={period.state}
               style={{
@@ -105,10 +108,11 @@ function HistoryStrip({
                 background: historyColor(period.state),
               }}
               title={humanStateWords[period.state]}
+              aria-label={`${humanStateWords[period.state]} period ${index + 1}, ${boundary}`}
             />
           );
         })}
-      </div>
+      </ul>
       <div className="historyTimes">
         <time>
           {new Date(start).toLocaleTimeString([], {

@@ -591,13 +591,36 @@ test("responsive mixed focus follows live stations onto the 86 board", async ({
   }
 });
 
-test("authoritative fixture drives rendered feed accents poses prep and freezer spirits", async ({
+test("authoritative fixture state sequence drives history accents poses prep and freezer spirits", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const directory = await mkdtemp(join(tmpdir(), "herdr-mise-freezer-")),
     port = await availablePort(),
     appUrl = `http://127.0.0.1:${port}`,
     socketPath = join(directory, "herdr.sock"),
+    baseline = JSON.stringify(
+      JSON.parse(
+        await readFile(
+          join(
+            process.cwd(),
+            "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+          ),
+          "utf8",
+        ),
+      ),
+    ),
+    advanced = JSON.stringify(
+      JSON.parse(
+        await readFile(
+          join(
+            process.cwd(),
+            "server/tests/fixtures/snapshot-herdr-0.8.2-p20-state-sequence-advanced.json",
+          ),
+          "utf8",
+        ),
+      ),
+    ),
     working = JSON.stringify(
       JSON.parse(
         await readFile(
@@ -634,7 +657,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       ),
     ),
     sockets = new Set<Socket>();
-  let snapshot = working;
+  let snapshot = baseline;
   const fixtureServer = createServer((socket) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -670,6 +693,38 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       })
       .toBe(200);
     await page.goto(`${appUrl}/?stats`);
+    const sequenceStation = page.getByRole("button", {
+      name: "example-cook, Working — on the fire, open details",
+    });
+    await expect(sequenceStation).toBeAttached();
+    await sequenceStation.evaluate((element) =>
+      (element as HTMLButtonElement).click(),
+    );
+    const sequenceDetails = page.getByRole("complementary", {
+        name: "example-cook details",
+      }),
+      stateAge = sequenceDetails
+        .locator(".fact", { hasText: "Time in state" })
+        .locator("b"),
+      periods = sequenceDetails.getByRole("list", {
+        name: "Observed state periods",
+      });
+    await expect.poll(() => stateAge.textContent()).toMatch(/^[2-9]\d*s$/);
+    await expect(periods.getByRole("listitem")).toHaveCount(1);
+    snapshot = advanced;
+    await expect(periods.getByRole("listitem")).toHaveCount(2);
+    await expect(
+      periods.getByRole("listitem", { name: /Working — on the fire period/ }),
+    ).toHaveCount(2);
+    await expect(
+      periods.getByRole("listitem", { name: /Blocked/ }),
+    ).toHaveCount(0);
+    await expect(stateAge).toHaveText("0s");
+    expect(
+      await periods.evaluate((element) => getComputedStyle(element).columnGap),
+    ).toBe("2px");
+    await page.getByRole("button", { name: "Close panel" }).click();
+    snapshot = working;
     await expect(
       page.getByRole("button", {
         name: "fixture-working, Working — on the fire, open details",
@@ -871,7 +926,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
-        endedEntries: 3,
+        endedEntries: 4,
         atmosphere: { workingContact: 0 },
         motion: { activeParticles: 0 },
         board: {
@@ -917,16 +972,16 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     );
     await expect(
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
-    ).toHaveCount(3);
+    ).toHaveCount(4);
     await expect(page.getByLabel("Agent state announcements")).toHaveText(
-      "Freezer, 3 of 3 ended chefs shown",
+      "Freezer, 4 of 4 ended chefs shown",
     );
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
         view: "freezer",
-        endedEntries: 3,
-        visibleSpirits: 3,
+        endedEntries: 4,
+        visibleSpirits: 4,
         atmosphere: { freezerAccents: 11 },
         motion: { activeParticles: 0 },
       });

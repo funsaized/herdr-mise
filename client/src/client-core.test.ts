@@ -348,18 +348,21 @@ describe("agent store machines", () => {
     store.onEvent((event) => events.push(event.type));
     store.apply(snapshot(agent("done")));
     const staleTimer = clock.latestTimerId();
+    events.length = 0;
     clock.advance(40);
     store.apply(
       upsert({
         ...agent("done", "a", 0.9),
-        stateEnteredAt: "2026-07-31T00:01:00Z",
+        stateEnteredAt: "2026-07-31T00:00:00.500Z",
       }),
     );
     expect(store.snapshot().agents.get("a")).toMatchObject({
-      stateEnteredAt: "2026-07-31T00:01:00Z",
+      stateEnteredAt: "2026-07-31T00:00:00.500Z",
       clearAt: 90,
       transitionStartedAt: 40,
     });
+    expect(store.snapshot().agents.get("a")?.history).toHaveLength(2);
+    expect(events.filter((event) => event === "state")).toHaveLength(0);
     clock.invoke(staleTimer);
     clock.advance(10);
     expect(store.coarse().visibleCount).toBe(1);
@@ -403,17 +406,25 @@ describe("agent store machines", () => {
     expect(listener).not.toHaveBeenCalled();
     expect(store.snapshot().agents.get("a")?.progress).toBe(0.9);
   });
-  it("records a same-state re-entry observed after reconnect", () => {
+  it("records only strictly newer same-state observation periods", () => {
     const store = new AgentStore(),
       first = agent("working"),
-      reentered = { ...first, stateEnteredAt: "2026-07-31T00:01:00Z" };
+      reentered = { ...first, stateEnteredAt: "2026-07-31T00:00:00.500Z" },
+      events: string[] = [];
+    store.onEvent((event) => events.push(event.type));
     store.apply(snapshot(first));
+    events.length = 0;
     store.setDisconnected();
     store.apply(snapshot(reentered));
+    store.apply(upsert(reentered));
+    store.apply(
+      upsert({ ...first, stateEnteredAt: "2026-07-30T23:59:59.999Z" }),
+    );
     expect(store.snapshot().agents.get("a")?.history).toEqual([
       { state: "working", startedAt: Date.parse(first.stateEnteredAt) },
       { state: "working", startedAt: Date.parse(reentered.stateEnteredAt) },
     ]);
+    expect(events.filter((event) => event === "state")).toHaveLength(0);
   });
   it("atomically replaces demo agents and source status from a live snapshot", () => {
     const store = new AgentStore();
@@ -1187,7 +1198,7 @@ describe("theme boundary and bell", () => {
     sockets[0]!.message(liveFixture);
 
     sendUpsert(sockets[0]!, "agent-01", "blocked");
-    sendUpsert(sockets[0]!, "agent-01", "blocked", clock.time + 500);
+    sendUpsert(sockets[0]!, "agent-01", "blocked");
     bell.tick();
     expect(bell.log.map(({ reason }) => reason)).toEqual(["enter"]);
     clock.advance(99);

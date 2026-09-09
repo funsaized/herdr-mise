@@ -473,9 +473,18 @@ describe("chrome interactions", () => {
     expect(screen.queryByRole("heading", { name: "app" })).toBeNull();
     expect(screen.getByText("app")).toBeTruthy();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
-    const history = screen.getByLabelText("Session history");
-    expect(history.querySelectorAll(".historyStrip i")).toHaveLength(2);
-    expect(history.querySelector('[data-state="working"]')).toBeTruthy();
+    expect(screen.getByLabelText("Session history")).toBeTruthy();
+    expect(
+      screen.getByRole("list", { name: "Observed state periods" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("listitem", { name: /Idle — prepping period 1,/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("listitem", {
+        name: /Working — on the fire period 2,.*to now/,
+      }),
+    ).toBeTruthy();
     expect(screen.queryByText(/Open in herdr/i)).toBeNull();
     expect(screen.queryByText(/herdr attach/i)).toBeNull();
     expect(document.querySelector('a[href^="herdr://agent/"]')).toBeNull();
