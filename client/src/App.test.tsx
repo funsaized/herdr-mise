@@ -136,6 +136,9 @@ it("requests pane identity and keeps selected details across a fixture move", ()
   let movedDetails = screen.getByLabelText("example-cook details");
   expect(within(movedDetails).getByText(beforeWorkspace.label)).toBeTruthy();
   expect(within(movedDetails).getByText(afterAgent.pane_id)).toBeTruthy();
+  expect(screen.getByLabelText("Agent state announcements").textContent).toBe(
+    `example-cook moved to ${beforeWorkspace.label}, pane ${afterAgent.pane_id}`,
+  );
 
   act(() =>
     socket.onmessage?.({
@@ -157,6 +160,9 @@ it("requests pane identity and keeps selected details across a fixture move", ()
   movedDetails = screen.getByLabelText("example-cook details");
   expect(within(movedDetails).getByText(afterWorkspace.label)).toBeTruthy();
   expect(within(movedDetails).getByText(afterAgent.pane_id)).toBeTruthy();
+  expect(screen.getByLabelText("Agent state announcements").textContent).toBe(
+    `example-cook moved to ${afterWorkspace.label}, pane ${afterAgent.pane_id}`,
+  );
   expect(
     within(movedDetails)
       .getByLabelText("Session history")

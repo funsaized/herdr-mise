@@ -681,8 +681,8 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       }),
     ).toBeAttached();
     await expect
-      .poll(async () => (await sceneMetrics(page))?.stationVisuals["p-11"])
-      .toMatchObject({ accent: "#667a9e", idlePose: null });
+      .poll(async () => (await sceneMetrics(page))?.stationVisuals["t-11"])
+      .toMatchObject({ accent: "#6f8a9a", idlePose: null });
     await expect
       .poll(async () => (await sceneMetrics(page))?.motion.activeParticles)
       .toBeGreaterThan(0);
@@ -723,17 +723,17 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
       .poll(async () => (await sceneMetrics(page))?.motion.activeParticles)
       .toBeGreaterThan(0);
     await expect
-      .poll(async () => (await sceneMetrics(page))?.stationVisuals["p-8"])
-      .toMatchObject({ accent: "#997f5e", prepStep: null });
+      .poll(async () => (await sceneMetrics(page))?.stationVisuals["t-8"])
+      .toMatchObject({ accent: "#a98a5b", prepStep: null });
     expect(
-      (await sceneMetrics(page))?.stationVisuals["p-8"]?.idlePose,
+      (await sceneMetrics(page))?.stationVisuals["t-8"]?.idlePose,
     ).not.toMatch(/prep|smoke/i);
-    const firstPrepStep = (await sceneMetrics(page))?.stationVisuals["p-11"]
+    const firstPrepStep = (await sceneMetrics(page))?.stationVisuals["t-11"]
       ?.prepStep;
     await expect
       .poll(
         async () =>
-          (await sceneMetrics(page))?.stationVisuals["p-11"]?.prepStep !==
+          (await sceneMetrics(page))?.stationVisuals["t-11"]?.prepStep !==
           firstPrepStep,
       )
       .toBe(true);
@@ -757,8 +757,8 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
         atmosphere: { workingContact: 0 },
         motion: { activeParticles: 0 },
         stationVisuals: {
-          "fictional-pane-19": {
-            accent: "#8f9a6f",
+          "fictional-terminal-19": {
+            accent: "#7a7f9e",
             idlePose: null,
             prepStep: null,
           },
@@ -783,11 +783,11 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toHaveAttribute(
       "id",
-      "station-tooltip-fictional-pane-19",
+      "station-tooltip-fictional-terminal-19",
     );
     await expect(blockedStation).toHaveAttribute(
       "aria-describedby",
-      "station-tooltip-fictional-pane-19",
+      "station-tooltip-fictional-terminal-19",
     );
     const tooltipBox = await tooltip.boundingBox();
     expect(tooltipBox).not.toBeNull();
@@ -805,11 +805,13 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     await expect(primaryPanels).toHaveCount(1);
     await expect(tooltip).toHaveCount(0);
     const selected = (await sceneMetrics(page))!.activeFocusBounds[
-        "fictional-pane-19"
+        "fictional-terminal-19"
       ]!,
       detailBox = await details.boundingBox();
     expect(
-      (await sceneMetrics(page))!.activeFocusCornerSizes["fictional-pane-19"],
+      (await sceneMetrics(page))!.activeFocusCornerSizes[
+        "fictional-terminal-19"
+      ],
     ).toBe(13.5);
     expect(detailBox).not.toBeNull();
     expectInside(detailBox!, { x: 0, y: 0, width: 390, height: 844 });
@@ -827,7 +829,7 @@ test("authoritative fixture drives rendered feed accents poses prep and freezer 
     expect(boxesIntersect(selected, settingsBox!)).toBe(false);
     await page.setViewportSize({ width: 320, height: 640 });
     const narrowSelected = (await sceneMetrics(page))!.activeFocusBounds[
-        "fictional-pane-19"
+        "fictional-terminal-19"
       ]!,
       narrowSettingsBox = await settingsPanel.boundingBox();
     expect(narrowSettingsBox).not.toBeNull();
@@ -965,6 +967,7 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
       ),
     ) as {
       agents: Array<{
+        terminal_id: string;
         pane_id: string;
         workspace_id: string;
         display_agent: string;
@@ -987,6 +990,7 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
         const suffix = String(index + 1).padStart(2, "0");
         return {
           ...source.agents[0]!,
+          terminal_id: `fictional-terminal-${suffix}`,
           pane_id: `fictional-pane-${suffix}`,
           display_agent: `example-cook-${suffix}`,
           agent_status: "working",
@@ -1217,6 +1221,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
       ),
     ) as {
       agents: Array<{
+        terminal_id: string;
         pane_id: string;
         workspace_id: string;
         display_agent: string;
@@ -1230,6 +1235,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
         const suffix = String(index + 1).padStart(2, "0");
         return {
           ...source.agents[0]!,
+          terminal_id: `fictional-terminal-${suffix}`,
           pane_id: `fictional-pane-${suffix}`,
           display_agent: `density-${suffix}`,
           agent_status: status,
@@ -1289,8 +1295,8 @@ test("fixture-driven kitchen materials", async ({ page }) => {
     });
     expect(workingOn.materials.floorSeams).toBeGreaterThan(0);
     expectInside(
-      workingOn.stationNameBounds["fictional-pane-01"]!,
-      workingOn.stationCells["fictional-pane-01"]!,
+      workingOn.stationNameBounds["fictional-terminal-01"]!,
+      workingOn.stationCells["fictional-terminal-01"]!,
     );
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("switch", { name: "Atmosphere" }).click();
@@ -1435,7 +1441,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           await expect
             .poll(async () => {
               const current = (await sceneMetrics(page))?.blockedPlacements;
-              return current?.["fictional-pane-01"]?.exiting;
+              return current?.["fictional-terminal-01"]?.exiting;
             })
             .toBe(true);
           const duringExit = Object.values(
@@ -1461,7 +1467,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           await expect
             .poll(async () => {
               return (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-pane-01"
+                "fictional-terminal-01"
               ];
             })
             .toBeUndefined();
@@ -1475,7 +1481,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
             .poll(
               async () =>
                 (await sceneMetrics(page))?.blockedPlacements[
-                  "fictional-pane-02"
+                  "fictional-terminal-02"
                 ]?.exiting,
             )
             .toBe(true);
@@ -1483,7 +1489,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           await expect
             .poll(async () => ({
               retained: (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-pane-02"
+                "fictional-terminal-02"
               ],
               transitions: (await sceneMetrics(page))?.motion.activeTransitions,
             }))
@@ -1497,7 +1503,7 @@ test("fixture-driven kitchen materials", async ({ page }) => {
           await expect
             .poll(async () => ({
               retained: (await sceneMetrics(page))?.blockedPlacements[
-                "fictional-pane-03"
+                "fictional-terminal-03"
               ],
               transitions: (await sceneMetrics(page))?.motion.activeTransitions,
             }))
@@ -1541,7 +1547,7 @@ test("atmosphere persists across the production fixture runtime", async ({
         }
       })
       .toBe(200);
-    await page.routeWebSocket("**/ws", (webSocket) => {
+    await page.routeWebSocket("**/ws?paneId=1", (webSocket) => {
       webSocket.send(fixture);
     });
     await page.goto(`${appUrl}/?stats`);
@@ -1633,7 +1639,7 @@ test("rejected state update resynchronizes through a fresh snapshot", async ({
         }
       })
       .toBe(200);
-    await page.routeWebSocket("**/ws", (webSocket) => {
+    await page.routeWebSocket("**/ws?paneId=1", (webSocket) => {
       connections++;
       if (connections === 1) {
         webSocket.send(snapshot);
