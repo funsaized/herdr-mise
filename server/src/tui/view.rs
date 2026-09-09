@@ -1261,12 +1261,10 @@ mod tests {
                 );
             }
         }
-        for expected in ["example-cook"] {
-            assert!(
-                kitchen.contains(expected),
-                "missing {expected:?} in {kitchen:?}"
-            );
-        }
+        assert!(
+            kitchen.contains("example-cook"),
+            "missing example-cook in {kitchen:?}"
+        );
         assert!(inspect_facts(table.agents().next().unwrap())[3].contains("WORKING / ON THE FIRE"));
 
         assert!(!handle_key_with_view(

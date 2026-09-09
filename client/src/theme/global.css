@@ -221,6 +221,8 @@ select:focus-visible {
   overflow-wrap: anywhere;
 }
 .copyLocator {
+  min-width: 44px;
+  min-height: 44px;
   margin-top: 4px;
 }
 .copyStatus {

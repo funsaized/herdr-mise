@@ -1124,7 +1124,10 @@ test("fixture-backed duplicate identity inspection", async ({
     );
     await expect(details).toContainText("codex");
     await expect(details).toContainText(locatorOne);
-    await details.getByRole("button", { name: "Copy locator" }).click();
+    const copyLocator = details.getByRole("button", { name: "Copy locator" });
+    await expect(copyLocator).toHaveCSS("min-width", "44px");
+    await expect(copyLocator).toHaveCSS("min-height", "44px");
+    await copyLocator.click();
     await expect(details).toContainText("Locator copied");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       locatorOne,

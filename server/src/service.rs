@@ -146,19 +146,19 @@ fn serialize_event(
             .and_then(serde_json::Value::as_array_mut)
         {
             for agent in agents {
-                agent.as_object_mut().map(|agent| {
+                if let Some(agent) = agent.as_object_mut() {
                     agent.remove("paneId");
                     agent.remove("agentKind");
-                });
+                }
             }
         }
-        value
+        if let Some(agent) = value
             .get_mut("agent")
             .and_then(serde_json::Value::as_object_mut)
-            .map(|agent| {
-                agent.remove("paneId");
-                agent.remove("agentKind");
-            });
+        {
+            agent.remove("paneId");
+            agent.remove("agentKind");
+        }
     }
     serde_json::to_string(&value)
 }
