@@ -44,10 +44,47 @@ export function columnCount(count: number) {
   if (count <= 8) return 4;
   return Math.min(6, count);
 }
+
+export function stationSlotCapacity(count: number) {
+  if (count <= 2) return Math.max(0, count);
+  if (count <= 6) return 6;
+  if (count <= 12) return 12;
+  return Math.ceil(count / 6) * 6;
+}
+
+export function reconcileStationSlots(
+  previous: readonly (string | null)[],
+  liveIds: readonly string[],
+): (string | null)[] {
+  const capacity = stationSlotCapacity(liveIds.length),
+    live = new Set(liveIds),
+    seen = new Set<string>();
+  if (previous.length !== capacity) {
+    const ordered: string[] = [];
+    for (const id of [...previous, ...liveIds])
+      if (id !== null && live.has(id) && !seen.has(id)) {
+        seen.add(id);
+        ordered.push(id);
+      }
+    return [...ordered, ...Array<null>(capacity).fill(null)].slice(0, capacity);
+  }
+
+  const slots = previous.map((id) => {
+    if (id === null || !live.has(id) || seen.has(id)) return null;
+    seen.add(id);
+    return id;
+  });
+  for (const id of liveIds) {
+    if (seen.has(id)) continue;
+    slots[slots.indexOf(null)] = id;
+    seen.add(id);
+  }
+  return slots;
+}
 export function computeLayout(
   width: number,
   height: number,
-  ids: readonly string[],
+  ids: readonly (string | null)[],
 ): SceneLayout {
   // Favor readable pixel clusters at laptop-height viewports. The former floor()
   // dropped 1280x633 to 3px units, leaving almost half the floor unoccupied.
@@ -58,14 +95,15 @@ export function computeLayout(
   const sceneWidth = width / unit,
     sceneHeight = height / unit;
   const wallHeight = Math.min(56, Math.max(42, sceneHeight * 0.3));
-  const sparse = ids.length <= 2,
+  const capacity = ids.length,
+    sparse = capacity <= 2,
     passWidth = Math.min(
       sparse ? tokens.scene.layout.sparsePassWidth : 132,
       sceneWidth * 0.52,
     );
-  const columns = columnCount(ids.length),
-    rows = Math.max(1, Math.ceil(ids.length / columns)),
-    banquet = ids.length > 8,
+  const columns = columnCount(capacity),
+    rows = Math.max(1, Math.ceil(capacity / columns)),
+    banquet = capacity > 6,
     scale = banquet ? 0.8 : sparse ? tokens.scene.layout.sparseScale : 1,
     gutter = banquet ? 0 : tokens.scene.layout.stationGutter;
   const gridTop = wallHeight + 25;
@@ -80,16 +118,22 @@ export function computeLayout(
   );
   const gridWidth = cellWidth * columns + gutter * (columns - 1);
   const left = (sceneWidth - gridWidth) / 2;
-  const stations = ids.map((id, index) => ({
-    id,
-    row: Math.floor(index / columns),
-    column: index % columns,
-    scale,
-    x: (left + (index % columns) * (cellWidth + gutter)) * unit,
-    y: (gridTop + Math.floor(index / columns) * cellHeight) * unit,
-    width: cellWidth * unit,
-    height: cellHeight * unit,
-  }));
+  const stations = ids.flatMap((id, index) =>
+    id === null
+      ? []
+      : [
+          {
+            id,
+            row: Math.floor(index / columns),
+            column: index % columns,
+            scale,
+            x: (left + (index % columns) * (cellWidth + gutter)) * unit,
+            y: (gridTop + Math.floor(index / columns) * cellHeight) * unit,
+            width: cellWidth * unit,
+            height: cellHeight * unit,
+          },
+        ],
+  );
   return {
     unit,
     wall: { x: 0, y: 0, width, height: wallHeight * unit },

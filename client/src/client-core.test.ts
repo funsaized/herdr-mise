@@ -30,6 +30,8 @@ import {
 import {
   computeFreezerLayout,
   computeLayout,
+  reconcileStationSlots,
+  stationSlotCapacity,
   stationVisualMetrics,
 } from "./scene/layout";
 import { ParticlePool } from "./scene/particles";
@@ -503,6 +505,107 @@ describe("agent store machines", () => {
 });
 
 describe("layout, transitions and resources", () => {
+  it("retains canonical station slots through roster churn", () => {
+    const rects = (slots: readonly (string | null)[]) =>
+        Object.fromEntries(
+          computeLayout(1200, 740, slots).stations.map(({ id, ...rect }) => [
+            id,
+            rect,
+          ]),
+        ),
+      reconcile = (
+        previous: readonly (string | null)[],
+        ids: readonly string[],
+      ) => reconcileStationSlots(previous, ids),
+      ids = (count: number) =>
+        Array.from({ length: count }, (_, index) => `agent-${index + 1}`);
+
+    expect(
+      [0, 1, 2, 3, 5, 6, 7, 9, 12, 13, 19].map(stationSlotCapacity),
+    ).toEqual([0, 1, 2, 6, 6, 6, 12, 12, 12, 18, 24]);
+
+    let slots = reconcile([], ids(4));
+    const four = rects(slots);
+    slots = reconcile(slots, ids(5));
+    for (const id of ["agent-1", "agent-2", "agent-3", "agent-4"])
+      expect(rects(slots)[id]).toEqual(four[id]);
+    slots = reconcile(slots, ["agent-1", "agent-3", "agent-4", "agent-5"]);
+    expect(slots).toEqual([
+      "agent-1",
+      null,
+      "agent-3",
+      "agent-4",
+      "agent-5",
+      null,
+    ]);
+    for (const id of ["agent-1", "agent-3", "agent-4"])
+      expect(rects(slots)[id]).toEqual(four[id]);
+    slots = reconcile(slots, [
+      "agent-1",
+      "agent-3",
+      "agent-4",
+      "agent-5",
+      "new",
+    ]);
+    expect(slots[1]).toBe("new");
+
+    slots = reconcile(slots, ids(8));
+    const eight = rects(slots);
+    slots = reconcile(slots, [...ids(8), "agent-9"]);
+    expect(rects(slots)).toMatchObject(eight);
+    slots = reconcile(slots, [
+      "agent-1",
+      "agent-4",
+      "agent-5",
+      "agent-7",
+      "agent-9",
+      "x",
+      "y",
+    ]);
+    slots = reconcile(slots, [
+      "agent-4",
+      "agent-5",
+      "agent-7",
+      "agent-9",
+      "y",
+      "z",
+      "z",
+    ]);
+    expect(slots).toHaveLength(12);
+    expect(slots.filter((id) => id !== null)).toEqual([
+      "z",
+      "agent-4",
+      "agent-5",
+      "y",
+      "agent-7",
+      "agent-9",
+    ]);
+    expect(new Set(slots.filter((id) => id !== null)).size).toBe(6);
+
+    const six = reconcile([], ids(6)),
+      sixRects = rects(six),
+      sevenRects = rects(reconcile(six, ids(7)));
+    expect(sevenRects["agent-1"]).not.toEqual(sixRects["agent-1"]);
+
+    for (const [width, height] of [
+      [320, 640],
+      [390, 844],
+      [1280, 720],
+    ])
+      for (const station of computeLayout(width, height, [
+        "a",
+        null,
+        "b",
+        null,
+        "c",
+        null,
+      ]).stations) {
+        expect(station.x).toBeGreaterThanOrEqual(0);
+        expect(station.y).toBeGreaterThanOrEqual(0);
+        expect(station.x + station.width).toBeLessThanOrEqual(width);
+        expect(station.y + station.height).toBeLessThanOrEqual(height);
+      }
+  });
   it("places only the newest fitting freezer spirits in deterministic safe slots", () => {
     const ids = Array.from({ length: 20 }, (_, index) => `ended-${index}`),
       first = computeFreezerLayout(420, 480, ids),
