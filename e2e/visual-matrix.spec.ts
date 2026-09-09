@@ -1137,6 +1137,21 @@ test("fixture-backed duplicate identity inspection", async ({
     await expect(details).toContainText(
       "/work/料理/very-long-shared-workspace",
     );
+
+    source.agents = [];
+    snapshot = JSON.stringify({ result: { snapshot: source } });
+    await page.getByRole("button", { name: "Freezer" }).click();
+    const ended = page.getByRole("navigation", { name: "Ended chefs" });
+    await expect(
+      ended.getByRole("button", {
+        name: /same chef · Unavailable · terminal-one, Ended/,
+      }),
+    ).toBeAttached({ timeout: 5_000 });
+    await expect(
+      ended.getByRole("button", {
+        name: /same chef · Unavailable · terminal-two, Ended/,
+      }),
+    ).toBeAttached();
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();

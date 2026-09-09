@@ -245,6 +245,24 @@ describe("semantic station controls", () => {
       within(navigation).getByRole("button").getAttribute("tabindex"),
     ).toBe("-1");
   });
+  it("keeps same-named ended station controls distinct", () => {
+    render(
+      <SemanticStationControls
+        agents={[
+          { ...agent, id: "ended-one", workspace: "", targetState: "ended" },
+          { ...agent, id: "ended-two", workspace: "", targetState: "ended" },
+        ]}
+        label="Ended chefs"
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Codex · Unavailable · ended-one,/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Codex · Unavailable · ended-two,/ }),
+    ).toBeTruthy();
+  });
   it("keeps colliding controls distinct when pane locators are unavailable", () => {
     render(
       <SemanticStationControls

@@ -23,11 +23,8 @@ export function SemanticStationControls({
   const blocked = agents.some((agent) => agent.targetState === "blocked"),
     now = useClock(blocked),
     nameCounts = new Map<string, number>(),
-    collisions = stationCollisionIds(
-      agents.filter((agent) => agent.targetState !== "ended"),
-    );
+    collisions = stationCollisionIds(agents);
   for (const agent of agents) {
-    if (agent.targetState === "ended") continue;
     const name = agent.name.toUpperCase();
     nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
   }
