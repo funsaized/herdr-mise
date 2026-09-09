@@ -486,6 +486,23 @@ mod tests {
         );
     }
     #[tokio::test]
+    async fn observed_timestamp_refresh_bypasses_metric_coalescing() {
+        let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
+        let mut changes = feed.subscribe();
+        feed.apply_live_coalesced(vec![record(0.2)], vec![]).await;
+        assert!(changes.try_recv().is_err());
+
+        let mut reentered = record(0.3);
+        reentered.state_entered_at = "2026-07-31T00:00:01Z".into();
+        feed.apply_live_coalesced(vec![reentered], vec![]).await;
+        assert!(matches!(
+            changes.try_recv().unwrap(),
+            AgentStateEvent::Delta { agent: Some(agent), .. }
+                if agent.state_entered_at == "2026-07-31T00:00:01Z"
+        ));
+        assert!(!feed.inner.pending.lock().await.contains_key("a"));
+    }
+    #[tokio::test]
     async fn cross_workspace_move_preserves_continuity() {
         let mut normalizer = Normalizer::default();
         let before = normalizer

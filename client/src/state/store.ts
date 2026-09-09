@@ -277,9 +277,8 @@ export class AgentStore {
   private upsert(agent: AgentRecord) {
     const prior = this.agents.get(agent.id);
     const now = this.scheduler.now();
-    const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
-      ? Date.parse(agent.stateEnteredAt)
-      : now;
+    const parsedEnteredAt = Date.parse(agent.stateEnteredAt),
+      enteredAt = Number.isFinite(parsedEnteredAt) ? parsedEnteredAt : now;
     const dismissedGeneration = this.dismissedDone.get(agent.id);
     const remainsDismissed =
       agent.state === "done" &&
@@ -291,12 +290,6 @@ export class AgentStore {
       return;
     }
     const stateChanged = prior?.targetState !== agent.state;
-    const sameDoneState =
-      prior?.targetState === "done" && agent.state === "done";
-    const currentDoneGeneration = this.doneGenerations.get(agent.id);
-    const newerDoneGeneration =
-      sameDoneState &&
-      enteredAt > Date.parse(currentDoneGeneration ?? prior.stateEnteredAt);
     const initialHistory: readonly StatePeriod[] = [
       { state: agent.state, startedAt: enteredAt },
     ];
@@ -304,7 +297,12 @@ export class AgentStore {
     const sameStateReentered =
       !stateChanged &&
       lastObservedAt !== undefined &&
-      enteredAt > lastObservedAt + 1_000;
+      Number.isFinite(parsedEnteredAt) &&
+      enteredAt > lastObservedAt;
+    const newerDoneGeneration =
+      prior?.targetState === "done" &&
+      agent.state === "done" &&
+      sameStateReentered;
     const history = prior
       ? stateChanged || sameStateReentered
         ? [

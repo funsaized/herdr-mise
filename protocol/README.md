@@ -22,6 +22,20 @@ connections therefore remain decodable until they reload and opt in.
   not the upstream session lifetime. Departure or process restart resets it.
   State timestamps likewise describe observations, not unseen history.
 
+Herdr's process-scoped `state_change_seq` remains internal to the adapter. A
+strict increase between two known values for the same terminal identity proves
+that continuity was interrupted, even when the observed state is unchanged, so
+the adapter refreshes `stateEnteredAt` to the local snapshot receipt time. The
+sequence reveals neither the intermediate states nor their transition times.
+Equal values preserve the current period. An absent value preserves the period
+and clears the comparison baseline; the next known value only establishes a
+baseline. A regression or reset preserves the period and rebases the baseline,
+allowing a later increase to mark a boundary. An observed state or knownness
+change still starts a period and stores the current baseline. Departure removes
+the observation, and a Mise or Herdr process restart conservatively begins
+again. Upstream `revision` is unrelated and ignored. Neither value enters
+`AgentRecord`, WebSocket events, browser state, or the bounded browser history.
+
 `snapshot-provenance.v1.json` covers unknown/unavailable and observed-zero
 records across the decoder, Rust schema round-trip, and detail presentation.
 Browser local history retains the latest 256 transitions; diagnostics retain

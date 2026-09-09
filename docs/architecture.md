@@ -342,6 +342,9 @@ upstream observations can still be missed. This is not a sub-250 ms
 upstream-to-pixel guarantee. `pane.agent_status_changed` remains outside the
 subscription contract until supported upstream subscription semantics are
 verified; the decoder recognizing a name is not sufficient evidence.
+Adapter-derived observation boundaries travel as `state_entered_at` changes
+and therefore use the same immediate path; see
+[Feed v1 observation semantics](../protocol/README.md) for the sequence contract.
 
 Browser and TUI take a snapshot with a new broadcast cursor while holding the
 Feed state read lock. Both initial subscription and lag recovery use this
