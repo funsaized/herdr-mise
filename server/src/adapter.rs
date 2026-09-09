@@ -200,6 +200,7 @@ impl Normalizer {
                 || agent.terminal_id.encode_utf16().count() > MAX_TEXT_UTF16_UNITS
                 || agent.pane_id.trim().is_empty()
                 || agent.pane_id.encode_utf16().count() > MAX_TEXT_UTF16_UNITS
+                || agent.pane_id.chars().any(char::is_control)
             {
                 return Err(AdapterError::IncompatibleSnapshot {
                     observed_protocol: raw.protocol,

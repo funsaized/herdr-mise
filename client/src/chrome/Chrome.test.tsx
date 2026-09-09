@@ -539,6 +539,10 @@ describe("chrome interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
     expect(await screen.findByText("Locator copied")).toBeTruthy();
     expect(writeText).toHaveBeenCalledWith("pane-🥘-exact");
+    expect(screen.getByText("Attempt 1:")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
+    expect(await screen.findByText("Attempt 2:")).toBeTruthy();
 
     rerender(
       <DetailCard
@@ -551,6 +555,7 @@ describe("chrome interactions", () => {
     writeText.mockRejectedValueOnce(new Error("denied"));
     fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
     expect(await screen.findByText(/Copy failed/)).toBeTruthy();
+    expect(screen.getByText("Attempt 3:")).toBeTruthy();
     expect(screen.getByText("pane-🥘-moved")).toBeTruthy();
   });
   it("distinguishes observed zero tickets from unknown source state", () => {

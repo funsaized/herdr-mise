@@ -1,5 +1,6 @@
 import {
   Application,
+  CanvasTextMetrics,
   CanvasTextPipe,
   CanvasTextSystem,
   Container,
@@ -1530,22 +1531,38 @@ export class KitchenScene {
         agent.progress === null ? "null" : Math.round(agent.progress * 1000),
       nameFontSize = Math.max(9, 2.1 * u),
       statusFontSize = Math.max(8, 1.8 * u),
-      nameCharacters = Math.max(
+      initialNameCharacters = Math.max(
         tokens.scene.layout.stationNameMinCharacters,
         Math.floor(
           (rect.width - 2 * u) /
             (nameFontSize * tokens.scene.layout.stationNameCharacterWidth),
         ),
       ),
+      maxNameWidth = rect.width - 2 * u;
+    name.style.fontSize = nameFontSize;
+    let nameCharacters = initialNameCharacters;
+    let identity = stationIdentityLabels(
+      agent,
+      state,
+      wallNow,
+      nameCharacters,
+      state === "blocked" ? placement : undefined,
+      colliding,
+    );
+    while (
+      nameCharacters > 1 &&
+      CanvasTextMetrics.measureText(identity.name, name.style).width >
+        maxNameWidth
+    )
       identity = stationIdentityLabels(
         agent,
         state,
         wallNow,
-        nameCharacters,
+        --nameCharacters,
         state === "blocked" ? placement : undefined,
         colliding,
-      ),
-      dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}:${this.lastAtmosphere}`,
+      );
+    const dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}:${this.lastAtmosphere}`,
       dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`,
       exitComplete =
         state !== "blocked" &&
@@ -1750,7 +1767,6 @@ export class KitchenScene {
     const colors = p.scene.stationState;
     name.text = identity.name;
     name.style.fill = p.scene.stationName[index];
-    name.style.fontSize = nameFontSize;
     name.position.set(rect.width / 2, 32 * u);
     label.text =
       agent.stateKnown === false ? "UNKNOWN · PREP" : identity.status;

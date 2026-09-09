@@ -259,8 +259,8 @@ describe("semantic station controls", () => {
       screen.getAllByRole("button").map((button) => button.textContent),
     ).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("Codex · terminal-one"),
-        expect.stringContaining("Codex · terminal-two"),
+        expect.stringContaining("Codex · Kitchen · terminal-one"),
+        expect.stringContaining("Codex · Kitchen · terminal-two"),
       ]),
     );
   });
@@ -322,6 +322,19 @@ describe("semantic station controls", () => {
           blockedPlacement: undefined,
         }),
       ).toContain(humanStateWords[targetState]);
+  });
+  it("includes workspace basenames in same-named station controls", () => {
+    render(
+      <SemanticStationControls
+        agents={[
+          { ...agent, id: "one", workspace: "/work/one" },
+          { ...agent, id: "two", workspace: "/work/two" },
+        ]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Codex · one,/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Codex · two,/ })).toBeTruthy();
   });
 });
 

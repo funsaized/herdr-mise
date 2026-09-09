@@ -1038,10 +1038,12 @@ test("fixture-backed duplicate identity inspection", async ({
     },
     { workspace_id: "two", label: "/other/very-long-shared-workspace" },
   ];
+  const locatorOne = "pane-with-a-very-long-shared-prefix-🥘-one",
+    locatorTwo = "pane-with-a-very-long-shared-prefix-🥘-two";
   source.agents[0] = {
     ...source.agents[0],
     terminal_id: "terminal-one",
-    pane_id: "pane-🥘-one",
+    pane_id: locatorOne,
     workspace_id: "one",
     name: "same chef",
     agent: kindFixture.result.snapshot.agents[0].agent,
@@ -1049,7 +1051,7 @@ test("fixture-backed duplicate identity inspection", async ({
   source.agents.push({
     ...source.agents[0],
     terminal_id: "terminal-two",
-    pane_id: "pane-🥘-two",
+    pane_id: locatorTwo,
     workspace_id: "two",
   });
   let snapshot = JSON.stringify({ result: { snapshot: source } });
@@ -1094,30 +1096,44 @@ test("fixture-backed duplicate identity inspection", async ({
     await page.setViewportSize({ width: 420, height: 640 });
     await page.goto(`${appUrl}/?stats`);
     const first = page.getByRole("button", {
-      name: /same chef · pane-🥘-one, Blocked/,
+      name: new RegExp(
+        `same chef · very-long-shared-workspace · ${locatorOne}, Blocked`,
+      ),
     });
     await expect(first).toBeAttached();
     await expect(
       page.getByRole("button", {
-        name: /same chef · pane-🥘-two, Blocked/,
+        name: new RegExp(
+          `same chef · very-long-shared-workspace · ${locatorTwo}, Blocked`,
+        ),
       }),
     ).toBeAttached();
+    await assertResponsiveScene(page, 2, false);
+    const labels = Object.values((await sceneMetrics(page))!.stationNameBounds);
+    expect(labels.every(({ text }) => Array.from(text).length <= 30)).toBe(
+      true,
+    );
+    expect(labels.map(({ text }) => text.slice(-3)).sort()).toEqual([
+      "one",
+      "two",
+    ]);
     await first.evaluate((button: HTMLButtonElement) => button.click());
     const details = page.getByLabel("same chef details");
     await expect(details).toContainText(
       "/work/料理/very-long-shared-workspace",
     );
     await expect(details).toContainText("codex");
-    await expect(details).toContainText("pane-🥘-one");
+    await expect(details).toContainText(locatorOne);
     await details.getByRole("button", { name: "Copy locator" }).click();
     await expect(details).toContainText("Locator copied");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "pane-🥘-one",
+      locatorOne,
     );
 
-    source.agents[0].pane_id = "pane-🥘-moved";
+    const movedLocator = "pane-with-a-very-long-shared-prefix-🥘-moved";
+    source.agents[0].pane_id = movedLocator;
     snapshot = JSON.stringify({ result: { snapshot: source } });
-    await expect(details).toContainText("pane-🥘-moved", { timeout: 5_000 });
+    await expect(details).toContainText(movedLocator, { timeout: 5_000 });
     await expect(details).toContainText(
       "/work/料理/very-long-shared-workspace",
     );

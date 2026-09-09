@@ -217,7 +217,7 @@ select:focus-visible {
 .locatorValue {
   display: block;
   user-select: text;
-  white-space: normal;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .copyLocator {
@@ -228,6 +228,13 @@ select:focus-visible {
   padding: 0 var(--spacePanel);
   color: var(--secondary);
   font-size: var(--fontSecondarySize);
+}
+.copyStatusAttempt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .fact .mono,
 .mono {

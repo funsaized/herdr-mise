@@ -40,6 +40,14 @@ export function compactPixelText(value: string, maxCharacters = 30) {
   return `${text.slice(0, maxCharacters - 3).join("")}...`;
 }
 
+function compactIdentity(value: string, maxCharacters: number) {
+  const points = Array.from(value);
+  if (points.length <= maxCharacters) return value;
+  if (maxCharacters <= 1) return points.slice(-maxCharacters).join("");
+  const head = Math.floor((maxCharacters - 1) / 2);
+  return `${points.slice(0, head).join("")}…${points.slice(-(maxCharacters - head - 1)).join("")}`;
+}
+
 export function stationCollisionIds(
   agents: readonly Pick<AgentMachine, "id" | "name" | "workspace">[],
 ) {
@@ -73,17 +81,27 @@ export function stationIdentityLabels(
     agentName = agent.name.toUpperCase(),
     base = `${agentName} · ${workspace}`,
     identity = colliding ? (agent.paneId ?? agent.id) : undefined,
-    locator = identity ? ` · ${identity}` : "",
-    available = Math.max(1, maxCharacters - Array.from(locator).length),
+    identityPoints = Array.from(identity ?? ""),
+    locatorBudget = Math.max(0, maxCharacters - 1),
+    locator = identity
+      ? locatorBudget <= 3
+        ? identityPoints.slice(identityPoints.length - locatorBudget).join("")
+        : ` · ${compactIdentity(identity, locatorBudget - 3)}`
+      : "",
+    available = Math.max(0, maxCharacters - Array.from(locator).length),
     namePoints = Array.from(agentName),
+    basePoints = Array.from(base),
+    workspacePoints = Array.from(workspace),
     compactBase =
       available <= 3
         ? ".".repeat(available)
-        : available <= namePoints.length
-          ? namePoints.length <= available
-            ? agentName
-            : `${namePoints.slice(0, Math.floor((available - 3) / 2)).join("")}...${namePoints.slice(-Math.ceil((available - 3) / 2)).join("")}`
-          : compactPixelText(base, available),
+        : basePoints.length <= available
+          ? base
+          : namePoints.length >= available
+            ? workspacePoints.length + 5 <= available
+              ? `${basePoints.slice(0, Math.floor((available - 3) / 2)).join("")}...${basePoints.slice(-Math.ceil((available - 3) / 2)).join("")}`
+              : `${namePoints.slice(0, Math.floor((available - 3) / 2)).join("")}...${namePoints.slice(-Math.ceil((available - 3) / 2)).join("")}`
+            : compactPixelText(base, available),
     compactName = `${compactBase}${locator}`,
     labels = {
       idle: "PREP",

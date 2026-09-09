@@ -44,8 +44,13 @@ export function semanticStationLabel(agent: SemanticAgent, elapsed?: string) {
   const queue = semanticQueueWords(agent);
   return `${agent.name}, ${semanticStateWords(agent)}${queue ? `, ${queue}` : ""}${elapsed ? `, ${elapsed}` : ""}, open details`;
 }
-export function semanticStationName(agent: SemanticAgent, colliding: boolean) {
-  return `${agent.name}${colliding ? ` · ${agent.paneId ?? agent.id}` : ""}`;
+export function semanticStationName(
+  agent: SemanticAgent,
+  workspaceName: string,
+  duplicateName: boolean,
+  colliding: boolean,
+) {
+  return `${agent.name}${duplicateName ? ` · ${workspaceName}` : ""}${colliding ? ` · ${agent.paneId ?? agent.id}` : ""}`;
 }
 export function semanticAgentsEqual(
   a: readonly SemanticAgent[],

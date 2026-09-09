@@ -1047,7 +1047,7 @@ fn kitchen_and_freezer_stay_separate_and_respect_reduced_motion() {
 }
 
 #[test]
-fn tui_strips_control_characters_from_external_strings() {
+fn tui_sanitizes_external_strings_without_obscuring_status() {
     let event = serde_json::from_str::<AgentStateEvent>(include_str!(
         "../../../../protocol/fixtures/snapshot.v1.json"
     ))
@@ -1060,6 +1060,12 @@ fn tui_strips_control_characters_from_external_strings() {
     agents[0].name.push_str("\u{1b}live");
     agents[0].model.push('\u{1b}');
     agents[0].workspace.push('\u{1b}');
+    agents[0].workspace.push_str(&"/料理🥘".repeat(100));
+    agents[0]
+        .pane_id
+        .as_mut()
+        .unwrap()
+        .push_str(&"-料理🥘".repeat(100));
     agents[0].state = AgentState::Blocked;
     agents[1].id.push('\u{1b}');
     agents[1].name.push_str("\u{1b}ended");
@@ -1070,7 +1076,7 @@ fn tui_strips_control_characters_from_external_strings() {
     let mut table = AgentTable::default();
     table.apply(AgentStateEvent::Snapshot {
         version: 1,
-        mode: AppMode::Live,
+        mode: AppMode::Demo,
         source_status: SourceStatus::UnsupportedProtocol,
         source_diagnostic: Some(SourceDiagnostic {
             observed_protocol: 23,
@@ -1100,5 +1106,9 @@ fn tui_strips_control_characters_from_external_strings() {
             .content
             .iter()
             .all(|cell| !cell.symbol().chars().any(char::is_control)));
+        let output = text(&buffer);
+        assert!(output.contains("MISE — DEMO SERVICE"), "{output}");
+        assert!(output.contains("Herdr protocol is unsupported"), "{output}");
+        assert!(output.contains("upgrade now"), "{output}");
     }
 }

@@ -491,7 +491,14 @@ pub(crate) fn draw_view(
     help_open: bool,
     reduced_motion: bool,
 ) {
-    if !scene_supported {
+    let area = frame.area();
+    let inspection_too_tall = selected_id
+        .and_then(|id| table.agents().find(|agent| agent.id == id))
+        .is_some_and(|agent| {
+            view::inspect_height(agent, area.width.saturating_sub(4))
+                > area.height.saturating_sub(theme::KITCHEN_HEADER_BAND)
+        });
+    if !scene_supported || inspection_too_tall {
         view::draw(
             frame,
             table,
@@ -506,7 +513,6 @@ pub(crate) fn draw_view(
         }
         return;
     }
-    let area = frame.area();
     match scene_view {
         SceneView::Freezer => draw_freezer(
             frame,
@@ -784,12 +790,16 @@ fn draw_kitchen(
             ),
         );
     } else {
+        let elapsed = blocked_elapsed(blocked[0], now);
+        let name_width = usize::from(layout.pass.width.saturating_sub(2))
+            .saturating_sub(view::display_width("‼ BLOCKED    ") + view::display_width(&elapsed))
+            .saturating_sub(blocked.len().saturating_sub(1) * 2)
+            / blocked.len();
         let names = blocked
             .iter()
-            .map(|agent| view::station_display_name(agent, &agents, usize::MAX))
+            .map(|agent| view::station_display_name(agent, &agents, name_width))
             .collect::<Vec<_>>()
             .join(", ");
-        let elapsed = blocked_elapsed(blocked[0], now);
         render_line(
             frame,
             area,
@@ -887,7 +897,7 @@ fn draw_kitchen(
         let available = station_area.width.saturating_sub(4);
         let suffix = format!("· {word} ");
         let maximum_name = usize::from(available)
-            .saturating_sub(suffix.chars().count() + 2)
+            .saturating_sub(view::display_width(&suffix) + 2)
             .max(1);
         let display_name = view::station_display_name(agent, &agents, maximum_name);
         render_line(
@@ -936,7 +946,8 @@ fn draw_kitchen(
         let width = area
             .width
             .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2));
-        let height = view::inspect_height(agent, width).min(area.height.saturating_sub(1));
+        let height = view::inspect_height(agent, width);
+        let inspection_y = cell_rect(layout.pass).bottom();
         frame.render_widget(
             view::inspect_paragraph(agent).style(
                 Style::default()
@@ -946,7 +957,7 @@ fn draw_kitchen(
             ),
             Rect::new(
                 area.x + theme::KITCHEN_GUTTER,
-                area.y + area.height.saturating_sub(height.saturating_add(1)),
+                area.y + inspection_y,
                 width,
                 height,
             ),
@@ -1272,7 +1283,7 @@ fn draw_freezer(
     );
     if let Some(agent) = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id)) {
         let width = area.width.saturating_sub(4);
-        let height = view::inspect_height(agent, width).min(area.height.saturating_sub(1));
+        let height = view::inspect_height(agent, width);
         frame.render_widget(
             view::inspect_paragraph(agent).style(
                 Style::default()

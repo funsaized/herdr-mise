@@ -156,19 +156,28 @@ export function DetailCard({
 }) {
   const now = useClock(true),
     color = stateColor(agent),
-    [copyResult, setCopyResult] = useState({ locator: "", status: "" }),
+    [copyResult, setCopyResult] = useState({
+      locator: "",
+      status: "",
+      attempt: 0,
+    }),
     copyStatus = copyResult.locator === agent.paneId ? copyResult.status : "";
   const copyLocator = async () => {
     if (!agent.paneId) return;
     const locator = agent.paneId;
     try {
       await navigator.clipboard.writeText(locator);
-      setCopyResult({ locator, status: "Locator copied" });
+      setCopyResult((previous) => ({
+        locator,
+        status: "Locator copied",
+        attempt: previous.attempt + 1,
+      }));
     } catch {
-      setCopyResult({
+      setCopyResult((previous) => ({
         locator,
         status: "Copy failed. Select and copy the locator manually.",
-      });
+        attempt: previous.attempt + 1,
+      }));
     }
   };
   return (
@@ -209,6 +218,11 @@ export function DetailCard({
         </Fact>
       </div>
       <div className="copyStatus" aria-live="polite" aria-atomic="true">
+        {copyStatus && (
+          <span className="copyStatusAttempt">
+            Attempt {copyResult.attempt}:{" "}
+          </span>
+        )}
         {copyStatus}
       </div>
       <HistoryStrip history={agent.history} now={now} />

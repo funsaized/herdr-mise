@@ -46,18 +46,75 @@ fn available(value: Option<&str>) -> String {
         .unwrap_or_else(|| "Unavailable".into())
 }
 
-fn station_suffix(agent: &AgentRecord, agents: &[&AgentRecord]) -> String {
-    let key = sanitize_external(&agent.name).to_uppercase();
+pub(super) fn display_width(value: &str) -> usize {
+    Line::from(value).width()
+}
+
+fn take_width(value: &str, max_width: usize, from_end: bool) -> String {
+    let mut width = 0_usize;
+    let mut characters = value.chars().collect::<Vec<_>>();
+    if from_end {
+        characters.reverse();
+    }
+    let mut kept = characters
+        .into_iter()
+        .take_while(|character| {
+            let character_width = display_width(&character.to_string());
+            if width.saturating_add(character_width) > max_width {
+                return false;
+            }
+            width += character_width;
+            true
+        })
+        .collect::<Vec<_>>();
+    if from_end {
+        kept.reverse();
+    }
+    kept.into_iter().collect()
+}
+
+fn compact_text(value: &str, max_width: usize) -> String {
+    if display_width(value) <= max_width {
+        return value.into();
+    }
+    if max_width <= 1 {
+        return take_width(value, max_width, true);
+    }
+    let content_width = max_width - 1;
+    let head_width = content_width / 2;
+    format!(
+        "{}…{}",
+        take_width(value, head_width, false),
+        take_width(value, content_width - head_width, true)
+    )
+}
+
+fn station_suffix(agent: &AgentRecord, agents: &[&AgentRecord], max_width: usize) -> String {
+    let key = format!(
+        "{}\0{}",
+        sanitize_external(&agent.name).to_uppercase(),
+        sanitize_external(workspace_display_name(&agent.workspace)).to_uppercase()
+    );
     let colliding = agents
         .iter()
-        .filter(|candidate| sanitize_external(&candidate.name).to_uppercase() == key)
+        .filter(|candidate| {
+            format!(
+                "{}\0{}",
+                sanitize_external(&candidate.name).to_uppercase(),
+                sanitize_external(workspace_display_name(&candidate.workspace)).to_uppercase()
+            ) == key
+        })
         .count()
         > 1;
     if colliding {
-        format!(
-            " · {}",
-            sanitize_external(agent.pane_id.as_deref().unwrap_or(&agent.id))
-        )
+        let identity = sanitize_external(agent.pane_id.as_deref().unwrap_or(&agent.id));
+        if display_width(&identity).saturating_add(3) <= max_width {
+            return format!(" · {identity}");
+        }
+        if max_width <= 3 {
+            return take_width(&identity, max_width, true);
+        }
+        format!(" · {}", compact_text(&identity, max_width - 3))
     } else {
         String::new()
     }
@@ -66,40 +123,41 @@ fn station_suffix(agent: &AgentRecord, agents: &[&AgentRecord]) -> String {
 pub(super) fn station_display_name(
     agent: &AgentRecord,
     agents: &[&AgentRecord],
-    max_chars: usize,
+    max_width: usize,
 ) -> String {
     let name = sanitize_external(&agent.name);
-    let suffix = station_suffix(agent, agents);
-    let name_chars = name.chars().collect::<Vec<_>>();
-    let suffix_len = suffix.chars().count();
-    if name_chars.len() + suffix_len <= max_chars {
-        return format!("{name}{suffix}");
-    }
-    let available = max_chars.saturating_sub(suffix_len);
-    let compact = if available > 1 {
+    let name_key = name.to_uppercase();
+    let duplicate_name = agents
+        .iter()
+        .filter(|candidate| sanitize_external(&candidate.name).to_uppercase() == name_key)
+        .count()
+        > 1;
+    let base = if duplicate_name {
         format!(
-            "{}…",
-            name_chars.iter().take(available - 1).collect::<String>()
+            "{name} · {}",
+            sanitize_external(workspace_display_name(&agent.workspace))
         )
     } else {
-        name_chars.iter().take(available).collect()
+        name
     };
-    format!("{compact}{suffix}")
+    let suffix = station_suffix(agent, agents, max_width.saturating_sub(1));
+    let available = max_width.saturating_sub(display_width(&suffix));
+    format!("{}{suffix}", compact_text(&base, available))
 }
 
 pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 4] {
     let tickets = agent.session.tickets_text();
     [
-        format!(
-            "{} · {}",
-            sanitize_external(&agent.name),
-            record_state_label(agent)
-        ),
-        format!("Workspace: {}", available(Some(&agent.workspace)),),
         format!("Agent kind: {}", available(agent.agent_kind.as_deref())),
         format!(
             "Pane locator: {} · Tickets: {tickets}",
             available(agent.pane_id.as_deref())
+        ),
+        format!("Workspace: {}", available(Some(&agent.workspace)),),
+        format!(
+            "{} · {}",
+            sanitize_external(&agent.name),
+            record_state_label(agent)
         ),
     ]
 }
@@ -317,13 +375,16 @@ pub fn draw(
     let all_agents = table.agents().collect::<Vec<_>>();
     let agent_width = all_agents
         .iter()
-        .map(|agent| station_suffix(agent, &all_agents))
+        .map(|agent| station_suffix(agent, &all_agents, usize::MAX))
         .filter(|suffix| !suffix.is_empty())
-        .map(|suffix| suffix.chars().count() + 3)
+        .map(|suffix| display_width(&suffix) + theme::KITCHEN_TABLE_AGENT_SUFFIX_PADDING)
         .max()
-        .unwrap_or(16)
-        .max(16)
-        .min(usize::from(available_width.saturating_sub(33)).max(16));
+        .unwrap_or(theme::KITCHEN_TABLE_AGENT_MIN_WIDTH)
+        .max(theme::KITCHEN_TABLE_AGENT_MIN_WIDTH)
+        .min(
+            usize::from(available_width.saturating_sub(theme::KITCHEN_TABLE_RESERVED_WIDTH))
+                .max(theme::KITCHEN_TABLE_AGENT_MIN_WIDTH),
+        );
     let rows = all_agents
         .iter()
         .copied()
@@ -453,9 +514,9 @@ mod tests {
         let crate::protocol::AgentStateEvent::Snapshot { agents, .. } = event else {
             panic!("snapshot")
         };
-        assert!(super::inspect_facts(&agents[0])[0].contains("UNKNOWN"));
-        assert!(super::inspect_facts(&agents[0])[3].contains("Tickets: Unavailable"));
-        assert!(super::inspect_facts(&agents[1])[3].contains("Tickets: 0"));
+        assert!(super::inspect_facts(&agents[0])[3].contains("UNKNOWN"));
+        assert!(super::inspect_facts(&agents[0])[1].contains("Tickets: Unavailable"));
+        assert!(super::inspect_facts(&agents[1])[1].contains("Tickets: 0"));
         assert_eq!(agents[0].session.tickets_text(), "Unavailable");
         assert_eq!(agents[1].session.tickets_text(), "0");
     }
@@ -486,10 +547,12 @@ mod tests {
         .unwrap();
         source["agents"][0]["agent"] = agent_kind.into();
         source["agents"][0]["name"] = "same chef".into();
+        source["agents"][0]["pane_id"] =
+            "fictional-pane-料理🥘-with-a-long-shared-prefix-19".into();
         source["workspaces"][0]["label"] = "/work/one/example-pantry".into();
         let mut duplicate = source["agents"][0].clone();
         duplicate["terminal_id"] = "fictional-terminal-20".into();
-        duplicate["pane_id"] = "fictional-pane-20".into();
+        duplicate["pane_id"] = "fictional-pane-料理🥘-with-a-long-shared-prefix-20".into();
         duplicate["workspace_id"] = "fictional-pantry-two".into();
         source["agents"].as_array_mut().unwrap().push(duplicate);
         source["workspaces"]
@@ -497,13 +560,59 @@ mod tests {
             .unwrap()
             .push(serde_json::json!({
                 "workspace_id": "fictional-pantry-two",
-                "label": "/work/two/different-pantry"
+                "label": "/work/two/example-pantry"
             }));
 
         let mut normalizer = Normalizer::default();
         let normalized = normalizer
             .normalize_snapshot_value(source.clone(), "2026-08-13T12:00:00Z")
             .unwrap();
+        let normalized_agents = normalized.agents.iter().collect::<Vec<_>>();
+        let labels = normalized_agents
+            .iter()
+            .map(|agent| station_display_name(agent, &normalized_agents, 18))
+            .collect::<Vec<_>>();
+        assert!(labels.iter().all(|label| display_width(label) <= 18));
+        assert!(labels[0].ends_with("-19"));
+        assert!(labels[1].ends_with("-20"));
+
+        let mut distinct_workspaces = source.clone();
+        distinct_workspaces["workspaces"][1]["label"] = "/work/two/different-pantry".into();
+        let distinct = Normalizer::default()
+            .normalize_snapshot_value(distinct_workspaces, "2026-08-13T12:00:00Z")
+            .unwrap();
+        let distinct_agents = distinct.agents.iter().collect::<Vec<_>>();
+        assert_eq!(
+            distinct_agents
+                .iter()
+                .map(|agent| station_display_name(agent, &distinct_agents, 80))
+                .collect::<Vec<_>>(),
+            ["same chef · example-pantry", "same chef · different-pantry"]
+        );
+        let mut long_agents = normalized.agents.clone();
+        long_agents[0].workspace = format!("/work/{}/example-pantry", "料理🥘/".repeat(100));
+        long_agents[0]
+            .pane_id
+            .as_mut()
+            .unwrap()
+            .push_str(&"-料理🥘".repeat(100));
+        assert!(inspect_height(&long_agents[0], 76) > 5);
+        let long_feed = crate::feed::Feed::fixed(AppMode::Live, long_agents).await;
+        let mut long_table = AgentTable::default();
+        long_table.apply(long_feed.snapshot().await);
+        let narrow = render_scene(
+            &long_table,
+            80,
+            24,
+            Some("fictional-terminal-19"),
+            SceneView::Kitchen,
+            false,
+        );
+        assert!(narrow.contains("BLOCKED / AT THE PASS"), "{narrow}");
+        assert!(narrow.contains("Agent kind: codex"), "{narrow}");
+        assert!(narrow.contains("Pane locator:"), "{narrow}");
+        assert!(narrow.contains("prefix-19"), "{narrow}");
+
         let feed = crate::feed::Feed::fixed(AppMode::Live, normalized.agents).await;
         let mut table = AgentTable::default();
         table.apply(feed.snapshot().await);
@@ -516,8 +625,8 @@ mod tests {
             .draw(|frame| draw(frame, &table, None, now, 0, None, 0))
             .unwrap();
         let fallback = buffer_text(&terminal);
-        assert!(fallback.contains("fictional-pane-19"));
-        assert!(fallback.contains("fictional-pane-20"));
+        assert!(fallback.contains("-19"));
+        assert!(fallback.contains("-20"));
         let initial = render_scene(
             &table,
             100,
@@ -526,14 +635,29 @@ mod tests {
             SceneView::Kitchen,
             false,
         );
-        assert!(initial.contains("fictional-pane-19"));
-        assert!(initial.contains("fictional-pane-20"));
+        assert!(
+            initial.contains("‼ BLOCKED  y · fictional…prefix-19, y · fictional…prefix-20  00:00"),
+            "{initial}"
+        );
+        assert!(initial.contains("-19"));
+        assert!(initial.contains("-20"));
         assert!(initial.contains("Workspace: /work/one/example-pantry"));
         assert!(initial.contains("Agent kind: codex"));
-        assert!(initial.contains("Pane locator: fictional-pane-19"));
+        assert_eq!(
+            inspect_facts(table.agents().find(|agent| agent.id == selected_id).unwrap())[1],
+            "Pane locator: fictional-pane-料理🥘-with-a-long-shared-prefix-19 · Tickets: Unavailable"
+        );
+        assert!(initial.contains("Pane locator: fictional-pane-"));
+        assert!(initial.contains("prefix-19"));
         let compact = render_scene(&table, 60, 18, Some(selected_id), SceneView::Kitchen, false);
         assert!(compact.contains("Agent kind: codex"));
-        assert!(compact.contains("Pane locator: fictional-pane-19"));
+        assert!(compact.contains("prefix-19"), "{compact}");
+
+        let mut invalid = source.clone();
+        invalid["agents"][0]["pane_id"] = "fictional-pane\nmoved".into();
+        assert!(normalizer
+            .normalize_snapshot_value(invalid, "2026-08-13T12:00:01Z")
+            .is_err());
 
         source["agents"][0]["pane_id"] = "fictional-pane-moved".into();
         let moved = normalizer
@@ -803,7 +927,11 @@ mod tests {
             .content
             .chunks(80)
             .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-            .filter(|row| row.contains("example-cook") || row.contains("Workspace:"))
+            .filter(|row| {
+                row.contains("example-cook")
+                    || row.contains("Workspace:")
+                    || row.contains("Agent kind:")
+            })
             .collect::<Vec<_>>()
             .join(" ");
 
@@ -1133,12 +1261,13 @@ mod tests {
                 );
             }
         }
-        for expected in ["example-cook", "WORKING / ON THE FIRE"] {
+        for expected in ["example-cook"] {
             assert!(
                 kitchen.contains(expected),
                 "missing {expected:?} in {kitchen:?}"
             );
         }
+        assert!(inspect_facts(table.agents().next().unwrap())[3].contains("WORKING / ON THE FIRE"));
 
         assert!(!handle_key_with_view(
             KeyCode::Esc,
