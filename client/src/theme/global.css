@@ -688,7 +688,8 @@ select:focus-visible {
   gap: 8px;
 }
 .kitchenPager button {
-  min-height: 28px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 4px 7px;
   color: var(--text);
   background: var(--panel);
@@ -750,7 +751,6 @@ select:focus-visible {
     gap: 4px;
   }
   .kitchenPager button {
-    min-height: 26px;
     padding: 3px 5px;
   }
   .kitchenPager span {
@@ -805,7 +805,6 @@ select:focus-visible {
     gap: 5px;
   }
   .kitchenPager button {
-    min-height: 26px;
     padding: 3px 5px;
   }
   &:has(.kitchenPager) .firstHint {

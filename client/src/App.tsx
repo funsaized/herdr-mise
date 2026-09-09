@@ -85,6 +85,7 @@ const initialMetrics: DebugMetrics = { drawCalls: 0, socketBytesPerSecond: 0 };
 const initialPage: PageMetadata = {
   totalCount: 0,
   visibleCount: 0,
+  visibleIds: [],
   capacity: 1,
   pageIndex: 0,
   pageCount: 1,
@@ -237,12 +238,9 @@ export function App() {
       hits.filter((hit) => hit.kind === "station").map((hit) => hit.id),
     ),
     blockedAgents = agents.filter((agent) => agent.targetState === "blocked"),
-    visibleBlocked = agents
-      .slice(
-        page.pageIndex * page.capacity,
-        (page.pageIndex + 1) * page.capacity,
-      )
-      .filter((agent) => agent.targetState === "blocked").length,
+    visibleBlocked = blockedAgents.filter((agent) =>
+      page.visibleIds.includes(agent.id),
+    ).length,
     spiritAgents = hits
       .filter((hit) => hit.kind === "spirit")
       .flatMap((hit) => {

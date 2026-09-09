@@ -1779,6 +1779,15 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
                   (element) => element.scrollWidth <= element.clientWidth,
                 ),
             ).toBe(true);
+          if (pager)
+            for (const button of await page
+              .getByRole("navigation", { name: "Kitchen pages" })
+              .getByRole("button")
+              .all()) {
+              const box = await button.boundingBox();
+              expect(box?.width).toBeGreaterThanOrEqual(44);
+              expect(box?.height).toBeGreaterThanOrEqual(44);
+            }
           if (pager && pageIndex === 0) {
             const hint = await page.locator(".firstHint").boundingBox();
             expect(hint).not.toBeNull();
@@ -2131,8 +2140,13 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
     await expect(
       page.getByRole("complementary", { name: /density-20 details/i }),
     ).toBeVisible();
+    const reversed = makeSnapshot(30);
+    reversed.agents.reverse();
+    reversed.agents.find(
+      (agent) => agent.terminal_id === selectedId,
+    )!.agent_status = "working";
     for (const next of [
-      { ...makeSnapshot(30), agents: [...makeSnapshot(30).agents].reverse() },
+      reversed,
       makeSnapshot(60),
       {
         ...makeSnapshot(5),
@@ -2149,6 +2163,14 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
       await expect(
         page.getByRole("complementary", { name: /density-20 details/i }),
       ).toBeVisible();
+      if (next === reversed) {
+        const current = (await sceneMetrics(page))!;
+        await expect(
+          page.getByText(
+            `${current.page.visibleIds.length} of 30 cooks shown · 29 blocked / ${30 - current.page.visibleIds.length} off-page`,
+          ),
+        ).toBeVisible();
+      }
     }
   } finally {
     app.kill("SIGTERM");

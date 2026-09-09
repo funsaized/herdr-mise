@@ -292,6 +292,7 @@ describe("semantic station controls", () => {
         page={{
           totalCount: 30,
           visibleCount: 1,
+          visibleIds: [agent.id],
           capacity: 12,
           pageIndex: 1,
           pageCount: 3,

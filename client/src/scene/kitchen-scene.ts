@@ -93,6 +93,7 @@ export interface SceneHit {
 export interface PageMetadata {
   totalCount: number;
   visibleCount: number;
+  visibleIds: readonly string[];
   capacity: number;
   pageIndex: number;
   pageCount: number;
@@ -125,7 +126,7 @@ export interface SceneMetrics {
     BlockedPlacement & { timerText: string; exiting: boolean }
   >;
   blockedIndicators: number;
-  page: PageMetadata & { visibleIds: readonly string[] };
+  page: PageMetadata;
   stateIndicators: Record<string, number>;
   endedEntries: number;
   view: "kitchen" | "freezer";
@@ -529,7 +530,6 @@ export class KitchenScene {
       blockedIndicators,
       page: {
         ...this.pageMetadata(),
-        visibleIds: this.layout?.visibleIds ?? [],
       },
       stateIndicators,
       endedEntries: snapshot.board.length,
@@ -1420,6 +1420,7 @@ export class KitchenScene {
     return {
       totalCount: this.layout?.totalCount ?? 0,
       visibleCount: this.layout?.visibleIds.length ?? 0,
+      visibleIds: this.layout?.visibleIds ?? [],
       capacity: this.layout?.capacity ?? 1,
       pageIndex: this.layout?.pageIndex ?? 0,
       pageCount: this.layout?.pageCount ?? 1,
@@ -1428,7 +1429,7 @@ export class KitchenScene {
   }
   private publishPage() {
     const page = this.pageMetadata(),
-      signature = `${page.totalCount}:${page.visibleCount}:${page.capacity}:${page.pageIndex}:${page.pageCount}:${page.pagerLayout}`;
+      signature = `${page.totalCount}:${page.visibleCount}:${page.visibleIds.join("|")}:${page.capacity}:${page.pageIndex}:${page.pageCount}:${page.pagerLayout}`;
     if (signature === this.lastPageSignature) return;
     this.lastPageSignature = signature;
     this.options.onPageLayout?.(page);
