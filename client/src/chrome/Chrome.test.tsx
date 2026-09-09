@@ -454,6 +454,8 @@ describe("chrome interactions", () => {
       <DetailCard
         agent={{
           ...record,
+          workspace: "/work/\u001bapp",
+          agentKind: "co\u0085dex",
           stateEnteredAt: new Date(now - 10_000).toISOString(),
           targetState: "working",
           renderedState: "working",
@@ -472,6 +474,7 @@ describe("chrome interactions", () => {
     expect(screen.getByRole("heading", { name: "refactor-auth" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "app" })).toBeNull();
     expect(screen.getByText("app")).toBeTruthy();
+    expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
     expect(screen.getByLabelText("Session history")).toBeTruthy();
     expect(
@@ -510,7 +513,50 @@ describe("chrome interactions", () => {
         onClose={() => {}}
       />,
     );
-    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThanOrEqual(4);
+  });
+  it("copies the exact pane locator and announces clipboard failure", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const agent = {
+      ...record,
+      paneId: "pane-🥘-exact",
+      agentKind: "codex",
+      targetState: "working" as const,
+      renderedState: "working" as const,
+      transitionStartedAt: 0,
+      clearAt: null,
+      answerReceivedUntil: null,
+      revision: 1,
+      history: [{ state: "working" as const, startedAt: Date.now() }],
+    };
+    const { rerender } = render(
+      <DetailCard agent={agent} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
+    expect(await screen.findByText("Locator copied")).toBeTruthy();
+    expect(writeText).toHaveBeenCalledWith("pane-🥘-exact");
+    expect(screen.getByText("Attempt 1:")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
+    expect(await screen.findByText("Attempt 2:")).toBeTruthy();
+
+    rerender(
+      <DetailCard
+        agent={{ ...agent, paneId: "pane-🥘-moved" }}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.queryByText("Locator copied")).toBeNull();
+
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
+    expect(await screen.findByText(/Copy failed/)).toBeTruthy();
+    expect(screen.getByText("Attempt 3:")).toBeTruthy();
+    expect(screen.getByText("pane-🥘-moved")).toBeTruthy();
   });
   it("distinguishes observed zero tickets from unknown source state", () => {
     const store = new AgentStore();

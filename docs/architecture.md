@@ -329,7 +329,7 @@ unchanged, and rejected payloads are neither partially applied nor logged.
 ```
 
 `apply_live_coalesced` publishes observed state/timestamp changes, new agents,
-and pane/workspace locator changes immediately, while progress-like updates land in `pending` and are drained by
+and pane/workspace/agent-kind inspection changes immediately, while progress-like updates land in `pending` and are drained by
 the 1.25 s coalescer task (`server/src/feed.rs`). An urgent transition evicts any
 older pending metric record under the same lock. The test
 `twelve_record_chatty_source_stays_below_wire_budget` enforces
@@ -354,10 +354,14 @@ send at two seconds. A stalled connection is dropped rather than retaining its
 task indefinitely. See [observation semantics](../protocol/README.md) for
 unknown state, unavailable metrics, and bounded local history.
 
-Browser clients request `paneId` with `/ws?paneId=1`. The legacy `/ws` shape
-omits that additive v1 field so already-open strict clients remain compatible
+Browser clients request inspection identity with `/ws?paneId=1`. The legacy
+`/ws` shape omits additive `paneId` and `agentKind` fields so already-open strict clients remain compatible
 until reload; both shapes come from the same Feed records. Mise time starts when
 this process first observes a terminal identity and resets on process restart.
+The browser and TUI show full workspace, verified upstream agent kind, and exact
+current pane locator only in selected-agent details. Compact station identities
+retain basename labels and add the locator only for colliding active rendered
+labels (name/basename pairs in the browser and names in the TUI).
 
 ## Ended lifecycle
 

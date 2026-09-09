@@ -491,7 +491,38 @@ pub(crate) fn draw_view(
     help_open: bool,
     reduced_motion: bool,
 ) {
-    if !scene_supported {
+    let area = frame.area();
+    let inspection_too_tall = selected_id
+        .and_then(|id| table.agents().find(|agent| agent.id == id))
+        .is_some_and(|agent| {
+            let available_height = match scene_view {
+                SceneView::Kitchen => match compute_layout(
+                    area.width,
+                    area.height.saturating_mul(2),
+                    table.agents().count(),
+                ) {
+                    LayoutDecision::Scene(layout) => layout
+                        .stations
+                        .iter()
+                        .map(|station| cell_rect(*station).y)
+                        .min()
+                        .unwrap_or(area.height)
+                        .saturating_sub(cell_rect(layout.pass).bottom()),
+                    LayoutDecision::Fallback => area.height,
+                },
+                SceneView::Freezer => {
+                    compute_freezer_layout(area.width, area.height.saturating_mul(2), &[])
+                        .map(|layout| {
+                            area.height
+                                .saturating_sub(layout.status.y / 2)
+                                .saturating_sub(2)
+                        })
+                        .unwrap_or(area.height)
+                }
+            };
+            view::inspect_height(agent, area.width.saturating_sub(4)) > available_height
+        });
+    if !scene_supported || inspection_too_tall {
         view::draw(
             frame,
             table,
@@ -506,7 +537,6 @@ pub(crate) fn draw_view(
         }
         return;
     }
-    let area = frame.area();
     match scene_view {
         SceneView::Freezer => draw_freezer(
             frame,
@@ -784,12 +814,16 @@ fn draw_kitchen(
             ),
         );
     } else {
+        let elapsed = blocked_elapsed(blocked[0], now);
+        let name_width = usize::from(layout.pass.width.saturating_sub(2))
+            .saturating_sub(view::display_width("‼ BLOCKED    ") + view::display_width(&elapsed))
+            .saturating_sub(blocked.len().saturating_sub(1) * 2)
+            / blocked.len();
         let names = blocked
             .iter()
-            .map(|agent| view::sanitize_external(&agent.name))
+            .map(|agent| view::station_display_name(agent, &agents, name_width))
             .collect::<Vec<_>>()
             .join(", ");
-        let elapsed = blocked_elapsed(blocked[0], now);
         render_line(
             frame,
             area,
@@ -887,12 +921,9 @@ fn draw_kitchen(
         let available = station_area.width.saturating_sub(4);
         let suffix = format!("· {word} ");
         let maximum_name = usize::from(available)
-            .saturating_sub(suffix.chars().count() + 2)
+            .saturating_sub(view::display_width(&suffix) + 2)
             .max(1);
-        let display_name = view::sanitize_external(&agent.name)
-            .chars()
-            .take(maximum_name)
-            .collect::<String>();
+        let display_name = view::station_display_name(agent, &agents, maximum_name);
         render_line(
             frame,
             area,
@@ -936,23 +967,25 @@ fn draw_kitchen(
     }
 
     if let Some(agent) = selected_id.and_then(|id| agents.iter().find(|agent| agent.id == id)) {
-        for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
-            render_line(
-                frame,
-                area,
-                theme::KITCHEN_GUTTER,
-                area.height.saturating_sub(3) + row as u16,
-                area.width
-                    .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2)),
-                Line::styled(
-                    facts,
-                    Style::default()
-                        .fg(mapped(theme::TEXT, color_mode))
-                        .bg(mapped(theme::PANEL2, color_mode))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            );
-        }
+        let width = area
+            .width
+            .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2));
+        let height = view::inspect_height(agent, width);
+        let inspection_y = cell_rect(layout.pass).bottom();
+        frame.render_widget(
+            view::inspect_paragraph(agent).style(
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .bg(mapped(theme::PANEL2, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Rect::new(
+                area.x + theme::KITCHEN_GUTTER,
+                area.y + inspection_y,
+                width,
+                height,
+            ),
+        );
     }
 
     let keys = if selected_id.is_some() {
@@ -1273,22 +1306,22 @@ fn draw_freezer(
         ),
     );
     if let Some(agent) = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id)) {
-        for (row, facts) in view::inspect_facts(agent).into_iter().enumerate() {
-            render_line(
-                frame,
-                area,
-                2,
-                area.height.saturating_sub(3) + row as u16,
-                area.width.saturating_sub(4),
-                Line::styled(
-                    facts,
-                    Style::default()
-                        .fg(mapped(theme::TEXT, color_mode))
-                        .bg(mapped(theme::PANEL2, color_mode))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            );
-        }
+        let width = area.width.saturating_sub(4);
+        let height = view::inspect_height(agent, width);
+        frame.render_widget(
+            view::inspect_paragraph(agent).style(
+                Style::default()
+                    .fg(mapped(theme::TEXT, color_mode))
+                    .bg(mapped(theme::PANEL2, color_mode))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Rect::new(
+                area.x.saturating_add(2),
+                area.y + area.height.saturating_sub(height.saturating_add(1)),
+                width,
+                height,
+            ),
+        );
     }
     let keys = format!("{KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}");
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);

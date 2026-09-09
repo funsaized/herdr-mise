@@ -965,6 +965,61 @@ describe("layout, transitions and resources", () => {
       signature: "Claude:/work/payments",
     });
   });
+  it("keeps workspace basenames visible when long station names match", () => {
+    const labels = ["one", "two"].map(
+      (workspace) =>
+        stationIdentityLabels(
+          { name: "ABCDEFGHIJKLMNO", workspace: `/${workspace}` },
+          "working",
+          Date.now(),
+          10,
+        ).name,
+    );
+    expect(labels).toEqual(["ABC... ONE", "ABC... TWO"]);
+  });
+  it("reserves exact Unicode pane locators only for colliding station identities", () => {
+    const colliding = {
+      name: "料理人",
+      workspace: "/one/台所",
+      paneId: "pane-🥘-二",
+    };
+    expect(
+      stationIdentityLabels(colliding, "working", Date.now(), 18).name,
+    ).toBe("料理人 · 台所");
+    const label = stationIdentityLabels(
+      colliding,
+      "working",
+      Date.now(),
+      18,
+      undefined,
+      true,
+    ).name;
+    expect(label).toContain("pane-🥘-二");
+    expect(Array.from(label).length).toBeLessThanOrEqual(18);
+    expect(
+      stationIdentityLabels(
+        { name: "料理人", workspace: "/one/台所", id: "terminal-one" },
+        "working",
+        Date.now(),
+        30,
+        undefined,
+        true,
+      ).name,
+    ).toContain("terminal-one");
+    const longLabel = stationIdentityLabels(
+      {
+        ...colliding,
+        paneId: "pane-with-a-very-long-shared-prefix-🥘-two",
+      },
+      "working",
+      Date.now(),
+      18,
+      undefined,
+      true,
+    ).name;
+    expect(Array.from(longLabel)).toHaveLength(18);
+    expect(longLabel).toMatch(/….*-two$/u);
+  });
   it("keeps every banquet status suffix intact within the 18-character bound", () => {
     const base = {
         name: "Claude",

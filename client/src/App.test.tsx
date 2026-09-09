@@ -245,6 +245,43 @@ describe("semantic station controls", () => {
       within(navigation).getByRole("button").getAttribute("tabindex"),
     ).toBe("-1");
   });
+  it("keeps same-named ended station controls distinct", () => {
+    render(
+      <SemanticStationControls
+        agents={[
+          { ...agent, id: "ended-one", workspace: "", targetState: "ended" },
+          { ...agent, id: "ended-two", workspace: "", targetState: "ended" },
+        ]}
+        label="Ended chefs"
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Codex · Unavailable · ended-one,/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Codex · Unavailable · ended-two,/ }),
+    ).toBeTruthy();
+  });
+  it("keeps colliding controls distinct when pane locators are unavailable", () => {
+    render(
+      <SemanticStationControls
+        agents={[
+          { ...agent, id: "terminal-one", paneId: undefined },
+          { ...agent, id: "terminal-two", paneId: undefined },
+        ]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Codex · Kitchen · terminal-one"),
+        expect.stringContaining("Codex · Kitchen · terminal-two"),
+      ]),
+    );
+  });
   it("deduplicates source updates that do not change the semantic slice", () => {
     const same = [agent],
       copy = [{ ...agent }];
@@ -303,6 +340,19 @@ describe("semantic station controls", () => {
           blockedPlacement: undefined,
         }),
       ).toContain(humanStateWords[targetState]);
+  });
+  it("includes workspace basenames in same-named station controls", () => {
+    render(
+      <SemanticStationControls
+        agents={[
+          { ...agent, id: "one", workspace: "/work/one" },
+          { ...agent, id: "two", workspace: "/work/two" },
+        ]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Codex · one,/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Codex · two,/ })).toBeTruthy();
   });
 });
 

@@ -14,6 +14,7 @@ export type SemanticAgent = Pick<
   AgentMachine,
   | "id"
   | "paneId"
+  | "agentKind"
   | "name"
   | "workspace"
   | "targetState"
@@ -43,6 +44,14 @@ export function semanticStationLabel(agent: SemanticAgent, elapsed?: string) {
   const queue = semanticQueueWords(agent);
   return `${agent.name}, ${semanticStateWords(agent)}${queue ? `, ${queue}` : ""}${elapsed ? `, ${elapsed}` : ""}, open details`;
 }
+export function semanticStationName(
+  agent: SemanticAgent,
+  workspaceName: string,
+  duplicateName: boolean,
+  colliding: boolean,
+) {
+  return `${agent.name}${duplicateName ? ` · ${workspaceName}` : ""}${colliding ? ` · ${agent.paneId ?? agent.id}` : ""}`;
+}
 export function semanticAgentsEqual(
   a: readonly SemanticAgent[],
   b: readonly SemanticAgent[],
@@ -53,6 +62,7 @@ export function semanticAgentsEqual(
       (agent, index) =>
         agent.id === b[index]?.id &&
         agent.paneId === b[index]?.paneId &&
+        agent.agentKind === b[index]?.agentKind &&
         agent.name === b[index]?.name &&
         agent.workspace === b[index]?.workspace &&
         agent.stateKnown === b[index]?.stateKnown &&
@@ -68,6 +78,7 @@ export function semanticAgents(
     ({
       id,
       paneId,
+      agentKind,
       name,
       workspace,
       targetState,
@@ -76,6 +87,7 @@ export function semanticAgents(
     }) => ({
       id,
       paneId,
+      agentKind,
       name,
       workspace,
       targetState,

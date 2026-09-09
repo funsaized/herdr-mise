@@ -83,11 +83,11 @@ async fn ws(
         return StatusCode::FORBIDDEN.into_response();
     }
     let feed = state.feed.clone();
-    let include_pane_id = uri
+    let include_inspection_identity = uri
         .query()
         .is_some_and(|query| query.split('&').any(|part| part == "paneId=1"));
     upgrade
-        .on_upgrade(move |socket| client(socket, feed, include_pane_id))
+        .on_upgrade(move |socket| client(socket, feed, include_inspection_identity))
         .into_response()
 }
 fn allowed_origin(headers: &HeaderMap, port: u16, extra_origins: &[String]) -> bool {
@@ -101,18 +101,18 @@ fn allowed_origin(headers: &HeaderMap, port: u16, extra_origins: &[String]) -> b
         || origin == format!("http://127.0.0.1:{port}")
         || extra_origins.iter().any(|extra| extra == origin)
 }
-async fn client(socket: WebSocket, feed: Arc<Feed>, include_pane_id: bool) {
+async fn client(socket: WebSocket, feed: Arc<Feed>, include_inspection_identity: bool) {
     let mut health = feed.subscribe_health();
     let (mut changes, initial_snapshot) = feed.subscribe_snapshot().await;
     let (mut output, mut input) = socket.split();
     if !*health.borrow() {
-        if let Ok(snapshot) = serialize_event(&feed.snapshot().await, include_pane_id) {
+        if let Ok(snapshot) = serialize_event(&feed.snapshot().await, include_inspection_identity) {
             let _ = send_bounded(&mut output, Message::Text(snapshot.into())).await;
         }
         let _ = send_bounded(&mut output, Message::Close(None)).await;
         return;
     }
-    let Ok(snapshot) = serialize_event(&initial_snapshot, include_pane_id) else {
+    let Ok(snapshot) = serialize_event(&initial_snapshot, include_inspection_identity) else {
         return;
     };
     if !send_bounded(&mut output, Message::Text(snapshot.into())).await {
@@ -123,36 +123,42 @@ async fn client(socket: WebSocket, feed: Arc<Feed>, include_pane_id: bool) {
     loop {
         tokio::select! {
             changed=health.changed()=>if changed.is_err() || !*health.borrow() {
-                if let Ok(snapshot) = serialize_event(&feed.snapshot().await, include_pane_id) {
+                if let Ok(snapshot) = serialize_event(&feed.snapshot().await, include_inspection_identity) {
                     let _ = send_bounded(&mut output, Message::Text(snapshot.into())).await;
                 }
                 let _=send_bounded(&mut output, Message::Close(None)).await;
                 break
             },
             message=input.next()=>match message { Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break, _=>{} },
-            event=changes.recv()=>match event { Ok(event)=> { let Ok(text)=serialize_event(&event, include_pane_id) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=> { let (cursor, snapshot) = feed.subscribe_snapshot().await; changes = cursor; let Ok(text)=serialize_event(&snapshot, include_pane_id) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(_)=>break },
-            _=heartbeat.tick()=> { let event=AgentStateEvent::Heartbeat{version:PROTOCOL_VERSION}; let Ok(text)=serialize_event(&event, include_pane_id) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }
+            event=changes.recv()=>match event { Ok(event)=> { let Ok(text)=serialize_event(&event, include_inspection_identity) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=> { let (cursor, snapshot) = feed.subscribe_snapshot().await; changes = cursor; let Ok(text)=serialize_event(&snapshot, include_inspection_identity) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }, Err(_)=>break },
+            _=heartbeat.tick()=> { let event=AgentStateEvent::Heartbeat{version:PROTOCOL_VERSION}; let Ok(text)=serialize_event(&event, include_inspection_identity) else{continue}; if !send_bounded(&mut output, Message::Text(text.into())).await {break} }
         }
     }
 }
 fn serialize_event(
     event: &AgentStateEvent,
-    include_pane_id: bool,
+    include_inspection_identity: bool,
 ) -> Result<String, serde_json::Error> {
     let mut value = serde_json::to_value(event)?;
-    if !include_pane_id {
+    if !include_inspection_identity {
         if let Some(agents) = value
             .get_mut("agents")
             .and_then(serde_json::Value::as_array_mut)
         {
             for agent in agents {
-                agent.as_object_mut().map(|agent| agent.remove("paneId"));
+                if let Some(agent) = agent.as_object_mut() {
+                    agent.remove("paneId");
+                    agent.remove("agentKind");
+                }
             }
         }
-        value
+        if let Some(agent) = value
             .get_mut("agent")
             .and_then(serde_json::Value::as_object_mut)
-            .map(|agent| agent.remove("paneId"));
+        {
+            agent.remove("paneId");
+            agent.remove("agentKind");
+        }
     }
     serde_json::to_string(&value)
 }
@@ -592,6 +598,7 @@ mod tests {
             state_known: None,
             id: "terminal-a".into(),
             pane_id: Some("pane-a".into()),
+            agent_kind: Some("codex".into()),
             name: "A".into(),
             state: AgentState::Working,
             progress: None,
@@ -616,17 +623,20 @@ mod tests {
         let legacy: serde_json::Value =
             serde_json::from_str(&read_server_text(&mut legacy).await).unwrap();
         assert!(legacy["agents"][0].get("paneId").is_none());
+        assert!(legacy["agents"][0].get("agentKind").is_none());
 
         let (_, mut capable) = websocket_request_path(address, &origin, "/ws?paneId=1").await;
         let capable_snapshot: serde_json::Value =
             serde_json::from_str(&read_server_text(&mut capable).await).unwrap();
         assert_eq!(capable_snapshot["agents"][0]["paneId"], "pane-a");
+        assert_eq!(capable_snapshot["agents"][0]["agentKind"], "codex");
 
         agent.workspace = "Pantry".into();
         feed.publish(agent).await;
         let capable_delta: serde_json::Value =
             serde_json::from_str(&read_server_text(&mut capable).await).unwrap();
         assert_eq!(capable_delta["agent"]["paneId"], "pane-a");
+        assert_eq!(capable_delta["agent"]["agentKind"], "codex");
         server.abort();
     }
 
@@ -734,6 +744,7 @@ mod tests {
             state_known: None,
             id: "a".into(),
             pane_id: None,
+            agent_kind: None,
             name: "A".into(),
             state: AgentState::Working,
             progress: Some(0.5),

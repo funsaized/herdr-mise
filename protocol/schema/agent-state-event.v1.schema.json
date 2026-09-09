@@ -52,6 +52,7 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "paneId": { "type": "string", "minLength": 1 },
+        "agentKind": { "type": "string", "minLength": 1 },
         "stateKnown": { "type": "boolean" },
         "name": { "type": "string", "minLength": 1 },
         "state": { "enum": ["idle", "working", "blocked", "done", "ended"] },

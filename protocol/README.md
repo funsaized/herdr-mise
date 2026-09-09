@@ -1,10 +1,10 @@
 # Feed v1 observation semantics
 
 The binary serves its matching browser client. The optional v1 fields
-`agent.stateKnown`, `agent.paneId`, and `session.ticketsAvailable` preserve the existing state
+`agent.stateKnown`, `agent.paneId`, `agent.agentKind`, and `session.ticketsAvailable` preserve the existing state
 enum and numeric ticket field while making missing observations explicit.
 Strict decoders must adopt the updated v1 schema before consuming these fields.
-For the additive `paneId` rollout, refreshed browser clients connect to
+For the additive inspection-identity rollout, refreshed browser clients connect to
 `/ws?paneId=1`; legacy `/ws` connections receive the prior field set. Existing
 connections therefore remain decodable until they reload and opt in.
 
@@ -18,6 +18,11 @@ connections therefore remain decodable until they reload and opt in.
 - `id` is Herdr's stable `terminal_id`; `paneId` and `workspace` are mutable
   locators. Herdr protocols 17, 19, and 20 expose terminal identity and preserve
   it when moving the attached terminal, so Mise uses no pane-ID fallback.
+- `agentKind` is the trimmed, non-empty upstream `agent` value. It is never
+  inferred from names, sessions, worktree metadata, or model-like fields.
+- Full workspace labels and pane locators appear only in explicit inspection.
+  Compact station labels use the workspace basename and append the exact current
+  `paneId` only when active name/basename pairs collide.
 - `runtimeMs` is time since this process first observed the terminal identity (Mise time),
   not the upstream session lifetime. Departure or process restart resets it.
   State timestamps likewise describe observations, not unseen history.

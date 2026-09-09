@@ -1004,6 +1004,161 @@ test("authoritative fixture state sequence drives history accents poses prep and
   }
 });
 
+test("fixture-backed duplicate identity inspection", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(120_000);
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-identity-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
+    socketPath = join(directory, "herdr.sock"),
+    kindFixture = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-working-idle-accents.json",
+        ),
+        "utf8",
+      ),
+    ),
+    source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.0-p19.json",
+        ),
+        "utf8",
+      ),
+    );
+  source.workspaces = [
+    {
+      workspace_id: "one",
+      label: "/work/料理/very-long-shared-workspace",
+    },
+    { workspace_id: "two", label: "/other/very-long-shared-workspace" },
+  ];
+  const locatorOne = "pane-with-a-very-long-shared-prefix-🥘-one",
+    locatorTwo = "pane-with-a-very-long-shared-prefix-🥘-two";
+  source.agents[0] = {
+    ...source.agents[0],
+    terminal_id: "terminal-one",
+    pane_id: locatorOne,
+    workspace_id: "one",
+    name: "same chef",
+    agent: kindFixture.result.snapshot.agents[0].agent,
+  };
+  source.agents.push({
+    ...source.agents[0],
+    terminal_id: "terminal-two",
+    pane_id: locatorTwo,
+    workspace_id: "two",
+  });
+  let snapshot = JSON.stringify({ result: { snapshot: source } });
+  const sockets = new Set<Socket>(),
+    fixtureServer = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      let request = "";
+      socket.on("data", (chunk) => {
+        request += chunk;
+        if (!request.includes("\n")) return;
+        const method = JSON.parse(request).method;
+        if (method === "session.snapshot") socket.end(`${snapshot}\n`);
+        else socket.write('{"result":{"type":"subscription_started"}}\n');
+      });
+    });
+  await new Promise<void>((resolve, reject) => {
+    fixtureServer.once("error", reject);
+    fixtureServer.listen(socketPath, resolve);
+  });
+  const app = spawn("target/debug/herdr-mise", [], {
+    env: {
+      ...process.env,
+      HERDR_MISE_PORT: String(port),
+      HERDR_SOCKET_PATH: socketPath,
+    },
+    stdio: "ignore",
+  });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(appUrl)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: appUrl,
+    });
+    await page.setViewportSize({ width: 420, height: 640 });
+    await page.goto(`${appUrl}/?stats`);
+    const first = page.getByRole("button", {
+      name: new RegExp(
+        `same chef · very-long-shared-workspace · ${locatorOne}, Blocked`,
+      ),
+    });
+    await expect(first).toBeAttached();
+    await expect(
+      page.getByRole("button", {
+        name: new RegExp(
+          `same chef · very-long-shared-workspace · ${locatorTwo}, Blocked`,
+        ),
+      }),
+    ).toBeAttached();
+    await assertResponsiveScene(page, 2, false);
+    const labels = Object.values((await sceneMetrics(page))!.stationNameBounds);
+    expect(labels.every(({ text }) => Array.from(text).length <= 30)).toBe(
+      true,
+    );
+    expect(labels.map(({ text }) => text.slice(-3)).sort()).toEqual([
+      "one",
+      "two",
+    ]);
+    await first.evaluate((button: HTMLButtonElement) => button.click());
+    const details = page.getByLabel("same chef details");
+    await expect(details).toContainText("very-long-shared-workspace");
+    await expect(details).toContainText("codex");
+    await expect(details).toContainText(locatorOne);
+    const copyLocator = details.getByRole("button", { name: "Copy locator" });
+    await expect(copyLocator).toHaveCSS("min-width", "44px");
+    await expect(copyLocator).toHaveCSS("min-height", "44px");
+    await copyLocator.click();
+    await expect(details).toContainText("Locator copied");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      locatorOne,
+    );
+
+    const movedLocator = "pane-with-a-very-long-shared-prefix-🥘-moved";
+    source.agents[0].pane_id = movedLocator;
+    snapshot = JSON.stringify({ result: { snapshot: source } });
+    await expect(details).toContainText(movedLocator, { timeout: 5_000 });
+    await expect(details).toContainText("very-long-shared-workspace");
+
+    source.agents = [];
+    snapshot = JSON.stringify({ result: { snapshot: source } });
+    await page.getByRole("button", { name: "Freezer" }).click();
+    const ended = page.getByRole("navigation", { name: "Ended chefs" });
+    await expect(
+      ended.getByRole("button", {
+        name: /same chef · Unavailable · terminal-one, Ended/,
+      }),
+    ).toBeAttached({ timeout: 5_000 });
+    await expect(
+      ended.getByRole("button", {
+        name: /same chef · Unavailable · terminal-two, Ended/,
+      }),
+    ).toBeAttached();
+  } finally {
+    app.kill("SIGTERM");
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("authoritative fixture keeps live kitchen after done-timeout dismissal and reveal", async ({
   page,
 }) => {

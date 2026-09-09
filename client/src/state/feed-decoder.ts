@@ -32,6 +32,7 @@ function agent(value: unknown): boolean {
     keys(value, [
       "id",
       "paneId",
+      "agentKind",
       "name",
       "state",
       "stateKnown",
@@ -49,6 +50,8 @@ function agent(value: unknown): boolean {
     value.id.length > 0 &&
     (value.paneId === undefined ||
       (text(value.paneId) && value.paneId.length > 0)) &&
+    (value.agentKind === undefined ||
+      (text(value.agentKind) && value.agentKind.length > 0)) &&
     text(value.name) &&
     value.name.length > 0 &&
     text(value.model) &&
