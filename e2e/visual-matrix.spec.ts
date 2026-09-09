@@ -173,26 +173,20 @@ function expectInside(inner: Box, outer: Box, tolerance = 3) {
 async function cycleSceneFocus(page: Page, count: number) {
   const stationIds = new Set<string>(),
     boardIds = new Set<string>();
-  let previousId: string | undefined;
-  for (
-    let index = 0;
-    index < count * 2 && stationIds.size + boardIds.size < count;
-    index++
-  ) {
+  for (let index = 0; index < count; index++) {
     await page.keyboard.press("ArrowRight");
     await expect
       .poll(async () => {
-        const metrics = await sceneMetrics(page),
-          [stationId] = Object.keys(metrics?.activeFocusBounds ?? {}),
-          [boardId] = metrics?.board.strokedIds ?? [],
-          currentId = stationId ?? boardId;
-        return currentId && currentId !== previousId ? 1 : 0;
+        const metrics = await sceneMetrics(page);
+        return (
+          Object.keys(metrics?.activeFocusBounds ?? {}).length +
+          (metrics?.board.strokedIds.length ?? 0)
+        );
       })
       .toBe(1);
     const focused = (await sceneMetrics(page))!,
       [stationId] = Object.keys(focused.activeFocusBounds),
       [boardId] = focused.board.strokedIds;
-    previousId = stationId ?? boardId;
     if (stationId) {
       stationIds.add(stationId);
       expectInside(
@@ -208,12 +202,12 @@ async function assertResponsiveScene(page: Page, count: number, demo: boolean) {
   await page.evaluate(() => document.fonts.ready);
   await expect
     .poll(async () => {
-      const cells = Object.values(
-          (await sceneMetrics(page))?.stationCells ?? {},
-        ),
+      const metrics = await sceneMetrics(page),
+        cells = Object.values(metrics?.stationCells ?? {}),
         viewport = page.viewportSize()!;
       return (
-        cells.length === count &&
+        metrics?.page.totalCount === count &&
+        cells.length === metrics.page.visibleIds.length &&
         cells.every(
           (cell) =>
             cell.x >= 0 &&
@@ -279,7 +273,7 @@ async function assertResponsiveScene(page: Page, count: number, demo: boolean) {
   await page.evaluate(() =>
     (document.activeElement as HTMLElement | null)?.blur(),
   );
-  await cycleSceneFocus(page, count);
+  await cycleSceneFocus(page, metrics.page.visibleIds.length);
   await page.keyboard.press("Enter");
   await expect(
     page.locator(
@@ -1429,7 +1423,9 @@ test("freezer matrix discloses empty full and bounded overflow scenes", async ({
   expect(errors).toEqual([]);
 });
 
-test("fixture-driven kitchen materials and station slots", async ({ page }) => {
+test("fixture-driven materials, slots, and readable dense kitchen", async ({
+  page,
+}) => {
   test.setTimeout(240_000);
   const directory = await mkdtemp(
       join(tmpdir(), "herdr-mise-blocked-density-"),
@@ -1740,6 +1736,26 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
             .toBe(metrics.page.pageIndex - 1);
           metrics = (await sceneMetrics(page))!;
         }
+        if (count === 60 && viewport.width === 1280) {
+          await page.evaluate(() =>
+            (document.activeElement as HTMLElement | null)?.blur(),
+          );
+          for (let index = 0; index <= expected.capacity; index++)
+            await page.keyboard.press("ArrowRight");
+          const expectedFocusedId = `fictional-terminal-m${String(expected.capacity + 1).padStart(2, "0")}`;
+          await expect(
+            page.locator(
+              `.stationA11yMirror button[data-agent-id="${expectedFocusedId}"]`,
+            ),
+          ).toBeFocused();
+          await expect
+            .poll(async () => (await sceneMetrics(page))?.page.visibleIds)
+            .toContain(expectedFocusedId);
+          await page.getByRole("button", { name: "Previous" }).click();
+          await expect
+            .poll(async () => (await sceneMetrics(page))?.page.pageIndex)
+            .toBe(0);
+        }
         const discovered = new Set<string>();
         metrics = (await sceneMetrics(page))!;
         expect(metrics.page.capacity).toBe(expected.capacity);
@@ -1794,6 +1810,17 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
             expect(boxesIntersect(hint!, pager)).toBe(false);
           }
           expect(metrics.page.pageIndex).toBe(pageIndex);
+          expect(
+            await buttons.evaluateAll((controls) =>
+              controls.map((control) => control.dataset.agentId),
+            ),
+          ).toEqual(
+            Array.from(
+              { length: count },
+              (_, index) =>
+                `fictional-terminal-m${String(index + 1).padStart(2, "0")}`,
+            ),
+          );
           expect(metrics.page.visibleIds).toEqual(
             Object.keys(metrics.stationCells),
           );
@@ -1967,15 +1994,21 @@ test("fixture-driven kitchen materials and station slots", async ({ page }) => {
         expect(focused.stationIds.size).toBe(visibleCount);
         const active = page.locator(".stationA11yMirror button:focus");
         await expect(active).toHaveCount(1);
-        const activeIndex = await buttons.evaluateAll((controls) =>
-          controls.findIndex((control) => control === document.activeElement),
-        );
+        const activeId = await active.getAttribute("data-agent-id");
+        expect(activeId).not.toBeNull();
         await page.keyboard.press("Enter");
         await expect(
           page.getByRole("complementary", { name: /details$/ }),
         ).toBeVisible();
         await page.keyboard.press("Escape");
-        await expect(buttons.nth(activeIndex)).toBeFocused();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                (document.activeElement as HTMLElement | null)?.dataset.agentId,
+            ),
+          )
+          .toBe(activeId);
         if (count === 60 && viewport.width === 1280) {
           const found = new Set<string>();
           for (let index = 0; index < count; index++) {

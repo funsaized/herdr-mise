@@ -47,6 +47,7 @@ export function SemanticStationControls({
         {agents.map((agent) => (
           <button
             key={agent.id}
+            data-agent-id={agent.id}
             tabIndex={-1}
             aria-describedby={
               agent.id === tooltipAgentId

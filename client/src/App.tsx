@@ -85,12 +85,20 @@ const initialMetrics: DebugMetrics = { drawCalls: 0, socketBytesPerSecond: 0 };
 const initialPage: PageMetadata = {
   totalCount: 0,
   visibleCount: 0,
-  visibleIds: [],
   capacity: 1,
   pageIndex: 0,
   pageCount: 1,
   pagerLayout: "standard",
 };
+
+function semanticStationButton(id: string) {
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      ".stationA11yMirror button",
+    ),
+  ].find((button) => button.dataset.agentId === id);
+}
+
 export function App() {
   const host = useRef<HTMLDivElement>(null),
     sceneRef = useRef<KitchenScene | null>(null),
@@ -233,13 +241,23 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [statsOpen]);
   const boardEntries = clientStore.snapshot().board,
-    agentById = new Map(agents.map((agent) => [agent.id, agent])),
     renderedIds = new Set(
       hits.filter((hit) => hit.kind === "station").map((hit) => hit.id),
     ),
+    stationHitById = new Map(
+      hits
+        .filter((hit) => hit.kind === "station")
+        .map((hit) => [hit.id, hit] as const),
+    ),
+    stationOrder = new Map(
+      hits
+        .filter((hit) => hit.kind === "station")
+        .map((hit, index) => [hit.id, index]),
+    ),
+    agentIds = new Set(agents.map((agent) => agent.id)),
     blockedAgents = agents.filter((agent) => agent.targetState === "blocked"),
     visibleBlocked = blockedAgents.filter((agent) =>
-      page.visibleIds.includes(agent.id),
+      renderedIds.has(agent.id),
     ).length,
     spiritAgents = hits
       .filter((hit) => hit.kind === "spirit")
@@ -258,18 +276,23 @@ export function App() {
           : [];
       }),
     kitchenControls = [
-      ...hits
-        .filter((hit) => hit.kind === "station")
-        .flatMap((hit) => {
-          const agent = agentById.get(hit.id);
-          return agent
-            ? [{ ...agent, blockedPlacement: hit.blockedPlacement }]
-            : [];
-        }),
-      ...agents.filter((agent) => !renderedIds.has(agent.id)),
+      ...(page.pageCount === 1
+        ? [...agents].sort(
+            (left, right) =>
+              (stationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+              (stationOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+          )
+        : agents
+      ).map((agent) => {
+        const hit = stationHitById.get(agent.id);
+        return hit
+          ? { ...agent, blockedPlacement: hit.blockedPlacement }
+          : agent;
+      }),
       ...hits
         .filter((hit) => hit.kind === "board")
         .flatMap((hit) => {
+          if (agentIds.has(hit.id)) return [];
           const entry = boardEntries.find((item) => item.id === hit.id);
           return entry
             ? [
@@ -341,15 +364,12 @@ export function App() {
             event.shiftKey
               ? -1
               : 1,
-          navigation =
-            semanticNav ??
-            document.querySelector<HTMLElement>(".stationA11yMirror"),
-          buttons = navigation
-            ? [...navigation.querySelectorAll<HTMLButtonElement>("button")]
-            : [],
-          index = semanticNav
-            ? buttons.indexOf(event.target as HTMLButtonElement)
-            : stationIds.indexOf(focusedId ?? ""),
+          currentId =
+            event.target instanceof Element
+              ? event.target.closest<HTMLButtonElement>("button")?.dataset
+                  .agentId
+              : undefined,
+          index = currentId ? stationIds.indexOf(currentId) : -1,
           nextIndex =
             index < 0
               ? direction > 0
@@ -359,7 +379,7 @@ export function App() {
           next = stationIds[nextIndex]!;
         setFocusedId(next);
         sceneRef.current?.focus(next);
-        buttons[nextIndex]?.focus();
+        semanticStationButton(next)?.focus();
         return;
       }
       if (event.key === "Enter" && focusedId) {
@@ -424,10 +444,7 @@ export function App() {
       next = blockedAgents[(currentIndex + 1) % blockedAgents.length]!;
     setFocusedId(next.id);
     sceneRef.current?.focus(next.id);
-    const index = controls.findIndex((agent) => agent.id === next.id);
-    document
-      .querySelectorAll<HTMLButtonElement>(".stationA11yMirror button")
-      [index]?.focus();
+    semanticStationButton(next.id)?.focus();
   };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
   return (
@@ -463,12 +480,10 @@ export function App() {
         className={canvasClass}
         aria-label={`Agent state ${view} scene`}
         onPointerDown={(event) => {
-          const hit = pointerHit(event),
-            index = controls.findIndex((control) => control.id === hit?.id);
-          semanticRestoreRef.current =
-            document.querySelectorAll<HTMLButtonElement>(
-              ".stationA11yMirror button",
-            )[index] ?? null;
+          const hit = pointerHit(event);
+          semanticRestoreRef.current = hit
+            ? (semanticStationButton(hit.id) ?? null)
+            : null;
           if (hit) {
             setFocusedId(hit.id);
             sceneRef.current?.focus(hit.id);
