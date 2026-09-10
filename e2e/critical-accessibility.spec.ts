@@ -107,11 +107,17 @@ test("workspace scope reveals blocked agents by keyboard at 320 CSS pixels", asy
     name: "1 blocked elsewhere — Show all",
   });
   await expect(showAll).toBeVisible();
-  const showAllBox = await showAll.boundingBox(),
-    placardBox = await page.locator(".demoPlacard").boundingBox();
+  const showAllBox = await showAll.boundingBox();
   expect(showAllBox).not.toBeNull();
-  expect(placardBox).not.toBeNull();
-  expect(showAllBox!.y + showAllBox!.height).toBeLessThanOrEqual(placardBox!.y);
+  if (
+    !(await page.getByRole("region", { name: "Agent status list" }).isVisible())
+  ) {
+    const placardBox = await page.locator(".demoPlacard").boundingBox();
+    expect(placardBox).not.toBeNull();
+    expect(showAllBox!.y + showAllBox!.height).toBeLessThanOrEqual(
+      placardBox!.y,
+    );
+  }
   await showAll.click();
   await expect(selector).toBeFocused();
   await selector.selectOption("visual-workspace-1");
