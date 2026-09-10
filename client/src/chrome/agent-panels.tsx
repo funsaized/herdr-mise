@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { workspaceDisplayName } from "../scene/geometry";
 import type { SceneHit } from "../scene/kitchen-scene";
 import {
@@ -92,12 +92,15 @@ function HistoryStrip({
   return (
     <section className="sessionHistory" aria-label="Session history">
       <h3>SESSION HISTORY</h3>
-      <div className="historyStrip">
+      <ul className="historyStrip" aria-label="Observed state periods">
         {history.map((period, index) => {
           const end = history[index + 1]?.startedAt ?? now,
-            width = Math.max(1, ((end - period.startedAt) / total) * 100);
+            width = Math.max(1, ((end - period.startedAt) / total) * 100),
+            boundary = `${new Date(period.startedAt).toISOString()} to ${
+              index + 1 < history.length ? new Date(end).toISOString() : "now"
+            }`;
           return (
-            <i
+            <li
               key={`${period.state}-${period.startedAt}`}
               data-state={period.state}
               style={{
@@ -105,10 +108,11 @@ function HistoryStrip({
                 background: historyColor(period.state),
               }}
               title={humanStateWords[period.state]}
+              aria-label={`${humanStateWords[period.state]} period ${index + 1}, ${boundary}`}
             />
           );
         })}
-      </div>
+      </ul>
       <div className="historyTimes">
         <time>
           {new Date(start).toLocaleTimeString([], {
@@ -132,6 +136,16 @@ function historyColor(state: StatePeriod["state"]) {
 const availableTickets = (value: number, available?: boolean) =>
   (available ?? value > 0) ? value : "Unavailable";
 
+function inspectionText(value?: string) {
+  const sanitized = Array.from(value ?? "")
+    .filter((character) => {
+      const point = character.codePointAt(0) ?? 0;
+      return point > 0x1f && (point < 0x7f || point > 0x9f);
+    })
+    .join("");
+  return sanitized.trim() ? sanitized : "Unavailable";
+}
+
 export function DetailCard({
   agent,
   hit,
@@ -142,7 +156,31 @@ export function DetailCard({
   onClose(): void;
 }) {
   const now = useClock(true),
-    color = stateColor(agent);
+    color = stateColor(agent),
+    [copyResult, setCopyResult] = useState({
+      locator: "",
+      status: "",
+      attempt: 0,
+    }),
+    copyStatus = copyResult.locator === agent.paneId ? copyResult.status : "";
+  const copyLocator = async () => {
+    if (!agent.paneId) return;
+    const locator = agent.paneId;
+    try {
+      await navigator.clipboard.writeText(locator);
+      setCopyResult((previous) => ({
+        locator,
+        status: "Locator copied",
+        attempt: previous.attempt + 1,
+      }));
+    } catch {
+      setCopyResult((previous) => ({
+        locator,
+        status: "Copy failed. Select and copy the locator manually.",
+        attempt: previous.attempt + 1,
+      }));
+    }
+  };
   return (
     <FocusedPanel label={`${agent.name} details`}>
       <PanelHeader
@@ -157,7 +195,18 @@ export function DetailCard({
       />
       <div className="facts">
         <Fact label="Workspace" mono>
-          {workspaceDisplayName(agent.workspace)}
+          {inspectionText(workspaceDisplayName(agent.workspace))}
+        </Fact>
+        <Fact label="Agent kind" mono>
+          {inspectionText(agent.agentKind)}
+        </Fact>
+        <Fact label="Pane locator" mono>
+          <span className="locatorValue">{agent.paneId ?? "Unavailable"}</span>
+          {agent.paneId && (
+            <button className="copyLocator" onClick={() => void copyLocator()}>
+              Copy locator
+            </button>
+          )}
         </Fact>
         <Fact label="Time in state">
           {formatDuration(now - Date.parse(agent.stateEnteredAt))}
@@ -168,6 +217,14 @@ export function DetailCard({
             agent.session.ticketsAvailable,
           )}
         </Fact>
+      </div>
+      <div className="copyStatus" aria-live="polite" aria-atomic="true">
+        {copyStatus && (
+          <span className="copyStatusAttempt">
+            Attempt {copyResult.attempt}:{" "}
+          </span>
+        )}
+        {copyStatus}
       </div>
       <HistoryStrip history={agent.history} now={now} />
     </FocusedPanel>

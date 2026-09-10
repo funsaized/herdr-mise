@@ -70,6 +70,8 @@ fn record(index: usize, step: u64, started_at: DateTime<Utc>) -> AgentRecord {
         } else {
             format!("demo-{index}")
         },
+        pane_id: None,
+        agent_kind: None,
         name,
         state,
         progress,

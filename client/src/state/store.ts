@@ -10,6 +10,7 @@ import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings } from "./settings-storage";
 
 export type AppMode = FeedMode | "empty" | "disconnected" | "connecting";
+export type ClientDisconnectReason = "incompatibleFeed" | null;
 export const HISTORY_LIMIT = 256;
 export interface Settings {
   sound: boolean;
@@ -50,19 +51,22 @@ export interface StoreSnapshot {
   feedMode: FeedMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
+  disconnectReason: ClientDisconnectReason;
   selectedId: string | null;
   settings: Settings;
   lastUpdateAt: number;
 }
 export interface CoarseSlice {
-  count: number;
+  sourceCount: number;
+  visibleCount: number;
+  clearedCount: number;
   blocked: number;
   done: number;
-  visibleCount: number;
   blockedElsewhere: number;
   mode: AppMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
+  disconnectReason: ClientDisconnectReason;
   selectedId: string | null;
   selectedWorkspaceId: string | null;
   selectedWorkspaceLabel: string | null;
@@ -72,6 +76,7 @@ export interface CoarseSlice {
 }
 export type StoreEvent =
   | { type: "clear" | "busser"; agentId: string }
+  | { type: "reveal"; count: number }
   | { type: "ended"; entry: BoardEntry }
   | {
       type: "state";
@@ -101,12 +106,12 @@ export const defaultSettings: Settings = {
 
 export class AgentStore {
   private agents = new Map<string, AgentMachine>();
-  private visibleAgents: ReadonlyMap<string, AgentMachine> = this.agents;
   private board: BoardEntry[] = [];
   private mode: AppMode = "connecting";
   private feedMode: FeedMode = "live";
   private sourceStatus: SourceStatus = "connected";
   private sourceDiagnostic: SourceDiagnostic | null = null;
+  private disconnectReason: ClientDisconnectReason = null;
   private selectedId: string | null = null;
   private workspaces: WorkspaceRecord[] = [];
   private selectedWorkspaceId: string | null = null;
@@ -118,6 +123,7 @@ export class AgentStore {
   private changeListeners = new Set<() => void>();
   private eventListeners = new Set<Listener<StoreEvent>>();
   private doneTimers = new Map<string, unknown>();
+  private doneGenerations = new Map<string, string>();
   private dismissedDone = new Map<string, string>();
   constructor(
     private scheduler: Scheduler = nativeScheduler,
@@ -132,29 +138,31 @@ export class AgentStore {
   snapshot(): StoreSnapshot {
     return {
       agents: this.agents,
-      visibleAgents: this.visibleAgents,
+      visibleAgents: this.visibleAgents(),
       board: this.board,
       mode: this.mode,
       feedMode: this.feedMode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
+      disconnectReason: this.disconnectReason,
       selectedId: this.selectedId,
       settings: this.settings,
       lastUpdateAt: this.lastUpdateAt,
     };
   }
   coarse(): CoarseSlice {
-    const values = [...this.agents.values()],
-      visibleAgents = this.visibleAgents;
+    const values = [...this.visibleAgents().values()];
     return {
-      count: values.length,
+      sourceCount: this.agents.size,
+      visibleCount: values.length,
+      clearedCount: this.dismissedDone.size,
       blocked: values.filter((a) => a.targetState === "blocked").length,
       done: values.filter((a) => a.targetState === "done").length,
-      visibleCount: visibleAgents.size,
       blockedElsewhere: this.blockedElsewhereCount(),
       mode: this.mode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
+      disconnectReason: this.disconnectReason,
       selectedId: this.selectedId,
       selectedWorkspaceId: this.selectedWorkspaceId,
       selectedWorkspaceLabel: this.selectedWorkspaceLabel,
@@ -199,20 +207,46 @@ export class AgentStore {
         current?.label ?? this.selectedWorkspaceLabel;
       this.workspaceUnavailable = !current;
     }
-    this.refreshVisibleRoster();
     this.pruneInvisibleSelection();
     this.emitCoarse();
     this.emitChange();
   }
+  revealCleared() {
+    const count = this.dismissedDone.size;
+    if (!count) return;
+    this.dismissedDone.clear();
+    this.emitEvent({ type: "reveal", count });
+    this.emitCoarse();
+    this.emitChange();
+  }
   setSettings(patch: Partial<Settings>) {
+    const oldDoneTimeoutMs = this.settings.doneTimeoutMs;
     this.settings = { ...this.settings, ...patch };
+    if (this.settings.doneTimeoutMs !== oldDoneTimeoutMs)
+      for (const machine of this.agents.values())
+        if (
+          machine.targetState === "done" &&
+          machine.clearAt !== null &&
+          this.doneTimers.has(machine.id)
+        ) {
+          machine.clearAt =
+            machine.clearAt - oldDoneTimeoutMs + this.settings.doneTimeoutMs;
+          this.armDone(
+            machine.id,
+            this.doneGenerations.get(machine.id) ?? machine.stateEnteredAt,
+            machine.clearAt,
+            Math.max(0, machine.clearAt - this.scheduler.now()),
+          );
+        }
     saveSettings(this.settingsStorage, this.settings);
     this.emitCoarse();
     this.emitChange();
   }
-  setDisconnected() {
-    if (this.mode !== "disconnected") {
+  setDisconnected(reason: ClientDisconnectReason = null) {
+    const nextReason = reason ?? this.disconnectReason;
+    if (this.mode !== "disconnected" || this.disconnectReason !== nextReason) {
       this.mode = "disconnected";
+      this.disconnectReason = nextReason;
       this.emitCoarse();
       this.emitChange();
     }
@@ -225,24 +259,29 @@ export class AgentStore {
   apply(event: AgentStateEvent) {
     if (event.type === "heartbeat") return;
     const before = this.coarse();
+    const modeChanged =
+      event.type === "snapshot" && event.mode !== this.feedMode;
+    if (modeChanged) {
+      for (const id of this.agents.keys()) this.remove(id);
+      this.board = [];
+      this.selectedId = null;
+      this.dismissedDone.clear();
+    }
     this.feedMode = event.mode;
     this.lastUpdateAt = this.scheduler.now();
     if (event.type === "snapshot") {
+      this.disconnectReason = null;
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
       this.syncWorkspaceCatalog(event.workspaces);
       const incoming = new Set(event.agents.map((agent) => agent.id));
-      for (const id of this.dismissedDone.keys())
-        if (!incoming.has(id)) this.dismissedDone.delete(id);
       for (const id of this.agents.keys())
         if (!incoming.has(id)) this.remove(id);
       for (const agent of event.agents) this.upsert(agent);
     } else if (event.operation === "upsert") this.upsert(event.agent);
     else {
-      this.dismissedDone.delete(event.agentId);
       this.remove(event.agentId);
     }
-    this.refreshVisibleRoster();
     this.pruneInvisibleSelection();
     this.mode =
       this.agents.size === 0 &&
@@ -262,28 +301,28 @@ export class AgentStore {
     for (const timer of this.doneTimers.values())
       this.scheduler.clearTimeout(timer);
     this.doneTimers.clear();
+    this.doneGenerations.clear();
     this.dismissedDone.clear();
     this.coarseListeners.clear();
     this.changeListeners.clear();
     this.eventListeners.clear();
   }
   private upsert(agent: AgentRecord) {
-    if (
-      agent.state === "done" &&
-      this.dismissedDone.get(agent.id) === agent.stateEnteredAt
-    )
-      return;
-    this.dismissedDone.delete(agent.id);
     const prior = this.agents.get(agent.id);
     const now = this.scheduler.now();
+    const parsedEnteredAt = Date.parse(agent.stateEnteredAt),
+      enteredAt = Number.isFinite(parsedEnteredAt) ? parsedEnteredAt : now;
+    const dismissedGeneration = this.dismissedDone.get(agent.id);
+    const remainsDismissed =
+      agent.state === "done" &&
+      dismissedGeneration !== undefined &&
+      enteredAt <= Date.parse(dismissedGeneration);
+    if (!remainsDismissed) this.dismissedDone.delete(agent.id);
     if (agent.state === "ended") {
       this.end(agent, now);
       return;
     }
     const stateChanged = prior?.targetState !== agent.state;
-    const enteredAt = Number.isFinite(Date.parse(agent.stateEnteredAt))
-      ? Date.parse(agent.stateEnteredAt)
-      : now;
     const initialHistory: readonly StatePeriod[] = [
       { state: agent.state, startedAt: enteredAt },
     ];
@@ -291,7 +330,12 @@ export class AgentStore {
     const sameStateReentered =
       !stateChanged &&
       lastObservedAt !== undefined &&
-      enteredAt > lastObservedAt + 1_000;
+      Number.isFinite(parsedEnteredAt) &&
+      enteredAt > lastObservedAt;
+    const newerDoneGeneration =
+      prior?.targetState === "done" &&
+      agent.state === "done" &&
+      sameStateReentered;
     const history = prior
       ? stateChanged || sameStateReentered
         ? [
@@ -310,12 +354,15 @@ export class AgentStore {
       ...agent,
       targetState: agent.state,
       renderedState: prior?.renderedState ?? agent.state,
-      transitionStartedAt: stateChanged
-        ? now
-        : (prior?.transitionStartedAt ?? now),
+      transitionStartedAt:
+        stateChanged || newerDoneGeneration
+          ? now
+          : (prior?.transitionStartedAt ?? now),
       clearAt:
         agent.state === "done"
-          ? (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
+          ? stateChanged || newerDoneGeneration
+            ? now + this.settings.doneTimeoutMs
+            : (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
           : null,
       answerReceivedUntil,
       revision: (prior?.revision ?? 0) + 1,
@@ -329,28 +376,45 @@ export class AgentStore {
         from: prior?.targetState,
         to: agent.state,
       });
-    if (stateChanged) {
+    if (stateChanged || newerDoneGeneration) {
       this.cancelDone(agent.id);
       if (agent.state === "done")
-        this.doneTimers.set(
+        this.armDone(
           agent.id,
-          this.scheduler.setTimeout(() => {
-            this.dismissedDone.set(agent.id, agent.stateEnteredAt);
-            this.emitEvent({ type: "busser", agentId: agent.id });
-            this.remove(agent.id);
-            this.refreshVisibleRoster();
-            if (this.mode !== "disconnected")
-              this.mode =
-                this.agents.size === 0 &&
-                this.feedMode === "live" &&
-                this.sourceStatus === "connected"
-                  ? "empty"
-                  : this.feedMode;
-            this.emitChange();
-            this.emitCoarse();
-          }, this.settings.doneTimeoutMs),
+          machine.stateEnteredAt,
+          machine.clearAt!,
+          this.settings.doneTimeoutMs,
         );
+      else this.doneGenerations.delete(agent.id);
     }
+  }
+  private armDone(
+    id: string,
+    generation: string,
+    clearAt: number,
+    delay: number,
+  ) {
+    this.cancelDone(id);
+    this.doneGenerations.set(id, generation);
+    this.doneTimers.set(
+      id,
+      this.scheduler.setTimeout(() => {
+        const current = this.agents.get(id);
+        if (
+          current?.targetState !== "done" ||
+          this.doneGenerations.get(id) !== generation ||
+          current.clearAt !== clearAt
+        )
+          return;
+        this.doneTimers.delete(id);
+        this.dismissedDone.set(id, generation);
+        this.emitEvent({ type: "busser", agentId: id });
+        this.emitEvent({ type: "clear", agentId: id });
+        if (this.selectedId === id) this.selectedId = null;
+        this.emitChange();
+        this.emitCoarse();
+      }, delay),
+    );
   }
   private end(agent: AgentRecord, now: number) {
     const prior = this.agents.get(agent.id),
@@ -374,19 +438,10 @@ export class AgentStore {
   }
   private remove(id: string) {
     this.cancelDone(id);
+    this.dismissedDone.delete(id);
+    this.doneGenerations.delete(id);
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
     if (this.selectedId === id) this.selectedId = null;
-  }
-  private refreshVisibleRoster() {
-    if (this.selectedWorkspaceId === null) {
-      this.visibleAgents = this.agents;
-      return;
-    }
-    const visible = new Map<string, AgentMachine>();
-    for (const [id, agent] of this.agents)
-      if (agent.workspaceId === this.selectedWorkspaceId)
-        visible.set(id, agent);
-    this.visibleAgents = visible;
   }
   private blockedElsewhereCount() {
     if (this.selectedWorkspaceId === null) return 0;
@@ -435,12 +490,28 @@ export class AgentStore {
   private emitEvent(event: StoreEvent) {
     for (const listener of this.eventListeners) listener(event);
   }
+  private visibleAgents() {
+    return new Map(
+      [...this.agents].filter(([id, agent]) => {
+        const dismissedGeneration = this.dismissedDone.get(id),
+          presented =
+            agent.targetState !== "done" ||
+            dismissedGeneration === undefined ||
+            Date.parse(agent.stateEnteredAt) > Date.parse(dismissedGeneration);
+        return (
+          presented &&
+          (this.selectedWorkspaceId === null ||
+            agent.workspaceId === this.selectedWorkspaceId)
+        );
+      }),
+    );
+  }
 }
-function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
-  const prefix = `${paneId}:`;
+function lastBoardIndex(board: readonly BoardEntry[], agentId: string) {
+  const prefix = `${agentId}:`;
   for (let index = board.length - 1; index >= 0; index--) {
     const id = board[index]?.id;
-    if (id === paneId || id?.startsWith(prefix)) return index;
+    if (id === agentId || id?.startsWith(prefix)) return index;
   }
   return -1;
 }
@@ -459,14 +530,16 @@ function sameWorkspaces(
 }
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
-    a.count === b.count &&
+    a.sourceCount === b.sourceCount &&
+    a.visibleCount === b.visibleCount &&
+    a.clearedCount === b.clearedCount &&
     a.blocked === b.blocked &&
     a.done === b.done &&
-    a.visibleCount === b.visibleCount &&
     a.blockedElsewhere === b.blockedElsewhere &&
     a.mode === b.mode &&
     a.sourceStatus === b.sourceStatus &&
     a.sourceDiagnostic === b.sourceDiagnostic &&
+    a.disconnectReason === b.disconnectReason &&
     a.selectedId === b.selectedId &&
     a.selectedWorkspaceId === b.selectedWorkspaceId &&
     a.selectedWorkspaceLabel === b.selectedWorkspaceLabel &&

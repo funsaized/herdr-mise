@@ -142,7 +142,11 @@ fn panic_restore_install_count() -> usize {
     PANIC_RESTORE_INSTALL_COUNT.load(Ordering::SeqCst)
 }
 
-fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable, scope: &Scope) {
+pub(crate) fn retain_selection(
+    selected_id: &mut Option<String>,
+    table: &AgentTable,
+    scope: &Scope,
+) {
     if selected_id.as_ref().is_some_and(|id| {
         !table
             .scoped_agents(scope.id.as_deref())
@@ -200,6 +204,7 @@ fn select_all(scope: &mut Scope) {
 
 pub(super) const KEY_HELP: &str = "? help";
 pub(super) const KEY_INSPECT: &str = "Tab / Shift+Tab inspect";
+pub(super) const KEY_BLOCKED: &str = "b next blocked";
 pub(super) const KEY_FREEZER: &str = "f freezer";
 pub(super) const KEY_SCOPE: &str = "w scope";
 pub(super) const KEY_ALL: &str = "a all";
@@ -208,9 +213,10 @@ pub(super) const KEY_QUIT: &str = "q quit";
 pub(super) const KEY_QUIT_ESC: &str = "q / Esc quit";
 pub(super) const KEY_KITCHEN: &str = "f kitchen";
 pub(super) const KEY_ESC_KITCHEN: &str = "Esc kitchen";
-pub(super) const HELP_LINES: [&str; 7] = [
+pub(super) const HELP_LINES: [&str; 8] = [
     KEY_HELP,
     KEY_INSPECT,
+    KEY_BLOCKED,
     KEY_FREEZER,
     KEY_SCOPE,
     KEY_ALL,
@@ -260,6 +266,19 @@ fn handle_key_with_scope(
     } else if code == KeyCode::Char('a') {
         select_all(scope);
         retain_selection(selected_id, table, scope);
+        false
+    } else if code == KeyCode::Char('b') {
+        let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
+        let start = selected_id
+            .as_ref()
+            .and_then(|id| agents.iter().position(|agent| &agent.id == id))
+            .map_or(0, |index| index + 1);
+        if let Some(agent) = (0..agents.len())
+            .map(|step| &agents[(start + step) % agents.len()])
+            .find(|agent| agent.state == crate::protocol::AgentState::Blocked)
+        {
+            *selected_id = Some(agent.id.clone());
+        }
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
         let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
@@ -326,6 +345,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
     let mut selected_id = None;
+    let mut table_offset = 0;
     let mut view = SceneView::default();
     let mut help_open = false;
     let mut scope = Scope::default();
@@ -334,6 +354,9 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
         reconcile_scope(&mut scope, &table);
         let now = Utc::now();
         terminal.draw(|frame| {
+            table_offset =
+                view::table_window(frame.area(), &table, selected_id.as_deref(), table_offset)
+                    .offset;
             scene::draw_view_scoped(
                 frame,
                 &table,
@@ -343,6 +366,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 capabilities.color_mode,
                 capabilities.scene_supported,
                 selected_id.as_deref(),
+                table_offset,
                 view,
                 help_open,
                 capabilities.reduced_motion,
@@ -446,6 +470,8 @@ mod tests {
         let agent = |id: &str| AgentRecord {
             state_known: None,
             id: id.into(),
+            pane_id: None,
+            agent_kind: None,
             name: id.into(),
             state: AgentState::Working,
             progress: None,
@@ -507,6 +533,16 @@ mod tests {
         assert_eq!(selected.as_deref(), Some("b"));
         assert!(!handle_key_with_scope(
             KeyCode::BackTab,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("a"));
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('b'),
             &table,
             &mut selected,
             &mut SceneView::Kitchen,

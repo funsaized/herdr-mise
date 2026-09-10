@@ -21,7 +21,7 @@ describe("shared protocol fixtures", () => {
     },
   );
   it("strictly validates bounded workspace scope metadata", () => {
-    expect(decodeFeedEvent(JSON.stringify(workspaces))).not.toBeNull();
+    expect(decodeFeedEvent(JSON.stringify(workspaces)).kind).toBe("accepted");
     for (const invalid of [
       { ...workspaces, workspaces: [{ id: "", label: "empty" }] },
       {
@@ -33,6 +33,6 @@ describe("shared protocol fixtures", () => {
       },
       { ...workspaces, agents: [{ ...workspaces.agents[0], workspaceId: "" }] },
     ])
-      expect(decodeFeedEvent(JSON.stringify(invalid))).toBeNull();
+      expect(decodeFeedEvent(JSON.stringify(invalid)).kind).toBe("rejected");
   });
 });

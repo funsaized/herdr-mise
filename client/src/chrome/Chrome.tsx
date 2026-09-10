@@ -72,6 +72,7 @@ export interface ChromeProps {
   hintVisible: boolean;
   view: "kitchen" | "freezer";
   onToggleFreezer(): void;
+  onRevealCleared(): void;
 }
 
 export function Chrome(props: ChromeProps) {
@@ -82,7 +83,9 @@ export function Chrome(props: ChromeProps) {
     [tuiRestart, setTuiRestart] = useState(0),
     tuiExpandToggle = useRef<HTMLButtonElement>(null),
     workspaceSelect = useRef<HTMLSelectElement>(null),
-    workspaceShowAll = useRef<HTMLButtonElement>(null);
+    workspaceShowAll = useRef<HTMLButtonElement>(null),
+    openSettings = useRef<HTMLButtonElement>(null),
+    previousSelectedId = useRef(props.coarse.selectedId);
   useEffect(() => reducedMotionPreference.subscribe(setTuiStopped), []);
   useEffect(() => {
     if (!tuiExpanded) return;
@@ -102,9 +105,11 @@ export function Chrome(props: ChromeProps) {
   }, [tuiExpanded]);
 
   const snapshot = props.store.snapshot(),
-    selectedAgent = props.coarse.selectedId
-      ? snapshot.agents.get(props.coarse.selectedId)
-      : undefined,
+    selectedAgent =
+      props.coarse.selectedId &&
+      snapshot.visibleAgents.has(props.coarse.selectedId)
+        ? snapshot.agents.get(props.coarse.selectedId)
+        : undefined,
     selectedBoard = props.coarse.selectedId
       ? snapshot.board.find((item) => item.id === props.coarse.selectedId)
       : undefined;
@@ -113,7 +118,10 @@ export function Chrome(props: ChromeProps) {
         hit.kind === "station" &&
         hit.id === (props.hoveredId ?? props.focusedId),
     ),
-    hoverAgent = hoverHit ? snapshot.agents.get(hoverHit.id) : undefined,
+    hoverAgent =
+      hoverHit && snapshot.visibleAgents.has(hoverHit.id)
+        ? snapshot.agents.get(hoverHit.id)
+        : undefined,
     selectedHit = props.hits.find(
       (hit) => hit.kind === "station" && hit.id === selectedAgent?.id,
     ),
@@ -126,6 +134,15 @@ export function Chrome(props: ChromeProps) {
     const frame = requestAnimationFrame(() => setTuiExpanded(false));
     return () => cancelAnimationFrame(frame);
   }, [primaryPanelOpen, tuiExpanded]);
+  useEffect(() => {
+    if (
+      previousSelectedId.current !== null &&
+      props.coarse.selectedId === null &&
+      document.activeElement === document.body
+    )
+      openSettings.current?.focus();
+    previousSelectedId.current = props.coarse.selectedId;
+  }, [props.coarse.selectedId]);
   return (
     <>
       {!primaryPanelOpen && hoverAgent && hoverHit && (
@@ -161,6 +178,7 @@ export function Chrome(props: ChromeProps) {
             Freezer
           </button>
           <button
+            ref={openSettings}
             className="settingsTrigger"
             onClick={props.onOpenSettings}
             aria-label="Open settings"
@@ -212,6 +230,7 @@ export function Chrome(props: ChromeProps) {
         mode={props.coarse.mode}
         sourceStatus={props.coarse.sourceStatus}
         sourceDiagnostic={props.coarse.sourceDiagnostic}
+        disconnectReason={props.coarse.disconnectReason}
         lastUpdateSeconds={props.lastUpdateSeconds}
         scopeUnavailableLabel={
           (props.coarse.mode === "live" || props.coarse.mode === "empty") &&
@@ -227,6 +246,8 @@ export function Chrome(props: ChromeProps) {
             ? workspaceScopeName(props.coarse.selectedWorkspaceLabel)
             : null
         }
+        clearedCount={props.coarse.clearedCount}
+        onRevealCleared={props.onRevealCleared}
       />
       {import.meta.env.MODE === "visual" && (
         <figure

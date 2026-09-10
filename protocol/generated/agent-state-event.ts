@@ -9,6 +9,8 @@ export interface WorkspaceRecord { id: string; label: string }
 export interface AgentRecord {
   stateKnown?: boolean;
   id: string;
+  paneId?: string;
+  agentKind?: string;
   name: string;
   state: AgentState;
   progress: number | null;

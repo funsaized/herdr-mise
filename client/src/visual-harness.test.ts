@@ -575,7 +575,12 @@ describe("visual WebSocket boundary", () => {
     vi.advanceTimersByTime(599_999);
     expect(visual.snapshot().agents.size).toBe(1);
     vi.advanceTimersByTime(1);
-    expect(visual.snapshot().agents.size).toBe(0);
+    expect(visual.coarse()).toMatchObject({
+      sourceCount: 1,
+      visibleCount: 0,
+      clearedCount: 1,
+      mode: "demo",
+    });
     visual.destroy();
     expect(vi.getTimerCount()).toBe(0);
   });

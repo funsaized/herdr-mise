@@ -48,6 +48,9 @@ impl AgentTable {
                 workspaces,
                 ..
             } => {
+                if mode != self.mode {
+                    self.board.clear();
+                }
                 self.mode = mode;
                 self.source_status = source_status;
                 self.source_diagnostic = source_diagnostic;
@@ -159,7 +162,7 @@ impl AgentTable {
             if let Some(index) = self
                 .board
                 .iter()
-                .rposition(|entry| same_pane(&entry.id, &agent.id))
+                .rposition(|entry| same_identity(&entry.id, &agent.id))
             {
                 let mut existing = self.board.remove(index);
                 existing.name = agent.name;
@@ -173,7 +176,7 @@ impl AgentTable {
             && self
                 .board
                 .iter()
-                .any(|entry| same_pane(&entry.id, &agent.id))
+                .any(|entry| same_identity(&entry.id, &agent.id))
         {
             format!("{}:{}", agent.id, self.board.len())
         } else {
@@ -196,8 +199,8 @@ impl AgentTable {
     }
 }
 
-fn same_pane(entry_id: &str, pane_id: &str) -> bool {
-    entry_id == pane_id || entry_id.starts_with(&format!("{pane_id}:"))
+fn same_identity(entry_id: &str, agent_id: &str) -> bool {
+    entry_id == agent_id || entry_id.starts_with(&format!("{agent_id}:"))
 }
 
 #[cfg(test)]
@@ -218,6 +221,8 @@ mod tests {
         AgentRecord {
             state_known: None,
             id: id.into(),
+            pane_id: None,
+            agent_kind: None,
             name: format!("cook-{id}"),
             state,
             progress: None,

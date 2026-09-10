@@ -11,7 +11,7 @@
     "workspace_id": "fictional-kitchen",
     "display_agent": "example-cook",
     "agent_status": "working",
-    "state_change_seq": 42,
+    "state_change_seq": 43,
     "agent_session": {"value": "fictional-session-20"}
   }]
 }

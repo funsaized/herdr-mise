@@ -4,7 +4,7 @@ STYLE 00 000..011 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 01 "Connected to Herdr · Workspace: All                                                                           "
 TEXT 02 "                                                                                                              "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
-TEXT 04 "┌Kitchen status──────────────────────────────────────────────────────────────────────────────────────────────┐"
+TEXT 04 "┌Kitchen status · 1-1/1 · 1 blocked──────────────────────────────────────────────────────────────────────────┐"
 TEXT 05 "│AGENT            STATE                  ELAPSED               WORKSPACE        TICKETS RUNTIME              │"
 STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 06 "│Cook blocked     BLOCKED / AT THE PASS  2m 5s                 customer-api     7       1h 1m                │"

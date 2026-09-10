@@ -12,12 +12,14 @@
   "layouts": [],
   "agents": [
     {
+      "terminal_id": "scope-terminal-one",
       "pane_id": "scope-pane-one",
       "workspace_id": "scope-workspace-one",
       "display_agent": "scope-working",
       "agent_status": "working"
     },
     {
+      "terminal_id": "scope-terminal-two",
       "pane_id": "scope-pane-two",
       "workspace_id": "scope-workspace-two",
       "display_agent": "scope-blocked",

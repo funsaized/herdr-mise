@@ -12,7 +12,14 @@ export function freezerAnnouncement(visible: number, total: number) {
 }
 export type SemanticAgent = Pick<
   AgentMachine,
-  "id" | "name" | "targetState" | "stateKnown" | "stateEnteredAt"
+  | "id"
+  | "paneId"
+  | "agentKind"
+  | "name"
+  | "workspace"
+  | "targetState"
+  | "stateKnown"
+  | "stateEnteredAt"
 > & {
   blockedPlacement?: {
     kind: "pass" | "station";
@@ -37,6 +44,14 @@ export function semanticStationLabel(agent: SemanticAgent, elapsed?: string) {
   const queue = semanticQueueWords(agent);
   return `${agent.name}, ${semanticStateWords(agent)}${queue ? `, ${queue}` : ""}${elapsed ? `, ${elapsed}` : ""}, open details`;
 }
+export function semanticStationName(
+  agent: SemanticAgent,
+  workspaceName: string,
+  duplicateName: boolean,
+  colliding: boolean,
+) {
+  return `${agent.name}${duplicateName ? ` · ${workspaceName}` : ""}${colliding ? ` · ${agent.paneId ?? agent.id}` : ""}`;
+}
 export function semanticAgentsEqual(
   a: readonly SemanticAgent[],
   b: readonly SemanticAgent[],
@@ -46,7 +61,10 @@ export function semanticAgentsEqual(
     a.every(
       (agent, index) =>
         agent.id === b[index]?.id &&
+        agent.paneId === b[index]?.paneId &&
+        agent.agentKind === b[index]?.agentKind &&
         agent.name === b[index]?.name &&
+        agent.workspace === b[index]?.workspace &&
         agent.stateKnown === b[index]?.stateKnown &&
         agent.targetState === b[index]?.targetState &&
         agent.stateEnteredAt === b[index]?.stateEnteredAt,
@@ -57,9 +75,21 @@ export function semanticAgents(
   snapshot: ReadonlyMap<string, AgentMachine>,
 ): SemanticAgent[] {
   return [...snapshot.values()].map(
-    ({ id, name, targetState, stateKnown, stateEnteredAt }) => ({
+    ({
       id,
+      paneId,
+      agentKind,
       name,
+      workspace,
+      targetState,
+      stateKnown,
+      stateEnteredAt,
+    }) => ({
+      id,
+      paneId,
+      agentKind,
+      name,
+      workspace,
       targetState,
       stateKnown,
       stateEnteredAt,

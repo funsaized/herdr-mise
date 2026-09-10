@@ -6,7 +6,12 @@ import {
   type CSSProperties,
 } from "react";
 import { Chrome, type DebugMetrics } from "./chrome/Chrome";
-import { KitchenScene, type SceneHit } from "./scene/kitchen-scene";
+import {
+  KitchenScene,
+  type PageMetadata,
+  type SceneHit,
+} from "./scene/kitchen-scene";
+import { workspaceDisplayName } from "./scene/geometry";
 import type { CoarseSlice } from "./state/store";
 import { AgentWebSocketClient } from "./state/ws-client";
 import { tokens } from "./theme/tokens";
@@ -73,19 +78,44 @@ const cssTokens = {
   "--fontSectionSize": `${tokens.typography.section.size}px`,
   "--fontSectionWeight": tokens.typography.section.weight,
   "--fontNumericVariant": tokens.typography.numericVariant,
+  "--pagerReservedHeight": `${tokens.scene.layout.pagerReservedHeight}px`,
+  "--compactPagerReservedHeight": `${tokens.scene.layout.compactPagerReservedHeight}px`,
 } as CSSProperties;
 const initialMetrics: DebugMetrics = { drawCalls: 0, socketBytesPerSecond: 0 };
+const initialPage: PageMetadata = {
+  totalCount: 0,
+  visibleCount: 0,
+  capacity: 1,
+  pageIndex: 0,
+  pageCount: 1,
+  pagerLayout: "standard",
+};
+
+function semanticStationButton(id: string) {
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      ".stationA11yMirror button",
+    ),
+  ].find((button) => button.dataset.agentId === id);
+}
+
 export function App() {
   const host = useRef<HTMLDivElement>(null),
     sceneRef = useRef<KitchenScene | null>(null),
     socketRef = useRef<AgentWebSocketClient | null>(null);
   const semanticRestoreRef = useRef<HTMLButtonElement | null>(null),
-    settingsRestorePendingRef = useRef(false);
+    settingsRestorePendingRef = useRef(false),
+    selectedLocationRef = useRef<Pick<
+      SemanticAgent,
+      "id" | "name" | "paneId" | "workspace"
+    > | null>(null),
+    pageRef = useRef<PageMetadata>(initialPage);
   const [coarse, setCoarse] = useState<CoarseSlice>(() => clientStore.coarse()),
     [agents, setAgents] = useState<readonly SemanticAgent[]>(() =>
       semanticAgents(clientStore.snapshot().visibleAgents),
     ),
     [hits, setHits] = useState<readonly SceneHit[]>([]),
+    [page, setPage] = useState<PageMetadata>(initialPage),
     [hoveredId, setHoveredId] = useState<string | null>(null),
     [focusedId, setFocusedId] = useState<string | null>(null),
     [view, setView] = useState<"kitchen" | "freezer">("kitchen"),
@@ -109,12 +139,36 @@ export function App() {
       ),
     [],
   );
+  useEffect(() => {
+    const selected = agents.find((agent) => agent.id === coarse.selectedId),
+      previous = selectedLocationRef.current;
+    selectedLocationRef.current = selected ?? null;
+    if (
+      selected &&
+      previous?.id === selected.id &&
+      (previous.paneId !== selected.paneId ||
+        previous.workspace !== selected.workspace)
+    )
+      setAnnouncement(
+        `${selected.name} moved to ${workspaceDisplayName(selected.workspace)}${selected.paneId ? `, pane ${selected.paneId}` : ""}`,
+      );
+  }, [agents, coarse.selectedId]);
   useEffect(
     () =>
       clientStore.onEvent((event) => {
-        if (event.type !== "state" || event.from === undefined) return;
+        if (event.type === "reveal") {
+          setAnnouncement(
+            `${event.count} plated cook${event.count === 1 ? "" : "s"} revealed`,
+          );
+          return;
+        }
+        if (event.type !== "busser" && event.type !== "state") return;
         const agent = clientStore.snapshot().agents.get(event.agentId);
-        if (agent)
+        if (event.type === "busser" && agent) {
+          setAnnouncement(`${agent.name} cleared from the kitchen`);
+          return;
+        }
+        if (event.type === "state" && event.from !== undefined && agent)
           setAnnouncement(
             `${agent.name} ${event.to}${event.to === "blocked" ? ", just now" : ""}`,
           );
@@ -125,6 +179,17 @@ export function App() {
     if (!host.current) return;
     const scene = new KitchenScene(clientStore, host.current, {
       onHitLayout: setHits,
+      onPageLayout: (next) => {
+        if (
+          pageRef.current.totalCount > 0 &&
+          pageRef.current.pageIndex !== next.pageIndex
+        )
+          setAnnouncement(
+            `Kitchen page ${next.pageIndex + 1} of ${next.pageCount}, ${next.visibleCount} of ${next.totalCount} cooks shown`,
+          );
+        pageRef.current = next;
+        setPage(next);
+      },
     });
     sceneRef.current = scene;
     if (new URLSearchParams(location.search).has("stats"))
@@ -138,7 +203,7 @@ export function App() {
     });
     const protocol = location.protocol === "https:" ? "wss:" : "ws:",
       socket = new AgentWebSocketClient(
-        `${protocol}//${location.host}/ws`,
+        `${protocol}//${location.host}/ws?paneId=1`,
         clientStore,
       );
     socketRef.current = socket;
@@ -176,6 +241,24 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [statsOpen]);
   const boardEntries = clientStore.snapshot().board,
+    renderedIds = new Set(
+      hits.filter((hit) => hit.kind === "station").map((hit) => hit.id),
+    ),
+    stationHitById = new Map(
+      hits
+        .filter((hit) => hit.kind === "station")
+        .map((hit) => [hit.id, hit] as const),
+    ),
+    stationOrder = new Map(
+      hits
+        .filter((hit) => hit.kind === "station")
+        .map((hit, index) => [hit.id, index]),
+    ),
+    agentIds = new Set(agents.map((agent) => agent.id)),
+    blockedAgents = agents.filter((agent) => agent.targetState === "blocked"),
+    visibleBlocked = blockedAgents.filter((agent) =>
+      renderedIds.has(agent.id),
+    ).length,
     spiritAgents = hits
       .filter((hit) => hit.kind === "spirit")
       .flatMap((hit) => {
@@ -185,6 +268,7 @@ export function App() {
               {
                 id: entry.id,
                 name: entry.name,
+                workspace: "",
                 targetState: "ended" as const,
                 stateEnteredAt: new Date(entry.endedAt).toISOString(),
               },
@@ -192,21 +276,30 @@ export function App() {
           : [];
       }),
     kitchenControls = [
-      ...agents.map((agent) => ({
-        ...agent,
-        blockedPlacement: hits.find(
-          (hit) => hit.kind === "station" && hit.id === agent.id,
-        )?.blockedPlacement,
-      })),
+      ...(page.pageCount === 1
+        ? [...agents].sort(
+            (left, right) =>
+              (stationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+              (stationOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+          )
+        : agents
+      ).map((agent) => {
+        const hit = stationHitById.get(agent.id);
+        return hit
+          ? { ...agent, blockedPlacement: hit.blockedPlacement }
+          : agent;
+      }),
       ...hits
         .filter((hit) => hit.kind === "board")
         .flatMap((hit) => {
+          if (agentIds.has(hit.id)) return [];
           const entry = boardEntries.find((item) => item.id === hit.id);
           return entry
             ? [
                 {
                   id: entry.id,
                   name: entry.name,
+                  workspace: "",
                   targetState: "ended" as const,
                   stateEnteredAt: new Date(entry.endedAt).toISOString(),
                 },
@@ -271,15 +364,12 @@ export function App() {
             event.shiftKey
               ? -1
               : 1,
-          navigation =
-            semanticNav ??
-            document.querySelector<HTMLElement>(".stationA11yMirror"),
-          buttons = navigation
-            ? [...navigation.querySelectorAll<HTMLButtonElement>("button")]
-            : [],
-          index = semanticNav
-            ? buttons.indexOf(event.target as HTMLButtonElement)
-            : stationIds.indexOf(focusedId ?? ""),
+          currentId =
+            event.target instanceof Element
+              ? event.target.closest<HTMLButtonElement>("button")?.dataset
+                  .agentId
+              : undefined,
+          index = currentId ? stationIds.indexOf(currentId) : -1,
           nextIndex =
             index < 0
               ? direction > 0
@@ -289,7 +379,7 @@ export function App() {
           next = stationIds[nextIndex]!;
         setFocusedId(next);
         sceneRef.current?.focus(next);
-        buttons[nextIndex]?.focus();
+        semanticStationButton(next)?.focus();
         return;
       }
       if (event.key === "Enter" && focusedId) {
@@ -347,9 +437,22 @@ export function App() {
     setView(next);
     if (next === "kitchen") setAnnouncement("Kitchen");
   };
+  const nextBlocked = () => {
+    if (!blockedAgents.length) return;
+    const current = focusedId ?? coarse.selectedId,
+      currentIndex = blockedAgents.findIndex((agent) => agent.id === current),
+      next = blockedAgents[(currentIndex + 1) % blockedAgents.length]!;
+    setFocusedId(next.id);
+    sceneRef.current?.focus(next.id);
+    semanticStationButton(next.id)?.focus();
+  };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
   return (
-    <main className="appShell" style={cssTokens}>
+    <main
+      className="appShell"
+      data-pager-layout={page.pagerLayout}
+      style={cssTokens}
+    >
       {rendererFailed && (
         <section className="rendererFallback" aria-label="Agent status list">
           <p role="alert">
@@ -377,12 +480,10 @@ export function App() {
         className={canvasClass}
         aria-label={`Agent state ${view} scene`}
         onPointerDown={(event) => {
-          const hit = pointerHit(event),
-            index = controls.findIndex((control) => control.id === hit?.id);
-          semanticRestoreRef.current =
-            document.querySelectorAll<HTMLButtonElement>(
-              ".stationA11yMirror button",
-            )[index] ?? null;
+          const hit = pointerHit(event);
+          semanticRestoreRef.current = hit
+            ? (semanticStationButton(hit.id) ?? null)
+            : null;
           if (hit) {
             setFocusedId(hit.id);
             sceneRef.current?.focus(hit.id);
@@ -395,8 +496,16 @@ export function App() {
         agents={controls}
         label={view === "freezer" ? "Ended chefs" : undefined}
         tooltipAgentId={tooltipAgentId}
+        page={view === "kitchen" ? page : undefined}
+        blockedTotal={blockedAgents.length}
+        blockedVisible={visibleBlocked}
+        onPreviousPage={() => sceneRef.current?.previousPage()}
+        onNextPage={() => sceneRef.current?.nextPage()}
+        onNextBlocked={nextBlocked}
         onSelect={(id, element) => {
           semanticRestoreRef.current = element;
+          setFocusedId(id);
+          sceneRef.current?.focus(id);
           clientStore.select(id);
         }}
       />
@@ -417,6 +526,7 @@ export function App() {
           onDismissHint={dismissHint}
           view={view}
           onToggleFreezer={toggleFreezer}
+          onRevealCleared={() => clientStore.revealCleared()}
         />
       </div>
       <div

@@ -10,12 +10,11 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
   await expect(
     page.getByRole("status").filter({ hasText: "DEMO SERVICE" }),
   ).toBeVisible();
-  const station = page
-    .getByRole("button", { name: /Blocked — .*open details/ })
-    .last();
   await page.locator("body").click({ position: { x: 1, y: 1 } });
   await page.keyboard.press("ArrowLeft");
-  await expect(station).toBeFocused();
+  const station = page.locator(".stationA11yMirror button:focus"),
+    selectedAgentId = await station.getAttribute("data-agent-id");
+  expect(selectedAgentId).not.toBeNull();
   await page.keyboard.press("Enter");
   const panel = page.getByRole("complementary", { name: /details$/ });
   await expect(panel).toBeVisible();
@@ -43,7 +42,9 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
     ).toBeVisible();
   }
   await page.keyboard.press("Escape");
-  await expect(station).toBeFocused();
+  await expect(
+    page.locator(`[data-agent-id="${selectedAgentId}"]`),
+  ).toBeFocused();
   const settings = page.getByRole("button", { name: /settings/i }).first();
   await settings.focus();
   await page.keyboard.press("Enter");

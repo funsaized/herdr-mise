@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentRecord } from "../../../protocol/generated/agent-state-event";
+import type {
+  AgentRecord,
+  AgentStateEvent,
+} from "../../../protocol/generated/agent-state-event";
+import snapshot from "../../../protocol/fixtures/snapshot.v1.json";
 import unsupported from "../../../protocol/fixtures/snapshot-demo-unsupported.v1.json";
 import { AgentStore, defaultSettings } from "../state/store";
 import { AgentWebSocketClient, type SocketLike } from "../state/ws-client";
@@ -100,8 +104,25 @@ describe("chrome interactions", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "last update 14s ago",
     );
+    rerender(
+      <ModeTreatment
+        mode="disconnected"
+        sourceStatus="connected"
+        disconnectReason="incompatibleFeed"
+        lastUpdateSeconds={14}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Browser received an incompatible Mise feed",
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Waiting for a compatible snapshot",
+    );
+    expect(screen.getByRole("alert").textContent).not.toContain(
+      "Lost connection to Mise",
+    );
   });
-  it("shows an actionable unsupported protocol diagnostic without conflating malformed input", () => {
+  it("shows actionable source diagnostics without conflating malformed input", () => {
     const { rerender } = render(
       <ModeTreatment
         mode="demo"
@@ -142,6 +163,36 @@ describe("chrome interactions", () => {
       "incompatible response",
     );
     expect(screen.getByRole("status").textContent).not.toContain("observed 23");
+    rerender(
+      <ModeTreatment
+        mode="demo"
+        sourceStatus="incompatibleResponse"
+        sourceDiagnostic={{
+          observedProtocol: 20,
+          supportedProtocols: [17, 19, 20],
+          nextAction: "ensure terminal identities are unique, then retry",
+        }}
+        lastUpdateSeconds={0}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain(
+      "ensure terminal identities are unique, then retry",
+    );
+    rerender(
+      <ModeTreatment
+        mode="disconnected"
+        sourceStatus="incompatibleResponse"
+        sourceDiagnostic={{
+          observedProtocol: 20,
+          supportedProtocols: [17, 19, 20],
+          nextAction: "ensure terminal identities are unique, then retry",
+        }}
+        lastUpdateSeconds={1}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "ensure terminal identities are unique, then retry",
+    );
   });
   it("round-trips settings controls", () => {
     const change = vi.fn(),
@@ -161,6 +212,15 @@ describe("chrome interactions", () => {
     expect(change).toHaveBeenCalledWith({ atmosphere: false });
     fireEvent.click(screen.getByRole("button", { name: "Dinner" }));
     expect(change).toHaveBeenCalledWith({ theme: "dark" });
+    expect(
+      screen.getByText(
+        "Also applies to dishes already plated, preserving elapsed time",
+      ),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Done timeout" }), {
+      target: { value: "1200000" },
+    });
+    expect(change).toHaveBeenCalledWith({ doneTimeoutMs: 1_200_000 });
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     expect(close).toHaveBeenCalledOnce();
   });
@@ -197,6 +257,7 @@ describe("chrome interactions", () => {
         onDismissHint: dismiss,
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onRevealCleared: () => {},
       },
       { rerender } = render(<Chrome {...props} />);
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -244,12 +305,87 @@ describe("chrome interactions", () => {
         onDismissHint={() => {}}
         view="freezer"
         onToggleFreezer={toggle}
+        onRevealCleared={() => {}}
       />,
     );
     const button = screen.getByRole("button", { name: "Freezer" });
     expect(button.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(button);
     expect(toggle).toHaveBeenCalledOnce();
+  });
+  it("reveals locally cleared plated cooks with a native live-only control", () => {
+    const reveal = vi.fn(),
+      { rerender } = render(
+        <ModeTreatment
+          mode="live"
+          sourceStatus="connected"
+          lastUpdateSeconds={0}
+          clearedCount={1}
+          onRevealCleared={reveal}
+        />,
+      );
+    fireEvent.click(
+      screen.getByRole("button", { name: "1 plated cook cleared — reveal" }),
+    );
+    expect(reveal).toHaveBeenCalledOnce();
+    rerender(
+      <ModeTreatment
+        mode="demo"
+        sourceStatus="connected"
+        lastUpdateSeconds={0}
+        clearedCount={2}
+        onRevealCleared={reveal}
+      />,
+    );
+    expect(screen.queryByText(/plated cooks cleared/)).toBeNull();
+    expect(screen.getByText("DEMO SERVICE")).toBeTruthy();
+  });
+  it("closes a selected demo session summary on live recovery", () => {
+    const store = new AgentStore();
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "demo",
+      sourceStatus: "unavailableSocket",
+      agents: [record],
+    });
+    store.apply({
+      version: 1,
+      type: "delta",
+      mode: "demo",
+      operation: "upsert",
+      agent: { ...record, state: "ended" },
+    });
+    store.select(record.id);
+    const props = {
+        store,
+        coarse: store.coarse(),
+        hoveredId: null,
+        focusedId: null,
+        hits: [],
+        settingsOpen: false,
+        statsOpen: false,
+        lastUpdateSeconds: 0,
+        metrics: { drawCalls: 0, socketBytesPerSecond: 0 },
+        onCloseSettings: () => {},
+        onOpenSettings: () => {},
+        hintVisible: false,
+        onDismissHint: () => {},
+        view: "kitchen" as const,
+        onToggleFreezer: () => {},
+        onRevealCleared: () => {},
+      },
+      { rerender } = render(<Chrome {...props} />);
+    expect(screen.getByLabelText("refactor-auth session summary")).toBeTruthy();
+
+    store.apply(snapshot as AgentStateEvent);
+    rerender(<Chrome {...props} coarse={store.coarse()} />);
+    expect(screen.queryByLabelText("refactor-auth session summary")).toBeNull();
+    expect(store.coarse().selectedId).toBeNull();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBe(
+      document.activeElement,
+    );
+    store.destroy();
   });
   it("offers duplicate workspace scopes and reveals blocked elsewhere with restored focus", () => {
     const store = new AgentStore();
@@ -284,6 +420,7 @@ describe("chrome interactions", () => {
         onDismissHint: () => {},
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onRevealCleared: () => {},
       },
       { rerender } = render(<Chrome {...props} />),
       select = screen.getByRole("combobox", { name: "Workspace" });
@@ -379,6 +516,8 @@ describe("chrome interactions", () => {
       <DetailCard
         agent={{
           ...record,
+          workspace: "/work/\u001bapp",
+          agentKind: "co\u0085dex",
           stateEnteredAt: new Date(now - 10_000).toISOString(),
           targetState: "working",
           renderedState: "working",
@@ -397,10 +536,20 @@ describe("chrome interactions", () => {
     expect(screen.getByRole("heading", { name: "refactor-auth" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "app" })).toBeNull();
     expect(screen.getByText("app")).toBeTruthy();
+    expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
-    const history = screen.getByLabelText("Session history");
-    expect(history.querySelectorAll(".historyStrip i")).toHaveLength(2);
-    expect(history.querySelector('[data-state="working"]')).toBeTruthy();
+    expect(screen.getByLabelText("Session history")).toBeTruthy();
+    expect(
+      screen.getByRole("list", { name: "Observed state periods" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("listitem", { name: /Idle — prepping period 1,/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("listitem", {
+        name: /Working — on the fire period 2,.*to now/,
+      }),
+    ).toBeTruthy();
     expect(screen.queryByText(/Open in herdr/i)).toBeNull();
     expect(screen.queryByText(/herdr attach/i)).toBeNull();
     expect(document.querySelector('a[href^="herdr://agent/"]')).toBeNull();
@@ -426,7 +575,50 @@ describe("chrome interactions", () => {
         onClose={() => {}}
       />,
     );
-    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThanOrEqual(4);
+  });
+  it("copies the exact pane locator and announces clipboard failure", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const agent = {
+      ...record,
+      paneId: "pane-🥘-exact",
+      agentKind: "codex",
+      targetState: "working" as const,
+      renderedState: "working" as const,
+      transitionStartedAt: 0,
+      clearAt: null,
+      answerReceivedUntil: null,
+      revision: 1,
+      history: [{ state: "working" as const, startedAt: Date.now() }],
+    };
+    const { rerender } = render(
+      <DetailCard agent={agent} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
+    expect(await screen.findByText("Locator copied")).toBeTruthy();
+    expect(writeText).toHaveBeenCalledWith("pane-🥘-exact");
+    expect(screen.getByText("Attempt 1:")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
+    expect(await screen.findByText("Attempt 2:")).toBeTruthy();
+
+    rerender(
+      <DetailCard
+        agent={{ ...agent, paneId: "pane-🥘-moved" }}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.queryByText("Locator copied")).toBeNull();
+
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy locator" }));
+    expect(await screen.findByText(/Copy failed/)).toBeTruthy();
+    expect(screen.getByText("Attempt 3:")).toBeTruthy();
+    expect(screen.getByText("pane-🥘-moved")).toBeTruthy();
   });
   it("distinguishes observed zero tickets from unknown source state", () => {
     const store = new AgentStore();

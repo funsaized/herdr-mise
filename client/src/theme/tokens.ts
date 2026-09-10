@@ -28,6 +28,18 @@ export const tokens = {
   scene: {
     layout: {
       stationGutter: 2,
+      stationWidth: 35,
+      stationHeight: 45,
+      stationMaxWidth: 48,
+      stationGridHorizontalInset: 14,
+      maxStationColumns: 6,
+      banquetStationHeight: 42,
+      pagedStationHeight: 50,
+      banquetScale: 0.8,
+      pagerReservedHeight: 136,
+      compactPagerReservedHeight: 66,
+      compactPagerMinWidth: 640,
+      compactPagerMaxHeight: 400,
       sparseScale: 1.5,
       sparsePassWidth: 90,
       selectionCornerSize: 3,

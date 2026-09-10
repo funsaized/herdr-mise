@@ -10,6 +10,8 @@ fn record(id: &str, state: AgentState) -> AgentRecord {
     AgentRecord {
         state_known: None,
         id: id.into(),
+        pane_id: None,
+        agent_kind: None,
         name: format!("Cook {id}"),
         state,
         progress: Some(0.5),
@@ -43,7 +45,7 @@ fn render(table: &AgentTable, width: u16, height: u16, tick: u64) -> Buffer {
     render_selected(table, width, height, tick, None)
 }
 
-fn render_selected(
+pub(crate) fn render_selected(
     table: &AgentTable,
     width: u16,
     height: u16,
@@ -105,6 +107,7 @@ fn render_view_with_warning(
                 ColorMode::Xterm256,
                 true,
                 selected_id,
+                0,
                 scene_view,
                 false,
                 reduced_motion,
@@ -128,6 +131,7 @@ fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supporte
                 ColorMode::Truecolor,
                 scene_supported,
                 None,
+                0,
                 SceneView::Kitchen,
                 false,
                 false,
@@ -181,6 +185,7 @@ fn workspace_scope_scene_filters_stations_and_keeps_global_blocked_count() {
                 ColorMode::Xterm256,
                 true,
                 None,
+                0,
                 SceneView::Kitchen,
                 false,
                 false,
@@ -635,6 +640,7 @@ fn fixture_backed_responsive_composition_matrix() {
                     ColorMode::Truecolor,
                     true,
                     None,
+                    0,
                     SceneView::Kitchen,
                     false,
                     false,
@@ -651,6 +657,45 @@ fn fixture_backed_responsive_composition_matrix() {
     terminal.backend_mut().resize(160, 48);
     draw(&mut terminal);
     assert_eq!(terminal.backend().buffer(), &large);
+}
+
+#[test]
+fn authoritative_done_fixture_stays_plated_until_the_source_is_empty() {
+    let mut raw = serde_json::from_str::<serde_json::Value>(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+    ))
+    .unwrap();
+    raw["agents"][0]["agent_status"] = "done".into();
+    let normalized = Normalizer::default()
+        .normalize_snapshot_value(raw, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let event = AgentStateEvent::Snapshot {
+        version: 1,
+        mode: AppMode::Live,
+        source_status: SourceStatus::Connected,
+        source_diagnostic: None,
+        agents: normalized.agents,
+        workspaces: Some(normalized.workspaces),
+    };
+    let mut table = AgentTable::default();
+    table.apply(event.clone());
+    table.apply(event);
+    assert_eq!(table.agents().count(), 1);
+    let output = text(&render(&table, 80, 24, 0));
+    assert!(output.contains("PLATED"));
+    assert!(!output.contains("Waiting for agents"));
+
+    let empty = Normalizer::default()
+        .normalize_snapshot_value(
+            serde_json::from_str(include_str!(
+                "../../../tests/fixtures/snapshot-protocol-19-empty-agents.json"
+            ))
+            .unwrap(),
+            "2026-08-13T12:00:00Z",
+        )
+        .unwrap();
+    let empty_table = snapshot(AppMode::Live, SourceStatus::Connected, None, empty.agents);
+    assert!(text(&render(&empty_table, 80, 24, 0)).contains("Waiting for agents"));
 }
 
 #[test]
@@ -726,7 +771,7 @@ fn real_fixture_keeps_material_depth_and_state_chrome() {
         let expected = match name {
             "demo" => &["MISE — DEMO SERVICE"][..],
             "waiting" => &["Waiting for agents"][..],
-            "unsupported" => &["unsupported Herdr protocol", "Mock feed"][..],
+            "unsupported" => &["Herdr protocol is unsupported", "Mock feed"][..],
             "fallback" => &["Kitchen status"][..],
             _ => unreachable!(),
         };
@@ -1062,7 +1107,7 @@ fn kitchen_and_freezer_stay_separate_and_respect_reduced_motion() {
 }
 
 #[test]
-fn tui_strips_control_characters_from_external_strings() {
+fn tui_sanitizes_external_strings_without_obscuring_status() {
     let event = serde_json::from_str::<AgentStateEvent>(include_str!(
         "../../../../protocol/fixtures/snapshot.v1.json"
     ))
@@ -1075,6 +1120,12 @@ fn tui_strips_control_characters_from_external_strings() {
     agents[0].name.push_str("\u{1b}live");
     agents[0].model.push('\u{1b}');
     agents[0].workspace.push('\u{1b}');
+    agents[0].workspace.push_str(&"/料理🥘".repeat(100));
+    agents[0]
+        .pane_id
+        .as_mut()
+        .unwrap()
+        .push_str(&"-料理🥘".repeat(100));
     agents[0].state = AgentState::Blocked;
     agents[1].id.push('\u{1b}');
     agents[1].name.push_str("\u{1b}ended");
@@ -1085,7 +1136,7 @@ fn tui_strips_control_characters_from_external_strings() {
     let mut table = AgentTable::default();
     table.apply(AgentStateEvent::Snapshot {
         version: 1,
-        mode: AppMode::Live,
+        mode: AppMode::Demo,
         source_status: SourceStatus::UnsupportedProtocol,
         source_diagnostic: Some(SourceDiagnostic {
             observed_protocol: 23,
@@ -1116,5 +1167,9 @@ fn tui_strips_control_characters_from_external_strings() {
             .content
             .iter()
             .all(|cell| !cell.symbol().chars().any(char::is_control)));
+        let output = text(&buffer);
+        assert!(output.contains("MISE — DEMO SERVICE"), "{output}");
+        assert!(output.contains("Herdr protocol is unsupported"), "{output}");
+        assert!(output.contains("upgrade now"), "{output}");
     }
 }

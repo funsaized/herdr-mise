@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "requiredAgentFields": ["terminal_id", "pane_id", "workspace_id"],
   "supported": [
     {
       "release": "0.7.5",

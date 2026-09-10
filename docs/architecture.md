@@ -43,6 +43,14 @@ ratatui-based TUI that Herdr runs inside a managed pty as a split pane. Both
 renderers read from the same `Feed` broadcast (`server/src/main.rs`,
 `server/src/runtime.rs`, `server/src/feed.rs`).
 
+The normalizer keys records by Herdr `terminal_id`. That identity remains stable
+when a terminal moves; `paneId` and workspace are authoritative mutable locators.
+The pinned protocol 17, 19, and 20 sources all carry the terminal identifier in
+`AgentInfo` from the terminal attached to the pane, and their move paths transfer
+that attached terminal rather than creating a lifecycle. A disappearance still
+ends the observed identity once, while a different terminal identity starts with
+fresh timestamps and accent. Mise never reads `agent_session` as identity.
+
 ```
                 +--------------------------+
                 |  Herdr ecosystem         |
@@ -288,7 +296,7 @@ WebSocket snapshot-before-delta contract.
   ----------------                                       -------
   tokio::time::interval(1s) ----------Text "heartbeat"--> AgentWebSocketClient
                                                           onmessage
-                                                          |  parsed.type === "heartbeat"
+                                                          |  accepted snapshot?
                                                           v
                                                         armStale()  // 2.9 s
                                                           (store NOT mutated,
@@ -296,15 +304,20 @@ WebSocket snapshot-before-delta contract.
 ```
 
 The server emits a typed `AgentStateEvent::Heartbeat` once per second
-on every connected WebSocket. The client treats it as liveness only;
-it does not apply it to the `AgentStore`. This is what stops the
+on every connected WebSocket. After that connection accepts a snapshot, the
+client treats heartbeats as liveness only; it does not apply them to the
+`AgentStore`. Before a snapshot, heartbeats and deltas cannot postpone the 2.9
+second snapshot deadline. This is what stops the
 "quiet live feed -> disconnect flapping" defect that would otherwise
 re-trigger the disconnected overlay on a kitchen where nothing was
 happening.
 
-The client still surfaces `disconnected` after a 2.9 s silence — that
-is the agreed liveness budget for genuinely stale data — and
-reconnects in 1 s.
+The client also closes immediately when the decoder rejects a state-bearing or
+unsupported event, surfaces `disconnected`, and reconnects in 1 second through
+the existing generation fence. One recovery attempt spans reconnects. A second
+rejection before an accepted snapshot sets the client-local `incompatibleFeed`
+disconnect reason; an accepted snapshot clears it. Ordinary socket-loss copy is
+unchanged, and rejected payloads are neither partially applied nor logged.
 
 ## Coalescing of bursty production events
 
@@ -319,7 +332,7 @@ reconnects in 1 s.
       |--- apply_live_coalesced(active_agents, ended_ids)
                 |
                 v
-          observed state/new agent --> immediate broadcast
+          state/new agent/locator change --> immediate broadcast
           metrics-only updates --> pending: HashMap<id, AgentRecord>
                 |
                 v
@@ -331,8 +344,8 @@ reconnects in 1 s.
         (cancelled with the shared token; weak ownership for fixed feeds)
 ```
 
-`apply_live_coalesced` publishes observed state/timestamp changes and new agents
-immediately, while progress-like updates land in `pending` and are drained by
+`apply_live_coalesced` publishes observed state/timestamp changes, new agents,
+and pane/workspace/agent-kind inspection changes immediately, while progress-like updates land in `pending` and are drained by
 the 1.25 s coalescer task (`server/src/feed.rs`). An urgent transition evicts any
 older pending metric record under the same lock. The test
 `twelve_record_chatty_source_stays_below_wire_budget` enforces
@@ -345,6 +358,9 @@ upstream observations can still be missed. This is not a sub-250 ms
 upstream-to-pixel guarantee. `pane.agent_status_changed` remains outside the
 subscription contract until supported upstream subscription semantics are
 verified; the decoder recognizing a name is not sufficient evidence.
+Adapter-derived observation boundaries travel as `state_entered_at` changes
+and therefore use the same immediate path; see
+[Feed v1 observation semantics](../protocol/README.md) for the sequence contract.
 
 Browser and TUI take a snapshot with a new broadcast cursor while holding the
 Feed state read lock. Both initial subscription and lag recovery use this
@@ -353,6 +369,15 @@ Upstream frames are capped at 4 MiB, rosters at 4096 records, and each downstrea
 send at two seconds. A stalled connection is dropped rather than retaining its
 task indefinitely. See [observation semantics](../protocol/README.md) for
 unknown state, unavailable metrics, and bounded local history.
+
+Browser clients request inspection identity with `/ws?paneId=1`. The legacy
+`/ws` shape omits additive `paneId` and `agentKind` fields so already-open strict clients remain compatible
+until reload; both shapes come from the same Feed records. Mise time starts when
+this process first observes a terminal identity and resets on process restart.
+The browser and TUI show full workspace, verified upstream agent kind, and exact
+current pane locator only in selected-agent details. Compact station identities
+retain basename labels and add the locator only for colliding active rendered
+labels (name/basename pairs in the browser and names in the TUI).
 
 ## Ended lifecycle
 
@@ -400,7 +425,8 @@ defensive and stores the truthful final state, which is what
   | - Live state announcements  |        | One ticker. One canvas.       |
   |                             |        | Reads from AgentStore inside |
   | Reads coarse slices only:   |        | the ticker. Per-frame values |
-  |   - count, blocked, done,   |        | bypass React.                 |
+  |   - source/visible/cleared, |        | bypass React.                 |
+  |   - blocked, done,          |        |                               |
   |   - mode, selectedId,       |        |                               |
   |   - settings                |        |                               |
   +--------------+--------------+        +---------------+---------------+
@@ -416,7 +442,12 @@ live agent truth; `Feed` owns the normalized server projection; `AgentStore` own
 the browser projection plus local selection, settings, observed history, done
 timers, and the 86 board. Within an agent machine, `targetState` is feed truth and
 `renderedState` is only an interruptible animation projection. The WebSocket client
-will not apply deltas until that connection has received a fresh snapshot.
+will not apply deltas or extend its snapshot deadline until that connection has
+received a fresh snapshot. Decoder rejection invalidates that projection and
+re-enters the same snapshot-first reconnect path.
+The coarse slice reports non-ended source records, the locally visible projection,
+and done records cleared from presentation separately. Blocked and done totals are
+visible-only; connected live empty mode requires a zero-record source snapshot.
 
 `scripts/audit-pixi-architecture.mjs` enforces the boundary in CI by
 forbidding direct WebGL, custom renderer, or shader imports in the
