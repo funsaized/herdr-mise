@@ -1873,7 +1873,10 @@ export class KitchenScene {
     label.style.wordWrap = true;
     label.style.breakWords = false;
     label.style.wordWrapWidth = Math.max(0, rect.width - 2 * u);
-    label.position.set(rect.width / 2, 37 * u);
+    label.position.set(
+      rect.width / 2,
+      Math.max(37 * u, name.y + name.height + Math.max(1, u)),
+    );
     node.alpha = 1;
   }
   private tick(deltaMs: number) {
