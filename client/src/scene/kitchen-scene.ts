@@ -113,6 +113,7 @@ export interface SceneMetrics {
     BlockedPlacement & { timerText: string; exiting: boolean }
   >;
   blockedIndicators: number;
+  escalationBlockedAgents: number;
   stateIndicators: Record<string, number>;
   endedEntries: number;
   view: "kitchen" | "freezer";
@@ -217,6 +218,7 @@ export class KitchenScene {
   private escalationLayer = new Container();
   private escalationGraphic = new Graphics();
   private escalationSignature = "";
+  private escalationBlockedAgents = 0;
   private busserLayer = new Container();
   private busserSweeps = new BusserSweepTimeline();
   private busserGraphics = new Map<string, Graphics>();
@@ -406,7 +408,7 @@ export class KitchenScene {
       activeFocusBounds: Record<string, Rect> = {},
       activeFocusCornerSizes: Record<string, number> = {},
       snapshot = this.store.snapshot(),
-      agents = [...snapshot.agents.values()];
+      agents = [...snapshot.visibleAgents.values()];
     for (const agent of agents) {
       const pose = this.idlePoses.get(agent.id);
       if (agent.targetState === "idle" && pose) idlePoses[agent.id] = pose;
@@ -471,6 +473,7 @@ export class KitchenScene {
       activeFocusCornerSizes,
       blockedPlacements: { ...this.blockedPlacementMetrics },
       blockedIndicators,
+      escalationBlockedAgents: this.escalationBlockedAgents,
       stateIndicators,
       endedEntries: snapshot.board.length,
       view: this.view,
@@ -517,7 +520,7 @@ export class KitchenScene {
       this.transitions.reconcile();
       this.retainedBlocked.clear();
     }
-    const ids = [...snapshot.agents.keys()],
+    const ids = [...snapshot.visibleAgents.keys()],
       liveIds = ids.join("|"),
       boardIds = snapshot.board.map((entry) => entry.id).join("|"),
       boardSelection = snapshot.board.some(
@@ -542,7 +545,7 @@ export class KitchenScene {
     const snapshot = this.store.snapshot();
     this.lastTheme = this.resolvedTheme();
     this.lastAtmosphere = snapshot.settings.atmosphere;
-    this.lastLiveIds = [...snapshot.agents.keys()].join("|");
+    this.lastLiveIds = [...snapshot.visibleAgents.keys()].join("|");
     this.lastBoardIds = snapshot.board.map((entry) => entry.id).join("|");
     this.boardSelection = snapshot.board.some(
       (item) => item.id === snapshot.selectedId,
@@ -560,7 +563,9 @@ export class KitchenScene {
       this.retainedBlocked.clear();
       this.store.reconcileRendered(undefined, true);
     }
-    this.layout = computeLayout(width, height, [...snapshot.agents.keys()]);
+    this.layout = computeLayout(width, height, [
+      ...snapshot.visibleAgents.keys(),
+    ]);
     this.app.renderer.resize(width, height);
     const kitchen = this.view === "kitchen";
     this.stationLayer.visible = kitchen;
@@ -1233,29 +1238,29 @@ export class KitchenScene {
     this.atmosphereMetrics.workingContact =
       this.lastAtmosphere &&
       (snapshot.mode === "live" || snapshot.mode === "demo")
-        ? [...snapshot.agents.values()].filter(
+        ? [...snapshot.visibleAgents.values()].filter(
             (agent) => agent.targetState === "working",
           ).length
         : 0;
     for (const id of this.retainedBlocked.keys()) {
-      const agent = snapshot.agents.get(id);
+      const agent = snapshot.visibleAgents.get(id);
       if (!agent || (this.reducedMotion && agent.targetState !== "blocked"))
         this.retainedBlocked.delete(id);
     }
     const blockedIds = this.layout.stations
         .filter(
           (station) =>
-            snapshot.agents.get(station.id)?.targetState === "blocked",
+            snapshot.visibleAgents.get(station.id)?.targetState === "blocked",
         )
         .map((station) => station.id),
       exiting = [...this.retainedBlocked.values()].filter(
         (retained) =>
-          snapshot.agents.get(retained.id)?.targetState !== "blocked",
+          snapshot.visibleAgents.get(retained.id)?.targetState !== "blocked",
       ),
       placements = blockedPlacements(this.layout, blockedIds, exiting);
     this.blockedPlacementMetrics = {};
     for (const [id, placement] of placements) {
-      const agent = snapshot.agents.get(id)!;
+      const agent = snapshot.visibleAgents.get(id)!;
       const retained = {
         ...placement,
         timerText: formatElapsed(
@@ -1272,7 +1277,7 @@ export class KitchenScene {
       };
     this.hits = this.hits.filter((hit) => hit.kind !== "station");
     for (const station of this.layout.stations) {
-      const agent = snapshot.agents.get(station.id);
+      const agent = snapshot.visibleAgents.get(station.id);
       if (!agent) continue;
       active.add(agent.id);
       let view = this.stationViews.get(agent.id);
@@ -1764,7 +1769,7 @@ export class KitchenScene {
       this.store.reconcileRendered();
       const motion = sceneMotionPolicy(this.reducedMotion);
       if (motion.steam && this.atmosphereHasWork(snapshot)) {
-        for (const agent of snapshot.agents.values()) {
+        for (const agent of snapshot.visibleAgents.values()) {
           if (agent.targetState === "working") {
             const lastSteam = this.lastSteam.get(agent.id) ?? 0;
             if (now - lastSteam < prepFrameInterval(agent.progress)) continue;
@@ -1785,7 +1790,7 @@ export class KitchenScene {
           }
         }
         for (const id of this.lastSteam.keys())
-          if (!snapshot.agents.has(id)) this.lastSteam.delete(id);
+          if (!snapshot.visibleAgents.has(id)) this.lastSteam.delete(id);
         this.particles.update(visualDelta);
       } else {
         this.lastSteam.clear();
@@ -1861,7 +1866,7 @@ export class KitchenScene {
         this.busserGraphics.delete(id);
       }
       const view = this.stationViews.get(id),
-        liveAgentIds = new Set(this.store.snapshot().agents.keys());
+        liveAgentIds = new Set(this.store.snapshot().visibleAgents.keys());
       if (view && shouldDisposeRetainedStation(liveAgentIds, id))
         this.disposeStation(id, view);
     }
@@ -1876,7 +1881,7 @@ export class KitchenScene {
   }
   private drawEscalation(now: number) {
     const settings = this.store.snapshot().settings,
-      blocked = [...this.store.snapshot().agents.values()].filter(
+      blocked = [...this.store.snapshot().visibleAgents.values()].filter(
         (agent) => agent.targetState === "blocked",
       ),
       elapsed = blocked.length
@@ -1896,6 +1901,7 @@ export class KitchenScene {
       pulseFrame =
         motion.escalation && blocked.length ? Math.floor(now / 125) : 0,
       signature = `${blocked.length}:${stage}:${pulseFrame}:${this.reducedMotion}:${this.resolvedTheme()}:${this.layout.unit}:${this.app.renderer.width}:${this.app.renderer.height}`;
+    this.escalationBlockedAgents = blocked.length;
     if (signature === this.escalationSignature) return;
     this.escalationSignature = signature;
     const p = getTheme().palette,
@@ -1957,7 +1963,7 @@ export class KitchenScene {
       this.view === "kitchen" &&
       snapshot.settings.atmosphere &&
       (snapshot.mode === "live" || snapshot.mode === "demo") &&
-      [...snapshot.agents.values()].some(
+      [...snapshot.visibleAgents.values()].some(
         (agent) => agent.targetState === "working",
       )
     );

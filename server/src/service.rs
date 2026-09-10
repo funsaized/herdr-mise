@@ -658,6 +658,7 @@ mod tests {
             accent_index: 0,
             model: "".into(),
             workspace: "".into(),
+            workspace_id: None,
             session: SessionStats {
                 tickets_available: None,
                 runtime_ms: 0,

@@ -33,6 +33,7 @@ function agent(value: unknown): boolean {
       "accentIndex",
       "model",
       "workspace",
+      "workspaceId",
       "session",
     ]) &&
     keys(value.session, ["runtimeMs", "tickets", "ticketsAvailable"]) &&
@@ -44,6 +45,8 @@ function agent(value: unknown): boolean {
     value.name.length > 0 &&
     text(value.model) &&
     text(value.workspace) &&
+    (value.workspaceId === undefined ||
+      (text(value.workspaceId) && value.workspaceId.length > 0)) &&
     typeof value.state === "string" &&
     states.has(value.state) &&
     text(value.stateEnteredAt) &&
@@ -60,6 +63,15 @@ function agent(value: unknown): boolean {
         value.progress <= 1)) &&
     natural(value.session.runtimeMs) &&
     natural(value.session.tickets)
+  );
+}
+function workspace(value: unknown): boolean {
+  return (
+    object(value) &&
+    keys(value, ["id", "label"]) &&
+    text(value.id) &&
+    value.id.length > 0 &&
+    text(value.label)
   );
 }
 export function decodeFeedEvent(raw: string): AgentStateEvent | null {
@@ -85,6 +97,7 @@ export function decodeFeedEvent(raw: string): AgentStateEvent | null {
         "sourceStatus",
         "sourceDiagnostic",
         "agents",
+        "workspaces",
       ])
     )
       return null;
@@ -98,6 +111,16 @@ export function decodeFeedEvent(raw: string): AgentStateEvent | null {
       return null;
     const ids = value.agents.map((entry) => entry.id);
     if (new Set(ids).size !== ids.length) return null;
+    if (value.workspaces !== undefined) {
+      if (
+        !Array.isArray(value.workspaces) ||
+        value.workspaces.length > 4096 ||
+        !value.workspaces.every(workspace)
+      )
+        return null;
+      const workspaceIds = value.workspaces.map((entry) => entry.id);
+      if (new Set(workspaceIds).size !== workspaceIds.length) return null;
+    }
     if (value.sourceDiagnostic !== undefined) {
       const diagnostic = value.sourceDiagnostic;
       if (

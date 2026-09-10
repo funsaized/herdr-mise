@@ -19,11 +19,15 @@ export function ModeTreatment({
   sourceStatus,
   sourceDiagnostic = null,
   lastUpdateSeconds,
+  scopeEmptyLabel = null,
+  scopeUnavailableLabel = null,
 }: {
   mode: CoarseSlice["mode"];
   sourceStatus: CoarseSlice["sourceStatus"];
   sourceDiagnostic?: SourceDiagnostic | null;
   lastUpdateSeconds: number;
+  scopeEmptyLabel?: string | null;
+  scopeUnavailableLabel?: string | null;
 }) {
   const detail =
     sourceStatus === "unsupportedProtocol" && sourceDiagnostic
@@ -33,12 +37,6 @@ export function ModeTreatment({
     return (
       <div className="emptyPill" role="status">
         Connecting to Mise — waiting for agent state
-      </div>
-    );
-  if (mode === "empty")
-    return (
-      <div className="emptyPill" role="status">
-        Waiting for agents — start one in herdr
       </div>
     );
   if (mode === "demo")
@@ -68,6 +66,24 @@ export function ModeTreatment({
             will reconnect to Herdr when its local source is available.
           </small>
         </div>
+      </div>
+    );
+  if (scopeUnavailableLabel !== null)
+    return (
+      <div className="emptyPill" role="status">
+        {scopeUnavailableLabel} is unavailable
+      </div>
+    );
+  if (mode === "empty")
+    return (
+      <div className="emptyPill" role="status">
+        Waiting for agents — start one in herdr
+      </div>
+    );
+  if (scopeEmptyLabel !== null)
+    return (
+      <div className="emptyPill" role="status">
+        No agents in {scopeEmptyLabel}
       </div>
     );
   return null;

@@ -96,7 +96,9 @@ const agent = (
   workspace: "/work",
   session: { runtimeMs: 1_000, tickets: 2 },
 });
-const snapshot = (...agents: AgentRecord[]): AgentStateEvent => ({
+const snapshot = (
+  ...agents: AgentRecord[]
+): Extract<AgentStateEvent, { type: "snapshot" }> => ({
   version: 1,
   type: "snapshot",
   mode: "live",
@@ -112,6 +114,58 @@ const upsert = (record: AgentRecord): AgentStateEvent => ({
 });
 
 describe("agent store machines", () => {
+  it("keeps workspace scope local while global blocked events and counts remain visible", () => {
+    const store = new AgentStore(),
+      here = { ...agent("working", "a"), workspaceId: "ws-1" },
+      elsewhere = { ...agent("blocked", "b"), workspaceId: "ws-2" },
+      events: string[] = [];
+    store.onEvent((event) => {
+      if (event.type === "state") events.push(`${event.agentId}:${event.to}`);
+    });
+    store.apply({
+      ...snapshot(here, elsewhere),
+      workspaces: [
+        { id: "ws-1", label: "same" },
+        { id: "ws-2", label: "same" },
+        { id: "ws-empty", label: "empty" },
+      ],
+    });
+    store.selectWorkspace("ws-1");
+    expect([...store.snapshot().agents.keys()]).toEqual(["a", "b"]);
+    expect([...store.snapshot().visibleAgents.keys()]).toEqual(["a"]);
+    expect(store.coarse().blockedElsewhere).toBe(1);
+    expect(events).toContain("b:blocked");
+
+    store.select("a");
+    store.selectWorkspace("ws-2");
+    expect(store.coarse().selectedId).toBeNull();
+    expect([...store.snapshot().visibleAgents.keys()]).toEqual(["b"]);
+  });
+
+  it("retains workspace scope by id across rename and removal without label reassignment", () => {
+    const store = new AgentStore(),
+      scoped = { ...agent("working", "a"), workspaceId: "ws-1" };
+    store.apply({
+      ...snapshot(scoped),
+      workspaces: [{ id: "ws-1", label: "old" }],
+    });
+    store.selectWorkspace("ws-1");
+    store.apply({
+      ...snapshot({ ...scoped, workspace: "renamed" }),
+      workspaces: [{ id: "ws-1", label: "renamed" }],
+    });
+    expect(store.coarse().selectedWorkspaceLabel).toBe("renamed");
+    store.apply({
+      ...snapshot(),
+      workspaces: [{ id: "ws-2", label: "renamed" }],
+    });
+    expect(store.coarse()).toMatchObject({
+      selectedWorkspaceId: "ws-1",
+      selectedWorkspaceLabel: "renamed",
+      workspaceUnavailable: true,
+      visibleCount: 0,
+    });
+  });
   it("keeps fixture feed identity and layout unchanged when atmosphere is off", () => {
     const store = new AgentStore();
     store.apply(fixtureSnapshot as AgentStateEvent);

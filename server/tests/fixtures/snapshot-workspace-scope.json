@@ -1,0 +1,27 @@
+{
+  "version": "0.8.0",
+  "protocol": 19,
+  "focused_workspace_id": "scope-workspace-two",
+  "workspaces": [
+    { "workspace_id": "scope-workspace-one", "label": "duplicate" },
+    { "workspace_id": "scope-workspace-two", "label": "duplicate" },
+    { "workspace_id": "scope-workspace-empty", "label": "empty" }
+  ],
+  "tabs": [],
+  "panes": [],
+  "layouts": [],
+  "agents": [
+    {
+      "pane_id": "scope-pane-one",
+      "workspace_id": "scope-workspace-one",
+      "display_agent": "scope-working",
+      "agent_status": "working"
+    },
+    {
+      "pane_id": "scope-pane-two",
+      "workspace_id": "scope-workspace-two",
+      "display_agent": "scope-blocked",
+      "agent_status": "blocked"
+    }
+  ]
+}

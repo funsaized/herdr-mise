@@ -15,7 +15,9 @@ use tokio::{
     time::timeout,
 };
 
-use crate::protocol::{AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus};
+use crate::protocol::{
+    AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus, WorkspaceRecord,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,6 +143,7 @@ pub struct Normalizer {
 pub struct NormalizedSnapshot {
     pub agents: Vec<AgentRecord>,
     pub ended_ids: Vec<String>,
+    pub workspaces: Vec<WorkspaceRecord>,
 }
 
 impl Normalizer {
@@ -163,11 +166,32 @@ impl Normalizer {
         // The product version is intentionally descriptive so patch releases keep working.
         let _server_version = &raw.version;
         let _ = (&raw.tabs, &raw.layouts);
-        let workspaces: HashMap<_, _> = raw
-            .workspaces
-            .into_iter()
-            .map(|w| (w.workspace_id, w.label))
-            .collect();
+        if raw.workspaces.len() > 4096 {
+            return Err(AdapterError::Remote(
+                "snapshot exceeds 4096 workspace limit".into(),
+            ));
+        }
+        let mut workspace_labels = HashMap::new();
+        let mut workspaces = Vec::new();
+        for workspace in raw.workspaces {
+            if workspace.workspace_id.is_empty() {
+                continue;
+            }
+            if workspace.workspace_id.len() > 4096 || workspace.label.len() > 4096 {
+                return Err(AdapterError::Remote(
+                    "workspace identity exceeds 4096 byte limit".into(),
+                ));
+            }
+            if workspace_labels.contains_key(&workspace.workspace_id) {
+                continue;
+            }
+            workspace_labels.insert(workspace.workspace_id.clone(), workspace.label.clone());
+            workspaces.push(WorkspaceRecord {
+                id: workspace.workspace_id,
+                label: workspace.label,
+            });
+        }
+        workspaces.sort_by(|a, b| a.id.cmp(&b.id));
         let source = raw.agents;
         if source.len() > 4096 {
             return Err(AdapterError::Remote(
@@ -177,6 +201,11 @@ impl Normalizer {
         let mut current = HashSet::new();
         let mut agents = Vec::with_capacity(source.len());
         for agent in source {
+            if agent.workspace_id.len() > 4096 {
+                return Err(AdapterError::Remote(
+                    "agent workspace identity exceeds 4096 byte limit".into(),
+                ));
+            }
             let id = agent.pane_id.clone();
             current.insert(id.clone());
             let state_known = !matches!(agent.agent_status, RawStatus::Unknown);
@@ -203,7 +232,9 @@ impl Normalizer {
                 .flatten()
                 .find(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| format!("agent-{}", agent.pane_id));
-            let workspace = workspaces
+            let workspace_id = (!agent.workspace_id.is_empty() && agent.workspace_id.len() <= 4096)
+                .then(|| agent.workspace_id.clone());
+            let workspace = workspace_labels
                 .get(&agent.workspace_id)
                 .filter(|s| !s.is_empty())
                 .cloned()
@@ -223,6 +254,7 @@ impl Normalizer {
                 state_entered_at: stamp,
                 model: String::new(),
                 workspace,
+                workspace_id,
                 session: SessionStats {
                     tickets_available: Some(false),
                     runtime_ms: mise_runtime_ms(&started, received_at),
@@ -237,7 +269,11 @@ impl Normalizer {
             self.entered_at.remove(id);
         }
         self.previous_ids = current;
-        Ok(NormalizedSnapshot { agents, ended_ids })
+        Ok(NormalizedSnapshot {
+            agents,
+            ended_ids,
+            workspaces,
+        })
     }
 }
 
@@ -435,9 +471,34 @@ mod tests {
         let a = &out.agents[0];
         assert_eq!(a.id, "p-1");
         assert_eq!(a.workspace, "demo");
+        assert_eq!(a.workspace_id.as_deref(), Some("ws-1"));
         assert_eq!(a.progress, None);
         assert_eq!(a.model, "");
         assert_eq!(a.session.runtime_ms, 0);
+    }
+    #[test]
+    fn workspace_scope_catalog_keeps_empty_deduplicated_ids_and_unknown_agent_identity() {
+        let value = json!({
+            "version":"0.8.0","protocol":19,"tabs":[],"panes":[],"layouts":[],
+            "workspaces":[
+                {"workspace_id":"ws-b","label":"same"},
+                {"workspace_id":"ws-a","label":"same"},
+                {"workspace_id":"ws-a","label":"ignored"}
+            ],
+            "agents":[{"pane_id":"p-1","workspace_id":"ws-unknown","agent":"codex","agent_status":"blocked"}]
+        });
+        let out = Normalizer::default()
+            .normalize_snapshot_value(value, "2026-07-31T00:00:00Z")
+            .unwrap();
+        assert_eq!(
+            out.workspaces
+                .iter()
+                .map(|w| w.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ws-a", "ws-b"]
+        );
+        assert_eq!(out.agents[0].workspace, "ws-unknown");
+        assert_eq!(out.agents[0].workspace_id.as_deref(), Some("ws-unknown"));
     }
     #[test]
     fn mise_time_accumulates_from_first_sighting_and_resets_on_end() {

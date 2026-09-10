@@ -83,7 +83,7 @@ export function App() {
     settingsRestorePendingRef = useRef(false);
   const [coarse, setCoarse] = useState<CoarseSlice>(() => clientStore.coarse()),
     [agents, setAgents] = useState<readonly SemanticAgent[]>(() =>
-      semanticAgents(clientStore.snapshot().agents),
+      semanticAgents(clientStore.snapshot().visibleAgents),
     ),
     [hits, setHits] = useState<readonly SceneHit[]>([]),
     [hoveredId, setHoveredId] = useState<string | null>(null),
@@ -103,7 +103,7 @@ export function App() {
     () =>
       clientStore.subscribe(() =>
         setAgents((previous) => {
-          const next = semanticAgents(clientStore.snapshot().agents);
+          const next = semanticAgents(clientStore.snapshot().visibleAgents);
           return semanticAgentsEqual(previous, next) ? previous : next;
         }),
       ),

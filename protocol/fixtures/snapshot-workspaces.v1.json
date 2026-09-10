@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "type": "snapshot",
+  "mode": "live",
+  "sourceStatus": "connected",
+  "agents": [
+    {
+      "id": "agent-scope",
+      "name": "scope-agent",
+      "state": "blocked",
+      "progress": null,
+      "stateEnteredAt": "2026-07-31T16:00:00Z",
+      "accentIndex": 2,
+      "model": "codex",
+      "workspace": "/work/pantry",
+      "workspaceId": "workspace-pantry",
+      "session": { "runtimeMs": 901000, "tickets": 4 }
+    }
+  ],
+  "workspaces": [
+    { "id": "workspace-empty", "label": "/work/empty" },
+    { "id": "workspace-pantry", "label": "/work/pantry" }
+  ]
+}

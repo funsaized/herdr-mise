@@ -5,6 +5,7 @@ export type AppMode = "live" | "demo";
 export type SourceStatus = "unavailableSocket" | "timeout" | "unsupportedProtocol" | "incompatibleResponse" | "connected";
 export interface SourceDiagnostic { observedProtocol: number; supportedProtocols: number[]; nextAction: string }
 export interface SessionStats { runtimeMs: number; tickets: number; ticketsAvailable?: boolean }
+export interface WorkspaceRecord { id: string; label: string }
 export interface AgentRecord {
   stateKnown?: boolean;
   id: string;
@@ -15,10 +16,11 @@ export interface AgentRecord {
   accentIndex: number;
   model: string;
   workspace: string;
+  workspaceId?: string;
   session: SessionStats;
 }
 export type AgentStateEvent =
-  | { version: typeof PROTOCOL_VERSION; type: "snapshot"; mode: AppMode; sourceStatus: SourceStatus; sourceDiagnostic?: SourceDiagnostic; agents: AgentRecord[] }
+  | { version: typeof PROTOCOL_VERSION; type: "snapshot"; mode: AppMode; sourceStatus: SourceStatus; sourceDiagnostic?: SourceDiagnostic; agents: AgentRecord[]; workspaces?: WorkspaceRecord[] }
   | { version: typeof PROTOCOL_VERSION; type: "delta"; mode: AppMode; operation: "upsert"; agent: AgentRecord }
   | { version: typeof PROTOCOL_VERSION; type: "delta"; mode: AppMode; operation: "remove"; agentId: string }
   | { version: typeof PROTOCOL_VERSION; type: "heartbeat" };

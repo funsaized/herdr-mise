@@ -15,8 +15,8 @@ use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, Pixel
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
     state::{AgentTable, BoardEntry, BOARD_CAP},
-    theme, view, SceneView, HELP_LINES, KEY_ESC_CLOSE, KEY_ESC_KITCHEN, KEY_FREEZER, KEY_HELP,
-    KEY_INSPECT, KEY_KITCHEN, KEY_QUIT, KEY_QUIT_ESC,
+    theme, view, SceneView, HELP_LINES, KEY_ALL, KEY_ESC_CLOSE, KEY_ESC_KITCHEN, KEY_FREEZER,
+    KEY_HELP, KEY_INSPECT, KEY_KITCHEN, KEY_QUIT, KEY_QUIT_ESC, KEY_SCOPE,
 };
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceStatus};
 
@@ -435,12 +435,17 @@ fn board_count_text(table: &AgentTable) -> String {
 fn footer_connection(table: &AgentTable, warning: Option<&str>, width: u16) -> String {
     let board = board_count_text(table);
     let connection_width = usize::from(width).saturating_sub(board.chars().count() + 3);
+    let connection = connection_text(table, warning);
+    let preferred = warning
+        .map(view::sanitize_external)
+        .filter(|warning| {
+            warning.chars().count() <= connection_width
+                && connection.chars().count() > connection_width
+        })
+        .unwrap_or(connection);
     format!(
         "{} · {board}",
-        connection_text(table, warning)
-            .chars()
-            .take(connection_width)
-            .collect::<String>()
+        preferred.chars().take(connection_width).collect::<String>()
     )
 }
 
@@ -477,7 +482,7 @@ fn draw_help(frame: &mut Frame<'_>, color_mode: ColorMode) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_view(
+pub(crate) fn draw_view_scoped(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
@@ -489,15 +494,17 @@ pub(crate) fn draw_view(
     scene_view: SceneView,
     help_open: bool,
     reduced_motion: bool,
+    scope: &super::Scope,
 ) {
     if !scene_supported {
-        view::draw(
+        view::draw_scoped(
             frame,
             table,
             warning,
             now,
             motion_tick(tick, reduced_motion),
             selected_id,
+            scope,
         );
         if help_open {
             draw_help(frame, color_mode);
@@ -516,6 +523,7 @@ pub(crate) fn draw_view(
             color_mode,
             selected_id,
             reduced_motion,
+            scope,
         ),
         SceneView::Kitchen => draw_kitchen(
             frame,
@@ -527,6 +535,7 @@ pub(crate) fn draw_view(
             color_mode,
             selected_id,
             reduced_motion,
+            scope,
         ),
     }
     if help_open {
@@ -545,19 +554,21 @@ fn draw_kitchen(
     color_mode: ColorMode,
     selected_id: Option<&str>,
     reduced_motion: bool,
+    scope: &super::Scope,
 ) {
-    let agents = table.agents().collect::<Vec<_>>();
+    let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
     let LayoutDecision::Scene(layout) =
         compute_layout(area.width, area.height.saturating_mul(2), agents.len())
     else {
         if area == frame.area() {
-            view::draw(
+            view::draw_scoped(
                 frame,
                 table,
                 warning,
                 now,
                 motion_tick(tick, reduced_motion),
                 selected_id,
+                scope,
             );
         }
         return;
@@ -667,7 +678,7 @@ fn draw_kitchen(
         table.mode(),
         table.source_status(),
         table.source_diagnostic(),
-        agents.len(),
+        table.agents().count(),
     );
     render_line(
         frame,
@@ -686,6 +697,7 @@ fn draw_kitchen(
     let source_width = area
         .width
         .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2));
+    let source = format!("{source} · {}", view::scope_summary(table, scope));
     let (source_first, source_overflow) = split_line(&source, usize::from(source_width));
     render_line(
         frame,
@@ -760,10 +772,9 @@ fn draw_kitchen(
         }
     }
 
-    let blocked = agents
-        .iter()
+    let blocked = table
+        .agents()
         .filter(|agent| agent.state == AgentState::Blocked)
-        .copied()
         .collect::<Vec<_>>();
     if blocked.is_empty() {
         render_line(
@@ -914,7 +925,7 @@ fn draw_kitchen(
         );
     }
 
-    if agents.is_empty()
+    if table.agents().next().is_none()
         && table.mode() == AppMode::Live
         && table.source_status() == &SourceStatus::Connected
     {
@@ -950,9 +961,9 @@ fn draw_kitchen(
     }
 
     let keys = if selected_id.is_some() {
-        format!("{KEY_INSPECT} · {KEY_FREEZER} · {KEY_ESC_CLOSE} · {KEY_QUIT}")
+        format!("{KEY_INSPECT} · {KEY_SCOPE} · {KEY_ALL} · {KEY_FREEZER} · {KEY_ESC_CLOSE} · {KEY_QUIT}")
     } else {
-        format!("{KEY_FREEZER} · {KEY_QUIT_ESC} · {KEY_HELP}")
+        format!("{KEY_SCOPE} · {KEY_ALL} · {KEY_FREEZER} · {KEY_QUIT_ESC} · {KEY_HELP}")
     };
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
     let connection = footer_connection(table, warning, connection_width);
@@ -989,6 +1000,7 @@ fn draw_freezer(
     color_mode: ColorMode,
     selected_id: Option<&str>,
     reduced_motion: bool,
+    scope: &super::Scope,
 ) {
     let ids = table
         .board()
@@ -998,13 +1010,14 @@ fn draw_freezer(
     let Some(layout) = compute_freezer_layout(area.width, area.height.saturating_mul(2), &ids)
     else {
         if area == frame.area() {
-            view::draw(
+            view::draw_scoped(
                 frame,
                 table,
                 warning,
                 now,
                 motion_tick(tick, reduced_motion),
                 selected_id,
+                scope,
             );
         }
         return;
@@ -1202,6 +1215,7 @@ fn draw_freezer(
         )]),
     );
     let source_width = area.width.saturating_sub(4);
+    let source = format!("{source} · {}", view::scope_summary(table, scope));
     let (source_first, source_overflow) = split_line(&source, usize::from(source_width));
     render_line(
         frame,
@@ -1282,7 +1296,7 @@ fn draw_freezer(
             );
         }
     }
-    let keys = format!("{KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}");
+    let keys = format!("{KEY_SCOPE} · {KEY_ALL} · {KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}");
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
     let connection = footer_connection(table, warning, connection_width);
     render_line(

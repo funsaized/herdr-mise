@@ -8,7 +8,7 @@ use crate::{
     demo,
     protocol::{
         AgentRecord, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic, SourceStatus,
-        PROTOCOL_VERSION,
+        WorkspaceRecord, PROTOCOL_VERSION,
     },
 };
 
@@ -28,6 +28,7 @@ struct FeedState {
     source_status: SourceStatus,
     source_diagnostic: Option<SourceDiagnostic>,
     agents: HashMap<String, AgentRecord>,
+    workspaces: Option<Vec<WorkspaceRecord>>,
 }
 
 impl Feed {
@@ -44,6 +45,7 @@ impl Feed {
                 source_status: SourceStatus::UnavailableSocket,
                 source_diagnostic: None,
                 agents: HashMap::new(),
+                workspaces: None,
             }),
             pending: Mutex::new(HashMap::new()),
             changes,
@@ -81,6 +83,7 @@ impl Feed {
                     source_diagnostic: None,
                     mode,
                     agents: HashMap::new(),
+                    workspaces: None,
                 }),
                 pending: Mutex::new(HashMap::new()),
                 changes,
@@ -104,6 +107,11 @@ impl Feed {
         let state = self.inner.state.read().await;
         Self::snapshot_state(&state)
     }
+    #[cfg(test)]
+    pub(crate) async fn apply_normalized_for_test(&self, snapshot: adapter::NormalizedSnapshot) {
+        self.apply_live_coalesced(snapshot.agents, snapshot.ended_ids, snapshot.workspaces)
+            .await;
+    }
     /// The cursor and snapshot share a read lock: no queued event predates it.
     pub async fn subscribe_snapshot(
         &self,
@@ -120,6 +128,7 @@ impl Feed {
             source_status: state.source_status.clone(),
             source_diagnostic: state.source_diagnostic.clone(),
             agents,
+            workspaces: state.workspaces.clone(),
         }
     }
     pub async fn publish(&self, agent: AgentRecord) {
@@ -138,14 +147,19 @@ impl Feed {
     }
     #[cfg(test)]
     async fn apply_live(&self, agents: Vec<AgentRecord>, ended_ids: Vec<String>) {
-        self.reconcile(agents, false).await;
-        self.end_ids(ended_ids).await;
+        self.apply_live_coalesced(agents, ended_ids, vec![]).await;
     }
-    async fn transition_to_live(&self, agents: Vec<AgentRecord>, ended_ids: Vec<String>) {
-        self.inner.pending.lock().await.clear();
-        self.end_ids(ended_ids).await;
+    async fn transition_to_live(
+        &self,
+        agents: Vec<AgentRecord>,
+        ended_ids: Vec<String>,
+        workspaces: Vec<WorkspaceRecord>,
+    ) {
         {
+            let mut pending = self.inner.pending.lock().await;
             let mut state = self.inner.state.write().await;
+            pending.clear();
+            self.end_ids_state(&mut pending, &mut state, ended_ids);
             state.mode = AppMode::Live;
             state.source_status = SourceStatus::Connected;
             state.source_diagnostic = None;
@@ -153,6 +167,7 @@ impl Feed {
                 .into_iter()
                 .map(|agent| (agent.id.clone(), agent))
                 .collect();
+            state.workspaces = Some(workspaces.clone());
             let mut agents = state.agents.values().cloned().collect::<Vec<_>>();
             agents.sort_by(|a, b| a.id.cmp(&b.id));
             let event = AgentStateEvent::Snapshot {
@@ -161,6 +176,7 @@ impl Feed {
                 source_status: SourceStatus::Connected,
                 source_diagnostic: None,
                 agents,
+                workspaces: Some(workspaces),
             };
             let _ = self.inner.changes.send(event);
         }
@@ -186,11 +202,36 @@ impl Feed {
                 source_status,
                 source_diagnostic,
                 agents,
+                workspaces: state.workspaces.clone(),
             };
             let _ = self.inner.changes.send(event);
         }
     }
-    async fn apply_live_coalesced(&self, agents: Vec<AgentRecord>, ended_ids: Vec<String>) {
+    async fn apply_live_coalesced(
+        &self,
+        agents: Vec<AgentRecord>,
+        ended_ids: Vec<String>,
+        workspaces: Vec<WorkspaceRecord>,
+    ) {
+        {
+            let mut pending = self.inner.pending.lock().await;
+            let mut state = self.inner.state.write().await;
+            if state.workspaces.as_deref().unwrap_or_default() == workspaces {
+                drop(state);
+                drop(pending);
+            } else {
+                pending.clear();
+                self.end_ids_state(&mut pending, &mut state, ended_ids);
+                state.agents = agents
+                    .into_iter()
+                    .map(|agent| (agent.id.clone(), agent))
+                    .collect();
+                state.workspaces = Some(workspaces);
+                let event = Self::snapshot_state(&state);
+                let _ = self.inner.changes.send(event);
+                return;
+            }
+        }
         {
             let mut pending = self.inner.pending.lock().await;
             let mut state = self.inner.state.write().await;
@@ -218,6 +259,14 @@ impl Feed {
     async fn end_ids(&self, ended_ids: Vec<String>) {
         let mut pending = self.inner.pending.lock().await;
         let mut state = self.inner.state.write().await;
+        self.end_ids_state(&mut pending, &mut state, ended_ids);
+    }
+    fn end_ids_state(
+        &self,
+        pending: &mut HashMap<String, AgentRecord>,
+        state: &mut FeedState,
+        ended_ids: Vec<String>,
+    ) {
         let mode = state.mode.clone();
         let stamp = now();
         for id in ended_ids {
@@ -238,11 +287,21 @@ impl Feed {
         }
     }
     async fn replace_demo(&self, agents: Vec<AgentRecord>) {
+        let workspaces = agents
+            .iter()
+            .filter_map(|agent| {
+                agent.workspace_id.as_ref().map(|id| WorkspaceRecord {
+                    id: id.clone(),
+                    label: agent.workspace.clone(),
+                })
+            })
+            .collect();
         let (ended, active): (Vec<_>, Vec<_>) = agents
             .into_iter()
             .partition(|agent| agent.state == crate::protocol::AgentState::Ended);
+        let mut state = self.inner.state.write().await;
+        state.workspaces = Some(workspaces);
         if !ended.is_empty() {
-            let mut state = self.inner.state.write().await;
             let mode = state.mode.clone();
             for agent in ended {
                 if state.agents.remove(&agent.id).is_some() {
@@ -256,10 +315,18 @@ impl Feed {
                 }
             }
         }
-        self.reconcile(active, true).await;
+        self.reconcile_state(&mut state, active, true);
     }
     async fn reconcile(&self, incoming: Vec<AgentRecord>, authoritative: bool) {
         let mut state = self.inner.state.write().await;
+        self.reconcile_state(&mut state, incoming, authoritative);
+    }
+    fn reconcile_state(
+        &self,
+        state: &mut FeedState,
+        incoming: Vec<AgentRecord>,
+        authoritative: bool,
+    ) {
         let mode = state.mode.clone();
         let incoming_ids = incoming
             .iter()
@@ -329,7 +396,7 @@ async fn run_startup_recovery(
         };
         match result {
             Ok(snapshot) => {
-                feed.transition_to_live(snapshot.agents, snapshot.ended_ids)
+                feed.transition_to_live(snapshot.agents, snapshot.ended_ids, snapshot.workspaces)
                     .await;
                 tokio::spawn(run_live(feed, path, normalizer, shutdown));
                 return;
@@ -400,14 +467,22 @@ async fn run_live(
             Ok(snapshot) => {
                 failures = 0;
                 if reconnecting {
-                    feed.transition_to_live(snapshot.agents, snapshot.ended_ids)
-                        .await;
+                    feed.transition_to_live(
+                        snapshot.agents,
+                        snapshot.ended_ids,
+                        snapshot.workspaces,
+                    )
+                    .await;
                     reconnecting = false;
                 } else {
                     // Preserve observed state transitions immediately; only
                     // same-state metrics wait for the bounded coalescer.
-                    feed.apply_live_coalesced(snapshot.agents, snapshot.ended_ids)
-                        .await;
+                    feed.apply_live_coalesced(
+                        snapshot.agents,
+                        snapshot.ended_ids,
+                        snapshot.workspaces,
+                    )
+                    .await;
                 }
                 if !*feed.inner.health.borrow() {
                     // send() fails without storing when every receiver is gone,
@@ -468,15 +543,76 @@ mod tests {
         let mut changes = feed.subscribe();
         let mut blocked = record(0.2);
         blocked.state = crate::protocol::AgentState::Blocked;
-        feed.apply_live_coalesced(vec![blocked.clone()], vec![])
+        feed.apply_live_coalesced(vec![blocked.clone()], vec![], vec![])
             .await;
         assert!(
             matches!(changes.try_recv().unwrap(), AgentStateEvent::Delta { agent: Some(agent), .. } if agent.state == crate::protocol::AgentState::Blocked)
         );
-        feed.apply_live_coalesced(vec![record(0.3)], vec![]).await;
+        feed.apply_live_coalesced(vec![record(0.3)], vec![], vec![])
+            .await;
         assert!(
             matches!(changes.try_recv().unwrap(), AgentStateEvent::Delta { agent: Some(agent), .. } if agent.state == crate::protocol::AgentState::Working)
         );
+    }
+    #[tokio::test]
+    async fn workspace_scope_catalog_changes_publish_one_full_snapshot() {
+        let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
+        let mut changes = feed.subscribe();
+        let first = vec![WorkspaceRecord {
+            id: "ws-1".into(),
+            label: "one".into(),
+        }];
+        let mut table = AgentTable::default();
+        table.apply(feed.snapshot().await);
+        feed.apply_live_coalesced(vec![], vec!["a".into()], first.clone())
+            .await;
+        table.apply(changes.recv().await.unwrap());
+        assert!(
+            matches!(changes.recv().await.unwrap(), AgentStateEvent::Snapshot { agents, workspaces: Some(ref value), .. } if agents.is_empty() && value == &first)
+        );
+        assert!(
+            matches!(table.board(), [entry] if entry.id == "a" && entry.final_state == AgentState::Working)
+        );
+        assert!(changes.try_recv().is_err());
+
+        let renamed = vec![WorkspaceRecord {
+            id: "ws-1".into(),
+            label: "renamed".into(),
+        }];
+        feed.apply_live_coalesced(vec![record(0.2)], vec![], renamed.clone())
+            .await;
+        assert!(
+            matches!(changes.recv().await.unwrap(), AgentStateEvent::Snapshot { workspaces: Some(ref value), .. } if value == &renamed)
+        );
+
+        let mut blocked = record(0.3);
+        blocked.state = AgentState::Blocked;
+        feed.apply_live_coalesced(vec![blocked], vec![], renamed)
+            .await;
+        assert!(matches!(
+            changes.recv().await.unwrap(),
+            AgentStateEvent::Delta { .. }
+        ));
+    }
+    #[tokio::test]
+    async fn workspace_scope_demo_replacement_updates_one_projection() {
+        let feed = Feed::fixed(AppMode::Demo, vec![record(0.0)]).await;
+        let mut replacement = record(0.4);
+        replacement.id = "replacement".into();
+        replacement.workspace_id = Some("workspace-b".into());
+        replacement.workspace = "Workspace B".into();
+
+        feed.replace_demo(vec![replacement.clone()]).await;
+
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot { agents, workspaces: Some(workspaces), .. }
+                if agents == vec![replacement]
+                    && workspaces == vec![WorkspaceRecord {
+                        id: "workspace-b".into(),
+                        label: "Workspace B".into(),
+                    }]
+        ));
     }
     #[tokio::test]
     async fn resnapshot_cursor_cannot_replay_old_queued_states() {
@@ -537,6 +673,7 @@ mod tests {
             accent_index: 0,
             model: "".into(),
             workspace: "".into(),
+            workspace_id: Some("workspace-a".into()),
             session: SessionStats {
                 tickets_available: None,
                 runtime_ms: 0,
@@ -738,7 +875,7 @@ mod tests {
         let mut table = AgentTable::default();
         feed.apply_live(first.agents, first.ended_ids).await;
         table.apply(changes.recv().await.unwrap());
-        feed.transition_to_live(second.agents, second.ended_ids)
+        feed.transition_to_live(second.agents, second.ended_ids, second.workspaces)
             .await;
         table.apply(changes.recv().await.unwrap());
         table.apply(changes.recv().await.unwrap());
@@ -809,7 +946,8 @@ mod tests {
     async fn production_live_updates_flow_through_coalescer() {
         let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
         let mut changes = feed.subscribe();
-        feed.apply_live_coalesced(vec![record(0.9)], vec![]).await;
+        feed.apply_live_coalesced(vec![record(0.9)], vec![], vec![])
+            .await;
         assert!(
             changes.try_recv().is_err(),
             "production update published directly"

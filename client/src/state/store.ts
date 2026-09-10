@@ -4,6 +4,7 @@ import type {
   AppMode as FeedMode,
   SourceDiagnostic,
   SourceStatus,
+  WorkspaceRecord,
 } from "../../../protocol/generated/agent-state-event";
 import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings } from "./settings-storage";
@@ -43,6 +44,7 @@ export interface AgentMachine extends AgentRecord {
 }
 export interface StoreSnapshot {
   agents: ReadonlyMap<string, AgentMachine>;
+  visibleAgents: ReadonlyMap<string, AgentMachine>;
   board: readonly BoardEntry[];
   mode: AppMode;
   feedMode: FeedMode;
@@ -56,10 +58,16 @@ export interface CoarseSlice {
   count: number;
   blocked: number;
   done: number;
+  visibleCount: number;
+  blockedElsewhere: number;
   mode: AppMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
   selectedId: string | null;
+  selectedWorkspaceId: string | null;
+  selectedWorkspaceLabel: string | null;
+  workspaceUnavailable: boolean;
+  workspaces: readonly WorkspaceRecord[];
   settings: Settings;
 }
 export type StoreEvent =
@@ -93,12 +101,17 @@ export const defaultSettings: Settings = {
 
 export class AgentStore {
   private agents = new Map<string, AgentMachine>();
+  private visibleAgents: ReadonlyMap<string, AgentMachine> = this.agents;
   private board: BoardEntry[] = [];
   private mode: AppMode = "connecting";
   private feedMode: FeedMode = "live";
   private sourceStatus: SourceStatus = "connected";
   private sourceDiagnostic: SourceDiagnostic | null = null;
   private selectedId: string | null = null;
+  private workspaces: WorkspaceRecord[] = [];
+  private selectedWorkspaceId: string | null = null;
+  private selectedWorkspaceLabel: string | null = null;
+  private workspaceUnavailable = false;
   private settings: Settings;
   private lastUpdateAt = 0;
   private coarseListeners = new Set<Listener<CoarseSlice>>();
@@ -119,6 +132,7 @@ export class AgentStore {
   snapshot(): StoreSnapshot {
     return {
       agents: this.agents,
+      visibleAgents: this.visibleAgents,
       board: this.board,
       mode: this.mode,
       feedMode: this.feedMode,
@@ -130,15 +144,22 @@ export class AgentStore {
     };
   }
   coarse(): CoarseSlice {
-    const values = [...this.agents.values()];
+    const values = [...this.agents.values()],
+      visibleAgents = this.visibleAgents;
     return {
       count: values.length,
       blocked: values.filter((a) => a.targetState === "blocked").length,
       done: values.filter((a) => a.targetState === "done").length,
+      visibleCount: visibleAgents.size,
+      blockedElsewhere: this.blockedElsewhereCount(),
       mode: this.mode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
       selectedId: this.selectedId,
+      selectedWorkspaceId: this.selectedWorkspaceId,
+      selectedWorkspaceLabel: this.selectedWorkspaceLabel,
+      workspaceUnavailable: this.workspaceUnavailable,
+      workspaces: this.workspaces,
       settings: this.settings,
     };
   }
@@ -163,6 +184,23 @@ export class AgentStore {
   select(id: string | null) {
     if (this.selectedId === id) return;
     this.selectedId = id;
+    this.emitCoarse();
+    this.emitChange();
+  }
+  selectWorkspace(id: string | null) {
+    if (this.selectedWorkspaceId === id) return;
+    this.selectedWorkspaceId = id;
+    if (id === null) {
+      this.selectedWorkspaceLabel = null;
+      this.workspaceUnavailable = false;
+    } else {
+      const current = this.workspaces.find((item) => item.id === id);
+      this.selectedWorkspaceLabel =
+        current?.label ?? this.selectedWorkspaceLabel;
+      this.workspaceUnavailable = !current;
+    }
+    this.refreshVisibleRoster();
+    this.pruneInvisibleSelection();
     this.emitCoarse();
     this.emitChange();
   }
@@ -192,6 +230,7 @@ export class AgentStore {
     if (event.type === "snapshot") {
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
+      this.syncWorkspaceCatalog(event.workspaces);
       const incoming = new Set(event.agents.map((agent) => agent.id));
       for (const id of this.dismissedDone.keys())
         if (!incoming.has(id)) this.dismissedDone.delete(id);
@@ -203,6 +242,8 @@ export class AgentStore {
       this.dismissedDone.delete(event.agentId);
       this.remove(event.agentId);
     }
+    this.refreshVisibleRoster();
+    this.pruneInvisibleSelection();
     this.mode =
       this.agents.size === 0 &&
       event.mode === "live" &&
@@ -297,6 +338,7 @@ export class AgentStore {
             this.dismissedDone.set(agent.id, agent.stateEnteredAt);
             this.emitEvent({ type: "busser", agentId: agent.id });
             this.remove(agent.id);
+            this.refreshVisibleRoster();
             if (this.mode !== "disconnected")
               this.mode =
                 this.agents.size === 0 &&
@@ -335,6 +377,49 @@ export class AgentStore {
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
     if (this.selectedId === id) this.selectedId = null;
   }
+  private refreshVisibleRoster() {
+    if (this.selectedWorkspaceId === null) {
+      this.visibleAgents = this.agents;
+      return;
+    }
+    const visible = new Map<string, AgentMachine>();
+    for (const [id, agent] of this.agents)
+      if (agent.workspaceId === this.selectedWorkspaceId)
+        visible.set(id, agent);
+    this.visibleAgents = visible;
+  }
+  private blockedElsewhereCount() {
+    if (this.selectedWorkspaceId === null) return 0;
+    let count = 0;
+    for (const agent of this.agents.values())
+      if (
+        agent.targetState === "blocked" &&
+        agent.workspaceId !== this.selectedWorkspaceId
+      )
+        count++;
+    return count;
+  }
+  private syncWorkspaceCatalog(catalog: WorkspaceRecord[] | undefined) {
+    const next = catalog ?? [];
+    if (!sameWorkspaces(this.workspaces, next)) this.workspaces = next;
+    if (this.selectedWorkspaceId === null) {
+      this.workspaceUnavailable = false;
+      return;
+    }
+    const current = this.workspaces.find(
+      (item) => item.id === this.selectedWorkspaceId,
+    );
+    if (current) {
+      this.selectedWorkspaceLabel = current.label;
+      this.workspaceUnavailable = false;
+    } else this.workspaceUnavailable = true;
+  }
+  private pruneInvisibleSelection() {
+    if (this.selectedId === null || this.selectedWorkspaceId === null) return;
+    const agent = this.agents.get(this.selectedId);
+    if (agent && agent.workspaceId !== this.selectedWorkspaceId)
+      this.selectedId = null;
+  }
   private cancelDone(id: string) {
     const timer = this.doneTimers.get(id);
     if (timer !== undefined) this.scheduler.clearTimeout(timer);
@@ -359,15 +444,34 @@ function lastBoardIndex(board: readonly BoardEntry[], paneId: string) {
   }
   return -1;
 }
+function sameWorkspaces(
+  a: readonly WorkspaceRecord[],
+  b: readonly WorkspaceRecord[],
+) {
+  return (
+    a === b ||
+    (a.length === b.length &&
+      a.every(
+        (item, index) =>
+          item.id === b[index]?.id && item.label === b[index]?.label,
+      ))
+  );
+}
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
     a.count === b.count &&
     a.blocked === b.blocked &&
     a.done === b.done &&
+    a.visibleCount === b.visibleCount &&
+    a.blockedElsewhere === b.blockedElsewhere &&
     a.mode === b.mode &&
     a.sourceStatus === b.sourceStatus &&
     a.sourceDiagnostic === b.sourceDiagnostic &&
     a.selectedId === b.selectedId &&
-    a.settings === b.settings
+    a.selectedWorkspaceId === b.selectedWorkspaceId &&
+    a.selectedWorkspaceLabel === b.selectedWorkspaceLabel &&
+    a.workspaceUnavailable === b.workspaceUnavailable &&
+    a.settings === b.settings &&
+    sameWorkspaces(a.workspaces, b.workspaces)
   );
 }

@@ -7,6 +7,12 @@ Old deployed clients ignore these fields; strict third-party schema consumers
 must adopt the updated v1 schema before consuming them. Existing fixtures with
 neither field still round-trip unchanged.
 
+Snapshots may also include a bounded `workspaces` catalog of stable `{id,label}`
+records, including workspaces with no agents. `agent.workspaceId` links an agent
+to that identity; the existing `agent.workspace` remains its display label.
+Clients own session-local filtering, default to All, and must not infer identity
+from labels or upstream focus. Legacy snapshots may omit both additions.
+
 - `stateKnown: false` means Herdr reported unknown. Mise places the agent at
   prep to keep it visible, labels it **Unknown**, and does not assert it is idle.
 - `ticketsAvailable: false` means unavailable, regardless of the placeholder

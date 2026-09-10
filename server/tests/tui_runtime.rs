@@ -48,6 +48,7 @@ async fn fixed_feed_snapshot_applies_through_real_reducer() {
         accent_index: 1,
         model: "codex".into(),
         workspace: "/work/fixed".into(),
+        workspace_id: None,
         session: SessionStats {
             tickets_available: None,
             runtime_ms: 60_000,

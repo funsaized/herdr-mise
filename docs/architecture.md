@@ -145,6 +145,8 @@ the same process serves the browser app on its configured loopback port.
   |               |  - per-agent machines |                        |
   |               |  - settings           |                        |
   |               |  - 86 board (FIFO 50) |                        |
+  |               |  - local workspace     |                        |
+  |               |    scope projection    |                        |
   |               |  - done timers        |                        |
   |               +----------+-----------+                        |
   |                          |                                    |
@@ -233,6 +235,20 @@ Two correctness rules enforced end-to-end:
   keys the whole UI off `apply()`, and a reconnecting client always
   receives a fresh snapshot on `open`, not deltas relative to its
   previous session.
+
+Feed v1 snapshots may carry a bounded workspace catalog and agents may carry a
+stable `workspaceId`. The adapter retains those upstream IDs and labels,
+including empty workspaces; it does not consume Herdr's focused workspace. The
+Feed stores catalog and roster atomically and emits a full snapshot when catalog
+identity or labels change. Routine agent-only polls retain coalesced deltas.
+
+Workspace scope is session-local renderer state and starts at All. Browser and
+TUI derive a visible active roster by stable ID while retaining the global
+roster for blocked-attention signals and the global 86 board/freezer. Rename
+updates a selected label by ID. Removal keeps the last label and marks the scope
+unavailable, so another workspace with the same label cannot inherit selection.
+The plugin manifest is intentionally unchanged because plugin context does not
+select or persist this view state.
 
 ## Demo fallback and automatic recovery
 
