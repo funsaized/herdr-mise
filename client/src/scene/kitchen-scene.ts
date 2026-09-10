@@ -1877,6 +1877,9 @@ export class KitchenScene {
       rect.width / 2,
       Math.max(37 * u, name.y + name.height + Math.max(1, u)),
     );
+    const labelOverflow = Math.max(0, label.y + label.height - rect.height);
+    name.y -= labelOverflow;
+    label.y -= labelOverflow;
     node.alpha = 1;
   }
   private tick(deltaMs: number) {
