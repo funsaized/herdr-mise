@@ -389,6 +389,7 @@ pub(crate) fn table_window(
     fallback_layout(area, table, &agents, selected_id, requested_offset).window
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_scoped(
     frame: &mut Frame<'_>,
     table: &AgentTable,
