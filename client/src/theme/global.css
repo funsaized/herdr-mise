@@ -413,6 +413,50 @@ select:focus-visible {
   border-color: var(--text);
   font-weight: var(--fontRowLabelWeight);
 }
+.workspaceScope {
+  position: absolute;
+  z-index: 8;
+  left: 14px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 180px);
+}
+.workspaceControls {
+  display: contents;
+}
+.workspaceControls:has(> .revealCleared) {
+  position: absolute;
+  z-index: 8;
+  left: 14px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 180px);
+}
+.workspaceControls:has(> .revealCleared) > .workspaceScope,
+.workspaceControls:has(> .revealCleared) > .revealCleared {
+  position: static;
+}
+.workspaceScope select,
+.workspaceScope button {
+  max-width: 100%;
+  min-height: 44px;
+  padding: 5px 11px;
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusSmall);
+  color: var(--textMuted);
+  background: var(--panelSoft);
+  font-size: var(--fontSecondarySize);
+  cursor: pointer;
+}
+.workspaceScope button {
+  color: var(--text);
+}
 .emptyPill,
 .revealCleared {
   position: absolute;
@@ -731,11 +775,6 @@ select:focus-visible {
     display: none;
   }
 }
-@media (max-width: 480px) {
-  .revealCleared {
-    bottom: 104px;
-  }
-}
 :where(.appShell[data-pager-layout="narrow"]) {
   .kitchenPager {
     left: 8px;
@@ -766,8 +805,19 @@ select:focus-visible {
     max-height: 22vh;
     overflow-y: auto;
   }
-  .panel ~ .emptyPill {
+  .panel ~ .workspaceControls > .emptyPill {
     bottom: calc(22vh + 60px);
+  }
+  .workspaceScope {
+    top: 8px;
+    right: 8px;
+    bottom: auto;
+    left: 8px;
+    max-width: none;
+  }
+  .workspaceControls:has(> .revealCleared) {
+    inset: 8px 8px auto;
+    max-width: none;
   }
   .demoPlacard {
     inset: 8px 8px auto;
@@ -775,6 +825,9 @@ select:focus-visible {
     padding: 7px 10px;
     transform: none;
     border-width: 2px;
+  }
+  .workspaceControls > .demoPlacard {
+    top: 110px;
   }
   .demoPlacard h2 {
     font-size: 13px;

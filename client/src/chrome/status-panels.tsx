@@ -20,6 +20,8 @@ export function ModeTreatment({
   sourceDiagnostic = null,
   disconnectReason = null,
   lastUpdateSeconds,
+  scopeEmptyLabel = null,
+  scopeUnavailableLabel = null,
   clearedCount,
   onRevealCleared,
 }: {
@@ -28,6 +30,8 @@ export function ModeTreatment({
   sourceDiagnostic?: SourceDiagnostic | null;
   disconnectReason?: CoarseSlice["disconnectReason"];
   lastUpdateSeconds: number;
+  scopeEmptyLabel?: string | null;
+  scopeUnavailableLabel?: string | null;
   clearedCount?: number;
   onRevealCleared?(): void;
 }) {
@@ -42,12 +46,6 @@ export function ModeTreatment({
     return (
       <div className="emptyPill" role="status">
         Connecting to Mise — waiting for agent state
-      </div>
-    );
-  if (mode === "empty")
-    return (
-      <div className="emptyPill" role="status">
-        Waiting for agents — start one in herdr
       </div>
     );
   if (mode === "demo")
@@ -84,6 +82,24 @@ export function ModeTreatment({
               : `${sourceStatus !== "connected" ? `${sourceStatusText[sourceStatus]}${detail}. ` : ""}The kitchen will reopen on its own. Check that Mise is running; Mise will reconnect to Herdr when its local source is available.`}
           </small>
         </div>
+      </div>
+    );
+  if (mode === "empty")
+    return (
+      <div className="emptyPill" role="status">
+        Waiting for agents — start one in herdr
+      </div>
+    );
+  if (scopeUnavailableLabel !== null)
+    return (
+      <div className="emptyPill" role="status">
+        {scopeUnavailableLabel} is unavailable
+      </div>
+    );
+  if (scopeEmptyLabel !== null)
+    return (
+      <div className="emptyPill" role="status">
+        No agents in {scopeEmptyLabel}
       </div>
     );
   if (mode === "live" && clearedCount)

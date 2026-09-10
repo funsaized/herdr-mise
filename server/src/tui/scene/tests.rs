@@ -1,6 +1,8 @@
 use super::*;
 use crate::adapter::Normalizer;
-use crate::protocol::{AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic};
+use crate::protocol::{
+    AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic, WorkspaceRecord,
+};
 use chrono::TimeZone;
 use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
 
@@ -17,6 +19,7 @@ fn record(id: &str, state: AgentState) -> AgentRecord {
         accent_index: 2,
         model: "gpt-5.6-sol".into(),
         workspace: "/work/customer-api".into(),
+        workspace_id: None,
         session: SessionStats {
             tickets_available: None,
             runtime_ms: 61_000,
@@ -33,6 +36,7 @@ fn live_table(agents: Vec<AgentRecord>) -> AgentTable {
         source_status: SourceStatus::Connected,
         source_diagnostic: None,
         agents,
+        workspaces: None,
     });
     table
 }
@@ -94,7 +98,7 @@ fn render_view_with_warning(
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
-            draw_view(
+            draw_view_scoped(
                 frame,
                 table,
                 warning,
@@ -107,6 +111,7 @@ fn render_view_with_warning(
                 scene_view,
                 false,
                 reduced_motion,
+                &super::super::Scope::default(),
             )
         })
         .unwrap();
@@ -117,7 +122,7 @@ fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supporte
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
-            draw_view(
+            draw_view_scoped(
                 frame,
                 table,
                 None,
@@ -130,6 +135,7 @@ fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supporte
                 SceneView::Kitchen,
                 false,
                 false,
+                &super::super::Scope::default(),
             )
         })
         .unwrap();
@@ -142,6 +148,56 @@ pub(crate) fn render_freezer(table: &AgentTable, width: u16, height: u16) -> Buf
 
 pub(crate) fn text(buffer: &Buffer) -> String {
     buffer.content.iter().map(|cell| cell.symbol()).collect()
+}
+
+#[test]
+fn workspace_scope_scene_filters_stations_and_keeps_global_blocked_count() {
+    let mut here = record("here", AgentState::Working);
+    here.workspace_id = Some("ws-1".into());
+    let mut elsewhere = record("elsewhere", AgentState::Blocked);
+    elsewhere.workspace_id = Some("ws-2".into());
+    let mut table = live_table(vec![here, elsewhere]);
+    let agents = table.agents().cloned().collect();
+    table.apply(AgentStateEvent::Snapshot {
+        version: 1,
+        mode: AppMode::Live,
+        source_status: SourceStatus::Connected,
+        source_diagnostic: None,
+        agents,
+        workspaces: Some(vec![WorkspaceRecord {
+            id: "ws-1".into(),
+            label: "Kitchen One".into(),
+        }]),
+    });
+    let scope = super::super::Scope {
+        id: Some("ws-1".into()),
+        label: Some("Kitchen One".into()),
+    };
+    let mut terminal = Terminal::new(TestBackend::new(110, 40)).unwrap();
+    terminal
+        .draw(|frame| {
+            draw_view_scoped(
+                frame,
+                &table,
+                None,
+                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                0,
+                ColorMode::Xterm256,
+                true,
+                None,
+                0,
+                SceneView::Kitchen,
+                false,
+                false,
+                &scope,
+            )
+        })
+        .unwrap();
+    let output = text(terminal.backend().buffer());
+    assert!(output.contains("Workspace: Kitchen One · 1 blocked elsewhere"));
+    assert!(output.contains("Cook here"));
+    assert!(output.contains("‼ BLOCKED  Cook elsewhere  00:00"));
+    assert!(!output.contains("— all stations clear —"));
 }
 
 fn buffer_dump(buffer: &Buffer) -> String {
@@ -203,6 +259,7 @@ fn snapshot(
         source_status: status,
         source_diagnostic: diagnostic,
         agents,
+        workspaces: None,
     });
     table
 }
@@ -574,7 +631,7 @@ fn fixture_backed_responsive_composition_matrix() {
     let draw = |terminal: &mut Terminal<TestBackend>| {
         terminal
             .draw(|frame| {
-                draw_view(
+                draw_view_scoped(
                     frame,
                     &table,
                     None,
@@ -587,6 +644,7 @@ fn fixture_backed_responsive_composition_matrix() {
                     SceneView::Kitchen,
                     false,
                     false,
+                    &super::super::Scope::default(),
                 )
             })
             .unwrap();
@@ -617,6 +675,7 @@ fn authoritative_done_fixture_stays_plated_until_the_source_is_empty() {
         source_status: SourceStatus::Connected,
         source_diagnostic: None,
         agents: normalized.agents,
+        workspaces: Some(normalized.workspaces),
     };
     let mut table = AgentTable::default();
     table.apply(event.clone());
@@ -712,7 +771,7 @@ fn real_fixture_keeps_material_depth_and_state_chrome() {
         let expected = match name {
             "demo" => &["MISE — DEMO SERVICE"][..],
             "waiting" => &["Waiting for agents"][..],
-            "unsupported" => &["unsupported Herdr protocol", "Mock feed"][..],
+            "unsupported" => &["Herdr protocol is unsupported", "Mock feed"][..],
             "fallback" => &["Kitchen status"][..],
             _ => unreachable!(),
         };
@@ -907,6 +966,7 @@ fn ended_moves_to_board_and_truthful_status_survives() {
             next_action: "upgrade Herdr, then retry".into(),
         }),
         agents: vec![],
+        workspaces: None,
     });
     let output = text(&render(&demo, 110, 40, 0));
     assert!(output.contains("MISE — DEMO SERVICE"));
@@ -1084,6 +1144,7 @@ fn tui_sanitizes_external_strings_without_obscuring_status() {
             next_action: "upgrade\u{1b} now".into(),
         }),
         agents,
+        workspaces: None,
     });
 
     for (width, height, scene_view) in [

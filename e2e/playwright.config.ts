@@ -13,11 +13,15 @@ export default defineConfig({
             use: { browserName: "firefox" as const },
             testMatch: "**/critical-accessibility.spec.ts",
           },
-          {
-            name: "webkit",
-            use: { browserName: "webkit" as const },
-            testMatch: "**/critical-accessibility.spec.ts",
-          },
+          ...(process.env.HERDR_MISE_SKIP_WEBKIT === "1"
+            ? []
+            : [
+                {
+                  name: "webkit",
+                  use: { browserName: "webkit" as const },
+                  testMatch: "**/critical-accessibility.spec.ts",
+                },
+              ]),
         ]
       : []),
   ],

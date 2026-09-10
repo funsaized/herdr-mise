@@ -15,7 +15,9 @@ use tokio::{
     time::timeout,
 };
 
-use crate::protocol::{AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus};
+use crate::protocol::{
+    AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus, WorkspaceRecord,
+};
 
 const MAX_TEXT_UTF16_UNITS: usize = 4096;
 const MAX_FEED_FRAME_UTF16_UNITS: usize = 4 * 1024 * 1024;
@@ -161,6 +163,7 @@ pub struct Normalizer {
 pub struct NormalizedSnapshot {
     pub agents: Vec<AgentRecord>,
     pub ended_ids: Vec<String>,
+    pub workspaces: Vec<WorkspaceRecord>,
 }
 
 impl Normalizer {
@@ -183,11 +186,33 @@ impl Normalizer {
         // The product version is intentionally descriptive so patch releases keep working.
         let _server_version = &raw.version;
         let _ = (&raw.tabs, &raw.layouts);
-        let workspaces: HashMap<_, _> = raw
-            .workspaces
-            .into_iter()
-            .map(|w| (w.workspace_id, w.label))
-            .collect();
+        if raw.workspaces.len() > 4096 {
+            return Err(AdapterError::Remote(
+                "snapshot exceeds 4096 workspace limit".into(),
+            ));
+        }
+        let mut workspace_labels = HashMap::new();
+        let mut workspaces = Vec::new();
+        for workspace in raw.workspaces {
+            if workspace.workspace_id.is_empty() {
+                continue;
+            }
+            if workspace.workspace_id.len() > 4096 {
+                return Err(AdapterError::Remote(
+                    "workspace identity exceeds 4096 byte limit".into(),
+                ));
+            }
+            if workspace_labels.contains_key(&workspace.workspace_id) {
+                continue;
+            }
+            let label = truncate_utf16(workspace.label);
+            workspace_labels.insert(workspace.workspace_id.clone(), label.clone());
+            workspaces.push(WorkspaceRecord {
+                id: workspace.workspace_id,
+                label,
+            });
+        }
+        workspaces.sort_by(|a, b| a.id.cmp(&b.id));
         let source = raw.agents;
         if source.len() > 4096 {
             return Err(AdapterError::Remote(
@@ -220,6 +245,11 @@ impl Normalizer {
         let mut entered_at = self.entered_at.clone();
         let mut first_seen = self.first_seen.clone();
         for agent in source {
+            if agent.workspace_id.len() > 4096 {
+                return Err(AdapterError::Remote(
+                    "agent workspace identity exceeds 4096 byte limit".into(),
+                ));
+            }
             let id = agent.terminal_id.clone();
             let agent_kind = agent
                 .agent
@@ -270,8 +300,10 @@ impl Normalizer {
                 .find(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| format!("agent-{}", agent.pane_id)),
             );
+            let workspace_id = (!agent.workspace_id.is_empty() && agent.workspace_id.len() <= 4096)
+                .then(|| agent.workspace_id.clone());
             let workspace = truncate_utf16(
-                workspaces
+                workspace_labels
                     .get(&agent.workspace_id)
                     .filter(|s| !s.is_empty())
                     .cloned()
@@ -293,6 +325,7 @@ impl Normalizer {
                 state_entered_at: stamp,
                 model: String::new(),
                 workspace,
+                workspace_id,
                 session: SessionStats {
                     tickets_available: Some(false),
                     runtime_ms: mise_runtime_ms(&started, received_at),
@@ -306,7 +339,10 @@ impl Normalizer {
             first_seen.remove(id);
             entered_at.remove(id);
         }
-        if serde_json::to_string(&agents)?.encode_utf16().count() > MAX_FEED_FRAME_UTF16_UNITS - 256
+        if serde_json::to_string(&(&agents, &workspaces))?
+            .encode_utf16()
+            .count()
+            > MAX_FEED_FRAME_UTF16_UNITS - 256
         {
             return Err(AdapterError::Remote(
                 "normalized snapshot exceeds browser frame limit".into(),
@@ -315,7 +351,11 @@ impl Normalizer {
         self.first_seen = first_seen;
         self.entered_at = entered_at;
         self.previous_ids = current;
-        Ok(NormalizedSnapshot { agents, ended_ids })
+        Ok(NormalizedSnapshot {
+            agents,
+            ended_ids,
+            workspaces,
+        })
     }
 }
 
@@ -586,9 +626,34 @@ mod tests {
         assert_eq!(a.id, "t-1");
         assert_eq!(a.pane_id.as_deref(), Some("p-1"));
         assert_eq!(a.workspace, "demo");
+        assert_eq!(a.workspace_id.as_deref(), Some("ws-1"));
         assert_eq!(a.progress, None);
         assert_eq!(a.model, "");
         assert_eq!(a.session.runtime_ms, 0);
+    }
+    #[test]
+    fn workspace_scope_catalog_keeps_empty_deduplicated_ids_and_unknown_agent_identity() {
+        let value = json!({
+            "version":"0.8.0","protocol":19,"tabs":[],"panes":[],"layouts":[],
+            "workspaces":[
+                {"workspace_id":"ws-b","label":"same"},
+                {"workspace_id":"ws-a","label":"same"},
+                {"workspace_id":"ws-a","label":"ignored"}
+            ],
+            "agents":[{"terminal_id":"t-1","pane_id":"p-1","workspace_id":"ws-unknown","agent":"codex","agent_status":"blocked"}]
+        });
+        let out = Normalizer::default()
+            .normalize_snapshot_value(value, "2026-07-31T00:00:00Z")
+            .unwrap();
+        assert_eq!(
+            out.workspaces
+                .iter()
+                .map(|w| w.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ws-a", "ws-b"]
+        );
+        assert_eq!(out.agents[0].workspace, "ws-unknown");
+        assert_eq!(out.agents[0].workspace_id.as_deref(), Some("ws-unknown"));
     }
     #[test]
     fn bounds_fixture_labels_for_browser_decoding() {
@@ -624,6 +689,22 @@ mod tests {
         assert!(matches!(
             Normalizer::default()
                 .normalize_snapshot_value(amplified, "2026-07-31T00:00:00Z"),
+            Err(AdapterError::Remote(message))
+                if message == "normalized snapshot exceeds browser frame limit"
+        ));
+
+        let mut workspace_heavy: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        workspace_heavy["result"]["snapshot"]["agents"] = json!([]);
+        workspace_heavy["result"]["snapshot"]["workspaces"] = json!((0..1_200)
+            .map(|index| json!({
+                "workspace_id": format!("ws-{index}"),
+                "label": "w".repeat(MAX_TEXT_UTF16_UNITS),
+            }))
+            .collect::<Vec<_>>());
+        assert!(matches!(
+            Normalizer::default()
+                .normalize_snapshot_value(workspace_heavy, "2026-07-31T00:00:00Z"),
             Err(AdapterError::Remote(message))
                 if message == "normalized snapshot exceeds browser frame limit"
         ));

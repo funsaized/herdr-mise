@@ -8,6 +8,12 @@ For the additive inspection-identity rollout, refreshed browser clients connect 
 `/ws?paneId=1`; legacy `/ws` connections receive the prior field set. Existing
 connections therefore remain decodable until they reload and opt in.
 
+Snapshots may also include a bounded `workspaces` catalog of stable `{id,label}`
+records, including workspaces with no agents. `agent.workspaceId` links an agent
+to that identity; the existing `agent.workspace` remains its display label.
+Clients own session-local filtering, default to All, and must not infer identity
+from labels or upstream focus. Legacy snapshots may omit both additions.
+
 - `stateKnown: false` means Herdr reported unknown. Mise places the agent at
   prep to keep it visible, labels it **Unknown**, and does not assert it is idle.
 - `ticketsAvailable: false` means unavailable, regardless of the placeholder

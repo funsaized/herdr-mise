@@ -73,6 +73,20 @@ describe("chrome interactions", () => {
     ).toBeTruthy();
     rerender(
       <ModeTreatment
+        mode="empty"
+        sourceStatus="connected"
+        lastUpdateSeconds={0}
+        scopeEmptyLabel="Kitchen One"
+        scopeUnavailableLabel="Removed Kitchen"
+      />,
+    );
+    expect(
+      screen.getByText("Waiting for agents — start one in herdr"),
+    ).toBeTruthy();
+    expect(screen.queryByText("No agents in Kitchen One")).toBeNull();
+    expect(screen.queryByText("Removed Kitchen is unavailable")).toBeNull();
+    rerender(
+      <ModeTreatment
         mode="demo"
         sourceStatus="unavailableSocket"
         lastUpdateSeconds={0}
@@ -327,6 +341,18 @@ describe("chrome interactions", () => {
     );
     expect(screen.queryByText(/plated cooks cleared/)).toBeNull();
     expect(screen.getByText("DEMO SERVICE")).toBeTruthy();
+    rerender(
+      <ModeTreatment
+        mode="live"
+        sourceStatus="connected"
+        lastUpdateSeconds={0}
+        scopeEmptyLabel="Kitchen One"
+        clearedCount={2}
+        onRevealCleared={reveal}
+      />,
+    );
+    expect(screen.getByText("No agents in Kitchen One")).toBeTruthy();
+    expect(screen.queryByText(/plated cooks cleared/)).toBeNull();
   });
   it("closes a selected demo session summary on live recovery", () => {
     const store = new AgentStore();
@@ -374,6 +400,56 @@ describe("chrome interactions", () => {
       document.activeElement,
     );
     store.destroy();
+  });
+  it("offers duplicate workspace scopes and reveals blocked elsewhere with restored focus", () => {
+    const store = new AgentStore();
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "live",
+      sourceStatus: "connected",
+      agents: [
+        { ...record, workspaceId: "workspace-one" },
+        { ...record, id: "b", state: "blocked", workspaceId: "workspace-two" },
+      ],
+      workspaces: [
+        { id: "workspace-one", label: "/srv/same" },
+        { id: "workspace-two", label: String.raw`C:\srv\same` },
+      ],
+    });
+    store.selectWorkspace("workspace-one");
+    const props = {
+        store,
+        coarse: store.coarse(),
+        hoveredId: null,
+        focusedId: null,
+        hits: [],
+        settingsOpen: false,
+        statsOpen: false,
+        lastUpdateSeconds: 0,
+        metrics: { drawCalls: 0, socketBytesPerSecond: 0 },
+        onCloseSettings: () => {},
+        onOpenSettings: () => {},
+        hintVisible: false,
+        onDismissHint: () => {},
+        view: "kitchen" as const,
+        onToggleFreezer: () => {},
+        onRevealCleared: () => {},
+      },
+      { rerender } = render(<Chrome {...props} />),
+      select = screen.getByRole("combobox", { name: "Workspace" });
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["All", "same (aceone)", "same (acetwo)"]);
+    const showAll = screen.getByRole("button", {
+      name: "1 blocked elsewhere — Show all",
+    });
+    fireEvent.keyDown(select, { key: "Tab" });
+    expect(document.activeElement).toBe(showAll);
+    fireEvent.click(showAll);
+    rerender(<Chrome {...props} coarse={store.coarse()} />);
+    expect(store.coarse().selectedWorkspaceId).toBeNull();
+    expect(document.activeElement).toBe(select);
   });
   it.each([
     ["blocked", "Blocked — waiting"],

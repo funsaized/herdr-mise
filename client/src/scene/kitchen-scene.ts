@@ -125,6 +125,7 @@ export interface SceneMetrics {
     BlockedPlacement & { timerText: string; exiting: boolean }
   >;
   blockedIndicators: number;
+  escalationBlockedAgents: number;
   page: PageMetadata & { visibleIds: readonly string[] };
   stateIndicators: Record<string, number>;
   endedEntries: number;
@@ -230,6 +231,7 @@ export class KitchenScene {
   private escalationLayer = new Container();
   private escalationGraphic = new Graphics();
   private escalationSignature = "";
+  private escalationBlockedAgents = 0;
   private busserLayer = new Container();
   private busserSweeps = new BusserSweepTimeline();
   private busserGraphics = new Map<string, Graphics>();
@@ -527,6 +529,7 @@ export class KitchenScene {
       activeFocusCornerSizes,
       blockedPlacements: { ...this.blockedPlacementMetrics },
       blockedIndicators,
+      escalationBlockedAgents: this.escalationBlockedAgents,
       page: {
         ...this.pageMetadata(),
         visibleIds: this.layout?.visibleIds ?? [],
@@ -2011,7 +2014,7 @@ export class KitchenScene {
   }
   private drawEscalation(now: number) {
     const settings = this.store.snapshot().settings,
-      blocked = [...this.store.snapshot().visibleAgents.values()].filter(
+      blocked = [...this.store.snapshot().agents.values()].filter(
         (agent) => agent.targetState === "blocked",
       ),
       elapsed = blocked.length
@@ -2031,6 +2034,7 @@ export class KitchenScene {
       pulseFrame =
         motion.escalation && blocked.length ? Math.floor(now / 125) : 0,
       signature = `${blocked.length}:${stage}:${pulseFrame}:${this.reducedMotion}:${this.resolvedTheme()}:${this.layout.unit}:${this.app.renderer.width}:${this.app.renderer.height}`;
+    this.escalationBlockedAgents = blocked.length;
     if (signature === this.escalationSignature) return;
     this.escalationSignature = signature;
     const p = getTheme().palette,

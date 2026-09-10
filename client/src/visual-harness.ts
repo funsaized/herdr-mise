@@ -114,6 +114,7 @@ function agent(
     workspace: mixed
       ? `/service/${identity[2]}${mixedSuffix}`
       : `/visual/station-${index + 1}`,
+    workspaceId: `visual-workspace-${index + 1}`,
     session: { runtimeMs: (index + 1) * 60_000, tickets: index + 1 },
   };
 }
@@ -143,6 +144,10 @@ export function buildVisualFeed(
     mode: "demo",
     sourceStatus: "unavailableSocket",
     agents,
+    workspaces: agents.map((record) => ({
+      id: record.workspaceId!,
+      label: record.workspace,
+    })),
   };
   if (config.preset !== "ended") return [snapshot];
   return [

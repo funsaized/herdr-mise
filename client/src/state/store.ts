@@ -4,6 +4,7 @@ import type {
   AppMode as FeedMode,
   SourceDiagnostic,
   SourceStatus,
+  WorkspaceRecord,
 } from "../../../protocol/generated/agent-state-event";
 import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings } from "./settings-storage";
@@ -61,11 +62,16 @@ export interface CoarseSlice {
   clearedCount: number;
   blocked: number;
   done: number;
+  blockedElsewhere: number;
   mode: AppMode;
   sourceStatus: SourceStatus;
   sourceDiagnostic: SourceDiagnostic | null;
   disconnectReason: ClientDisconnectReason;
   selectedId: string | null;
+  selectedWorkspaceId: string | null;
+  selectedWorkspaceLabel: string | null;
+  workspaceUnavailable: boolean;
+  workspaces: readonly WorkspaceRecord[];
   settings: Settings;
 }
 export type StoreEvent =
@@ -107,6 +113,10 @@ export class AgentStore {
   private sourceDiagnostic: SourceDiagnostic | null = null;
   private disconnectReason: ClientDisconnectReason = null;
   private selectedId: string | null = null;
+  private workspaces: WorkspaceRecord[] = [];
+  private selectedWorkspaceId: string | null = null;
+  private selectedWorkspaceLabel: string | null = null;
+  private workspaceUnavailable = false;
   private settings: Settings;
   private lastUpdateAt = 0;
   private coarseListeners = new Set<Listener<CoarseSlice>>();
@@ -148,11 +158,16 @@ export class AgentStore {
       clearedCount: this.dismissedDone.size,
       blocked: values.filter((a) => a.targetState === "blocked").length,
       done: values.filter((a) => a.targetState === "done").length,
+      blockedElsewhere: this.blockedElsewhereCount(),
       mode: this.mode,
       sourceStatus: this.sourceStatus,
       sourceDiagnostic: this.sourceDiagnostic,
       disconnectReason: this.disconnectReason,
       selectedId: this.selectedId,
+      selectedWorkspaceId: this.selectedWorkspaceId,
+      selectedWorkspaceLabel: this.selectedWorkspaceLabel,
+      workspaceUnavailable: this.workspaceUnavailable,
+      workspaces: this.workspaces,
       settings: this.settings,
     };
   }
@@ -177,6 +192,22 @@ export class AgentStore {
   select(id: string | null) {
     if (this.selectedId === id) return;
     this.selectedId = id;
+    this.emitCoarse();
+    this.emitChange();
+  }
+  selectWorkspace(id: string | null) {
+    if (this.selectedWorkspaceId === id) return;
+    this.selectedWorkspaceId = id;
+    if (id === null) {
+      this.selectedWorkspaceLabel = null;
+      this.workspaceUnavailable = false;
+    } else {
+      const current = this.workspaces.find((item) => item.id === id);
+      this.selectedWorkspaceLabel =
+        current?.label ?? this.selectedWorkspaceLabel;
+      this.workspaceUnavailable = !current;
+    }
+    this.pruneInvisibleSelection();
     this.emitCoarse();
     this.emitChange();
   }
@@ -242,6 +273,7 @@ export class AgentStore {
       this.disconnectReason = null;
       this.sourceStatus = event.sourceStatus;
       this.sourceDiagnostic = event.sourceDiagnostic ?? null;
+      this.syncWorkspaceCatalog(event.workspaces);
       const incoming = new Set(event.agents.map((agent) => agent.id));
       for (const id of this.agents.keys())
         if (!incoming.has(id)) this.remove(id);
@@ -250,6 +282,7 @@ export class AgentStore {
     else {
       this.remove(event.agentId);
     }
+    this.pruneInvisibleSelection();
     this.mode =
       this.agents.size === 0 &&
       event.mode === "live" &&
@@ -410,6 +443,38 @@ export class AgentStore {
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
     if (this.selectedId === id) this.selectedId = null;
   }
+  private blockedElsewhereCount() {
+    if (this.selectedWorkspaceId === null) return 0;
+    let count = 0;
+    for (const agent of this.agents.values())
+      if (
+        agent.targetState === "blocked" &&
+        agent.workspaceId !== this.selectedWorkspaceId
+      )
+        count++;
+    return count;
+  }
+  private syncWorkspaceCatalog(catalog: WorkspaceRecord[] | undefined) {
+    const next = catalog ?? [];
+    if (!sameWorkspaces(this.workspaces, next)) this.workspaces = next;
+    if (this.selectedWorkspaceId === null) {
+      this.workspaceUnavailable = false;
+      return;
+    }
+    const current = this.workspaces.find(
+      (item) => item.id === this.selectedWorkspaceId,
+    );
+    if (current) {
+      this.selectedWorkspaceLabel = current.label;
+      this.workspaceUnavailable = false;
+    } else this.workspaceUnavailable = true;
+  }
+  private pruneInvisibleSelection() {
+    if (this.selectedId === null || this.selectedWorkspaceId === null) return;
+    const agent = this.agents.get(this.selectedId);
+    if (agent && agent.workspaceId !== this.selectedWorkspaceId)
+      this.selectedId = null;
+  }
   private cancelDone(id: string) {
     const timer = this.doneTimers.get(id);
     if (timer !== undefined) this.scheduler.clearTimeout(timer);
@@ -428,11 +493,15 @@ export class AgentStore {
   private visibleAgents() {
     return new Map(
       [...this.agents].filter(([id, agent]) => {
-        const dismissedGeneration = this.dismissedDone.get(id);
+        const dismissedGeneration = this.dismissedDone.get(id),
+          presented =
+            agent.targetState !== "done" ||
+            dismissedGeneration === undefined ||
+            Date.parse(agent.stateEnteredAt) > Date.parse(dismissedGeneration);
         return (
-          agent.targetState !== "done" ||
-          dismissedGeneration === undefined ||
-          Date.parse(agent.stateEnteredAt) > Date.parse(dismissedGeneration)
+          presented &&
+          (this.selectedWorkspaceId === null ||
+            agent.workspaceId === this.selectedWorkspaceId)
         );
       }),
     );
@@ -446,6 +515,19 @@ function lastBoardIndex(board: readonly BoardEntry[], agentId: string) {
   }
   return -1;
 }
+function sameWorkspaces(
+  a: readonly WorkspaceRecord[],
+  b: readonly WorkspaceRecord[],
+) {
+  return (
+    a === b ||
+    (a.length === b.length &&
+      a.every(
+        (item, index) =>
+          item.id === b[index]?.id && item.label === b[index]?.label,
+      ))
+  );
+}
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
     a.sourceCount === b.sourceCount &&
@@ -453,11 +535,16 @@ function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
     a.clearedCount === b.clearedCount &&
     a.blocked === b.blocked &&
     a.done === b.done &&
+    a.blockedElsewhere === b.blockedElsewhere &&
     a.mode === b.mode &&
     a.sourceStatus === b.sourceStatus &&
     a.sourceDiagnostic === b.sourceDiagnostic &&
     a.disconnectReason === b.disconnectReason &&
     a.selectedId === b.selectedId &&
-    a.settings === b.settings
+    a.selectedWorkspaceId === b.selectedWorkspaceId &&
+    a.selectedWorkspaceLabel === b.selectedWorkspaceLabel &&
+    a.workspaceUnavailable === b.workspaceUnavailable &&
+    a.settings === b.settings &&
+    sameWorkspaces(a.workspaces, b.workspaces)
   );
 }

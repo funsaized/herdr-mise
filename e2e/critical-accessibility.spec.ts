@@ -93,3 +93,47 @@ test("renderer failure keeps a visible operable agent list", async ({
   await expect(fallback.getByRole("button").first()).toBeFocused();
   expect(errors).toEqual([]);
 });
+
+test("workspace scope reveals blocked agents by keyboard at 320 CSS pixels", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/?preset=mixed&agents=2");
+  const selector = page.getByRole("combobox", { name: "Workspace" });
+  await expect(selector).toHaveValue("");
+  await selector.selectOption("visual-workspace-1");
+  const showAll = page.getByRole("button", {
+    name: "1 blocked elsewhere — Show all",
+  });
+  await expect(showAll).toBeVisible();
+  const showAllBox = await showAll.boundingBox();
+  expect(showAllBox).not.toBeNull();
+  if (
+    !(await page.getByRole("region", { name: "Agent status list" }).isVisible())
+  ) {
+    const placardBox = await page.locator(".demoPlacard").boundingBox();
+    expect(placardBox).not.toBeNull();
+    expect(showAllBox!.y + showAllBox!.height).toBeLessThanOrEqual(
+      placardBox!.y,
+    );
+  }
+  await showAll.focus();
+  await page.keyboard.press("Enter");
+  await expect(selector).toBeFocused();
+  await selector.selectOption("visual-workspace-1");
+  await selector.focus();
+  await page.keyboard.press("Tab");
+  await expect(showAll).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(selector).toBeFocused();
+  await expect(selector).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: /Claude, Blocked — .*open details/ }),
+  ).toBeAttached();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});

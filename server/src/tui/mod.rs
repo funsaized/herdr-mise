@@ -37,6 +37,12 @@ pub(crate) enum SceneView {
     Freezer,
 }
 
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(crate) struct Scope {
+    pub(crate) id: Option<String>,
+    pub(crate) label: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct TerminalCapabilities {
     color_mode: canvas::ColorMode,
@@ -136,39 +142,95 @@ fn panic_restore_install_count() -> usize {
     PANIC_RESTORE_INSTALL_COUNT.load(Ordering::SeqCst)
 }
 
-pub(crate) fn retain_selection(selected_id: &mut Option<String>, table: &AgentTable) {
-    if selected_id
-        .as_ref()
-        .is_some_and(|id| !table.agents().any(|agent| &agent.id == id))
-    {
+pub(crate) fn retain_selection(
+    selected_id: &mut Option<String>,
+    table: &AgentTable,
+    scope: &Scope,
+) {
+    if selected_id.as_ref().is_some_and(|id| {
+        !table
+            .scoped_agents(scope.id.as_deref())
+            .any(|agent| &agent.id == id)
+    }) {
         *selected_id = None;
     }
+}
+
+fn reconcile_scope(scope: &mut Scope, table: &AgentTable) {
+    match scope.id.as_deref() {
+        None => scope.label = None,
+        Some(id) => {
+            if let Some(workspace) = table.workspace(id) {
+                scope.label = Some(workspace.label.clone());
+            }
+            // An id missing from the catalog keeps its prior label and reads
+            // as unavailable; a same-label new id is a distinct scope and never
+            // revives this one.
+        }
+    }
+}
+
+fn cycle_scope(scope: &mut Scope, table: &AgentTable) {
+    let catalog = table.workspaces();
+    if catalog.is_empty() {
+        scope.id = None;
+        scope.label = None;
+        return;
+    }
+    let current = scope
+        .id
+        .as_deref()
+        .and_then(|id| catalog.iter().position(|workspace| workspace.id == id));
+    match current {
+        Some(index) if index + 1 < catalog.len() => {
+            scope.id = Some(catalog[index + 1].id.clone());
+            scope.label = Some(catalog[index + 1].label.clone());
+        }
+        Some(_) => {
+            scope.id = None;
+            scope.label = None;
+        }
+        None => {
+            scope.id = Some(catalog[0].id.clone());
+            scope.label = Some(catalog[0].label.clone());
+        }
+    }
+}
+
+fn select_all(scope: &mut Scope) {
+    scope.id = None;
+    scope.label = None;
 }
 
 pub(super) const KEY_HELP: &str = "? help";
 pub(super) const KEY_INSPECT: &str = "Tab / Shift+Tab inspect";
 pub(super) const KEY_BLOCKED: &str = "b next blocked";
 pub(super) const KEY_FREEZER: &str = "f freezer";
+pub(super) const KEY_SCOPE: &str = "w scope";
+pub(super) const KEY_ALL: &str = "a all";
 pub(super) const KEY_ESC_CLOSE: &str = "Esc close";
 pub(super) const KEY_QUIT: &str = "q quit";
 pub(super) const KEY_QUIT_ESC: &str = "q / Esc quit";
 pub(super) const KEY_KITCHEN: &str = "f kitchen";
 pub(super) const KEY_ESC_KITCHEN: &str = "Esc kitchen";
-pub(super) const HELP_LINES: [&str; 6] = [
+pub(super) const HELP_LINES: [&str; 8] = [
     KEY_HELP,
     KEY_INSPECT,
     KEY_BLOCKED,
     KEY_FREEZER,
+    KEY_SCOPE,
+    KEY_ALL,
     "Esc close / leave / quit",
     KEY_QUIT,
 ];
 
-fn handle_key_with_view(
+fn handle_key_with_scope(
     code: KeyCode,
     table: &AgentTable,
     selected_id: &mut Option<String>,
     view: &mut SceneView,
     help_open: &mut bool,
+    scope: &mut Scope,
     shutdown: &CancellationToken,
 ) -> bool {
     if code == KeyCode::Char('q') {
@@ -197,8 +259,16 @@ fn handle_key_with_view(
             SceneView::Freezer => SceneView::Kitchen,
         };
         false
+    } else if code == KeyCode::Char('w') {
+        cycle_scope(scope, table);
+        retain_selection(selected_id, table, scope);
+        false
+    } else if code == KeyCode::Char('a') {
+        select_all(scope);
+        retain_selection(selected_id, table, scope);
+        false
     } else if code == KeyCode::Char('b') {
-        let agents = table.agents().collect::<Vec<_>>();
+        let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
         let start = selected_id
             .as_ref()
             .and_then(|id| agents.iter().position(|agent| &agent.id == id))
@@ -211,7 +281,7 @@ fn handle_key_with_view(
         }
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
-        let agents = table.agents().collect::<Vec<_>>();
+        let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
         if agents.is_empty() {
             *selected_id = None;
             return false;
@@ -231,23 +301,6 @@ fn handle_key_with_view(
     } else {
         false
     }
-}
-
-#[cfg(test)]
-fn handle_key(
-    code: KeyCode,
-    table: &AgentTable,
-    selected_id: &mut Option<String>,
-    shutdown: &CancellationToken,
-) -> bool {
-    handle_key_with_view(
-        code,
-        table,
-        selected_id,
-        &mut SceneView::Kitchen,
-        &mut false,
-        shutdown,
-    )
 }
 
 struct TerminalGuard {
@@ -295,14 +348,16 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut table_offset = 0;
     let mut view = SceneView::default();
     let mut help_open = false;
+    let mut scope = Scope::default();
     loop {
-        retain_selection(&mut selected_id, &table);
+        retain_selection(&mut selected_id, &table, &scope);
+        reconcile_scope(&mut scope, &table);
         let now = Utc::now();
         terminal.draw(|frame| {
             table_offset =
                 view::table_window(frame.area(), &table, selected_id.as_deref(), table_offset)
                     .offset;
-            scene::draw_view(
+            scene::draw_view_scoped(
                 frame,
                 &table,
                 warning.message(),
@@ -315,6 +370,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 view,
                 help_open,
                 capabilities.reduced_motion,
+                &scope,
             )
         })?;
         tokio::select! {
@@ -334,7 +390,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 FeedDecision::Closed => break,
             },
             event = events.next() => match event {
-                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key_with_view(key.code, &table, &mut selected_id, &mut view, &mut help_open, &shutdown) => break,
+                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key_with_scope(key.code, &table, &mut selected_id, &mut view, &mut help_open, &mut scope, &shutdown) => break,
                 Some(Err(error)) => return Err(error),
                 None => break,
                 _ => {}
@@ -391,7 +447,15 @@ mod tests {
         let table = AgentTable::default();
         for code in [KeyCode::Char('q'), KeyCode::Esc] {
             let token = CancellationToken::new();
-            assert!(handle_key(code, &table, &mut None, &token));
+            assert!(handle_key_with_scope(
+                code,
+                &table,
+                &mut None,
+                &mut SceneView::Kitchen,
+                &mut false,
+                &mut Scope::default(),
+                &token
+            ));
             assert!(token.is_cancelled());
         }
     }
@@ -415,6 +479,7 @@ mod tests {
             accent_index: 0,
             model: String::new(),
             workspace: String::new(),
+            workspace_id: None,
             session: SessionStats {
                 tickets_available: None,
                 runtime_ms: 0,
@@ -428,37 +493,84 @@ mod tests {
             source_status: SourceStatus::Connected,
             source_diagnostic: None,
             agents: vec![agent("a"), agent("b")],
+            workspaces: None,
         });
         let quit = CancellationToken::new();
         let mut selected = Some("a".into());
-        assert!(handle_key(KeyCode::Char('q'), &table, &mut selected, &quit));
+        assert!(handle_key_with_scope(
+            KeyCode::Char('q'),
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &quit
+        ));
         assert!(quit.is_cancelled());
 
         let shutdown = CancellationToken::new();
         let mut selected = None;
 
-        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+        assert!(!handle_key_with_scope(
+            KeyCode::Tab,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
         assert_eq!(selected.as_deref(), Some("a"));
-        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+        assert!(!handle_key_with_scope(
+            KeyCode::Tab,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
         assert_eq!(selected.as_deref(), Some("b"));
-        assert!(!handle_key(
+        assert!(!handle_key_with_scope(
             KeyCode::BackTab,
             &table,
             &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
             &shutdown
         ));
         assert_eq!(selected.as_deref(), Some("a"));
-        assert!(!handle_key(
+        assert!(!handle_key_with_scope(
             KeyCode::Char('b'),
             &table,
             &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
             &shutdown
         ));
         assert_eq!(selected.as_deref(), Some("a"));
-        assert!(!handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert!(!handle_key_with_scope(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
         assert_eq!(selected, None);
         assert!(!shutdown.is_cancelled());
-        assert!(handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert!(handle_key_with_scope(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
         assert!(shutdown.is_cancelled());
 
         selected = Some("b".into());
@@ -469,7 +581,7 @@ mod tests {
             agent: None,
             agent_id: Some("b".into()),
         });
-        retain_selection(&mut selected, &table);
+        retain_selection(&mut selected, &table, &Scope::default());
         assert_eq!(selected, None);
     }
 
@@ -481,34 +593,105 @@ mod tests {
         let mut view = SceneView::default();
         let mut help_open = false;
         assert_eq!(view, SceneView::Kitchen);
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Char('f'),
             &table,
             &mut selected,
             &mut view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert_eq!(view, SceneView::Freezer);
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Esc,
             &table,
             &mut selected,
             &mut view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert_eq!(view, SceneView::Kitchen);
         assert!(!shutdown.is_cancelled());
-        assert!(handle_key_with_view(
+        assert!(handle_key_with_scope(
             KeyCode::Esc,
             &table,
             &mut selected,
             &mut view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn workspace_scope_keys_cycle_by_id_retain_rename_and_return_to_all() {
+        use crate::protocol::{AgentStateEvent, AppMode, SourceStatus, WorkspaceRecord};
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![],
+            workspaces: Some(vec![WorkspaceRecord {
+                id: "ws-1".into(),
+                label: "old".into(),
+            }]),
+        });
+        let shutdown = CancellationToken::new();
+        let mut scope = Scope::default();
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('w'),
+            &table,
+            &mut None,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut scope,
+            &shutdown
+        ));
+        assert_eq!(scope.id.as_deref(), Some("ws-1"));
+
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![],
+            workspaces: Some(vec![WorkspaceRecord {
+                id: "ws-1".into(),
+                label: "renamed".into(),
+            }]),
+        });
+        reconcile_scope(&mut scope, &table);
+        assert_eq!(scope.label.as_deref(), Some("renamed"));
+
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![],
+            workspaces: Some(vec![WorkspaceRecord {
+                id: "ws-2".into(),
+                label: "renamed".into(),
+            }]),
+        });
+        reconcile_scope(&mut scope, &table);
+        assert_eq!(scope.id.as_deref(), Some("ws-1"));
+        assert_eq!(scope.label.as_deref(), Some("renamed"));
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('a'),
+            &table,
+            &mut None,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut scope,
+            &shutdown
+        ));
+        assert_eq!(scope, Scope::default());
     }
 
     #[tokio::test]
