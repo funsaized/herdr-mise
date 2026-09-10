@@ -53,7 +53,7 @@ jobs:
             repositoryUrl: https://github.com/funsaized/herdr-mise.git
             workspaceRoot: ..
             baseRef: ${{ inputs.commit }}
-            branch: ${{ "nightshift/ship-" + inputs.workItem }}
+            branch: ${{ "nightshift/ship-" + inputs.workItem + "-" + inputs.commit }}
         dependsOn:
           - { step: require-issue-link, condition: { type: succeeded } }
       - name: verify-candidate
