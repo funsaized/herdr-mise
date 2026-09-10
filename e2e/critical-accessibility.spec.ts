@@ -118,7 +118,8 @@ test("workspace scope reveals blocked agents by keyboard at 320 CSS pixels", asy
       placardBox!.y,
     );
   }
-  await showAll.click();
+  await showAll.focus();
+  await page.keyboard.press("Enter");
   await expect(selector).toBeFocused();
   await selector.selectOption("visual-workspace-1");
   await selector.focus();
