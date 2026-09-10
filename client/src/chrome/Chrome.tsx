@@ -187,68 +187,70 @@ export function Chrome(props: ChromeProps) {
           </button>
         </>
       )}
-      <div className="workspaceScope">
-        <select
-          ref={workspaceSelect}
-          aria-label="Workspace"
-          value={props.coarse.selectedWorkspaceId ?? ""}
-          onChange={(event) =>
-            props.store.selectWorkspace(event.target.value || null)
-          }
-          onKeyDown={(event) => {
-            if (
-              event.key === "Tab" &&
-              !event.shiftKey &&
-              workspaceShowAll.current
-            ) {
-              event.preventDefault();
-              workspaceShowAll.current.focus();
+      <div className="workspaceControls">
+        <div className="workspaceScope">
+          <select
+            ref={workspaceSelect}
+            aria-label="Workspace"
+            value={props.coarse.selectedWorkspaceId ?? ""}
+            onChange={(event) =>
+              props.store.selectWorkspace(event.target.value || null)
             }
-          }}
-        >
-          <option value="">All</option>
-          {catalog.map((item) => (
-            <option key={item.id} value={item.id}>
-              {workspaceOptionLabel(item.id, item.label, catalog)}
-            </option>
-          ))}
-        </select>
-        {props.coarse.blockedElsewhere > 0 && (
-          <button
-            ref={workspaceShowAll}
-            type="button"
-            onClick={() => {
-              props.store.selectWorkspace(null);
-              workspaceSelect.current?.focus();
+            onKeyDown={(event) => {
+              if (
+                event.key === "Tab" &&
+                !event.shiftKey &&
+                workspaceShowAll.current
+              ) {
+                event.preventDefault();
+                workspaceShowAll.current.focus();
+              }
             }}
           >
-            {props.coarse.blockedElsewhere} blocked elsewhere — Show all
-          </button>
-        )}
+            <option value="">All</option>
+            {catalog.map((item) => (
+              <option key={item.id} value={item.id}>
+                {workspaceOptionLabel(item.id, item.label, catalog)}
+              </option>
+            ))}
+          </select>
+          {props.coarse.blockedElsewhere > 0 && (
+            <button
+              ref={workspaceShowAll}
+              type="button"
+              onClick={() => {
+                props.store.selectWorkspace(null);
+                workspaceSelect.current?.focus();
+              }}
+            >
+              {props.coarse.blockedElsewhere} blocked elsewhere — Show all
+            </button>
+          )}
+        </div>
+        <ModeTreatment
+          mode={props.coarse.mode}
+          sourceStatus={props.coarse.sourceStatus}
+          sourceDiagnostic={props.coarse.sourceDiagnostic}
+          disconnectReason={props.coarse.disconnectReason}
+          lastUpdateSeconds={props.lastUpdateSeconds}
+          scopeUnavailableLabel={
+            (props.coarse.mode === "live" || props.coarse.mode === "empty") &&
+            props.coarse.workspaceUnavailable
+              ? workspaceScopeName(props.coarse.selectedWorkspaceLabel)
+              : null
+          }
+          scopeEmptyLabel={
+            (props.coarse.mode === "live" || props.coarse.mode === "empty") &&
+            props.coarse.selectedWorkspaceId !== null &&
+            !props.coarse.workspaceUnavailable &&
+            props.coarse.visibleCount === 0
+              ? workspaceScopeName(props.coarse.selectedWorkspaceLabel)
+              : null
+          }
+          clearedCount={props.coarse.clearedCount}
+          onRevealCleared={props.onRevealCleared}
+        />
       </div>
-      <ModeTreatment
-        mode={props.coarse.mode}
-        sourceStatus={props.coarse.sourceStatus}
-        sourceDiagnostic={props.coarse.sourceDiagnostic}
-        disconnectReason={props.coarse.disconnectReason}
-        lastUpdateSeconds={props.lastUpdateSeconds}
-        scopeUnavailableLabel={
-          (props.coarse.mode === "live" || props.coarse.mode === "empty") &&
-          props.coarse.workspaceUnavailable
-            ? workspaceScopeName(props.coarse.selectedWorkspaceLabel)
-            : null
-        }
-        scopeEmptyLabel={
-          (props.coarse.mode === "live" || props.coarse.mode === "empty") &&
-          props.coarse.selectedWorkspaceId !== null &&
-          !props.coarse.workspaceUnavailable &&
-          props.coarse.visibleCount === 0
-            ? workspaceScopeName(props.coarse.selectedWorkspaceLabel)
-            : null
-        }
-        clearedCount={props.coarse.clearedCount}
-        onRevealCleared={props.onRevealCleared}
-      />
       {import.meta.env.MODE === "visual" && (
         <figure
           className="visualTuiFigure"

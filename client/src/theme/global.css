@@ -424,9 +424,28 @@ select:focus-visible {
   gap: 6px;
   max-width: calc(100% - 180px);
 }
+.workspaceControls {
+  display: contents;
+}
+.workspaceControls:has(> .revealCleared) {
+  position: absolute;
+  z-index: 8;
+  left: 14px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 180px);
+}
+.workspaceControls:has(> .revealCleared) > .workspaceScope,
+.workspaceControls:has(> .revealCleared) > .revealCleared {
+  position: static;
+}
 .workspaceScope select,
 .workspaceScope button {
   max-width: 100%;
+  min-height: 44px;
   padding: 5px 11px;
   border: 1px solid var(--borderSoft);
   border-radius: var(--radiusSmall);
@@ -459,9 +478,6 @@ select:focus-visible {
   left: 14px;
   bottom: 12px;
   cursor: pointer;
-}
-.workspaceScope:has(~ .revealCleared) {
-  left: 250px;
 }
 .demoPlacard {
   position: absolute;
@@ -794,7 +810,7 @@ select:focus-visible {
     max-height: 22vh;
     overflow-y: auto;
   }
-  .panel ~ .emptyPill {
+  .panel ~ .workspaceControls > .emptyPill {
     bottom: calc(22vh + 60px);
   }
   .workspaceScope {
@@ -804,6 +820,10 @@ select:focus-visible {
     left: 8px;
     max-width: none;
   }
+  .workspaceControls:has(> .revealCleared) {
+    inset: 8px 8px auto;
+    max-width: none;
+  }
   .demoPlacard {
     inset: 8px 8px auto;
     width: auto;
@@ -811,8 +831,8 @@ select:focus-visible {
     transform: none;
     border-width: 2px;
   }
-  .workspaceScope ~ .demoPlacard {
-    top: 88px;
+  .workspaceControls > .demoPlacard {
+    top: 110px;
   }
   .demoPlacard h2 {
     font-size: 13px;

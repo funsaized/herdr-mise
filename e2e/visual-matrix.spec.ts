@@ -693,6 +693,10 @@ test("workspace scope follows stable identity without hiding blocked attention",
     const showAll = page.getByRole("button", {
       name: "1 blocked elsewhere — Show all",
     });
+    const selectorBox = (await selector.boundingBox())!,
+      showAllBox = (await showAll.boundingBox())!;
+    expect(selectorBox.height).toBeGreaterThanOrEqual(44);
+    expect(showAllBox.height).toBeGreaterThanOrEqual(44);
     await selector.focus();
     await page.keyboard.press("Tab");
     await expect(showAll).toBeFocused();
@@ -1482,6 +1486,7 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
     for (const viewport of [
       { width: 1280, height: 720 },
       { width: 390, height: 844 },
+      { width: 320, height: 640 },
     ]) {
       await page.setViewportSize(viewport);
       await expect
@@ -1494,6 +1499,8 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
         .toBe(true);
       const revealBox = (await reveal.boundingBox())!,
         workspaceBox = (await page.locator(".workspaceScope").boundingBox())!,
+        pager = page.locator(".kitchenPager"),
+        pagerBox = (await pager.count()) ? await pager.boundingBox() : null,
         settingsBox = (await page
           .getByRole("button", { name: "Open settings" })
           .boundingBox())!,
@@ -1501,6 +1508,7 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
           .getByRole("button", { name: "Freezer" })
           .boundingBox())!;
       expect(boxesIntersect(revealBox, workspaceBox)).toBe(false);
+      if (pagerBox) expect(boxesIntersect(revealBox, pagerBox)).toBe(false);
       expect(boxesIntersect(revealBox, settingsBox)).toBe(false);
       expect(boxesIntersect(revealBox, freezerBox)).toBe(false);
       for (const cell of Object.values(
