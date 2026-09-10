@@ -241,6 +241,7 @@ impl Feed {
                         || prior.state_entered_at != agent.state_entered_at
                         || prior.pane_id != agent.pane_id
                         || prior.agent_kind != agent.agent_kind
+                        || prior.workspace_id != agent.workspace_id
                         || prior.workspace != agent.workspace
                 });
                 if transition {
@@ -591,6 +592,19 @@ mod tests {
         assert!(matches!(
             changes.recv().await.unwrap(),
             AgentStateEvent::Delta { .. }
+        ));
+    }
+    #[tokio::test]
+    async fn workspace_identity_changes_bypass_metric_coalescing() {
+        let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
+        let mut changes = feed.subscribe();
+        let mut moved = record(0.2);
+        moved.workspace_id = Some("workspace-b".into());
+        feed.apply_live_coalesced(vec![moved], vec![], vec![]).await;
+        assert!(matches!(
+            changes.try_recv().unwrap(),
+            AgentStateEvent::Delta { agent: Some(agent), .. }
+                if agent.workspace_id.as_deref() == Some("workspace-b")
         ));
     }
     #[tokio::test]
