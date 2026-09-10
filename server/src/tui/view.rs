@@ -322,20 +322,12 @@ fn fallback_layout(
     agents: &[&AgentRecord],
     selected_id: Option<&str>,
     requested_offset: usize,
+    header_content_height: u16,
 ) -> FallbackLayout {
     let compact = area.height < 20;
     let agent_count = agents.len();
-    let (title, source_copy) = status_lines(
-        table.mode(),
-        table.source_status(),
-        table.source_diagnostic(),
-        agent_count,
-    );
-    let header =
-        Paragraph::new(vec![Line::from(title), Line::from(source_copy)]).wrap(Wrap { trim: true });
-    let content_height = u16::try_from(header.line_count(area.width)).unwrap_or(u16::MAX);
     let baseline_height = if compact { 2 } else { 4 };
-    let header_height = baseline_height.max(content_height + u16::from(!compact));
+    let header_height = baseline_height.max(header_content_height + u16::from(!compact));
     let table_height = u16::try_from(agent_count)
         .unwrap_or(u16::MAX)
         .saturating_add(3);
@@ -386,7 +378,24 @@ pub(crate) fn table_window(
     requested_offset: usize,
 ) -> TableWindow {
     let agents = table.agents().collect::<Vec<_>>();
-    fallback_layout(area, table, &agents, selected_id, requested_offset).window
+    let (title, source_copy) = status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        agents.len(),
+    );
+    let header =
+        Paragraph::new(vec![Line::from(title), Line::from(source_copy)]).wrap(Wrap { trim: true });
+    let header_content_height = u16::try_from(header.line_count(area.width)).unwrap_or(u16::MAX);
+    fallback_layout(
+        area,
+        table,
+        &agents,
+        selected_id,
+        requested_offset,
+        header_content_height,
+    )
+    .window
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -417,11 +426,20 @@ pub(crate) fn draw_scoped(
         Line::from(format!("{source_copy} · {}", scope_summary(table, scope))),
     ])
     .wrap(Wrap { trim: true });
+    let header_content_height =
+        u16::try_from(header.line_count(frame.area().width)).unwrap_or(u16::MAX);
     if !compact {
         header = header.block(Block::default().borders(Borders::BOTTOM));
     }
     let selected = selected_id.and_then(|id| agents.iter().copied().find(|agent| agent.id == id));
-    let layout = fallback_layout(frame.area(), table, &agents, selected_id, table_offset);
+    let layout = fallback_layout(
+        frame.area(),
+        table,
+        &agents,
+        selected_id,
+        table_offset,
+        header_content_height,
+    );
     let areas = layout.areas;
     frame.render_widget(header, areas[0]);
     let available_width = areas[1].width.saturating_sub(2);
@@ -1619,6 +1637,18 @@ mod tests {
         assert!(output.contains("Workspace: Kitchen One · 1 blocked elsewhere"));
         assert!(output.contains("Cook here"));
         assert!(!output.contains("Cook elsewhere"));
+
+        let mut narrow = Terminal::new(TestBackend::new(20, 24)).unwrap();
+        narrow
+            .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &scope))
+            .unwrap();
+        let narrow_output = buffer_text(&narrow);
+        for expected in ["Workspace:", "Kitchen", "One", "blocked", "elsewhere"] {
+            assert!(
+                narrow_output.contains(expected),
+                "missing {expected:?} in {narrow_output:?}"
+            );
+        }
 
         let unavailable = Scope {
             id: Some("removed".into()),
