@@ -159,7 +159,7 @@ impl Feed {
             let mut pending = self.inner.pending.lock().await;
             let mut state = self.inner.state.write().await;
             pending.clear();
-            self.end_ids_state(&mut pending, &mut state, ended_ids);
+            Self::end_ids(&self.inner.changes, &mut pending, &mut state, ended_ids);
             state.mode = AppMode::Live;
             state.source_status = SourceStatus::Connected;
             state.source_diagnostic = None;
@@ -221,7 +221,7 @@ impl Feed {
                 drop(pending);
             } else {
                 pending.clear();
-                self.end_ids_state(&mut pending, &mut state, ended_ids);
+                Self::end_ids(&self.inner.changes, &mut pending, &mut state, ended_ids);
                 state.agents = agents
                     .into_iter()
                     .map(|agent| (agent.id.clone(), agent))
@@ -259,14 +259,6 @@ impl Feed {
             }
             Self::end_ids(&self.inner.changes, &mut pending, &mut state, ended_ids);
         }
-    }
-    fn end_ids_state(
-        &self,
-        pending: &mut HashMap<String, AgentRecord>,
-        state: &mut FeedState,
-        ended_ids: Vec<String>,
-    ) {
-        Self::end_ids(&self.inner.changes, pending, state, ended_ids);
     }
     fn end_ids(
         changes: &broadcast::Sender<AgentStateEvent>,

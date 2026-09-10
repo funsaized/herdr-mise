@@ -84,16 +84,22 @@ export function ModeTreatment({
         </div>
       </div>
     );
+  if (mode === "empty")
+    return (
+      <div className="emptyPill" role="status">
+        Waiting for agents — start one in herdr
+      </div>
+    );
   if (scopeUnavailableLabel !== null)
     return (
       <div className="emptyPill" role="status">
         {scopeUnavailableLabel} is unavailable
       </div>
     );
-  if (mode === "empty")
+  if (scopeEmptyLabel !== null)
     return (
       <div className="emptyPill" role="status">
-        Waiting for agents — start one in herdr
+        No agents in {scopeEmptyLabel}
       </div>
     );
   if (mode === "live" && clearedCount)
@@ -102,12 +108,6 @@ export function ModeTreatment({
         {clearedCount} plated cook{clearedCount === 1 ? "" : "s"} cleared —
         reveal
       </button>
-    );
-  if (scopeEmptyLabel !== null)
-    return (
-      <div className="emptyPill" role="status">
-        No agents in {scopeEmptyLabel}
-      </div>
     );
   return null;
 }

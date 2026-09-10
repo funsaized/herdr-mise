@@ -339,7 +339,10 @@ impl Normalizer {
             first_seen.remove(id);
             entered_at.remove(id);
         }
-        if serde_json::to_string(&agents)?.encode_utf16().count() > MAX_FEED_FRAME_UTF16_UNITS - 256
+        if serde_json::to_string(&(&agents, &workspaces))?
+            .encode_utf16()
+            .count()
+            > MAX_FEED_FRAME_UTF16_UNITS - 256
         {
             return Err(AdapterError::Remote(
                 "normalized snapshot exceeds browser frame limit".into(),
@@ -686,6 +689,22 @@ mod tests {
         assert!(matches!(
             Normalizer::default()
                 .normalize_snapshot_value(amplified, "2026-07-31T00:00:00Z"),
+            Err(AdapterError::Remote(message))
+                if message == "normalized snapshot exceeds browser frame limit"
+        ));
+
+        let mut workspace_heavy: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        workspace_heavy["result"]["snapshot"]["agents"] = json!([]);
+        workspace_heavy["result"]["snapshot"]["workspaces"] = json!((0..1_200)
+            .map(|index| json!({
+                "workspace_id": format!("ws-{index}"),
+                "label": "w".repeat(MAX_TEXT_UTF16_UNITS),
+            }))
+            .collect::<Vec<_>>());
+        assert!(matches!(
+            Normalizer::default()
+                .normalize_snapshot_value(workspace_heavy, "2026-07-31T00:00:00Z"),
             Err(AdapterError::Remote(message))
                 if message == "normalized snapshot exceeds browser frame limit"
         ));

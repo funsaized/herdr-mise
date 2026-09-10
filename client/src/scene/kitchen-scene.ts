@@ -2014,7 +2014,7 @@ export class KitchenScene {
   }
   private drawEscalation(now: number) {
     const settings = this.store.snapshot().settings,
-      blocked = [...this.store.snapshot().visibleAgents.values()].filter(
+      blocked = [...this.store.snapshot().agents.values()].filter(
         (agent) => agent.targetState === "blocked",
       ),
       elapsed = blocked.length

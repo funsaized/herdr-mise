@@ -689,7 +689,7 @@ test("workspace scope follows stable identity without hiding blocked attention",
           metrics?.escalationBlockedAgents,
         ];
       })
-      .toEqual([["scope-terminal-one"], 0]);
+      .toEqual([["scope-terminal-one"], 1]);
     const showAll = page.getByRole("button", {
       name: "1 blocked elsewhere — Show all",
     });

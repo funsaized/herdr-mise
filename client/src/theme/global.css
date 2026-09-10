@@ -775,11 +775,6 @@ select:focus-visible {
     display: none;
   }
 }
-@media (max-width: 480px) {
-  .revealCleared {
-    bottom: 104px;
-  }
-}
 :where(.appShell[data-pager-layout="narrow"]) {
   .kitchenPager {
     left: 8px;

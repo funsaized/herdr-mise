@@ -77,12 +77,14 @@ describe("chrome interactions", () => {
         sourceStatus="connected"
         lastUpdateSeconds={0}
         scopeEmptyLabel="Kitchen One"
+        scopeUnavailableLabel="Removed Kitchen"
       />,
     );
     expect(
       screen.getByText("Waiting for agents — start one in herdr"),
     ).toBeTruthy();
     expect(screen.queryByText("No agents in Kitchen One")).toBeNull();
+    expect(screen.queryByText("Removed Kitchen is unavailable")).toBeNull();
     rerender(
       <ModeTreatment
         mode="demo"
@@ -339,6 +341,18 @@ describe("chrome interactions", () => {
     );
     expect(screen.queryByText(/plated cooks cleared/)).toBeNull();
     expect(screen.getByText("DEMO SERVICE")).toBeTruthy();
+    rerender(
+      <ModeTreatment
+        mode="live"
+        sourceStatus="connected"
+        lastUpdateSeconds={0}
+        scopeEmptyLabel="Kitchen One"
+        clearedCount={2}
+        onRevealCleared={reveal}
+      />,
+    );
+    expect(screen.getByText("No agents in Kitchen One")).toBeTruthy();
+    expect(screen.queryByText(/plated cooks cleared/)).toBeNull();
   });
   it("closes a selected demo session summary on live recovery", () => {
     const store = new AgentStore();
