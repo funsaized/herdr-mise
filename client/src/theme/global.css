@@ -616,6 +616,9 @@ select:focus-visible {
   text-decoration: underline;
   cursor: pointer;
 }
+.appShell:has(.kitchenPager) .firstHint {
+  bottom: calc(var(--pagerReservedHeight) + 8px);
+}
 .statsOverlay {
   position: absolute;
   z-index: 40;
@@ -660,6 +663,47 @@ select:focus-visible {
   padding: 0;
   border: 0;
 }
+.kitchenPager {
+  position: fixed;
+  z-index: 12;
+  left: 50%;
+  bottom: 8px;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  max-width: calc(100vw - 16px);
+  padding: 6px 8px;
+  transform: translateX(-50%);
+  color: var(--text);
+  background: var(--panelSoft);
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusControl);
+  box-shadow: var(--shadowSmall);
+  font-size: var(--fontSecondarySize);
+  text-align: center;
+}
+.kitchenPager div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kitchenPager button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 7px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radiusSmall);
+  cursor: pointer;
+}
+.kitchenPager button:disabled {
+  color: var(--tertiary);
+  cursor: default;
+}
+.kitchenPager span {
+  white-space: nowrap;
+}
 @keyframes blink {
   50% {
     opacity: 0.25;
@@ -690,6 +734,31 @@ select:focus-visible {
 @media (max-width: 480px) {
   .revealCleared {
     bottom: 104px;
+  }
+}
+:where(.appShell[data-pager-layout="narrow"]) {
+  .kitchenPager {
+    left: 8px;
+    right: 104px;
+    bottom: 8px;
+    gap: 2px;
+    width: auto;
+    max-width: none;
+    padding: 4px 6px;
+    transform: none;
+  }
+  .kitchenPager div {
+    gap: 4px;
+  }
+  .kitchenPager button {
+    padding: 3px 5px;
+  }
+  .kitchenPager span {
+    white-space: normal;
+  }
+  .freezerTrigger {
+    right: 14px;
+    bottom: 48px;
   }
   .panel {
     inset: auto 8px 52px;
@@ -722,6 +791,24 @@ select:focus-visible {
   }
   .firstHint {
     bottom: 52px;
+  }
+}
+:where(.appShell[data-pager-layout="short"]) {
+  .kitchenPager {
+    display: flex;
+    gap: 6px;
+    width: calc(100vw - 16px);
+    min-height: calc(var(--compactPagerReservedHeight) - 16px);
+    justify-content: center;
+  }
+  .kitchenPager div {
+    gap: 5px;
+  }
+  .kitchenPager button {
+    padding: 3px 5px;
+  }
+  &:has(.kitchenPager) .firstHint {
+    bottom: calc(var(--compactPagerReservedHeight) + 8px);
   }
 }
 @media (max-width: 340px) {

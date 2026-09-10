@@ -282,6 +282,40 @@ describe("semantic station controls", () => {
       ]),
     );
   });
+  it("exposes keyboard-operable kitchen paging and blocked totals", () => {
+    const onPreviousPage = vi.fn(),
+      onNextPage = vi.fn(),
+      onNextBlocked = vi.fn();
+    render(
+      <SemanticStationControls
+        agents={[agent]}
+        page={{
+          totalCount: 30,
+          visibleCount: 1,
+          capacity: 12,
+          pageIndex: 1,
+          pageCount: 3,
+          pagerLayout: "standard",
+        }}
+        blockedTotal={7}
+        blockedVisible={1}
+        onPreviousPage={onPreviousPage}
+        onNextPage={onNextPage}
+        onNextBlocked={onNextBlocked}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText("Page 2 of 3")).toBeTruthy();
+    expect(
+      screen.getByText("1 of 30 cooks shown · 7 blocked / 6 off-page"),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next blocked cook" }));
+    expect(onPreviousPage).toHaveBeenCalledOnce();
+    expect(onNextPage).toHaveBeenCalledOnce();
+    expect(onNextBlocked).toHaveBeenCalledOnce();
+  });
   it("deduplicates source updates that do not change the semantic slice", () => {
     const same = [agent],
       copy = [{ ...agent }];

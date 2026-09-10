@@ -90,8 +90,17 @@ export interface SceneHit {
     "kind" | "queueOrdinal" | "queueTotal"
   >;
 }
+export interface PageMetadata {
+  totalCount: number;
+  visibleCount: number;
+  capacity: number;
+  pageIndex: number;
+  pageCount: number;
+  pagerLayout: SceneLayout["pagerLayout"];
+}
 export interface KitchenSceneOptions {
   onHitLayout?: (hits: readonly SceneHit[]) => void;
+  onPageLayout?: (page: PageMetadata) => void;
   systemDark?: MediaQueryList;
   reducedMotion?: ReducedMotionPreference;
 }
@@ -116,6 +125,7 @@ export interface SceneMetrics {
     BlockedPlacement & { timerText: string; exiting: boolean }
   >;
   blockedIndicators: number;
+  page: PageMetadata & { visibleIds: readonly string[] };
   stateIndicators: Record<string, number>;
   endedEntries: number;
   view: "kitchen" | "freezer";
@@ -240,6 +250,8 @@ export class KitchenScene {
   private blockedPlacementMetrics: SceneMetrics["blockedPlacements"] = {};
   private hits: SceneHit[] = [];
   private lastHitSignature = "";
+  private lastPageSignature = "";
+  private requestedPage = 0;
   private focusedId: string | null = null;
   private lastTheme: ResolvedTheme | null = null;
   private lastAtmosphere: boolean | null = null;
@@ -385,8 +397,12 @@ export class KitchenScene {
     );
   }
   focus(id: string | null) {
-    if (this.focusedId === id) return;
+    if (this.focusedId === id) {
+      if (id) this.reveal(id);
+      return;
+    }
     this.focusedId = id;
+    if (id && this.reveal(id)) return;
     if (this.layout && this.view === "kitchen") {
       this.drawStations(performance.now());
       destroyChildren(this.boardLayer);
@@ -399,6 +415,42 @@ export class KitchenScene {
   setView(view: "kitchen" | "freezer") {
     if (this.view === view) return;
     this.view = view;
+    this.redraw();
+  }
+  previousPage() {
+    this.setPage(this.requestedPage - 1);
+  }
+  nextPage() {
+    this.setPage(this.requestedPage + 1);
+  }
+  reveal(id: string) {
+    if (!this.app.renderer || this.view !== "kitchen") return false;
+    const occupiedIds = this.stationSlots.filter(
+        (slot): slot is string => slot !== null,
+      ),
+      index = occupiedIds.indexOf(id);
+    if (index < 0) return false;
+    const layout = computeLayout(
+        this.host.clientWidth || innerWidth,
+        this.host.clientHeight || innerHeight,
+        this.stationSlots,
+        this.requestedPage,
+      ),
+      page = Math.floor(index / layout.capacity);
+    if (page === layout.pageIndex) return false;
+    this.setPage(page);
+    return true;
+  }
+  private setPage(page: number) {
+    if (!this.app.renderer || this.view !== "kitchen") return;
+    const layout = computeLayout(
+      this.host.clientWidth || innerWidth,
+      this.host.clientHeight || innerHeight,
+      this.stationSlots,
+      page,
+    );
+    if (layout.pageIndex === this.layout?.pageIndex) return;
+    this.requestedPage = layout.pageIndex;
     this.redraw();
   }
   metrics(): SceneMetrics {
@@ -475,6 +527,10 @@ export class KitchenScene {
       activeFocusCornerSizes,
       blockedPlacements: { ...this.blockedPlacementMetrics },
       blockedIndicators,
+      page: {
+        ...this.pageMetadata(),
+        visibleIds: this.layout?.visibleIds ?? [],
+      },
       stateIndicators,
       endedEntries: snapshot.board.length,
       view: this.view,
@@ -546,7 +602,10 @@ export class KitchenScene {
     const snapshot = this.store.snapshot();
     this.lastTheme = this.resolvedTheme();
     this.lastAtmosphere = snapshot.settings.atmosphere;
-    this.lastLiveIds = [...snapshot.visibleAgents.keys()].join("|");
+    const liveIds = [...snapshot.visibleAgents.keys()],
+      liveKey = liveIds.join("|"),
+      rosterChanged = liveKey !== this.lastLiveIds;
+    this.lastLiveIds = liveKey;
     this.lastBoardIds = snapshot.board.map((entry) => entry.id).join("|");
     this.boardSelection = snapshot.board.some(
       (item) => item.id === snapshot.selectedId,
@@ -555,22 +614,45 @@ export class KitchenScene {
       : null;
     const width = this.host.clientWidth || innerWidth,
       height = this.host.clientHeight || innerHeight,
-      nextSlots = reconcileStationSlots(this.stationSlots, [
-        ...snapshot.visibleAgents.keys(),
-      ]),
-      capacityChanged = nextSlots.length !== this.stationSlots.length,
-      layoutChanged =
-        this.layout &&
-        (this.layout.wall.width !== width ||
-          this.app.renderer.height !== height ||
-          capacityChanged);
+      nextSlots = reconcileStationSlots(this.stationSlots, liveIds);
+    let nextLayout = computeLayout(
+      width,
+      height,
+      nextSlots,
+      this.requestedPage,
+    );
+    const occupiedIds = nextSlots.filter((id): id is string => id !== null),
+      anchor = [this.focusedId, snapshot.selectedId].find(
+        (id): id is string => id !== null && occupiedIds.includes(id),
+      );
+    if (rosterChanged && anchor && !nextLayout.visibleIds.includes(anchor))
+      nextLayout = computeLayout(
+        width,
+        height,
+        nextSlots,
+        Math.floor(occupiedIds.indexOf(anchor) / nextLayout.capacity),
+      );
+    this.requestedPage = nextLayout.pageIndex;
+    const layoutChanged =
+      this.layout &&
+      (this.layout.wall.width !== width ||
+        this.app.renderer.height !== height ||
+        nextSlots.length !== this.stationSlots.length ||
+        this.layout.visibleIds.join("|") !== nextLayout.visibleIds.join("|"));
     if (layoutChanged) {
       this.transitions.reconcile();
       this.retainedBlocked.clear();
+      this.busserSweeps.clear();
+      for (const graphic of this.busserGraphics.values()) {
+        this.busserLayer.removeChild(graphic);
+        graphic.destroy();
+      }
+      this.busserGraphics.clear();
       this.store.reconcileRendered(undefined, true);
     }
     this.stationSlots = nextSlots;
-    this.layout = computeLayout(width, height, this.stationSlots);
+    this.layout = nextLayout;
+    this.publishPage();
     this.app.renderer.resize(width, height);
     const kitchen = this.view === "kitchen";
     this.stationLayer.visible = kitchen;
@@ -1252,17 +1334,16 @@ export class KitchenScene {
       if (!agent || (this.reducedMotion && agent.targetState !== "blocked"))
         this.retainedBlocked.delete(id);
     }
-    const blockedIds = this.layout.stations
-        .filter(
-          (station) =>
-            snapshot.visibleAgents.get(station.id)?.targetState === "blocked",
-        )
-        .map((station) => station.id),
+    const blockedIds = [...snapshot.visibleAgents.values()]
+        .filter((agent) => agent.targetState === "blocked")
+        .map((agent) => agent.id),
       exiting = [...this.retainedBlocked.values()].filter(
         (retained) =>
           snapshot.visibleAgents.get(retained.id)?.targetState !== "blocked",
       ),
-      placements = blockedPlacements(this.layout, blockedIds, exiting);
+      placements = blockedPlacements(this.layout, blockedIds, exiting, [
+        ...snapshot.visibleAgents.keys(),
+      ]);
     this.blockedPlacementMetrics = {};
     const collisionIds = stationCollisionIds([
       ...snapshot.visibleAgents.values(),
@@ -1334,6 +1415,23 @@ export class KitchenScene {
       this.lastHitSignature = signature;
       this.options.onHitLayout?.(this.hits);
     }
+  }
+  private pageMetadata(): PageMetadata {
+    return {
+      totalCount: this.layout?.totalCount ?? 0,
+      visibleCount: this.layout?.visibleIds.length ?? 0,
+      capacity: this.layout?.capacity ?? 1,
+      pageIndex: this.layout?.pageIndex ?? 0,
+      pageCount: this.layout?.pageCount ?? 1,
+      pagerLayout: this.layout?.pagerLayout ?? "standard",
+    };
+  }
+  private publishPage() {
+    const page = this.pageMetadata(),
+      signature = `${page.totalCount}:${page.visibleCount}:${page.capacity}:${page.pageIndex}:${page.pageCount}:${page.pagerLayout}`;
+    if (signature === this.lastPageSignature) return;
+    this.lastPageSignature = signature;
+    this.options.onPageLayout?.(page);
   }
   private createStationView(agent: AgentMachine): StationView {
     const p = getTheme().palette,
@@ -1775,7 +1873,13 @@ export class KitchenScene {
     label.style.wordWrap = true;
     label.style.breakWords = false;
     label.style.wordWrapWidth = Math.max(0, rect.width - 2 * u);
-    label.position.set(rect.width / 2, 37 * u);
+    label.position.set(
+      rect.width / 2,
+      Math.max(37 * u, name.y + name.height + Math.max(1, u)),
+    );
+    const labelOverflow = Math.max(0, label.y + label.height - rect.height);
+    name.y -= labelOverflow;
+    label.y -= labelOverflow;
     node.alpha = 1;
   }
   private tick(deltaMs: number) {
