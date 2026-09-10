@@ -1493,12 +1493,14 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
         })
         .toBe(true);
       const revealBox = (await reveal.boundingBox())!,
+        workspaceBox = (await page.locator(".workspaceScope").boundingBox())!,
         settingsBox = (await page
           .getByRole("button", { name: "Open settings" })
           .boundingBox())!,
         freezerBox = (await page
           .getByRole("button", { name: "Freezer" })
           .boundingBox())!;
+      expect(boxesIntersect(revealBox, workspaceBox)).toBe(false);
       expect(boxesIntersect(revealBox, settingsBox)).toBe(false);
       expect(boxesIntersect(revealBox, freezerBox)).toBe(false);
       for (const cell of Object.values(

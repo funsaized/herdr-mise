@@ -460,6 +460,9 @@ select:focus-visible {
   bottom: 12px;
   cursor: pointer;
 }
+.workspaceScope:has(~ .revealCleared) {
+  left: 250px;
+}
 .demoPlacard {
   position: absolute;
   z-index: 8;
