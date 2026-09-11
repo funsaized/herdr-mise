@@ -75,6 +75,36 @@ describe("state announcements", () => {
     store.destroy();
   });
 
+  it("disambiguates duplicate blocked names like semantic station controls", () => {
+    vi.useFakeTimers();
+    const clock = scheduler(),
+      store = new AgentStore(clock),
+      duplicate = {
+        ...snapshot.agents[0]!,
+        id: "agent-02",
+        paneId: "pane-02",
+      },
+      agents = [snapshot.agents[0]!, duplicate],
+      announce = vi.fn(),
+      controller = new StateAnnouncementController(store, announce, clock);
+    store.apply({ ...snapshot, agents });
+    store.apply({
+      ...snapshot,
+      agents: agents.map((agent) => ({
+        ...agent,
+        state: "blocked" as const,
+        progress: null,
+      })),
+    });
+    vi.advanceTimersByTime(100);
+
+    expect(announce).toHaveBeenCalledWith(
+      "2 agents blocked: refactor-agent · refactor · pane-01 and refactor-agent · refactor · pane-02. Use Agent stations to open details.",
+    );
+    controller.destroy();
+    store.destroy();
+  });
+
   it("caps excess identities and directs listeners to Agent stations", () => {
     vi.useFakeTimers();
     const clock = scheduler(),

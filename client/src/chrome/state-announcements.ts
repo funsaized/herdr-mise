@@ -1,5 +1,11 @@
-import type { AgentRecord } from "../../../protocol/generated/agent-state-event";
-import type { AgentStore, Scheduler, StoreEvent } from "../state/store";
+import { stationCollisionIds, workspaceDisplayName } from "../scene/geometry";
+import { semanticStationName } from "../state/semantic-stations";
+import type {
+  AgentMachine,
+  AgentStore,
+  Scheduler,
+  StoreEvent,
+} from "../state/store";
 
 const BURST_MS = 100,
   MAX_NAME_LENGTH = 40;
@@ -13,9 +19,9 @@ const nativeScheduler: Pick<Scheduler, "setTimeout" | "clearTimeout"> = {
 
 function boundedName(name: string) {
   const characters = Array.from(name);
-  return characters.length > MAX_NAME_LENGTH
-    ? `${characters.slice(0, MAX_NAME_LENGTH - 1).join("")}…`
-    : name;
+  if (characters.length <= MAX_NAME_LENGTH) return name;
+  const head = Math.floor((MAX_NAME_LENGTH - 1) / 2);
+  return `${characters.slice(0, head).join("")}…${characters.slice(-(MAX_NAME_LENGTH - head - 1)).join("")}`;
 }
 
 export class StateAnnouncementController {
@@ -59,28 +65,29 @@ export class StateAnnouncementController {
 
   private flush() {
     this.timer = null;
+    const snapshot = this.store.snapshot();
     const transitions = [...this.pending.values()].filter((event) => {
-      const agent = this.store.snapshot().agents.get(event.agentId);
+      const agent = snapshot.agents.get(event.agentId);
       return agent?.targetState === event.to;
     });
     this.pending.clear();
     if (transitions.length === 0) return;
     if (transitions.length === 1) {
       const event = transitions[0]!,
-        agent = this.store.snapshot().agents.get(event.agentId)!;
+        agent = snapshot.agents.get(event.agentId)!;
       this.announce(
         `${boundedName(agent.name)} ${event.to}${event.to === "blocked" ? ", just now" : ""}`,
       );
       return;
     }
     const blocked = transitions.flatMap((event) => {
-      const agent = this.store.snapshot().agents.get(event.agentId);
+      const agent = snapshot.agents.get(event.agentId);
       return event.to === "blocked" && agent?.targetState === "blocked"
         ? [agent]
         : [];
     });
     if (blocked.length > 0) {
-      this.announce(blockedSummary(blocked));
+      this.announce(blockedSummary(blocked, [...snapshot.agents.values()]));
       return;
     }
     this.announce(
@@ -89,9 +96,29 @@ export class StateAnnouncementController {
   }
 }
 
-function blockedSummary(agents: readonly Pick<AgentRecord, "name">[]) {
+function blockedSummary(
+  agents: readonly AgentMachine[],
+  allAgents: readonly AgentMachine[],
+) {
   const count = agents.length,
-    names = agents.slice(0, 2).map((agent) => boundedName(agent.name)),
+    nameCounts = new Map<string, number>(),
+    collisions = stationCollisionIds(allAgents);
+  for (const agent of allAgents) {
+    const name = agent.name.toUpperCase();
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
+  const names = agents
+      .slice(0, 2)
+      .map((agent) =>
+        boundedName(
+          semanticStationName(
+            agent,
+            workspaceDisplayName(agent.workspace),
+            (nameCounts.get(agent.name.toUpperCase()) ?? 0) > 1,
+            collisions.has(agent.id),
+          ),
+        ),
+      ),
     identities =
       count === 1
         ? names[0]
