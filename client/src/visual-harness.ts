@@ -14,14 +14,18 @@ export interface VisualConfig {
   theme: ThemeChoice;
 }
 
-const presets = new Set<VisualPreset>([
+export const visualPresets = [
   "idle",
   "working",
   "blocked",
   "done",
   "ended",
   "mixed",
-]);
+] as const satisfies readonly VisualPreset[];
+export const visualAgentCounts = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+] as const;
+const presets = new Set<VisualPreset>(visualPresets);
 export const defaultVisualConfig: VisualConfig = {
   preset: "mixed",
   agents: 6,
@@ -85,7 +89,11 @@ function agent(
   const cycle = Math.floor(index / identities.length) + 1;
   const mixedSuffix = cycle > 1 ? `-${cycle}` : "";
   const progress =
-    state === "working" ? (mixed ? (index + 2) / 14 : (index + 1) / 13) : null;
+    state === "working"
+      ? mixed
+        ? ((index % 12) + 2) / 14
+        : ((index % 12) + 1) / 13
+      : null;
   return {
     id: `visual-agent-${index + 1}`,
     name: mixed

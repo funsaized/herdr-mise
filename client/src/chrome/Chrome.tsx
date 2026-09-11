@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { reducedMotionPreference } from "../runtime";
 import { workspaceDisplayName } from "../scene/geometry";
 import type { SceneHit } from "../scene/kitchen-scene";
 import type { AgentStore, CoarseSlice } from "../state/store";
+import {
+  parseVisualConfig,
+  visualAgentCounts,
+  visualPresets,
+} from "../visual-harness";
 import {
   nextBlockedAgent,
   orderedBlockedAgents,
@@ -21,6 +26,69 @@ export { DetailCard, SessionSummary, Tooltip } from "./agent-panels";
 export { SettingsPanel } from "./settings-panel";
 export { ModeTreatment, StatsOverlay } from "./status-panels";
 export type { DebugMetrics } from "./status-panels";
+
+function VisualExplorer({ search }: { search: string }) {
+  const config = parseVisualConfig(search);
+  function loadPreview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget),
+      query = new URLSearchParams(location.search);
+    query.set("preset", String(form.get("preset")));
+    query.set("agents", String(form.get("agents")));
+    location.search = query.toString();
+  }
+  return (
+    <aside className="visualExplorer" aria-label="Preview explorer">
+      <details>
+        <summary>Preview explorer</summary>
+        <div>
+          <form onSubmit={loadPreview}>
+            <label>
+              Scene
+              <select name="preset" defaultValue={config.preset}>
+                {visualPresets.map((preset) => (
+                  <option key={preset}>{preset}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Cooks
+              <select name="agents" defaultValue={config.agents}>
+                {!visualAgentCounts.some(
+                  (count) => count === config.agents,
+                ) && (
+                  <option value={config.agents}>
+                    {config.agents} — URL roster
+                  </option>
+                )}
+                {visualAgentCounts.map((count) => (
+                  <option key={count} value={count}>
+                    {count === 0
+                      ? "0 — Clear service"
+                      : count === 12
+                        ? "12 — Large herd"
+                        : count}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">Load preview</button>
+            <button type="button" onClick={() => location.reload()}>
+              Replay
+            </button>
+          </form>
+          <span>Loading a scene resets this preview.</span>
+          <nav aria-label="Project links">
+            <a href="https://github.com/funsaized/herdr-mise#quick-start">
+              Install for Herdr
+            </a>
+            <a href="https://github.com/funsaized/herdr-mise">Source</a>
+          </nav>
+        </div>
+      </details>
+    </aside>
+  );
+}
 
 const tuiDemoDescription =
   "The herdr-mise terminal runs deterministic demo data, showing its kitchen status before visiting WALK-IN FREEZER.";
@@ -307,60 +375,64 @@ export function Chrome(props: ChromeProps) {
           }
           clearedCount={props.coarse.clearedCount}
           onRevealCleared={props.onRevealCleared}
+          intentionalPreview={import.meta.env.MODE === "visual"}
         />
       </div>
       {import.meta.env.MODE === "visual" && (
-        <figure
-          className="visualTuiFigure"
-          data-expanded={tuiExpanded}
-          aria-label="herdr-mise TUI demo recording"
-          aria-describedby="tui-demo-description"
-        >
-          {tuiExpanded && (
-            <picture>
-              <img
-                src={
-                  tuiStopped
-                    ? "/tui-demo-poster.png"
-                    : `/tui-demo.gif${tuiRestart ? `?restart=${tuiRestart}` : ""}`
-                }
-                alt={
-                  tuiStopped
-                    ? "Still frame of the herdr-mise terminal demo kitchen."
-                    : "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer."
-                }
-              />
-            </picture>
-          )}
-          <figcaption>
-            Native Ghostty recording of herdr-mise using deterministic demo
-            data.
-          </figcaption>
-          <span id="tui-demo-description" className="visualTuiDescription">
-            {tuiDemoDescription}
-          </span>
-          <div className="visualTuiControls">
-            <button
-              ref={tuiExpandToggle}
-              type="button"
-              aria-expanded={tuiExpanded}
-              onClick={() => setTuiExpanded(!tuiExpanded)}
-            >
-              {tuiExpanded ? "Collapse recording" : "Expand recording"}
-            </button>
+        <>
+          {!primaryPanelOpen && <VisualExplorer search={location.search} />}
+          <figure
+            className="visualTuiFigure"
+            data-expanded={tuiExpanded}
+            aria-label="herdr-mise TUI demo recording"
+            aria-describedby="tui-demo-description"
+          >
             {tuiExpanded && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (tuiStopped) setTuiRestart((value) => value + 1);
-                  setTuiStopped(!tuiStopped);
-                }}
-              >
-                {tuiStopped ? "Restart animation" : "Stop animation"}
-              </button>
+              <picture>
+                <img
+                  src={
+                    tuiStopped
+                      ? "/tui-demo-poster.png"
+                      : `/tui-demo.gif${tuiRestart ? `?restart=${tuiRestart}` : ""}`
+                  }
+                  alt={
+                    tuiStopped
+                      ? "Still frame of the herdr-mise terminal demo kitchen."
+                      : "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer."
+                  }
+                />
+              </picture>
             )}
-          </div>
-        </figure>
+            <figcaption>
+              Native Ghostty recording of herdr-mise using deterministic demo
+              data.
+            </figcaption>
+            <span id="tui-demo-description" className="visualTuiDescription">
+              {tuiDemoDescription}
+            </span>
+            <div className="visualTuiControls">
+              <button
+                ref={tuiExpandToggle}
+                type="button"
+                aria-expanded={tuiExpanded}
+                onClick={() => setTuiExpanded(!tuiExpanded)}
+              >
+                {tuiExpanded ? "Collapse recording" : "Expand recording"}
+              </button>
+              {tuiExpanded && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tuiStopped) setTuiRestart((value) => value + 1);
+                    setTuiStopped(!tuiStopped);
+                  }}
+                >
+                  {tuiStopped ? "Restart animation" : "Stop animation"}
+                </button>
+              )}
+            </div>
+          </figure>
+        </>
       )}
       {props.hintVisible && (
         <div className="firstHint" role="note">

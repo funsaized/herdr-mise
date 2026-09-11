@@ -174,7 +174,7 @@ it("requests pane identity and keeps selected details across a fixture move", ()
 });
 
 describe("global keyboard routing", () => {
-  it.each(["input", "select", "textarea", "button", "a"])(
+  it.each(["input", "select", "textarea", "button", "summary", "a"])(
     "leaves shortcuts and arrow keys to %s targets",
     (tag) => {
       const element = document.createElement(tag);

@@ -58,12 +58,14 @@ select {
 }
 button,
 a,
-select {
+select,
+summary {
   outline-offset: 3px;
 }
 button:focus-visible,
 a:focus-visible,
-select:focus-visible {
+select:focus-visible,
+summary:focus-visible {
   outline: 3px solid var(--focus);
 }
 .canvasHost {
@@ -573,6 +575,80 @@ select:focus-visible {
   box-shadow: var(--shadowPlacard);
   pointer-events: auto;
 }
+.visualExplorer {
+  position: absolute;
+  z-index: 8;
+  top: 20px;
+  left: 236px;
+  width: 180px;
+  padding: 7px 9px;
+  color: var(--textMuted);
+  background: var(--panelSoft);
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusSmall);
+  box-shadow: var(--shadowSmall);
+  font-size: var(--fontSecondarySize);
+  pointer-events: none;
+}
+.visualExplorer:has(details[open]) {
+  width: min(390px, calc(100vw - 516px));
+  pointer-events: auto;
+}
+.visualExplorer summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: bold;
+  pointer-events: auto;
+}
+.visualExplorer details > div {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+.visualExplorer details[open] {
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+.visualExplorer form,
+.visualExplorer label,
+.visualExplorer nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.visualExplorer form {
+  flex-wrap: wrap;
+}
+.visualExplorer label {
+  color: var(--secondary);
+}
+.visualExplorer select,
+.visualExplorer button {
+  min-height: 44px;
+  padding: 3px 6px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radiusSmall);
+  font: inherit;
+}
+.visualExplorer button,
+.visualExplorer a {
+  cursor: pointer;
+}
+.visualExplorer nav {
+  justify-content: end;
+}
+.visualExplorer a {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 3px 6px;
+  color: var(--text);
+}
 .visualTuiFigure picture {
   display: flex;
   min-height: 0;
@@ -602,6 +678,7 @@ select:focus-visible {
   gap: 5px;
 }
 .visualTuiControls button {
+  min-height: 44px;
   padding: 4px 6px;
   color: var(--text);
   background: var(--panel);
@@ -810,6 +887,40 @@ select:focus-visible {
 @media (max-width: 900px), (max-height: 640px) {
   .visualTuiFigure {
     display: none;
+  }
+  .visualExplorer {
+    right: 20px;
+    left: auto;
+  }
+  .visualExplorer:has(details[open]) {
+    width: min(390px, calc(100vw - 40px));
+  }
+}
+:where(.appShell[data-pager-layout="narrow"]) .visualExplorer {
+  top: 182px;
+  right: 8px;
+  left: 8px;
+  width: auto;
+  transform: none;
+}
+:where(.appShell[data-pager-layout="narrow"])
+  .visualExplorer:has(details[open]) {
+  z-index: 13;
+  width: auto;
+}
+@media (max-width: 340px) and (max-height: 400px) {
+  :where(.appShell[data-pager-layout="narrow"])
+    .visualExplorer:not(:has(details[open])) {
+    right: 8px;
+    left: auto;
+    width: 96px;
+    padding-inline: 6px;
+    font-size: 10px;
+  }
+  :where(.appShell[data-pager-layout="narrow"])
+    .visualExplorer:has(details[open])
+    details {
+    max-height: calc(100vh - 198px);
   }
 }
 @media (max-width: 480px) {
