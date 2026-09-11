@@ -1251,20 +1251,20 @@ test("real fixture service summary cycles every blocked cook without moving stat
         summary = page.getByRole("region", {
           name: "Observed service summary",
         });
-      await expect(summary).toContainText(`Blocked ${blockedCount}`, {
+      await expect(summary).toContainText(`Blocked: ${blockedCount}`, {
         timeout: 10_000,
       });
-      await expect(summary).toContainText(`Shown ${count} of ${count}`);
-      await expect(summary).toContainText("Hidden plated 0");
+      await expect(summary).toContainText(`Shown: ${count} of ${count}`);
+      await expect(summary).toContainText("Hidden plated: 0");
       await expect(summary).toContainText("Oldest blocked: Cook00");
       expect(await summary.locator("strong").allTextContents()).toEqual([
-        "Observed",
-        "Working",
-        "Blocked",
-        "Plated",
-        "Unknown",
-        "Shown",
-        "Hidden plated",
+        "Observed -",
+        "Working:",
+        "Blocked:",
+        "Plated:",
+        "Unknown:",
+        "Shown:",
+        "Hidden plated:",
         "Oldest blocked:",
       ]);
       const initialMetrics = (await sceneMetrics(page))!;
@@ -1309,7 +1309,7 @@ test("real fixture service summary cycles every blocked cook without moving stat
     const summary = page.getByRole("region", {
       name: "Observed service summary",
     });
-    await expect(summary).toContainText("Blocked 12", { timeout: 10_000 });
+    await expect(summary).toContainText("Blocked: 12", { timeout: 10_000 });
     await expect
       .poll(
         async () =>

@@ -202,27 +202,27 @@ export function Chrome(props: ChromeProps) {
       )}
       <section className="serviceStrip" aria-label="Observed service summary">
         <div>
-          <strong>Observed</strong>
+          <strong>Observed -</strong>
           <span>
-            <strong>Working</strong> {props.coarse.working}
+            <strong>Working:</strong> {props.coarse.working}
           </span>
           <span>
-            <strong>Blocked</strong> {props.coarse.blocked}
+            <strong>Blocked:</strong> {props.coarse.blocked}
           </span>
           <span>
-            <strong>Plated</strong> {props.coarse.plated}
+            <strong>Plated:</strong> {props.coarse.plated}
           </span>
           <span>
-            <strong>Unknown</strong> {props.coarse.unknown}
+            <strong>Unknown:</strong> {props.coarse.unknown}
           </span>
         </div>
         <div>
           <span>
-            <strong>Shown</strong> {props.coarse.visible} of{" "}
+            <strong>Shown:</strong> {props.coarse.visible} of{" "}
             {props.coarse.count}
           </span>
           <span>
-            <strong>Hidden plated</strong> {props.coarse.hiddenDone}
+            <strong>Hidden plated:</strong> {props.coarse.hiddenDone}
           </span>
           <span>
             <strong>Oldest blocked:</strong> {oldestBlocked?.name ?? "None"}

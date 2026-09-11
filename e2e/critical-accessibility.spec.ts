@@ -141,7 +141,7 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
       name: "Observed service summary",
     }),
     summaryBox = (await summary.boundingBox())!;
-  await expect(summary).toContainText("Blocked 12");
+  await expect(summary).toContainText("Blocked: 12");
   expect(summaryBox.x).toBeGreaterThanOrEqual(0);
   expect(summaryBox.x + summaryBox.width).toBeLessThanOrEqual(320);
   const nextBlocked = page.getByRole("button", { name: /Next blocked:/ });

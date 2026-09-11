@@ -383,21 +383,21 @@ describe("chrome interactions", () => {
     const summary = screen.getByRole("region", {
       name: "Observed service summary",
     });
-    expect(summary.textContent).toContain("Working 1");
-    expect(summary.textContent).toContain("Blocked 1");
-    expect(summary.textContent).toContain("Shown 2 of 2");
+    expect(summary.textContent).toContain("Working: 1");
+    expect(summary.textContent).toContain("Blocked: 1");
+    expect(summary.textContent).toContain("Shown: 2 of 2");
     expect(summary.textContent).toContain("Oldest blocked: Oldest cook");
     expect(summary.textContent).not.toContain("Outside cook");
     expect(
       [...summary.querySelectorAll("strong")].map((label) => label.textContent),
     ).toEqual([
-      "Observed",
-      "Working",
-      "Blocked",
-      "Plated",
-      "Unknown",
-      "Shown",
-      "Hidden plated",
+      "Observed -",
+      "Working:",
+      "Blocked:",
+      "Plated:",
+      "Unknown:",
+      "Shown:",
+      "Hidden plated:",
       "Oldest blocked:",
     ]);
     const button = screen.getByRole("button", {
