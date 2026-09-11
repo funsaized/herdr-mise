@@ -493,7 +493,7 @@ complete the broader deferred VoiceOver release-gate pass.
 | Field                         | Record                                                                                                                                                                       |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Date                          | `2026-09-11`                                                                                                                                                                 |
-| Commit / candidate identifier | `837407073dc71c3f1f0410f396e1762fb2814e61`                                                                                                                                   |
+| Commit / candidate identifier | `nightshift/187` / PR #214; exact release commit recorded by the software factory                                                                                            |
 | macOS                         | Session performed; version unavailable                                                                                                                                       |
 | Browser                       | Session performed; browser and version unavailable                                                                                                                           |
 | VoiceOver settings            | Session performed; settings unavailable                                                                                                                                      |
