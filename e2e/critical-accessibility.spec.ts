@@ -1,4 +1,131 @@
 import { expect, test } from "@playwright/test";
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer, type Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+async function availablePort() {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new Error("failed to reserve a browser fixture port");
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return address.port;
+}
+
+test("coalesces the mixed blocked burst and keeps both stations discoverable", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-announcement-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
+    socketPath = join(directory, "herdr.sock"),
+    source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+        ),
+        "utf8",
+      ),
+    ),
+    sockets = new Set<Socket>(),
+    agents = [
+      ["fixture-codex", "Codex", "working"],
+      ["fixture-hermes", "Hermes", "working"],
+      ["fixture-claude", "Claude", "idle"],
+    ].map(([id, name, state], index) => ({
+      ...source.agents[0],
+      terminal_id: id,
+      pane_id: `${id}-pane`,
+      display_agent: name,
+      agent_status: state,
+      state_change_seq: index + 1,
+      agent_session: { value: `${id}-session` },
+    }));
+  let snapshot = JSON.stringify({
+    result: { snapshot: { ...source, agents } },
+  });
+  const fixtureServer = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    let request = "";
+    socket.on("data", (chunk) => {
+      request += chunk;
+      if (!request.includes("\n")) return;
+      const method = JSON.parse(request).method;
+      if (method === "session.snapshot") socket.end(`${snapshot}\n`);
+      else socket.write('{"result":{"type":"subscription_started"}}\n');
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    fixtureServer.once("error", reject);
+    fixtureServer.listen(socketPath, resolve);
+  });
+  const app = spawn("target/debug/herdr-mise", [], {
+    env: {
+      ...process.env,
+      HERDR_MISE_PORT: String(port),
+      HERDR_SOCKET_PATH: socketPath,
+    },
+    stdio: "ignore",
+  });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(appUrl)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.goto(appUrl);
+    await expect(
+      page.getByRole("button", { name: /^Codex, Working —/ }),
+    ).toBeAttached();
+    await expect(
+      page.getByRole("button", { name: /^Claude, Idle —/ }),
+    ).toBeAttached();
+
+    snapshot = JSON.stringify({
+      result: {
+        snapshot: {
+          ...source,
+          agents: [
+            { ...agents[0], agent_status: "blocked", state_change_seq: 4 },
+            { ...agents[1], agent_status: "blocked", state_change_seq: 5 },
+            { ...agents[2], agent_status: "working", state_change_seq: 6 },
+          ],
+        },
+      },
+    });
+    const liveRegion = page.getByLabel("Agent state announcements");
+    await expect(liveRegion).toHaveAttribute("aria-live", "polite");
+    await expect(liveRegion).toHaveAttribute("aria-atomic", "true");
+    await expect(liveRegion).toHaveText(
+      "2 agents blocked: Codex and Hermes. Use Agent stations to open details.",
+      { timeout: 10_000 },
+    );
+
+    for (const name of ["Codex", "Hermes"])
+      await expect(
+        page.getByRole("button", {
+          name: new RegExp(`^${name}, Blocked — .*open details$`),
+        }),
+      ).toBeAttached();
+  } finally {
+    app.kill("SIGTERM");
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("blocked summary agents and settings remain keyboard-accessible at 320 CSS pixels", async ({
   page,

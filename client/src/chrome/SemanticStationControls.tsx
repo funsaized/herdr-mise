@@ -54,20 +54,15 @@ export function SemanticStationControls({
                 ? `station-tooltip-${encodeURIComponent(agent.id)}`
                 : undefined
             }
-            aria-label={semanticStationLabel(
-              {
-                ...agent,
-                name: semanticStationName(
-                  agent,
-                  workspaceDisplayName(agent.workspace),
-                  (nameCounts.get(agent.name.toUpperCase()) ?? 0) > 1,
-                  collisions.has(agent.id),
-                ),
-              },
-              agent.targetState === "blocked" && agent.stateKnown !== false
-                ? `${formatDuration(now - Date.parse(agent.stateEnteredAt))} blocked`
-                : undefined,
-            )}
+            aria-label={semanticStationLabel({
+              ...agent,
+              name: semanticStationName(
+                agent,
+                workspaceDisplayName(agent.workspace),
+                (nameCounts.get(agent.name.toUpperCase()) ?? 0) > 1,
+                collisions.has(agent.id),
+              ),
+            })}
             onClick={(event) => onSelect(agent.id, event.currentTarget)}
           >
             {semanticStationName(

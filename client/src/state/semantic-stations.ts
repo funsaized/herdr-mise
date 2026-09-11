@@ -40,9 +40,9 @@ export function semanticQueueWords(agent: SemanticAgent) {
     ? `queue ${agent.blockedPlacement.queueOrdinal} of ${agent.blockedPlacement.queueTotal}`
     : "";
 }
-export function semanticStationLabel(agent: SemanticAgent, elapsed?: string) {
+export function semanticStationLabel(agent: SemanticAgent) {
   const queue = semanticQueueWords(agent);
-  return `${agent.name}, ${semanticStateWords(agent)}${queue ? `, ${queue}` : ""}${elapsed ? `, ${elapsed}` : ""}, open details`;
+  return `${agent.name}, ${semanticStateWords(agent)}${queue ? `, ${queue}` : ""}, open details`;
 }
 export function semanticStationName(
   agent: SemanticAgent,

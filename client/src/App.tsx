@@ -26,6 +26,7 @@ import {
   semanticStateWords,
   type SemanticAgent,
 } from "./state/semantic-stations";
+import { StateAnnouncementController } from "./chrome/state-announcements";
 import { SemanticStationControls } from "./chrome/SemanticStationControls";
 
 const cssTokens = {
@@ -155,28 +156,13 @@ export function App() {
         `${selected.name} moved to ${workspaceDisplayName(selected.workspace)}${selected.paneId ? `, pane ${selected.paneId}` : ""}`,
       );
   }, [agents, coarse.selectedId]);
-  useEffect(
-    () =>
-      clientStore.onEvent((event) => {
-        if (event.type === "reveal") {
-          setAnnouncement(
-            `${event.count} plated cook${event.count === 1 ? "" : "s"} revealed`,
-          );
-          return;
-        }
-        if (event.type !== "busser" && event.type !== "state") return;
-        const agent = clientStore.snapshot().agents.get(event.agentId);
-        if (event.type === "busser" && agent) {
-          setAnnouncement(`${agent.name} cleared from the kitchen`);
-          return;
-        }
-        if (event.type === "state" && event.from !== undefined && agent)
-          setAnnouncement(
-            `${agent.name} ${event.to}${event.to === "blocked" ? ", just now" : ""}`,
-          );
-      }),
-    [],
-  );
+  useEffect(() => {
+    const controller = new StateAnnouncementController(
+      clientStore,
+      setAnnouncement,
+    );
+    return () => controller.destroy();
+  }, []);
   useEffect(() => {
     if (!host.current) return;
     const scene = new KitchenScene(clientStore, host.current, {
