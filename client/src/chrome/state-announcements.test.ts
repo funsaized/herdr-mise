@@ -105,6 +105,36 @@ describe("state announcements", () => {
     store.destroy();
   });
 
+  it("keeps bounded blocked identities distinct when long locators differ", () => {
+    vi.useFakeTimers();
+    const clock = scheduler(),
+      store = new AgentStore(clock),
+      agents = ["one", "two"].map((middle, index) => ({
+        ...snapshot.agents[0]!,
+        id: `agent-${index}`,
+        paneId: `pane-${"x".repeat(30)}${middle}${"y".repeat(30)}-end`,
+      })),
+      announce = vi.fn(),
+      controller = new StateAnnouncementController(store, announce, clock);
+    store.apply({ ...snapshot, agents });
+    store.apply({
+      ...snapshot,
+      agents: agents.map((agent) => ({
+        ...agent,
+        state: "blocked" as const,
+        progress: null,
+      })),
+    });
+    vi.advanceTimersByTime(100);
+
+    const message = announce.mock.lastCall?.[0];
+    expect(message).toContain("agent 1 and");
+    expect(message).toContain("agent 2");
+    expect(message?.length).toBeLessThan(160);
+    controller.destroy();
+    store.destroy();
+  });
+
   it("caps excess identities and directs listeners to Agent stations", () => {
     vi.useFakeTimers();
     const clock = scheduler(),

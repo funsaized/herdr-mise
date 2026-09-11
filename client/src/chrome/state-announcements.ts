@@ -1,5 +1,4 @@
-import { stationCollisionIds, workspaceDisplayName } from "../scene/geometry";
-import { semanticStationName } from "../state/semantic-stations";
+import { semanticStationNames } from "../state/semantic-stations";
 import type {
   AgentMachine,
   AgentStore,
@@ -17,11 +16,11 @@ const nativeScheduler: Pick<Scheduler, "setTimeout" | "clearTimeout"> = {
   clearTimeout: (id) => globalThis.clearTimeout(id as number),
 };
 
-function boundedName(name: string) {
+function boundedName(name: string, maxLength = MAX_NAME_LENGTH) {
   const characters = Array.from(name);
-  if (characters.length <= MAX_NAME_LENGTH) return name;
-  const head = Math.floor((MAX_NAME_LENGTH - 1) / 2);
-  return `${characters.slice(0, head).join("")}…${characters.slice(-(MAX_NAME_LENGTH - head - 1)).join("")}`;
+  if (characters.length <= maxLength) return name;
+  const head = Math.floor((maxLength - 1) / 2);
+  return `${characters.slice(0, head).join("")}…${characters.slice(-(maxLength - head - 1)).join("")}`;
 }
 
 export class StateAnnouncementController {
@@ -101,29 +100,15 @@ function blockedSummary(
   allAgents: readonly AgentMachine[],
 ) {
   const count = agents.length,
-    nameCounts = new Map<string, number>(),
-    collisions = stationCollisionIds(allAgents);
-  for (const agent of allAgents) {
-    const name = agent.name.toUpperCase();
-    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
-  }
-  const names = agents
+    stationNames = semanticStationNames(allAgents),
+    names = agents
       .slice(0, 2)
-      .map((agent) =>
-        boundedName(
-          semanticStationName(
-            agent,
-            workspaceDisplayName(agent.workspace),
-            (nameCounts.get(agent.name.toUpperCase()) ?? 0) > 1,
-            collisions.has(agent.id),
-          ),
-        ),
-      ),
-    identities =
-      count === 1
-        ? names[0]
-        : count === 2
-          ? `${names[0]} and ${names[1]}`
-          : `${names.join(", ")}, and ${count - 2} more`;
+      .map((agent) => boundedName(stationNames.get(agent.id) ?? agent.name));
+  const identities =
+    count === 1
+      ? names[0]
+      : count === 2
+        ? `${names[0]} and ${names[1]}`
+        : `${names.join(", ")}, and ${count - 2} more`;
   return `${count} agent${count === 1 ? "" : "s"} blocked: ${identities}. Use Agent stations to open details.`;
 }

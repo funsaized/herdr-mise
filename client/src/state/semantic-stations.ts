@@ -1,4 +1,5 @@
 import type { AgentMachine } from "./store";
+import { stationCollisionIds, workspaceDisplayName } from "../scene/geometry";
 
 export const humanStateWords = {
   idle: "Idle — prepping",
@@ -51,6 +52,48 @@ export function semanticStationName(
   colliding: boolean,
 ) {
   return `${agent.name}${duplicateName ? ` · ${workspaceName}` : ""}${colliding ? ` · ${agent.paneId ?? agent.id}` : ""}`;
+}
+export function semanticStationNames(agents: readonly SemanticAgent[]) {
+  const nameCounts = new Map<string, number>(),
+    collisions = stationCollisionIds(agents);
+  for (const agent of agents) {
+    const name = agent.name.toUpperCase();
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
+  const names = agents.map(
+      (agent) =>
+        [
+          agent.id,
+          boundedIdentity(
+            semanticStationName(
+              agent,
+              workspaceDisplayName(agent.workspace),
+              (nameCounts.get(agent.name.toUpperCase()) ?? 0) > 1,
+              collisions.has(agent.id),
+            ),
+          ),
+        ] as const,
+    ),
+    boundedCounts = new Map<string, number>();
+  for (const [, name] of names)
+    boundedCounts.set(name, (boundedCounts.get(name) ?? 0) + 1);
+  return new Map(
+    names.map(([id, name]) => {
+      if ((boundedCounts.get(name) ?? 0) === 1) return [id, name];
+      const peers = names
+          .filter(([, candidate]) => candidate === name)
+          .map(([candidateId]) => candidateId)
+          .sort(),
+        suffix = ` · agent ${peers.indexOf(id) + 1}`;
+      return [id, `${boundedIdentity(name, 40 - suffix.length)}${suffix}`];
+    }),
+  );
+}
+function boundedIdentity(value: string, maxLength = 40) {
+  const characters = Array.from(value);
+  if (characters.length <= maxLength) return value;
+  const head = Math.floor((maxLength - 1) / 2);
+  return `${characters.slice(0, head).join("")}…${characters.slice(-(maxLength - head - 1)).join("")}`;
 }
 export function semanticAgentsEqual(
   a: readonly SemanticAgent[],
