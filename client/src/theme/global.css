@@ -635,6 +635,9 @@ summary:focus-visible {
   border-radius: var(--radiusSmall);
   font: inherit;
 }
+.visualExplorer select {
+  height: 44px;
+}
 .visualExplorer button,
 .visualExplorer a {
   cursor: pointer;
