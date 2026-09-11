@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
@@ -9,7 +9,7 @@ use ratatui::{
 
 use super::{
     state::{AgentTable, BOARD_CAP},
-    theme,
+    theme, Scope,
 };
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceDiagnostic, SourceStatus};
 
@@ -39,19 +39,150 @@ fn workspace_display_name(workspace: &str) -> &str {
         .unwrap_or("Unavailable")
 }
 
-pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 2] {
+fn short_workspace_id(id: &str) -> String {
+    let compact = id
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>();
+    compact
+        .chars()
+        .rev()
+        .take(6)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect()
+}
+
+fn available(value: Option<&str>) -> String {
+    value
+        .filter(|value| !value.trim().is_empty())
+        .map(sanitize_external)
+        .unwrap_or_else(|| "Unavailable".into())
+}
+
+pub(super) fn display_width(value: &str) -> usize {
+    Line::from(value).width()
+}
+
+fn take_width(value: &str, max_width: usize, from_end: bool) -> String {
+    let mut width = 0_usize;
+    let mut characters = value.chars().collect::<Vec<_>>();
+    if from_end {
+        characters.reverse();
+    }
+    let mut kept = characters
+        .into_iter()
+        .take_while(|character| {
+            let character_width = display_width(&character.to_string());
+            if width.saturating_add(character_width) > max_width {
+                return false;
+            }
+            width += character_width;
+            true
+        })
+        .collect::<Vec<_>>();
+    if from_end {
+        kept.reverse();
+    }
+    kept.into_iter().collect()
+}
+
+fn compact_text(value: &str, max_width: usize) -> String {
+    if display_width(value) <= max_width {
+        return value.into();
+    }
+    if max_width <= 1 {
+        return take_width(value, max_width, true);
+    }
+    let content_width = max_width - 1;
+    let head_width = content_width / 2;
+    format!(
+        "{}…{}",
+        take_width(value, head_width, false),
+        take_width(value, content_width - head_width, true)
+    )
+}
+
+fn station_suffix(agent: &AgentRecord, agents: &[&AgentRecord], max_width: usize) -> String {
+    let key = format!(
+        "{}\0{}",
+        sanitize_external(&agent.name).to_uppercase(),
+        sanitize_external(workspace_display_name(&agent.workspace)).to_uppercase()
+    );
+    let colliding = agents
+        .iter()
+        .filter(|candidate| {
+            format!(
+                "{}\0{}",
+                sanitize_external(&candidate.name).to_uppercase(),
+                sanitize_external(workspace_display_name(&candidate.workspace)).to_uppercase()
+            ) == key
+        })
+        .count()
+        > 1;
+    if colliding {
+        let identity = sanitize_external(agent.pane_id.as_deref().unwrap_or(&agent.id));
+        if display_width(&identity).saturating_add(3) <= max_width {
+            return format!(" · {identity}");
+        }
+        if max_width <= 3 {
+            return take_width(&identity, max_width, true);
+        }
+        format!(" · {}", compact_text(&identity, max_width - 3))
+    } else {
+        String::new()
+    }
+}
+
+pub(super) fn station_display_name(
+    agent: &AgentRecord,
+    agents: &[&AgentRecord],
+    max_width: usize,
+) -> String {
+    let name = sanitize_external(&agent.name);
+    let name_key = name.to_uppercase();
+    let duplicate_name = agents
+        .iter()
+        .filter(|candidate| sanitize_external(&candidate.name).to_uppercase() == name_key)
+        .count()
+        > 1;
+    let base = if duplicate_name {
+        format!(
+            "{name} · {}",
+            sanitize_external(workspace_display_name(&agent.workspace))
+        )
+    } else {
+        name
+    };
+    let suffix = station_suffix(agent, agents, max_width.saturating_sub(1));
+    let available = max_width.saturating_sub(display_width(&suffix));
+    format!("{}{suffix}", compact_text(&base, available))
+}
+
+pub(super) fn inspect_facts(agent: &AgentRecord) -> [String; 4] {
     let tickets = agent.session.tickets_text();
     [
+        format!("Agent kind: {}", available(agent.agent_kind.as_deref())),
+        format!(
+            "Pane locator: {} · Tickets: {tickets}",
+            available(agent.pane_id.as_deref())
+        ),
+        format!("Workspace: {}", available(Some(&agent.workspace)),),
         format!(
             "{} · {}",
             sanitize_external(&agent.name),
             record_state_label(agent)
         ),
-        format!(
-            "Workspace: {} · Tickets: {tickets}",
-            sanitize_external(workspace_display_name(&agent.workspace)),
-        ),
     ]
+}
+
+pub(super) fn inspect_paragraph(agent: &AgentRecord) -> Paragraph<'static> {
+    Paragraph::new(inspect_facts(agent).map(Line::from).to_vec()).wrap(Wrap { trim: false })
+}
+
+pub(super) fn inspect_height(agent: &AgentRecord, width: u16) -> u16 {
+    u16::try_from(inspect_paragraph(agent).line_count(width.max(1))).unwrap_or(u16::MAX)
 }
 
 fn format_duration(milliseconds: u64) -> String {
@@ -67,26 +198,31 @@ fn format_duration(milliseconds: u64) -> String {
     }
 }
 
-pub(super) fn service_line(table: &AgentTable, now: DateTime<Utc>) -> String {
-    let summary = table.service_summary();
-    let oldest = table.blocked_agents().first().map_or_else(
-        || "None".into(),
-        |agent| {
-            let milliseconds = DateTime::parse_from_rfc3339(&agent.state_entered_at)
-                .ok()
-                .map(|entered| {
-                    now.signed_duration_since(entered.with_timezone(&Utc))
-                        .num_milliseconds()
-                        .max(0) as u64
-                })
-                .unwrap_or(0);
-            format!(
-                "{} {}",
-                sanitize_external(&agent.name),
-                format_duration(milliseconds)
-            )
-        },
-    );
+pub(super) fn service_line(table: &AgentTable, now: DateTime<Utc>, scope: Option<&str>) -> String {
+    let summary = table.service_summary_scoped(scope);
+    let oldest = table
+        .blocked_agents()
+        .into_iter()
+        .filter(|agent| scope.is_none_or(|id| agent.workspace_id.as_deref() == Some(id)))
+        .next()
+        .map_or_else(
+            || "None".into(),
+            |agent| {
+                let milliseconds = DateTime::parse_from_rfc3339(&agent.state_entered_at)
+                    .ok()
+                    .map(|entered| {
+                        now.signed_duration_since(entered.with_timezone(&Utc))
+                            .num_milliseconds()
+                            .max(0) as u64
+                    })
+                    .unwrap_or(0);
+                format!(
+                    "{} {}",
+                    sanitize_external(&agent.name),
+                    format_duration(milliseconds)
+                )
+            },
+        );
     format!(
         "OBSERVED W {} · B {} · P {} · U {} · SHOWN {}/{} · HIDDEN {} · OLDEST BLOCKED {oldest}",
         summary.working,
@@ -144,22 +280,22 @@ pub(crate) fn status_lines(
             "Waiting for agents — start one in herdr".into(),
         );
     }
-    let detail = if source_status == &SourceStatus::UnsupportedProtocol {
-        diagnostic.map_or_else(String::new, |diagnostic| {
-            format!(
-                " — observed {}; supported: {}; {}",
-                diagnostic.observed_protocol,
-                diagnostic
-                    .supported_protocols
-                    .iter()
-                    .map(u64::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                sanitize_external(&diagnostic.next_action)
-            )
-        })
-    } else {
-        String::new()
+    let detail = match (source_status, diagnostic) {
+        (SourceStatus::UnsupportedProtocol, Some(diagnostic)) => format!(
+            " — observed {}; supported: {}; {}",
+            diagnostic.observed_protocol,
+            diagnostic
+                .supported_protocols
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+            sanitize_external(&diagnostic.next_action)
+        ),
+        (SourceStatus::IncompatibleResponse, Some(diagnostic)) => {
+            format!(" — {}", sanitize_external(&diagnostic.next_action))
+        }
+        _ => String::new(),
     };
     let condition = format!("{}{}", source_status_text(source_status), detail);
     let status = if mode == AppMode::Demo {
@@ -170,43 +306,77 @@ pub(crate) fn status_lines(
     (title.into(), status)
 }
 
-pub fn draw(
-    frame: &mut Frame<'_>,
-    table: &AgentTable,
-    warning: Option<&str>,
-    now: DateTime<Utc>,
-    _tick: u64,
-    selected_id: Option<&str>,
-) {
-    let compact = frame.area().height < 20;
-    let agent_count = table.agents().count();
-    let (title, source_copy) = status_lines(
-        table.mode(),
-        table.source_status(),
-        table.source_diagnostic(),
-        agent_count,
+pub(crate) fn scope_summary(table: &AgentTable, scope: &Scope) -> String {
+    let Some(id) = scope.id.as_deref() else {
+        return "Workspace: All".into();
+    };
+    let current = table.workspace(id);
+    let label = current
+        .map(|workspace| workspace.label.as_str())
+        .or(scope.label.as_deref())
+        .filter(|label| !label.trim().is_empty())
+        .unwrap_or(id);
+    let display_label = workspace_display_name(label);
+    let duplicate = current.is_some()
+        && table
+            .workspaces()
+            .iter()
+            .filter(|workspace| workspace_display_name(&workspace.label) == display_label)
+            .count()
+            > 1;
+    let suffix = duplicate.then(|| format!(" ({})", short_workspace_id(id)));
+    let mut summary = format!(
+        "Workspace: {}{}",
+        sanitize_external(display_label),
+        suffix.as_deref().unwrap_or_default()
     );
-    let mut header = Paragraph::new(vec![
-        Line::from(Span::styled(
-            title,
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
-        Line::from(source_copy),
-        Line::from(service_line(table, now)),
-    ])
-    .wrap(Wrap { trim: true });
-    let content_height = u16::try_from(header.line_count(frame.area().width)).unwrap_or(u16::MAX);
-    let baseline_height = if compact { 3 } else { 5 };
-    let header_height = baseline_height.max(content_height + u16::from(!compact));
-    if !compact {
-        header = header.block(Block::default().borders(Borders::BOTTOM));
+    if current.is_none() {
+        summary.push_str(" (unavailable)");
+    } else if table.scoped_agents(Some(id)).next().is_none() {
+        summary.push_str(" (empty)");
     }
+    let blocked = table.blocked_elsewhere(Some(id));
+    if blocked > 0 {
+        summary.push_str(&format!(" · {blocked} blocked elsewhere"));
+    }
+    summary
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct TableWindow {
+    pub(crate) offset: usize,
+    pub(crate) end: usize,
+}
+
+struct FallbackLayout {
+    areas: Vec<Rect>,
+    window: TableWindow,
+}
+
+fn fallback_layout(
+    area: Rect,
+    table: &AgentTable,
+    agents: &[&AgentRecord],
+    selected_id: Option<&str>,
+    requested_offset: usize,
+    header_content_height: u16,
+) -> FallbackLayout {
+    let compact = area.height < 20;
+    let agent_count = agents.len();
+    let baseline_height = if compact { 2 } else { 4 };
+    let header_height = baseline_height.max(header_content_height + u16::from(!compact));
     let table_height = u16::try_from(agent_count)
         .unwrap_or(u16::MAX)
         .saturating_add(3);
-    let board_height = u16::try_from(table.board().len().min(3))
-        .unwrap_or(3)
-        .saturating_add(2);
+    let selected = selected_id.and_then(|id| agents.iter().copied().find(|agent| agent.id == id));
+    let selected_index = selected_id.and_then(|id| agents.iter().position(|agent| agent.id == id));
+    let board_height = if compact && selected.is_some() {
+        0
+    } else {
+        u16::try_from(table.board().len().min(3))
+            .unwrap_or(3)
+            .saturating_add(2)
+    };
     let mut constraints = vec![
         Constraint::Length(header_height),
         Constraint::Length(table_height),
@@ -214,60 +384,173 @@ pub fn draw(
         Constraint::Min(0),
         Constraint::Length(1),
     ];
-    let selected = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id));
-    if selected.is_some() {
-        constraints.insert(4, Constraint::Length(2));
+    if let Some(agent) = selected {
+        constraints.insert(4, Constraint::Length(inspect_height(agent, area.width)));
     }
     let areas = Layout::default()
         .direction(Direction::Vertical)
         .constraints(constraints)
-        .split(frame.area());
+        .split(area)
+        .to_vec();
+    let capacity = usize::from(areas[1].height.saturating_sub(3));
+    let mut offset = requested_offset.min(agent_count.saturating_sub(capacity));
+    if let Some(index) = selected_index {
+        if index < offset {
+            offset = index;
+        } else if index >= offset.saturating_add(capacity) {
+            offset = index.saturating_add(1).saturating_sub(capacity);
+        }
+    }
+    let end = offset.saturating_add(capacity).min(agent_count);
+    FallbackLayout {
+        areas,
+        window: TableWindow { offset, end },
+    }
+}
+
+pub(crate) fn table_window(
+    area: Rect,
+    table: &AgentTable,
+    now: DateTime<Utc>,
+    scope: &Scope,
+    selected_id: Option<&str>,
+    requested_offset: usize,
+) -> TableWindow {
+    let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
+    let (title, source_copy) = status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        agents.len(),
+    );
+    let header = Paragraph::new(vec![
+        Line::from(title),
+        Line::from(format!("{source_copy} · {}", scope_summary(table, scope))),
+        Line::from(service_line(table, now, scope.id.as_deref())),
+    ])
+    .wrap(Wrap { trim: true });
+    let header_content_height = u16::try_from(header.line_count(area.width)).unwrap_or(u16::MAX);
+    fallback_layout(
+        area,
+        table,
+        &agents,
+        selected_id,
+        requested_offset,
+        header_content_height,
+    )
+    .window
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_scoped(
+    frame: &mut Frame<'_>,
+    table: &AgentTable,
+    warning: Option<&str>,
+    now: DateTime<Utc>,
+    _tick: u64,
+    selected_id: Option<&str>,
+    table_offset: usize,
+    scope: &Scope,
+) {
+    let compact = frame.area().height < 20;
+    let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
+    let agent_count = agents.len();
+    let (title, source_copy) = status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        table.agents().count(),
+    );
+    let mut header = Paragraph::new(vec![
+        Line::from(Span::styled(
+            title,
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(format!("{source_copy} · {}", scope_summary(table, scope))),
+        Line::from(service_line(table, now, scope.id.as_deref())),
+    ])
+    .wrap(Wrap { trim: true });
+    let header_content_height =
+        u16::try_from(header.line_count(frame.area().width)).unwrap_or(u16::MAX);
+    if !compact {
+        header = header.block(Block::default().borders(Borders::BOTTOM));
+    }
+    let selected = selected_id.and_then(|id| agents.iter().copied().find(|agent| agent.id == id));
+    let layout = fallback_layout(
+        frame.area(),
+        table,
+        &agents,
+        selected_id,
+        table_offset,
+        header_content_height,
+    );
+    let areas = layout.areas;
     frame.render_widget(header, areas[0]);
     let available_width = areas[1].width.saturating_sub(2);
     let show_workspace = available_width >= theme::KITCHEN_TABLE_WORKSPACE_MIN_WIDTH;
     let show_tickets = available_width >= theme::KITCHEN_TABLE_TICKETS_MIN_WIDTH;
     let show_runtime = available_width >= theme::KITCHEN_TABLE_RUNTIME_MIN_WIDTH;
-    let rows = table.agents().map(|agent| {
-        let selected_row = selected_id == Some(agent.id.as_str());
-        let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
-            .ok()
-            .map(|d| d.with_timezone(&Utc));
-        let elapsed = entered
-            .map(|d| now.signed_duration_since(d).num_milliseconds().max(0) as u64)
-            .unwrap_or(0);
-        let style = if agent.state == AgentState::Blocked {
-            Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
-        } else if selected_row {
-            Style::default().add_modifier(Modifier::BOLD)
-        } else {
-            Style::default()
-        };
-        let mut cells = vec![
-            Cell::from(if selected_row {
-                format!("> {}", sanitize_external(&agent.name))
+    let agent_width = agents
+        .iter()
+        .map(|agent| station_suffix(agent, &agents, usize::MAX))
+        .filter(|suffix| !suffix.is_empty())
+        .map(|suffix| display_width(&suffix) + theme::KITCHEN_TABLE_AGENT_SUFFIX_PADDING)
+        .max()
+        .unwrap_or(theme::KITCHEN_TABLE_AGENT_MIN_WIDTH)
+        .max(theme::KITCHEN_TABLE_AGENT_MIN_WIDTH)
+        .min(
+            usize::from(available_width.saturating_sub(theme::KITCHEN_TABLE_RESERVED_WIDTH))
+                .max(theme::KITCHEN_TABLE_AGENT_MIN_WIDTH),
+        );
+    let rows = agents
+        .iter()
+        .copied()
+        .skip(layout.window.offset)
+        .take(layout.window.end.saturating_sub(layout.window.offset))
+        .map(|agent| {
+            let selected_row = selected_id == Some(agent.id.as_str());
+            let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
+                .ok()
+                .map(|d| d.with_timezone(&Utc));
+            let elapsed = entered
+                .map(|d| now.signed_duration_since(d).num_milliseconds().max(0) as u64)
+                .unwrap_or(0);
+            let style = if agent.state == AgentState::Blocked {
+                Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
+            } else if selected_row {
+                Style::default().add_modifier(Modifier::BOLD)
             } else {
-                sanitize_external(&agent.name)
-            })
-            .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
-            Cell::from(record_state_label(agent))
-                .style(Style::default().fg(theme::compact_state_color(&agent.state))),
-            Cell::from(format_duration(elapsed)),
-        ];
-        if show_workspace {
-            cells.push(Cell::from(sanitize_external(workspace_display_name(
-                &agent.workspace,
-            ))));
-        }
-        if show_tickets {
-            cells.push(Cell::from(agent.session.tickets_text()));
-        }
-        if show_runtime {
-            cells.push(Cell::from(format_duration(agent.session.runtime_ms)));
-        }
-        Row::new(cells).style(style)
-    });
+                Style::default()
+            };
+            let mut cells = vec![
+                Cell::from(if selected_row {
+                    format!(
+                        "> {}",
+                        station_display_name(agent, &agents, agent_width.saturating_sub(2))
+                    )
+                } else {
+                    station_display_name(agent, &agents, agent_width)
+                })
+                .style(Style::default().fg(theme::compact_accent(agent.accent_index))),
+                Cell::from(record_state_label(agent))
+                    .style(Style::default().fg(theme::compact_state_color(&agent.state))),
+                Cell::from(format_duration(elapsed)),
+            ];
+            if show_workspace {
+                cells.push(Cell::from(sanitize_external(workspace_display_name(
+                    &agent.workspace,
+                ))));
+            }
+            if show_tickets {
+                cells.push(Cell::from(agent.session.tickets_text()));
+            }
+            if show_runtime {
+                cells.push(Cell::from(format_duration(agent.session.runtime_ms)));
+            }
+            Row::new(cells).style(style)
+        });
     let mut widths = vec![
-        Constraint::Length(16),
+        Constraint::Length(u16::try_from(agent_width).unwrap_or(u16::MAX)),
         Constraint::Length(22),
         Constraint::Min(9),
     ];
@@ -284,15 +567,20 @@ pub fn draw(
         widths.push(Constraint::Min(9));
         headings.push("RUNTIME");
     }
+    let blocked_count = agents
+        .iter()
+        .filter(|agent| agent.state == AgentState::Blocked)
+        .count();
+    let range_start = usize::from(agent_count > 0 && layout.window.end > layout.window.offset)
+        .saturating_add(layout.window.offset);
     frame.render_widget(
         Table::new(rows, widths)
             .header(Row::new(headings).style(Style::default().add_modifier(Modifier::BOLD)))
             .column_spacing(1)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Kitchen status"),
-            ),
+            .block(Block::default().borders(Borders::ALL).title(format!(
+                "Kitchen status · {range_start}-{}/{agent_count} · {blocked_count} blocked",
+                layout.window.end
+            ))),
         areas[1],
     );
     let board_rows = table.board().iter().rev().take(3).map(|entry| {
@@ -314,18 +602,15 @@ pub fn draw(
         areas[2],
     );
     let status_area = if let Some(agent) = selected {
-        frame.render_widget(
-            Paragraph::new(inspect_facts(agent).map(Line::from).to_vec()),
-            areas[4],
-        );
+        frame.render_widget(inspect_paragraph(agent), areas[4]);
         areas[5]
     } else {
         areas[4]
     };
     let keys = if selected.is_some() {
-        "Tab / Shift+Tab inspect · b next blocked · Esc close · q quit"
+        "Tab / Shift+Tab inspect · b next blocked · w scope · a all · Esc close · q quit"
     } else {
-        "b next blocked · q / Esc quit"
+        "q / Esc quit · b next blocked · w scope · a all"
     };
     let board = format!("86 {}/{BOARD_CAP}", table.board().len());
     let status = warning.map_or_else(
@@ -346,28 +631,210 @@ mod tests {
         let crate::protocol::AgentStateEvent::Snapshot { agents, .. } = event else {
             panic!("snapshot")
         };
-        assert!(super::inspect_facts(&agents[0])[0].contains("UNKNOWN"));
+        assert!(super::inspect_facts(&agents[0])[3].contains("UNKNOWN"));
         assert!(super::inspect_facts(&agents[0])[1].contains("Tickets: Unavailable"));
         assert!(super::inspect_facts(&agents[1])[1].contains("Tickets: 0"));
         assert_eq!(agents[0].session.tickets_text(), "Unavailable");
         assert_eq!(agents[1].session.tickets_text(), "0");
     }
     use super::super::{
-        handle_key, handle_key_with_view, retain_selection, scene, SceneView, HELP_LINES,
+        handle_key_with_scope, reconcile_scope, retain_selection, scene, SceneView, HELP_LINES,
     };
     use super::*;
     use crate::adapter::Normalizer;
+    use crate::feed::Feed;
     use crate::protocol::{
         AgentRecord, AgentStateEvent, DeltaOperation, SessionStats, SourceDiagnostic, SourceStatus,
+        WorkspaceRecord,
     };
     use crossterm::event::KeyCode;
     use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
     use tokio_util::sync::CancellationToken;
 
+    #[tokio::test]
+    async fn fixture_backed_inspection_identity_is_unambiguous() {
+        let kind_fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/snapshot-working-idle-accents.json"
+        ))
+        .unwrap();
+        let agent_kind = kind_fixture["result"]["snapshot"]["agents"][0]["agent"]
+            .as_str()
+            .unwrap();
+        let mut source: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
+        ))
+        .unwrap();
+        source["agents"][0]["agent"] = agent_kind.into();
+        source["agents"][0]["name"] = "same chef".into();
+        source["agents"][0]["pane_id"] =
+            "fictional-pane-料理🥘-with-a-long-shared-prefix-19".into();
+        source["workspaces"][0]["label"] = "/work/one/example-pantry".into();
+        let mut duplicate = source["agents"][0].clone();
+        duplicate["terminal_id"] = "fictional-terminal-20".into();
+        duplicate["pane_id"] = "fictional-pane-料理🥘-with-a-long-shared-prefix-20".into();
+        duplicate["workspace_id"] = "fictional-pantry-two".into();
+        source["agents"].as_array_mut().unwrap().push(duplicate);
+        source["workspaces"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "workspace_id": "fictional-pantry-two",
+                "label": "/work/two/example-pantry"
+            }));
+
+        let mut normalizer = Normalizer::default();
+        let normalized = normalizer
+            .normalize_snapshot_value(source.clone(), "2026-08-13T12:00:00Z")
+            .unwrap();
+        let normalized_agents = normalized.agents.iter().collect::<Vec<_>>();
+        let labels = normalized_agents
+            .iter()
+            .map(|agent| station_display_name(agent, &normalized_agents, 18))
+            .collect::<Vec<_>>();
+        assert!(labels.iter().all(|label| display_width(label) <= 18));
+        assert!(labels[0].ends_with("-19"));
+        assert!(labels[1].ends_with("-20"));
+
+        let mut distinct_workspaces = source.clone();
+        distinct_workspaces["workspaces"][1]["label"] = "/work/two/different-pantry".into();
+        let distinct = Normalizer::default()
+            .normalize_snapshot_value(distinct_workspaces, "2026-08-13T12:00:00Z")
+            .unwrap();
+        let distinct_agents = distinct.agents.iter().collect::<Vec<_>>();
+        assert_eq!(
+            distinct_agents
+                .iter()
+                .map(|agent| station_display_name(agent, &distinct_agents, 80))
+                .collect::<Vec<_>>(),
+            ["same chef · example-pantry", "same chef · different-pantry"]
+        );
+        let mut long_agents = normalized.agents.clone();
+        long_agents[0].workspace = format!("/work/{}/example-pantry", "料理🥘/".repeat(20));
+        long_agents[0]
+            .pane_id
+            .as_mut()
+            .unwrap()
+            .push_str(&"-料理🥘".repeat(20));
+        assert!((6..=18).contains(&inspect_height(&long_agents[0], 76)));
+        let long_feed = crate::feed::Feed::fixed(AppMode::Live, long_agents).await;
+        let mut long_table = AgentTable::default();
+        long_table.apply(long_feed.snapshot().await);
+        let narrow = render_scene(
+            &long_table,
+            80,
+            24,
+            Some("fictional-terminal-19"),
+            SceneView::Kitchen,
+            false,
+        );
+        assert!(narrow.contains("BLOCKED / AT THE PASS"), "{narrow}");
+        assert!(narrow.contains("Kitchen status"), "{narrow}");
+        assert!(narrow.contains("Agent kind: codex"), "{narrow}");
+        assert!(narrow.contains("Pane locator:"), "{narrow}");
+        assert!(narrow.contains("prefix-19"), "{narrow}");
+        let narrow_freezer = render_scene(
+            &long_table,
+            80,
+            24,
+            Some("fictional-terminal-19"),
+            SceneView::Freezer,
+            false,
+        );
+        assert!(
+            narrow_freezer.contains("Kitchen status"),
+            "{narrow_freezer}"
+        );
+        assert!(
+            !narrow_freezer.contains("FREEZER EMPTY"),
+            "{narrow_freezer}"
+        );
+
+        let feed = crate::feed::Feed::fixed(AppMode::Live, normalized.agents).await;
+        let mut table = AgentTable::default();
+        table.apply(feed.snapshot().await);
+        let selected_id = "fictional-terminal-19";
+        let mut terminal = Terminal::new(TestBackend::new(60, 18)).unwrap();
+        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        terminal
+            .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &Scope::default()))
+            .unwrap();
+        let fallback = buffer_text(&terminal);
+        assert!(fallback.contains("-19"));
+        assert!(fallback.contains("-20"));
+        let initial = render_scene(
+            &table,
+            100,
+            30,
+            Some(selected_id),
+            SceneView::Kitchen,
+            false,
+        );
+        assert!(
+            initial.contains("‼ BLOCKED  y · fictional…prefix-19, y · fictional…prefix-20  00:00"),
+            "{initial}"
+        );
+        assert!(initial.contains("-19"));
+        assert!(initial.contains("-20"));
+        assert!(initial.contains("Workspace: /work/one/example-pantry"));
+        assert!(initial.contains("Agent kind: codex"));
+        assert_eq!(
+            inspect_facts(table.agents().find(|agent| agent.id == selected_id).unwrap())[1],
+            "Pane locator: fictional-pane-料理🥘-with-a-long-shared-prefix-19 · Tickets: Unavailable"
+        );
+        assert!(initial.contains("Pane locator: fictional-pane-"));
+        assert!(initial.contains("prefix-19"));
+        let compact = render_scene(&table, 60, 18, Some(selected_id), SceneView::Kitchen, false);
+        assert!(compact.contains("Agent kind: codex"));
+        assert!(compact.contains("prefix-19"), "{compact}");
+
+        let mut invalid = source.clone();
+        invalid["agents"][0]["pane_id"] = "fictional-pane\nmoved".into();
+        assert!(normalizer
+            .normalize_snapshot_value(invalid, "2026-08-13T12:00:01Z")
+            .is_err());
+
+        source["agents"][0]["pane_id"] = "fictional-pane-moved".into();
+        let moved = normalizer
+            .normalize_snapshot_value(source, "2026-08-13T12:00:01Z")
+            .unwrap();
+        let selected = moved
+            .agents
+            .iter()
+            .find(|agent| agent.id == selected_id)
+            .unwrap()
+            .clone();
+        feed.publish(selected).await;
+        table.apply(feed.snapshot().await);
+        let moved = render_scene(
+            &table,
+            100,
+            30,
+            Some(selected_id),
+            SceneView::Kitchen,
+            false,
+        );
+        assert!(moved.contains("Pane locator: fictional-pane-moved"));
+        assert!(moved.contains("fictional-pane-moved"));
+        let freezer = render_scene(
+            &table,
+            100,
+            30,
+            Some(selected_id),
+            SceneView::Freezer,
+            false,
+        );
+        assert!(freezer.contains("Agent kind: codex"));
+        assert!(freezer.contains("Pane locator: fictional-pane-moved"));
+    }
+
     fn record(id: &str, state: AgentState) -> AgentRecord {
         AgentRecord {
             state_known: None,
             id: id.into(),
+            pane_id: None,
+            agent_kind: None,
             name: format!("Cook {id}"),
             state,
             progress: None,
@@ -375,6 +842,7 @@ mod tests {
             accent_index: 2,
             model: "gpt-5.6-sol".into(),
             workspace: "/work/customer-api".into(),
+            workspace_id: None,
             session: SessionStats {
                 tickets_available: None,
                 runtime_ms: 3_661_000,
@@ -417,7 +885,7 @@ mod tests {
             .with_timezone(&Utc);
         terminal
             .draw(|frame| {
-                scene::draw_view(
+                scene::draw_view_scoped(
                     frame,
                     table,
                     None,
@@ -426,9 +894,11 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected_id,
+                    0,
                     scene_view,
                     help_open,
                     false,
+                    &Scope::default(),
                 )
             })
             .unwrap();
@@ -494,7 +964,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         terminal
-            .draw(|frame| draw(frame, table, warning, now, 9, None))
+            .draw(|frame| draw_scoped(frame, table, warning, now, 9, None, 0, &Scope::default()))
             .unwrap();
         buffer_dump(terminal.backend().buffer())
     }
@@ -560,11 +1030,20 @@ mod tests {
             source_status: SourceStatus::Connected,
             source_diagnostic: None,
             agents: normalized.agents,
+            workspaces: Some(normalized.workspaces),
         });
         let shutdown = CancellationToken::new();
         let mut selected = None;
-        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
-        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
+        assert!(!handle_key_with_scope(
+            KeyCode::Tab,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown,
+        ));
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -573,7 +1052,7 @@ mod tests {
             .with_timezone(&Utc);
         terminal
             .draw(|frame| {
-                scene::draw_view(
+                scene::draw_view_scoped(
                     frame,
                     &table,
                     None,
@@ -582,9 +1061,11 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
+                    0,
                     SceneView::Kitchen,
                     false,
                     false,
+                    &Scope::default(),
                 )
             })
             .unwrap();
@@ -594,7 +1075,11 @@ mod tests {
             .content
             .chunks(80)
             .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-            .filter(|row| row.contains("example-cook") || row.contains("Workspace:"))
+            .filter(|row| {
+                row.contains("example-cook")
+                    || row.contains("Workspace:")
+                    || row.contains("Agent kind:")
+            })
             .collect::<Vec<_>>()
             .join(" ");
 
@@ -625,7 +1110,7 @@ mod tests {
         let mut compact = Terminal::new(TestBackend::new(79, 23)).unwrap();
         compact
             .draw(|frame| {
-                scene::draw_view(
+                scene::draw_view_scoped(
                     frame,
                     &table,
                     None,
@@ -634,29 +1119,202 @@ mod tests {
                     super::super::canvas::ColorMode::Xterm256,
                     true,
                     selected.as_deref(),
+                    0,
                     SceneView::Kitchen,
                     false,
                     false,
+                    &Scope::default(),
                 )
             })
             .unwrap();
         assert!(buffer_text(&compact).contains("> example-cook"));
 
-        assert!(!handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert!(!handle_key_with_scope(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown,
+        ));
         assert_eq!(selected, None);
         assert!(!shutdown.is_cancelled());
-        assert!(!handle_key(KeyCode::Tab, &table, &mut selected, &shutdown));
+        assert!(!handle_key_with_scope(
+            KeyCode::Tab,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown,
+        ));
         table.apply(AgentStateEvent::Delta {
             version: 1,
             mode: AppMode::Live,
             operation: DeltaOperation::Remove,
             agent: None,
-            agent_id: Some("fictional-pane-20".into()),
+            agent_id: Some("fictional-terminal-20".into()),
         });
-        retain_selection(&mut selected, &table);
+        retain_selection(&mut selected, &table, &Scope::default());
         assert_eq!(selected, None);
-        assert!(handle_key(KeyCode::Esc, &table, &mut selected, &shutdown));
+        assert!(handle_key_with_scope(
+            KeyCode::Esc,
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown,
+        ));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn real_herdr_fixtures_keep_fallback_rows_reachable() {
+        let normalize = |fixture| {
+            Normalizer::default()
+                .normalize_snapshot_value(
+                    serde_json::from_str(fixture).unwrap(),
+                    "2026-08-13T12:00:00Z",
+                )
+                .unwrap()
+                .agents
+                .into_iter()
+                .next()
+                .unwrap()
+        };
+        let working = normalize(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ));
+        let blocked = normalize(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
+        ));
+        assert_eq!(blocked.state, AgentState::Blocked);
+        let agents = (0..30)
+            .map(|index| {
+                let mut agent = if index == 29 {
+                    blocked.clone()
+                } else {
+                    working.clone()
+                };
+                agent.id = format!("fixture-{index:02}");
+                agent.name = format!("Cook{index:02}");
+                agent
+            })
+            .collect();
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents,
+            workspaces: None,
+        });
+        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let render = |width, height, selected: Option<&str>, offset: &mut usize| {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal
+                .draw(|frame| {
+                    *offset = table_window(
+                        frame.area(),
+                        &table,
+                        now,
+                        &Scope::default(),
+                        selected,
+                        *offset,
+                    )
+                    .offset;
+                    scene::draw_view_scoped(
+                        frame,
+                        &table,
+                        None,
+                        now,
+                        0,
+                        super::super::canvas::ColorMode::Xterm256,
+                        true,
+                        selected,
+                        *offset,
+                        SceneView::Kitchen,
+                        false,
+                        false,
+                        &Scope::default(),
+                    )
+                })
+                .unwrap();
+            buffer_text(&terminal)
+        };
+        let shutdown = CancellationToken::new();
+
+        for (width, height) in [(60, 12), (80, 24)] {
+            let mut offset = 0;
+            let mut view = SceneView::Kitchen;
+            let mut help_open = false;
+            let mut scope = Scope::default();
+            let initial = render(width, height, None, &mut offset);
+            assert!(
+                initial.contains("/30 · 1 blocked"),
+                "{width}x{height}: {initial:?}"
+            );
+            assert!(!initial.contains("│Cook29"));
+
+            let mut selected = None;
+            for index in 0..30 {
+                assert!(!handle_key_with_scope(
+                    KeyCode::Tab,
+                    &table,
+                    &mut selected,
+                    &mut view,
+                    &mut help_open,
+                    &mut scope,
+                    &shutdown,
+                ));
+                let output = render(width, height, selected.as_deref(), &mut offset);
+                assert!(
+                    output.contains(&format!("> Cook{index:02}")),
+                    "{width}x{height} could not show {selected:?}: {output:?}"
+                );
+            }
+
+            selected = None;
+            assert!(!handle_key_with_scope(
+                KeyCode::BackTab,
+                &table,
+                &mut selected,
+                &mut view,
+                &mut help_open,
+                &mut scope,
+                &shutdown,
+            ));
+            assert_eq!(selected.as_deref(), Some("fixture-29"));
+            assert!(render(width, height, selected.as_deref(), &mut offset).contains("> Cook29"));
+
+            selected = None;
+            assert!(!handle_key_with_scope(
+                KeyCode::Char('b'),
+                &table,
+                &mut selected,
+                &mut view,
+                &mut help_open,
+                &mut scope,
+                &shutdown,
+            ));
+            assert_eq!(selected.as_deref(), Some("fixture-29"));
+            assert!(render(width, height, selected.as_deref(), &mut offset).contains("> Cook29"));
+        }
+
+        let selected = Some("fixture-29".to_owned());
+        let mut offset = 0;
+        render(60, 12, selected.as_deref(), &mut offset);
+        let narrow_offset = offset;
+        let resized = render(80, 24, selected.as_deref(), &mut offset);
+        assert_eq!(selected.as_deref(), Some("fixture-29"));
+        assert!(resized.contains("> Cook29"));
+        assert!(offset < narrow_offset);
+        assert!(resized.contains(&format!("{}-30/30", offset + 1)));
     }
 
     #[test]
@@ -675,28 +1333,36 @@ mod tests {
             source_status: SourceStatus::Connected,
             source_diagnostic: None,
             agents: normalized.agents,
+            workspaces: Some(normalized.workspaces),
         });
         let shutdown = CancellationToken::new();
         let mut selected = None;
         let mut scene_view = SceneView::Kitchen;
         let mut help_open = false;
 
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Char('?'),
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert!(help_open);
-        for code in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Char('f')] {
-            assert!(!handle_key_with_view(
+        for code in [
+            KeyCode::Tab,
+            KeyCode::BackTab,
+            KeyCode::Char('b'),
+            KeyCode::Char('f'),
+        ] {
+            assert!(!handle_key_with_scope(
                 code,
                 &table,
                 &mut selected,
                 &mut scene_view,
                 &mut help_open,
+                &mut Scope::default(),
                 &shutdown,
             ));
         }
@@ -713,68 +1379,80 @@ mod tests {
             );
         }
 
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Char('?'),
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Tab,
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
-        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
-        assert!(!handle_key_with_view(
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
+        assert!(!handle_key_with_scope(
             KeyCode::Char('?'),
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         let kitchen = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Char('?'),
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Char('f'),
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert_eq!(scene_view, SceneView::Freezer);
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Char('?'),
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
-        for code in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Char('f')] {
-            assert!(!handle_key_with_view(
+        for code in [
+            KeyCode::Tab,
+            KeyCode::BackTab,
+            KeyCode::Char('b'),
+            KeyCode::Char('f'),
+        ] {
+            assert!(!handle_key_with_scope(
                 code,
                 &table,
                 &mut selected,
                 &mut scene_view,
                 &mut help_open,
+                &mut Scope::default(),
                 &shutdown,
             ));
         }
-        assert_eq!(selected.as_deref(), Some("fictional-pane-20"));
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
         assert_eq!(scene_view, SceneView::Freezer);
 
         let freezer = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
@@ -793,62 +1471,66 @@ mod tests {
                 );
             }
         }
-        for expected in ["example-cook", "WORKING / ON THE FIRE"] {
-            assert!(
-                kitchen.contains(expected),
-                "missing {expected:?} in {kitchen:?}"
-            );
-        }
+        assert!(
+            kitchen.contains("example-cook"),
+            "missing example-cook in {kitchen:?}"
+        );
+        assert!(inspect_facts(table.agents().next().unwrap())[3].contains("WORKING / ON THE FIRE"));
 
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Esc,
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert!(!help_open);
         assert!(selected.is_some());
         assert_eq!(scene_view, SceneView::Freezer);
         assert!(!shutdown.is_cancelled());
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Esc,
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert_eq!(selected, None);
         assert_eq!(scene_view, SceneView::Freezer);
-        assert!(!handle_key_with_view(
+        assert!(!handle_key_with_scope(
             KeyCode::Esc,
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert_eq!(scene_view, SceneView::Kitchen);
-        assert!(handle_key_with_view(
+        assert!(handle_key_with_scope(
             KeyCode::Esc,
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &shutdown,
         ));
         assert!(shutdown.is_cancelled());
 
         let quit = CancellationToken::new();
         help_open = true;
-        assert!(handle_key_with_view(
+        assert!(handle_key_with_scope(
             KeyCode::Char('q'),
             &table,
             &mut selected,
             &mut scene_view,
             &mut help_open,
+            &mut Scope::default(),
             &quit,
         ));
         assert!(quit.is_cancelled());
@@ -866,7 +1548,7 @@ mod tests {
     }
 
     #[test]
-    fn status_copy_is_truthful_for_live_demo_waiting_and_unsupported() {
+    fn status_copy_is_truthful_for_live_demo_and_source_failures() {
         assert_eq!(
             status_lines(AppMode::Live, &SourceStatus::Connected, None, 1),
             ("MISE — LIVE".into(), "Connected to Herdr".into())
@@ -902,6 +1584,23 @@ mod tests {
                 "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19, 20; upgrade Herdr, then retry. Nothing here is real.".into()
             )
         );
+        let incompatible = SourceDiagnostic {
+            observed_protocol: 20,
+            supported_protocols: vec![17, 19, 20],
+            next_action: "ensure terminal identities are unique, then retry".into(),
+        };
+        assert_eq!(
+            status_lines(
+                AppMode::Live,
+                &SourceStatus::IncompatibleResponse,
+                Some(&incompatible),
+                0,
+            ),
+            (
+                "MISE — LIVE".into(),
+                "Herdr returned an incompatible response — ensure terminal identities are unique, then retry".into()
+            )
+        );
     }
 
     #[test]
@@ -913,6 +1612,7 @@ mod tests {
             source_status: SourceStatus::Connected,
             source_diagnostic: None,
             agents: vec![record("blocked", AgentState::Blocked)],
+            workspaces: None,
         });
         apply_upsert(&mut table, record("ended", AgentState::Ended));
         let backend = TestBackend::new(110, 24);
@@ -921,7 +1621,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         terminal
-            .draw(|frame| draw(frame, &table, None, now, 9, None))
+            .draw(|frame| draw_scoped(frame, &table, None, now, 9, None, 0, &Scope::default()))
             .unwrap();
         let text = buffer_text(&terminal);
         for expected in [
@@ -957,6 +1657,191 @@ mod tests {
     }
 
     #[test]
+    fn workspace_scope_compact_header_filters_and_marks_unavailable() {
+        let mut here = record("here", AgentState::Working);
+        here.workspace_id = Some("ws-1".into());
+        let mut elsewhere = record("elsewhere", AgentState::Blocked);
+        elsewhere.workspace_id = Some("ws-2".into());
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![here, elsewhere],
+            workspaces: Some(vec![WorkspaceRecord {
+                id: "ws-1".into(),
+                label: "/srv/Kitchen One".into(),
+            }]),
+        });
+        let now = DateTime::parse_from_rfc3339("2026-08-13T12:02:05Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut terminal = Terminal::new(TestBackend::new(110, 24)).unwrap();
+        let scope = Scope {
+            id: Some("ws-1".into()),
+            label: Some("/srv/Kitchen One".into()),
+        };
+        terminal
+            .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &scope))
+            .unwrap();
+        let output = buffer_text(&terminal);
+        assert!(output.contains("Workspace: Kitchen One · 1 blocked elsewhere"));
+        assert!(output.contains("Cook here"));
+        assert!(!output.contains("Cook elsewhere"));
+
+        let mut narrow = Terminal::new(TestBackend::new(20, 24)).unwrap();
+        narrow
+            .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &scope))
+            .unwrap();
+        let narrow_output = buffer_text(&narrow);
+        for expected in ["Workspace:", "Kitchen", "One", "blocked", "elsewhere"] {
+            assert!(
+                narrow_output.contains(expected),
+                "missing {expected:?} in {narrow_output:?}"
+            );
+        }
+
+        let unavailable = Scope {
+            id: Some("removed".into()),
+            label: Some("Gone".into()),
+        };
+        terminal
+            .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &unavailable))
+            .unwrap();
+        assert!(buffer_text(&terminal).contains("Workspace: Gone (unavailable)"));
+    }
+
+    #[tokio::test]
+    async fn workspace_scope_fixture_flows_through_feed_keys_and_test_backend() {
+        let mut normalizer = Normalizer::default();
+        let mut raw: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/snapshot-workspace-scope.json"
+        ))
+        .unwrap();
+        let feed = Feed::fixed(AppMode::Live, vec![]).await;
+        let mut changes = feed.subscribe();
+        feed.apply_normalized_for_test(
+            normalizer
+                .normalize_snapshot_value(raw.clone(), "2026-08-13T12:00:00Z")
+                .unwrap(),
+        )
+        .await;
+        let mut table = AgentTable::default();
+        table.apply(changes.recv().await.unwrap());
+        let shutdown = CancellationToken::new();
+        let mut selected = None;
+        let mut view = SceneView::Kitchen;
+        let mut help_open = false;
+        let mut scope = Scope::default();
+
+        for expected in ["scope-workspace-empty", "scope-workspace-one"] {
+            assert!(!handle_key_with_scope(
+                KeyCode::Char('w'),
+                &table,
+                &mut selected,
+                &mut view,
+                &mut help_open,
+                &mut scope,
+                &shutdown,
+            ));
+            assert_eq!(scope.id.as_deref(), Some(expected));
+        }
+        assert_eq!(table.blocked_elsewhere(scope.id.as_deref()), 1);
+
+        let now = DateTime::parse_from_rfc3339("2026-08-13T12:02:05Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut scene_terminal = Terminal::new(TestBackend::new(110, 40)).unwrap();
+        scene_terminal
+            .draw(|frame| {
+                scene::draw_view_scoped(
+                    frame,
+                    &table,
+                    None,
+                    now,
+                    0,
+                    super::super::canvas::ColorMode::Xterm256,
+                    true,
+                    None,
+                    0,
+                    SceneView::Kitchen,
+                    false,
+                    false,
+                    &scope,
+                )
+            })
+            .unwrap();
+        let scene_output = buffer_text(&scene_terminal);
+        assert!(scene_output.contains("Workspace: duplicate (aceone) · 1 blocked elsewhere"));
+        assert!(scene_output.contains("scope-working"));
+        assert!(scene_output.contains("‼ BLOCKED  scope-blocked"));
+
+        let mut terminal = Terminal::new(TestBackend::new(110, 24)).unwrap();
+        terminal
+            .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &scope))
+            .unwrap();
+        let output = buffer_text(&terminal);
+        assert!(output.contains("Workspace: duplicate (aceone) · 1 blocked elsewhere"));
+        assert!(output.contains("scope-working"));
+        assert!(!output.contains("scope-blocked"));
+
+        raw["workspaces"][0]["label"] = "renamed".into();
+        feed.apply_normalized_for_test(
+            normalizer
+                .normalize_snapshot_value(raw.clone(), "2026-08-13T12:00:01Z")
+                .unwrap(),
+        )
+        .await;
+        table.apply(changes.recv().await.unwrap());
+        reconcile_scope(&mut scope, &table);
+        assert_eq!(scope.label.as_deref(), Some("renamed"));
+
+        raw["workspaces"] = serde_json::json!([
+            raw["workspaces"][1].clone(),
+            raw["workspaces"][2].clone(),
+            { "workspace_id": "scope-workspace-new", "label": "renamed" }
+        ]);
+        raw["agents"] = serde_json::json!([
+            raw["agents"][1].clone(),
+            {
+                "terminal_id": "scope-terminal-new",
+                "pane_id": "scope-pane-new",
+                "workspace_id": "scope-workspace-new",
+                "display_agent": "scope-new",
+                "agent_status": "working"
+            }
+        ]);
+        feed.apply_normalized_for_test(
+            normalizer
+                .normalize_snapshot_value(raw, "2026-08-13T12:00:02Z")
+                .unwrap(),
+        )
+        .await;
+        table.apply(changes.recv().await.unwrap());
+        table.apply(changes.recv().await.unwrap());
+        reconcile_scope(&mut scope, &table);
+        terminal
+            .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &scope))
+            .unwrap();
+        let output = buffer_text(&terminal);
+        assert!(output.contains("Workspace: renamed (unavailable) · 1 blocked elsewhere"));
+        assert!(!output.contains("scope-new"));
+
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('a'),
+            &table,
+            &mut selected,
+            &mut view,
+            &mut help_open,
+            &mut scope,
+            &shutdown,
+        ));
+        assert_eq!(scope, Scope::default());
+        assert_eq!(table.scoped_agents(None).count(), 2);
+    }
+
+    #[test]
     fn deterministic_complete_buffer_goldens() {
         let mut demo = AgentTable::default();
         demo.apply(AgentStateEvent::Snapshot {
@@ -965,6 +1850,7 @@ mod tests {
             source_status: SourceStatus::UnavailableSocket,
             source_diagnostic: None,
             agents: vec![record("demo", AgentState::Working)],
+            workspaces: None,
         });
         demo.apply(AgentStateEvent::Delta {
             version: 1,
@@ -985,6 +1871,7 @@ mod tests {
             source_status: SourceStatus::Connected,
             source_diagnostic: None,
             agents: vec![record("blocked", AgentState::Blocked)],
+            workspaces: None,
         });
         if let Err(error) = golden_result("live-blocked", &live, None) {
             mismatches.push(error);
@@ -997,6 +1884,7 @@ mod tests {
             source_status: SourceStatus::Connected,
             source_diagnostic: None,
             agents: vec![],
+            workspaces: None,
         });
         if let Err(error) = golden_result("waiting", &waiting, None) {
             mismatches.push(error);
@@ -1019,13 +1907,15 @@ mod tests {
             .with_timezone(&Utc);
         terminal
             .draw(|frame| {
-                draw(
+                draw_scoped(
                     frame,
                     &AgentTable::default(),
                     Some("bind warning"),
                     now,
                     7,
                     None,
+                    0,
+                    &Scope::default(),
                 )
             })
             .unwrap();
@@ -1054,7 +1944,7 @@ mod tests {
             let backend = TestBackend::new(width, height);
             let mut terminal = Terminal::new(backend).unwrap();
             terminal
-                .draw(|frame| draw(frame, &table, None, now, 7, None))
+                .draw(|frame| draw_scoped(frame, &table, None, now, 7, None, 0, &Scope::default()))
                 .unwrap();
             let rendered = terminal
                 .backend()
@@ -1114,7 +2004,18 @@ mod tests {
 
         let mut terminal = Terminal::new(TestBackend::new(79, 23)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &table, None, Utc::now(), 0, Some("agent-02")))
+            .draw(|frame| {
+                draw_scoped(
+                    frame,
+                    &table,
+                    None,
+                    Utc::now(),
+                    0,
+                    Some("agent-02"),
+                    0,
+                    &Scope::default(),
+                )
+            })
             .unwrap();
         let output = buffer_text(&terminal);
         assert!(output.contains("[31mSAFE"));

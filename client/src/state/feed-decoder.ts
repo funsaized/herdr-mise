@@ -20,11 +20,19 @@ const keys = (value: Record<string, unknown>, allowed: string[]) =>
   Object.keys(value).every((key) => allowed.includes(key));
 const optionalBoolean = (value: unknown) =>
   value === undefined || typeof value === "boolean";
+export type FeedDecodeOutcome =
+  | { kind: "accepted"; event: AgentStateEvent }
+  | { kind: "rejected" }
+  | { kind: "noise" };
+const rejected: FeedDecodeOutcome = { kind: "rejected" };
+const noise: FeedDecodeOutcome = { kind: "noise" };
 function agent(value: unknown): boolean {
   if (!object(value) || !object(value.session)) return false;
   return (
     keys(value, [
       "id",
+      "paneId",
+      "agentKind",
       "name",
       "state",
       "stateKnown",
@@ -33,6 +41,7 @@ function agent(value: unknown): boolean {
       "accentIndex",
       "model",
       "workspace",
+      "workspaceId",
       "session",
     ]) &&
     keys(value.session, ["runtimeMs", "tickets", "ticketsAvailable"]) &&
@@ -40,10 +49,16 @@ function agent(value: unknown): boolean {
     optionalBoolean(value.session.ticketsAvailable) &&
     text(value.id) &&
     value.id.length > 0 &&
+    (value.paneId === undefined ||
+      (text(value.paneId) && value.paneId.length > 0)) &&
+    (value.agentKind === undefined ||
+      (text(value.agentKind) && value.agentKind.length > 0)) &&
     text(value.name) &&
     value.name.length > 0 &&
     text(value.model) &&
     text(value.workspace) &&
+    (value.workspaceId === undefined ||
+      (text(value.workspaceId) && value.workspaceId.length > 0)) &&
     typeof value.state === "string" &&
     states.has(value.state) &&
     text(value.stateEnteredAt) &&
@@ -62,20 +77,35 @@ function agent(value: unknown): boolean {
     natural(value.session.tickets)
   );
 }
-export function decodeFeedEvent(raw: string): AgentStateEvent | null {
-  if (raw.length > 4 * 1024 * 1024) return null;
+function workspace(value: unknown): boolean {
+  return (
+    object(value) &&
+    keys(value, ["id", "label"]) &&
+    text(value.id) &&
+    value.id.length > 0 &&
+    text(value.label)
+  );
+}
+export function decodeFeedEvent(raw: string): FeedDecodeOutcome {
+  if (raw.length > 4 * 1024 * 1024) return rejected;
   let value: unknown;
   try {
     value = JSON.parse(raw);
   } catch {
-    return null;
+    return noise;
   }
-  if (!object(value) || value.version !== 1) return null;
+  const reject = () =>
+    object(value) &&
+    typeof value.type === "string" &&
+    value.type !== "heartbeat"
+      ? rejected
+      : noise;
+  if (!object(value) || value.version !== 1) return reject();
   if (value.type === "heartbeat")
     return keys(value, ["version", "type"])
-      ? (value as unknown as AgentStateEvent)
-      : null;
-  if (value.mode !== "live" && value.mode !== "demo") return null;
+      ? { kind: "accepted", event: value as unknown as AgentStateEvent }
+      : noise;
+  if (value.mode !== "live" && value.mode !== "demo") return reject();
   if (value.type === "snapshot") {
     if (
       !keys(value, [
@@ -85,9 +115,10 @@ export function decodeFeedEvent(raw: string): AgentStateEvent | null {
         "sourceStatus",
         "sourceDiagnostic",
         "agents",
+        "workspaces",
       ])
     )
-      return null;
+      return rejected;
     if (
       typeof value.sourceStatus !== "string" ||
       !sources.has(value.sourceStatus) ||
@@ -95,9 +126,19 @@ export function decodeFeedEvent(raw: string): AgentStateEvent | null {
       value.agents.length > 4096 ||
       !value.agents.every(agent)
     )
-      return null;
+      return rejected;
     const ids = value.agents.map((entry) => entry.id);
-    if (new Set(ids).size !== ids.length) return null;
+    if (new Set(ids).size !== ids.length) return rejected;
+    if (value.workspaces !== undefined) {
+      if (
+        !Array.isArray(value.workspaces) ||
+        value.workspaces.length > 4096 ||
+        !value.workspaces.every(workspace)
+      )
+        return rejected;
+      const workspaceIds = value.workspaces.map((entry) => entry.id);
+      if (new Set(workspaceIds).size !== workspaceIds.length) return rejected;
+    }
     if (value.sourceDiagnostic !== undefined) {
       const diagnostic = value.sourceDiagnostic;
       if (
@@ -117,7 +158,7 @@ export function decodeFeedEvent(raw: string): AgentStateEvent | null {
         !text(diagnostic.nextAction) ||
         !diagnostic.nextAction.length
       )
-        return null;
+        return rejected;
     }
   } else if (value.type === "delta") {
     if (
@@ -129,7 +170,7 @@ export function decodeFeedEvent(raw: string): AgentStateEvent | null {
         value.operation === "upsert" ? "agent" : "agentId",
       ])
     )
-      return null;
+      return rejected;
     if (
       value.operation === "upsert"
         ? !agent(value.agent)
@@ -137,7 +178,7 @@ export function decodeFeedEvent(raw: string): AgentStateEvent | null {
           !text(value.agentId) ||
           !value.agentId.length
     )
-      return null;
-  } else return null;
-  return value as unknown as AgentStateEvent;
+      return rejected;
+  } else return rejected;
+  return { kind: "accepted", event: value as unknown as AgentStateEvent };
 }

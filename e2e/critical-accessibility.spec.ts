@@ -21,12 +21,15 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
   await expect(nextBlocked).toBeEnabled();
   expect(await nextBlocked.getAttribute("aria-live")).toBeNull();
   await nextBlocked.click();
-  const station = page
-    .getByRole("button", { name: /Blocked — .*open details/ })
-    .last();
+  await expect(page.locator(".stationA11yMirror button:focus")).toHaveAttribute(
+    "aria-label",
+    /Blocked — .*open details/,
+  );
   await page.locator("body").click({ position: { x: 1, y: 1 } });
   await page.keyboard.press("ArrowLeft");
-  await expect(station).toBeFocused();
+  const station = page.locator(".stationA11yMirror button:focus"),
+    selectedAgentId = await station.getAttribute("data-agent-id");
+  expect(selectedAgentId).not.toBeNull();
   await page.keyboard.press("Enter");
   const panel = page.getByRole("complementary", { name: /details$/ });
   await expect(panel).toBeVisible();
@@ -54,7 +57,9 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
     ).toBeVisible();
   }
   await page.keyboard.press("Escape");
-  await expect(station).toBeFocused();
+  await expect(
+    page.locator(`[data-agent-id="${selectedAgentId}"]`),
+  ).toBeFocused();
   const settings = page.getByRole("button", { name: /settings/i }).first();
   await settings.focus();
   await page.keyboard.press("Enter");
@@ -107,4 +112,48 @@ test("renderer failure keeps a visible operable agent list", async ({
   await page.getByRole("button", { name: "Close panel" }).click();
   await expect(fallback.getByRole("button").first()).toBeFocused();
   expect(errors).toEqual([]);
+});
+
+test("workspace scope reveals blocked agents by keyboard at 320 CSS pixels", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/?preset=mixed&agents=2");
+  const selector = page.getByRole("combobox", { name: "Workspace" });
+  await expect(selector).toHaveValue("");
+  await selector.selectOption("visual-workspace-1");
+  const showAll = page.getByRole("button", {
+    name: "1 blocked elsewhere — Show all",
+  });
+  await expect(showAll).toBeVisible();
+  const showAllBox = await showAll.boundingBox();
+  expect(showAllBox).not.toBeNull();
+  if (
+    !(await page.getByRole("region", { name: "Agent status list" }).isVisible())
+  ) {
+    const placardBox = await page.locator(".demoPlacard").boundingBox();
+    expect(placardBox).not.toBeNull();
+    expect(showAllBox!.y + showAllBox!.height).toBeLessThanOrEqual(
+      placardBox!.y,
+    );
+  }
+  await showAll.focus();
+  await page.keyboard.press("Enter");
+  await expect(selector).toBeFocused();
+  await selector.selectOption("visual-workspace-1");
+  await selector.focus();
+  await page.keyboard.press("Tab");
+  await expect(showAll).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(selector).toBeFocused();
+  await expect(selector).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: /Claude, Blocked — .*open details/ }),
+  ).toBeAttached();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });

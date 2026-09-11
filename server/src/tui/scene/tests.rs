@@ -1,6 +1,8 @@
 use super::*;
 use crate::adapter::Normalizer;
-use crate::protocol::{AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic};
+use crate::protocol::{
+    AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic, WorkspaceRecord,
+};
 use chrono::TimeZone;
 use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
 
@@ -8,6 +10,8 @@ fn record(id: &str, state: AgentState) -> AgentRecord {
     AgentRecord {
         state_known: None,
         id: id.into(),
+        pane_id: None,
+        agent_kind: None,
         name: format!("Cook {id}"),
         state,
         progress: Some(0.5),
@@ -15,6 +19,7 @@ fn record(id: &str, state: AgentState) -> AgentRecord {
         accent_index: 2,
         model: "gpt-5.6-sol".into(),
         workspace: "/work/customer-api".into(),
+        workspace_id: None,
         session: SessionStats {
             tickets_available: None,
             runtime_ms: 61_000,
@@ -31,6 +36,7 @@ fn live_table(agents: Vec<AgentRecord>) -> AgentTable {
         source_status: SourceStatus::Connected,
         source_diagnostic: None,
         agents,
+        workspaces: None,
     });
     table
 }
@@ -39,7 +45,7 @@ fn render(table: &AgentTable, width: u16, height: u16, tick: u64) -> Buffer {
     render_selected(table, width, height, tick, None)
 }
 
-fn render_selected(
+pub(crate) fn render_selected(
     table: &AgentTable,
     width: u16,
     height: u16,
@@ -92,7 +98,7 @@ fn render_view_with_warning(
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
-            draw_view(
+            draw_view_scoped(
                 frame,
                 table,
                 warning,
@@ -101,9 +107,11 @@ fn render_view_with_warning(
                 ColorMode::Xterm256,
                 true,
                 selected_id,
+                0,
                 scene_view,
                 false,
                 reduced_motion,
+                &super::super::Scope::default(),
             )
         })
         .unwrap();
@@ -114,7 +122,7 @@ fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supporte
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
-            draw_view(
+            draw_view_scoped(
                 frame,
                 table,
                 None,
@@ -123,9 +131,11 @@ fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supporte
                 ColorMode::Truecolor,
                 scene_supported,
                 None,
+                0,
                 SceneView::Kitchen,
                 false,
                 false,
+                &super::super::Scope::default(),
             )
         })
         .unwrap();
@@ -138,6 +148,56 @@ pub(crate) fn render_freezer(table: &AgentTable, width: u16, height: u16) -> Buf
 
 pub(crate) fn text(buffer: &Buffer) -> String {
     buffer.content.iter().map(|cell| cell.symbol()).collect()
+}
+
+#[test]
+fn workspace_scope_scene_filters_stations_and_keeps_global_blocked_count() {
+    let mut here = record("here", AgentState::Working);
+    here.workspace_id = Some("ws-1".into());
+    let mut elsewhere = record("elsewhere", AgentState::Blocked);
+    elsewhere.workspace_id = Some("ws-2".into());
+    let mut table = live_table(vec![here, elsewhere]);
+    let agents = table.agents().cloned().collect();
+    table.apply(AgentStateEvent::Snapshot {
+        version: 1,
+        mode: AppMode::Live,
+        source_status: SourceStatus::Connected,
+        source_diagnostic: None,
+        agents,
+        workspaces: Some(vec![WorkspaceRecord {
+            id: "ws-1".into(),
+            label: "Kitchen One".into(),
+        }]),
+    });
+    let scope = super::super::Scope {
+        id: Some("ws-1".into()),
+        label: Some("Kitchen One".into()),
+    };
+    let mut terminal = Terminal::new(TestBackend::new(110, 40)).unwrap();
+    terminal
+        .draw(|frame| {
+            draw_view_scoped(
+                frame,
+                &table,
+                None,
+                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                0,
+                ColorMode::Xterm256,
+                true,
+                None,
+                0,
+                SceneView::Kitchen,
+                false,
+                false,
+                &scope,
+            )
+        })
+        .unwrap();
+    let output = text(terminal.backend().buffer());
+    assert!(output.contains("Workspace: Kitchen One · 1 blocked elsewhere"));
+    assert!(output.contains("Cook here"));
+    assert!(output.contains("‼ BLOCKED  Cook elsewhere  00:00"));
+    assert!(!output.contains("— all stations clear —"));
 }
 
 fn buffer_dump(buffer: &Buffer) -> String {
@@ -199,6 +259,7 @@ fn snapshot(
         source_status: status,
         source_diagnostic: diagnostic,
         agents,
+        workspaces: None,
     });
     table
 }
@@ -588,7 +649,7 @@ fn fixture_backed_responsive_composition_matrix() {
     let draw = |terminal: &mut Terminal<TestBackend>| {
         terminal
             .draw(|frame| {
-                draw_view(
+                draw_view_scoped(
                     frame,
                     &table,
                     None,
@@ -597,9 +658,11 @@ fn fixture_backed_responsive_composition_matrix() {
                     ColorMode::Truecolor,
                     true,
                     None,
+                    0,
                     SceneView::Kitchen,
                     false,
                     false,
+                    &super::super::Scope::default(),
                 )
             })
             .unwrap();
@@ -612,6 +675,45 @@ fn fixture_backed_responsive_composition_matrix() {
     terminal.backend_mut().resize(160, 48);
     draw(&mut terminal);
     assert_eq!(terminal.backend().buffer(), &large);
+}
+
+#[test]
+fn authoritative_done_fixture_stays_plated_until_the_source_is_empty() {
+    let mut raw = serde_json::from_str::<serde_json::Value>(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+    ))
+    .unwrap();
+    raw["agents"][0]["agent_status"] = "done".into();
+    let normalized = Normalizer::default()
+        .normalize_snapshot_value(raw, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let event = AgentStateEvent::Snapshot {
+        version: 1,
+        mode: AppMode::Live,
+        source_status: SourceStatus::Connected,
+        source_diagnostic: None,
+        agents: normalized.agents,
+        workspaces: Some(normalized.workspaces),
+    };
+    let mut table = AgentTable::default();
+    table.apply(event.clone());
+    table.apply(event);
+    assert_eq!(table.agents().count(), 1);
+    let output = text(&render(&table, 80, 24, 0));
+    assert!(output.contains("PLATED"));
+    assert!(!output.contains("Waiting for agents"));
+
+    let empty = Normalizer::default()
+        .normalize_snapshot_value(
+            serde_json::from_str(include_str!(
+                "../../../tests/fixtures/snapshot-protocol-19-empty-agents.json"
+            ))
+            .unwrap(),
+            "2026-08-13T12:00:00Z",
+        )
+        .unwrap();
+    let empty_table = snapshot(AppMode::Live, SourceStatus::Connected, None, empty.agents);
+    assert!(text(&render(&empty_table, 80, 24, 0)).contains("Waiting for agents"));
 }
 
 #[test]
@@ -687,7 +789,7 @@ fn real_fixture_keeps_material_depth_and_state_chrome() {
         let expected = match name {
             "demo" => &["MISE — DEMO SERVICE"][..],
             "waiting" => &["Waiting for agents"][..],
-            "unsupported" => &["unsupported Herdr protocol", "Mock feed"][..],
+            "unsupported" => &["Herdr protocol is unsupported", "Mock feed"][..],
             "fallback" => &["Kitchen status"][..],
             _ => unreachable!(),
         };
@@ -882,6 +984,7 @@ fn ended_moves_to_board_and_truthful_status_survives() {
             next_action: "upgrade Herdr, then retry".into(),
         }),
         agents: vec![],
+        workspaces: None,
     });
     let output = text(&render(&demo, 110, 40, 0));
     assert!(output.contains("MISE — DEMO SERVICE"));
@@ -1022,7 +1125,7 @@ fn kitchen_and_freezer_stay_separate_and_respect_reduced_motion() {
 }
 
 #[test]
-fn tui_strips_control_characters_from_external_strings() {
+fn tui_sanitizes_external_strings_without_obscuring_status() {
     let event = serde_json::from_str::<AgentStateEvent>(include_str!(
         "../../../../protocol/fixtures/snapshot.v1.json"
     ))
@@ -1035,6 +1138,12 @@ fn tui_strips_control_characters_from_external_strings() {
     agents[0].name.push_str("\u{1b}live");
     agents[0].model.push('\u{1b}');
     agents[0].workspace.push('\u{1b}');
+    agents[0].workspace.push_str(&"/料理🥘".repeat(100));
+    agents[0]
+        .pane_id
+        .as_mut()
+        .unwrap()
+        .push_str(&"-料理🥘".repeat(100));
     agents[0].state = AgentState::Blocked;
     agents[1].id.push('\u{1b}');
     agents[1].name.push_str("\u{1b}ended");
@@ -1045,7 +1154,7 @@ fn tui_strips_control_characters_from_external_strings() {
     let mut table = AgentTable::default();
     table.apply(AgentStateEvent::Snapshot {
         version: 1,
-        mode: AppMode::Live,
+        mode: AppMode::Demo,
         source_status: SourceStatus::UnsupportedProtocol,
         source_diagnostic: Some(SourceDiagnostic {
             observed_protocol: 23,
@@ -1053,6 +1162,7 @@ fn tui_strips_control_characters_from_external_strings() {
             next_action: "upgrade\u{1b} now".into(),
         }),
         agents,
+        workspaces: None,
     });
 
     for (width, height, scene_view) in [
@@ -1075,5 +1185,9 @@ fn tui_strips_control_characters_from_external_strings() {
             .content
             .iter()
             .all(|cell| !cell.symbol().chars().any(char::is_control)));
+        let output = text(&buffer);
+        assert!(output.contains("MISE — DEMO SERVICE"), "{output}");
+        assert!(output.contains("Herdr protocol is unsupported"), "{output}");
+        assert!(output.contains("upgrade now"), "{output}");
     }
 }

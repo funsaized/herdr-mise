@@ -1,6 +1,6 @@
 use crate::protocol::{
     AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic,
-    SourceStatus,
+    SourceStatus, WorkspaceRecord,
 };
 use chrono::DateTime;
 
@@ -22,6 +22,7 @@ pub struct AgentTable {
     source_diagnostic: Option<SourceDiagnostic>,
     agents: Vec<AgentRecord>,
     board: Vec<BoardEntry>,
+    workspaces: Vec<WorkspaceRecord>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -42,6 +43,7 @@ impl Default for AgentTable {
             source_diagnostic: None,
             agents: Vec::new(),
             board: Vec::new(),
+            workspaces: Vec::new(),
         }
     }
 }
@@ -54,11 +56,16 @@ impl AgentTable {
                 source_status,
                 source_diagnostic,
                 agents,
+                workspaces,
                 ..
             } => {
+                if mode != self.mode {
+                    self.board.clear();
+                }
                 self.mode = mode;
                 self.source_status = source_status;
                 self.source_diagnostic = source_diagnostic;
+                self.workspaces = workspaces.unwrap_or_default();
                 let prior_agents = std::mem::take(&mut self.agents);
                 for agent in agents {
                     if agent.state == AgentState::Ended {
@@ -118,9 +125,13 @@ impl AgentTable {
         &self.board
     }
     pub fn service_summary(&self) -> ServiceSummary {
-        let known = self
-            .agents
+        self.service_summary_scoped(None)
+    }
+    pub fn service_summary_scoped(&self, scope: Option<&str>) -> ServiceSummary {
+        let agents = self.scoped_agents(scope).collect::<Vec<_>>();
+        let known = agents
             .iter()
+            .copied()
             .filter(|agent| agent.state_known != Some(false));
         ServiceSummary {
             working: known
@@ -134,12 +145,11 @@ impl AgentTable {
             plated: known
                 .filter(|agent| agent.state == AgentState::Done)
                 .count(),
-            unknown: self
-                .agents
+            unknown: agents
                 .iter()
                 .filter(|agent| agent.state_known == Some(false))
                 .count(),
-            visible: self.agents.len(),
+            visible: agents.len(),
             hidden_done: 0,
         }
     }
@@ -162,6 +172,37 @@ impl AgentTable {
         blocked
     }
 
+    pub fn workspaces(&self) -> &[WorkspaceRecord] {
+        &self.workspaces
+    }
+
+    pub fn workspace(&self, id: &str) -> Option<&WorkspaceRecord> {
+        self.workspaces.iter().find(|workspace| workspace.id == id)
+    }
+
+    pub fn scoped_agents<'a>(
+        &'a self,
+        scope: Option<&'a str>,
+    ) -> impl Iterator<Item = &'a AgentRecord> + 'a {
+        self.agents.iter().filter(move |agent| match scope {
+            Some(id) => agent.workspace_id.as_deref() == Some(id),
+            None => true,
+        })
+    }
+
+    pub fn blocked_elsewhere(&self, scope: Option<&str>) -> usize {
+        match scope {
+            Some(id) => self
+                .agents
+                .iter()
+                .filter(|agent| {
+                    agent.state == AgentState::Blocked && agent.workspace_id.as_deref() != Some(id)
+                })
+                .count(),
+            None => 0,
+        }
+    }
+
     fn upsert(&mut self, agent: AgentRecord) {
         let existing = self.agents.iter().position(|entry| entry.id == agent.id);
         if agent.state == AgentState::Ended {
@@ -179,7 +220,7 @@ impl AgentTable {
             if let Some(index) = self
                 .board
                 .iter()
-                .rposition(|entry| same_pane(&entry.id, &agent.id))
+                .rposition(|entry| same_identity(&entry.id, &agent.id))
             {
                 let mut existing = self.board.remove(index);
                 existing.name = agent.name;
@@ -193,7 +234,7 @@ impl AgentTable {
             && self
                 .board
                 .iter()
-                .any(|entry| same_pane(&entry.id, &agent.id))
+                .any(|entry| same_identity(&entry.id, &agent.id))
         {
             format!("{}:{}", agent.id, self.board.len())
         } else {
@@ -216,8 +257,8 @@ impl AgentTable {
     }
 }
 
-fn same_pane(entry_id: &str, pane_id: &str) -> bool {
-    entry_id == pane_id || entry_id.starts_with(&format!("{pane_id}:"))
+fn same_identity(entry_id: &str, agent_id: &str) -> bool {
+    entry_id == agent_id || entry_id.starts_with(&format!("{agent_id}:"))
 }
 
 #[cfg(test)]
@@ -238,6 +279,8 @@ mod tests {
         AgentRecord {
             state_known: None,
             id: id.into(),
+            pane_id: None,
+            agent_kind: None,
             name: format!("cook-{id}"),
             state,
             progress: None,
@@ -245,6 +288,7 @@ mod tests {
             accent_index: 0,
             model: "codex".into(),
             workspace: format!("/work/{id}"),
+            workspace_id: None,
             session: SessionStats {
                 tickets_available: None,
                 runtime_ms,
@@ -502,6 +546,46 @@ mod tests {
         table_snapshot_duplicate_assertion(first_a, last_a);
     }
 
+    #[test]
+    fn workspace_scope_filters_agents_and_counts_global_blocked_elsewhere() {
+        let mut here = record("here", AgentState::Working, 0, 0);
+        here.workspace_id = Some("ws-1".into());
+        let mut elsewhere = record("elsewhere", AgentState::Blocked, 0, 0);
+        elsewhere.workspace_id = Some("ws-2".into());
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![here, elsewhere],
+            workspaces: Some(vec![
+                WorkspaceRecord {
+                    id: "ws-1".into(),
+                    label: "same".into(),
+                },
+                WorkspaceRecord {
+                    id: "ws-2".into(),
+                    label: "same".into(),
+                },
+                WorkspaceRecord {
+                    id: "ws-empty".into(),
+                    label: "empty".into(),
+                },
+            ]),
+        });
+        assert_eq!(
+            table
+                .scoped_agents(Some("ws-1"))
+                .map(|a| a.id.as_str())
+                .collect::<Vec<_>>(),
+            ["here"]
+        );
+        assert_eq!(table.scoped_agents(Some("ws-empty")).count(), 0);
+        assert_eq!(table.blocked_elsewhere(Some("ws-1")), 1);
+        assert_eq!(table.blocked_elsewhere(None), 0);
+    }
+
     fn table_snapshot_duplicate_assertion(first_a: AgentRecord, last_a: AgentRecord) {
         let mut table = AgentTable::default();
         table.apply(AgentStateEvent::Snapshot {
@@ -514,6 +598,7 @@ mod tests {
                 record("b", AgentState::Working, 20, 2),
                 last_a.clone(),
             ],
+            workspaces: None,
         });
         let agents = table.agents().collect::<Vec<_>>();
         assert_eq!(

@@ -70,6 +70,8 @@ fn record(index: usize, step: u64, started_at: DateTime<Utc>) -> AgentRecord {
         } else {
             format!("demo-{index}")
         },
+        pane_id: None,
+        agent_kind: None,
         name,
         state,
         progress,
@@ -84,6 +86,7 @@ fn record(index: usize, step: u64, started_at: DateTime<Utc>) -> AgentRecord {
             .map(|value| value.workspace)
             .unwrap_or("/demo/overflow")
             .to_owned(),
+        workspace_id: Some(format!("demo-workspace-{index}")),
         session: SessionStats {
             tickets_available: Some(true),
             runtime_ms: observed_step * 1_000,

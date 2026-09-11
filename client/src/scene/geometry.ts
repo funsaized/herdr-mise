@@ -34,15 +34,40 @@ export function stationWorkspaceLabel(workspace: string) {
 }
 
 export function compactPixelText(value: string, maxCharacters = 30) {
-  const text = value.trim();
-  if (text.length <= maxCharacters) return text;
+  const text = Array.from(value.trim());
+  if (text.length <= maxCharacters) return text.join("");
   if (maxCharacters <= 3) return ".".repeat(Math.max(0, maxCharacters));
-  return `${text.slice(0, maxCharacters - 3)}...`;
+  return `${text.slice(0, maxCharacters - 3).join("")}...`;
+}
+
+function compactIdentity(value: string, maxCharacters: number) {
+  const points = Array.from(value);
+  if (points.length <= maxCharacters) return value;
+  if (maxCharacters <= 1) return points.slice(-maxCharacters).join("");
+  const head = Math.floor((maxCharacters - 1) / 2);
+  return `${points.slice(0, head).join("")}…${points.slice(-(maxCharacters - head - 1)).join("")}`;
+}
+
+export function stationCollisionIds(
+  agents: readonly Pick<AgentMachine, "id" | "name" | "workspace">[],
+) {
+  const identities = agents.map(
+      (agent) =>
+        `${agent.name.toUpperCase()}\0${workspaceDisplayName(agent.workspace).toUpperCase()}`,
+    ),
+    counts = new Map<string, number>();
+  for (const identity of identities)
+    counts.set(identity, (counts.get(identity) ?? 0) + 1);
+  return new Set(
+    agents
+      .filter((_, index) => (counts.get(identities[index]!) ?? 0) > 1)
+      .map((agent) => agent.id),
+  );
 }
 
 export function stationIdentityLabels(
   agent: Pick<AgentMachine, "name" | "workspace"> &
-    Partial<Pick<AgentMachine, "answerReceivedUntil">>,
+    Partial<Pick<AgentMachine, "id" | "paneId" | "answerReceivedUntil">>,
   state: AgentMachine["targetState"],
   now = Date.now(),
   maxCharacters = 30,
@@ -50,15 +75,34 @@ export function stationIdentityLabels(
     BlockedPlacement,
     "kind" | "queueOrdinal" | "queueTotal"
   >,
+  colliding = false,
 ) {
   const workspace = workspaceDisplayName(agent.workspace).toUpperCase(),
     agentName = agent.name.toUpperCase(),
-    compactName =
-      maxCharacters <= agentName.length
-        ? agentName.length <= maxCharacters
-          ? agentName
-          : `${agentName.slice(0, Math.floor((maxCharacters - 3) / 2))}...${agentName.slice(-Math.ceil((maxCharacters - 3) / 2))}`
-        : compactPixelText(`${agentName} · ${workspace}`, maxCharacters),
+    base = `${agentName} · ${workspace}`,
+    identity = colliding ? (agent.paneId ?? agent.id) : undefined,
+    identityPoints = Array.from(identity ?? ""),
+    locatorBudget = Math.max(0, maxCharacters - 1),
+    locator = identity
+      ? locatorBudget <= 3
+        ? identityPoints.slice(identityPoints.length - locatorBudget).join("")
+        : ` · ${compactIdentity(identity, locatorBudget - 3)}`
+      : "",
+    available = Math.max(0, maxCharacters - Array.from(locator).length),
+    namePoints = Array.from(agentName),
+    basePoints = Array.from(base),
+    workspacePoints = Array.from(workspace),
+    compactBase =
+      available <= 3
+        ? ".".repeat(available)
+        : basePoints.length <= available
+          ? base
+          : namePoints.length >= available
+            ? workspacePoints.length + 5 <= available
+              ? `${basePoints.slice(0, Math.floor((available - 3) / 2)).join("")}...${basePoints.slice(-Math.ceil((available - 3) / 2)).join("")}`
+              : `${namePoints.slice(0, Math.floor((available - 3) / 2)).join("")}...${namePoints.slice(-Math.ceil((available - 3) / 2)).join("")}`
+            : compactPixelText(base, available),
+    compactName = `${compactBase}${locator}`,
     labels = {
       idle: "PREP",
       working: "FIRE",
@@ -75,7 +119,7 @@ export function stationIdentityLabels(
   return {
     name: compactName,
     status,
-    signature: `${agent.name}:${agent.workspace}`,
+    signature: `${agent.name}:${agent.workspace}${identity ? `:${identity}` : ""}`,
   };
 }
 
@@ -116,10 +160,12 @@ export function blockedPlacements(
   layout: SceneLayout,
   blockedIds: readonly string[],
   occupied: readonly BlockedPlacement[] = [],
+  globalStationIds: readonly string[] = layout.visibleIds,
 ) {
-  const stationIds = new Set(layout.stations.map((station) => station.id)),
-    ordered = blockedIds.filter((id) => stationIds.has(id)),
-    total = ordered.length,
+  const blockedSet = new Set(blockedIds),
+    ordered = layout.visibleIds.filter((id) => blockedSet.has(id)),
+    globalOrder = globalStationIds.filter((id) => blockedSet.has(id)),
+    total = globalOrder.length,
     placements = new Map<string, BlockedPlacement>(),
     u = layout.unit,
     blocked = tokens.scene.layout.blocked,
@@ -140,7 +186,7 @@ export function blockedPlacements(
     right = bell.x - blocked.passInset * u;
   let cursor = left,
     overflow = false;
-  ordered.forEach((id, index) => {
+  ordered.forEach((id) => {
     const station = layout.stations.find((item) => item.id === id)!,
       scale = station.scale,
       cookWidth = blocked.cookWidth * u * scale,
@@ -176,7 +222,7 @@ export function blockedPlacements(
         return {
           id,
           kind: "station",
-          queueOrdinal: index + 1,
+          queueOrdinal: globalOrder.indexOf(id) + 1,
           queueTotal: total,
           cook,
           cookBounds: {
@@ -206,7 +252,7 @@ export function blockedPlacements(
           next: BlockedPlacement = {
             id,
             kind: "pass",
-            queueOrdinal: index + 1,
+            queueOrdinal: globalOrder.indexOf(id) + 1,
             queueTotal: total,
             cook,
             cookBounds: {

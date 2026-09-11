@@ -51,6 +51,8 @@
       ],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "paneId": { "type": "string", "minLength": 1 },
+        "agentKind": { "type": "string", "minLength": 1 },
         "stateKnown": { "type": "boolean" },
         "name": { "type": "string", "minLength": 1 },
         "state": { "enum": ["idle", "working", "blocked", "done", "ended"] },
@@ -64,6 +66,7 @@
         "accentIndex": { "type": "integer", "minimum": 0, "maximum": 11 },
         "model": { "type": "string" },
         "workspace": { "type": "string" },
+        "workspaceId": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "session": {
           "type": "object",
           "additionalProperties": false,
@@ -76,6 +79,15 @@
         }
       }
     },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "label": { "type": "string", "maxLength": 4096 }
+      }
+    },
     "snapshot": {
       "type": "object",
       "additionalProperties": false,
@@ -86,7 +98,12 @@
         "mode": { "$ref": "#/$defs/mode" },
         "sourceStatus": { "$ref": "#/$defs/sourceStatus" },
         "sourceDiagnostic": { "$ref": "#/$defs/sourceDiagnostic" },
-        "agents": { "type": "array", "items": { "$ref": "#/$defs/agent" } }
+        "agents": { "type": "array", "items": { "$ref": "#/$defs/agent" } },
+        "workspaces": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/workspace" }
+        }
       }
     },
     "upsertDelta": {

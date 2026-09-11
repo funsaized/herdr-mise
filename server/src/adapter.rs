@@ -15,7 +15,12 @@ use tokio::{
     time::timeout,
 };
 
-use crate::protocol::{AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus};
+use crate::protocol::{
+    AgentRecord, AgentState, SessionStats, SourceDiagnostic, SourceStatus, WorkspaceRecord,
+};
+
+const MAX_TEXT_UTF16_UNITS: usize = 4096;
+const MAX_FEED_FRAME_UTF16_UNITS: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +61,11 @@ pub enum AdapterError {
     Json(#[from] serde_json::Error),
     #[error("remote error: {0}")]
     Remote(String),
+    #[error("incompatible snapshot: {next_action}")]
+    IncompatibleSnapshot {
+        observed_protocol: u64,
+        next_action: &'static str,
+    },
     #[error("unsupported herdr protocol: {0}")]
     Protocol(u64),
     #[error("missing snapshot result")]
@@ -68,9 +78,10 @@ impl AdapterError {
             Self::Io(_) => SourceStatus::UnavailableSocket,
             Self::Timeout => SourceStatus::Timeout,
             Self::Protocol(_) => SourceStatus::UnsupportedProtocol,
-            Self::Json(_) | Self::Remote(_) | Self::MissingSnapshot => {
-                SourceStatus::IncompatibleResponse
-            }
+            Self::Json(_)
+            | Self::Remote(_)
+            | Self::IncompatibleSnapshot { .. }
+            | Self::MissingSnapshot => SourceStatus::IncompatibleResponse,
         }
     }
 
@@ -81,6 +92,14 @@ impl AdapterError {
                 supported_protocols: supported_protocols(),
                 next_action: "upgrade or downgrade Herdr to a tested release, then retry"
                     .to_owned(),
+            }),
+            Self::IncompatibleSnapshot {
+                observed_protocol,
+                next_action,
+            } => Some(SourceDiagnostic {
+                observed_protocol: *observed_protocol,
+                supported_protocols: supported_protocols(),
+                next_action: (*next_action).to_owned(),
             }),
             _ => None,
         }
@@ -96,6 +115,7 @@ struct Workspace {
 
 #[derive(Debug, Clone, Deserialize)]
 struct RawAgent {
+    terminal_id: String,
     pane_id: String,
     #[serde(default)]
     workspace_id: String,
@@ -108,6 +128,8 @@ struct RawAgent {
     #[serde(default)]
     title: Option<String>,
     agent_status: RawStatus,
+    #[serde(default)]
+    state_change_seq: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -133,7 +155,7 @@ struct RawSnapshot {
 #[derive(Debug, Default)]
 pub struct Normalizer {
     previous_ids: HashSet<String>,
-    entered_at: HashMap<String, (AgentState, bool, String)>,
+    entered_at: HashMap<String, (AgentState, bool, String, Option<u64>)>,
     first_seen: HashMap<String, String>,
 }
 
@@ -141,6 +163,7 @@ pub struct Normalizer {
 pub struct NormalizedSnapshot {
     pub agents: Vec<AgentRecord>,
     pub ended_ids: Vec<String>,
+    pub workspaces: Vec<WorkspaceRecord>,
 }
 
 impl Normalizer {
@@ -163,22 +186,77 @@ impl Normalizer {
         // The product version is intentionally descriptive so patch releases keep working.
         let _server_version = &raw.version;
         let _ = (&raw.tabs, &raw.layouts);
-        let workspaces: HashMap<_, _> = raw
-            .workspaces
-            .into_iter()
-            .map(|w| (w.workspace_id, w.label))
-            .collect();
+        if raw.workspaces.len() > 4096 {
+            return Err(AdapterError::Remote(
+                "snapshot exceeds 4096 workspace limit".into(),
+            ));
+        }
+        let mut workspace_labels = HashMap::new();
+        let mut workspaces = Vec::new();
+        for workspace in raw.workspaces {
+            if workspace.workspace_id.is_empty() {
+                continue;
+            }
+            if workspace.workspace_id.len() > 4096 {
+                return Err(AdapterError::Remote(
+                    "workspace identity exceeds 4096 byte limit".into(),
+                ));
+            }
+            if workspace_labels.contains_key(&workspace.workspace_id) {
+                continue;
+            }
+            let label = truncate_utf16(workspace.label);
+            workspace_labels.insert(workspace.workspace_id.clone(), label.clone());
+            workspaces.push(WorkspaceRecord {
+                id: workspace.workspace_id,
+                label,
+            });
+        }
+        workspaces.sort_by(|a, b| a.id.cmp(&b.id));
         let source = raw.agents;
         if source.len() > 4096 {
             return Err(AdapterError::Remote(
                 "snapshot exceeds 4096 agent limit".into(),
             ));
         }
-        let mut current = HashSet::new();
+        let mut current = HashSet::with_capacity(source.len());
+        for agent in &source {
+            if agent.terminal_id.trim().is_empty()
+                || agent.terminal_id.encode_utf16().count() > MAX_TEXT_UTF16_UNITS
+                || agent.pane_id.trim().is_empty()
+                || agent.pane_id.encode_utf16().count() > MAX_TEXT_UTF16_UNITS
+                || agent.pane_id.chars().any(char::is_control)
+            {
+                return Err(AdapterError::IncompatibleSnapshot {
+                    observed_protocol: raw.protocol,
+                    next_action:
+                        "ensure every agent has a valid terminal identity and pane locator, then retry",
+                });
+            }
+            if !current.insert(agent.terminal_id.clone()) {
+                return Err(AdapterError::IncompatibleSnapshot {
+                    observed_protocol: raw.protocol,
+                    next_action:
+                        "ensure terminal identities are unique within the Herdr snapshot, then retry",
+                });
+            }
+        }
         let mut agents = Vec::with_capacity(source.len());
+        let mut entered_at = self.entered_at.clone();
+        let mut first_seen = self.first_seen.clone();
         for agent in source {
-            let id = agent.pane_id.clone();
-            current.insert(id.clone());
+            if agent.workspace_id.len() > 4096 {
+                return Err(AdapterError::Remote(
+                    "agent workspace identity exceeds 4096 byte limit".into(),
+                ));
+            }
+            let id = agent.terminal_id.clone();
+            let agent_kind = agent
+                .agent
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| truncate_utf16(value.to_owned()));
             let state_known = !matches!(agent.agent_status, RawStatus::Unknown);
             let state = match agent.agent_status {
                 RawStatus::Idle | RawStatus::Unknown => AgentState::Idle,
@@ -186,30 +264,52 @@ impl Normalizer {
                 RawStatus::Blocked => AgentState::Blocked,
                 RawStatus::Done => AgentState::Done,
             };
-            let stamp = match self.entered_at.get(&id) {
-                Some((old, known, stamp)) if old == &state && *known == state_known => {
-                    stamp.clone()
+            let stamp = match entered_at.get(&id) {
+                Some((old, known, stamp, previous_sequence))
+                    if old == &state && *known == state_known =>
+                {
+                    if matches!(
+                        (*previous_sequence, agent.state_change_seq),
+                        (Some(previous), Some(current)) if current > previous
+                    ) {
+                        received_at.to_owned()
+                    } else {
+                        stamp.clone()
+                    }
                 }
-                _ => {
-                    self.entered_at.insert(
-                        id.clone(),
-                        (state.clone(), state_known, received_at.to_owned()),
-                    );
-                    received_at.to_owned()
-                }
+                _ => received_at.to_owned(),
             };
-            let name = [agent.name, agent.display_agent, agent.agent, agent.title]
+            entered_at.insert(
+                id.clone(),
+                (
+                    state.clone(),
+                    state_known,
+                    stamp.clone(),
+                    agent.state_change_seq,
+                ),
+            );
+            let name = truncate_utf16(
+                [
+                    agent.name,
+                    agent.display_agent,
+                    agent.agent.clone(),
+                    agent.title,
+                ]
                 .into_iter()
                 .flatten()
                 .find(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| format!("agent-{}", agent.pane_id));
-            let workspace = workspaces
-                .get(&agent.workspace_id)
-                .filter(|s| !s.is_empty())
-                .cloned()
-                .unwrap_or(agent.workspace_id);
-            let started = self
-                .first_seen
+                .unwrap_or_else(|| format!("agent-{}", agent.pane_id)),
+            );
+            let workspace_id = (!agent.workspace_id.is_empty() && agent.workspace_id.len() <= 4096)
+                .then(|| agent.workspace_id.clone());
+            let workspace = truncate_utf16(
+                workspace_labels
+                    .get(&agent.workspace_id)
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+                    .unwrap_or(agent.workspace_id),
+            );
+            let started = first_seen
                 .entry(id.clone())
                 .or_insert_with(|| received_at.to_owned())
                 .clone();
@@ -217,12 +317,15 @@ impl Normalizer {
                 state_known: Some(state_known),
                 accent_index: accent(&id),
                 id,
+                pane_id: Some(agent.pane_id),
+                agent_kind,
                 name,
                 state,
                 progress: None,
                 state_entered_at: stamp,
                 model: String::new(),
                 workspace,
+                workspace_id,
                 session: SessionStats {
                     tickets_available: Some(false),
                     runtime_ms: mise_runtime_ms(&started, received_at),
@@ -233,12 +336,38 @@ impl Normalizer {
         agents.sort_by(|a, b| a.id.cmp(&b.id));
         let ended_ids: Vec<String> = self.previous_ids.difference(&current).cloned().collect();
         for id in &ended_ids {
-            self.first_seen.remove(id);
-            self.entered_at.remove(id);
+            first_seen.remove(id);
+            entered_at.remove(id);
         }
+        if serde_json::to_string(&(&agents, &workspaces))?
+            .encode_utf16()
+            .count()
+            > MAX_FEED_FRAME_UTF16_UNITS - 256
+        {
+            return Err(AdapterError::Remote(
+                "normalized snapshot exceeds browser frame limit".into(),
+            ));
+        }
+        self.first_seen = first_seen;
+        self.entered_at = entered_at;
         self.previous_ids = current;
-        Ok(NormalizedSnapshot { agents, ended_ids })
+        Ok(NormalizedSnapshot {
+            agents,
+            ended_ids,
+            workspaces,
+        })
     }
+}
+
+fn truncate_utf16(value: String) -> String {
+    let mut units = 0;
+    value
+        .chars()
+        .take_while(|character| {
+            units += character.len_utf16();
+            units <= MAX_TEXT_UTF16_UNITS
+        })
+        .collect()
 }
 
 fn mise_runtime_ms(started_at: &str, received_at: &str) -> u64 {
@@ -423,8 +552,69 @@ mod tests {
             .unwrap();
         assert_eq!(again.agents[0].state_entered_at, "2026-07-31T00:01:00Z");
     }
+
+    #[test]
+    fn state_sequence_marks_only_verified_same_state_reentry() {
+        let baseline: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ))
+        .unwrap();
+        let advanced: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/snapshot-herdr-0.8.2-p20-state-sequence-advanced.json"
+        ))
+        .unwrap();
+        let mut normalizer = Normalizer::default();
+        let stamp = |normalizer: &mut Normalizer, snapshot: Value, received_at: &str| {
+            normalizer
+                .normalize_snapshot_value(snapshot, received_at)
+                .unwrap()
+                .agents[0]
+                .state_entered_at
+                .clone()
+        };
+
+        assert_eq!(stamp(&mut normalizer, baseline.clone(), "t0"), "t0");
+        assert_eq!(stamp(&mut normalizer, baseline.clone(), "t1"), "t0");
+        assert_eq!(stamp(&mut normalizer, advanced.clone(), "t2"), "t2");
+
+        let mut absent = advanced.clone();
+        absent["agents"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("state_change_seq");
+        assert_eq!(stamp(&mut normalizer, absent, "t3"), "t2");
+        assert_eq!(stamp(&mut normalizer, advanced.clone(), "t4"), "t2");
+
+        let mut regressed = advanced.clone();
+        regressed["agents"][0]["state_change_seq"] = json!(1);
+        assert_eq!(stamp(&mut normalizer, regressed, "t5"), "t2");
+        assert_eq!(stamp(&mut normalizer, baseline.clone(), "t6"), "t6");
+
+        let absent_release: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/snapshot-herdr-0.7.5-p17.json"
+        ))
+        .unwrap();
+        let mut fallback = Normalizer::default();
+        assert_eq!(stamp(&mut fallback, absent_release.clone(), "f0"), "f0");
+        assert_eq!(stamp(&mut fallback, absent_release.clone(), "f1"), "f0");
+
+        let mut blocked = baseline.clone();
+        blocked["agents"][0]["agent_status"] = json!("blocked");
+        assert_eq!(stamp(&mut normalizer, blocked, "t7"), "t7");
+        let mut idle = baseline.clone();
+        idle["agents"][0]["agent_status"] = json!("idle");
+        assert_eq!(stamp(&mut normalizer, idle.clone(), "t8"), "t8");
+        idle["agents"][0]["agent_status"] = json!("unknown");
+        assert_eq!(stamp(&mut normalizer, idle, "t9"), "t9");
+
+        let released = normalizer
+            .normalize_snapshot_value(absent_release, "t10")
+            .unwrap();
+        assert_eq!(released.ended_ids, vec!["fictional-terminal-20"]);
+        assert!(!normalizer.entered_at.contains_key("fictional-terminal-20"));
+    }
     fn raw(status: &str) -> Value {
-        json!({"version":"0.7.5","protocol":17,"workspaces":[{"workspace_id":"ws-1","label":"demo"}],"tabs":[],"panes":[],"layouts":[],"agents":[{"pane_id":"p-1","workspace_id":"ws-1","agent":"codex","agent_status":status,"agent_session":null}]})
+        json!({"version":"0.7.5","protocol":17,"workspaces":[{"workspace_id":"ws-1","label":"demo"}],"tabs":[],"panes":[],"layouts":[],"agents":[{"terminal_id":"t-1","pane_id":"p-1","workspace_id":"ws-1","agent":"codex","agent_status":status,"agent_session":null}]})
     }
     #[test]
     fn joins_and_defaults() {
@@ -433,11 +623,91 @@ mod tests {
             .normalize_snapshot_value(raw("working"), "2026-07-31T00:00:00Z")
             .unwrap();
         let a = &out.agents[0];
-        assert_eq!(a.id, "p-1");
+        assert_eq!(a.id, "t-1");
+        assert_eq!(a.pane_id.as_deref(), Some("p-1"));
         assert_eq!(a.workspace, "demo");
+        assert_eq!(a.workspace_id.as_deref(), Some("ws-1"));
         assert_eq!(a.progress, None);
         assert_eq!(a.model, "");
         assert_eq!(a.session.runtime_ms, 0);
+    }
+    #[test]
+    fn workspace_scope_catalog_keeps_empty_deduplicated_ids_and_unknown_agent_identity() {
+        let value = json!({
+            "version":"0.8.0","protocol":19,"tabs":[],"panes":[],"layouts":[],
+            "workspaces":[
+                {"workspace_id":"ws-b","label":"same"},
+                {"workspace_id":"ws-a","label":"same"},
+                {"workspace_id":"ws-a","label":"ignored"}
+            ],
+            "agents":[{"terminal_id":"t-1","pane_id":"p-1","workspace_id":"ws-unknown","agent":"codex","agent_status":"blocked"}]
+        });
+        let out = Normalizer::default()
+            .normalize_snapshot_value(value, "2026-07-31T00:00:00Z")
+            .unwrap();
+        assert_eq!(
+            out.workspaces
+                .iter()
+                .map(|w| w.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ws-a", "ws-b"]
+        );
+        assert_eq!(out.agents[0].workspace, "ws-unknown");
+        assert_eq!(out.agents[0].workspace_id.as_deref(), Some("ws-unknown"));
+    }
+    #[test]
+    fn bounds_fixture_labels_for_browser_decoding() {
+        let mut snapshot: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        snapshot["result"]["snapshot"]["agents"][0]["name"] = json!("😀".repeat(4096));
+        snapshot["result"]["snapshot"]["workspaces"][0]["label"] =
+            json!("workspace😀".repeat(4096));
+        let normalized = Normalizer::default()
+            .normalize_snapshot_value(snapshot, "2026-07-31T00:00:00Z")
+            .unwrap();
+        let agent = &normalized.agents[0];
+
+        assert_eq!(agent.name.encode_utf16().count(), MAX_TEXT_UTF16_UNITS);
+        assert!(agent.workspace.encode_utf16().count() <= MAX_TEXT_UTF16_UNITS);
+        assert!(!agent.name.is_empty());
+        assert!(serde_json::to_string(agent).unwrap().len() < MAX_FRAME_BYTES);
+
+        let mut amplified: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        amplified["result"]["snapshot"]["workspaces"][0]["label"] = json!("😀".repeat(2048));
+        let template = amplified["result"]["snapshot"]["agents"][0].clone();
+        amplified["result"]["snapshot"]["agents"] = Value::Array(
+            (0..4096)
+                .map(|index| {
+                    let mut agent = template.clone();
+                    agent["terminal_id"] = json!(format!("t-{index}"));
+                    agent["pane_id"] = json!(format!("p-{index}"));
+                    agent
+                })
+                .collect(),
+        );
+        assert!(matches!(
+            Normalizer::default()
+                .normalize_snapshot_value(amplified, "2026-07-31T00:00:00Z"),
+            Err(AdapterError::Remote(message))
+                if message == "normalized snapshot exceeds browser frame limit"
+        ));
+
+        let mut workspace_heavy: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/snapshot-working.json")).unwrap();
+        workspace_heavy["result"]["snapshot"]["agents"] = json!([]);
+        workspace_heavy["result"]["snapshot"]["workspaces"] = json!((0..1_200)
+            .map(|index| json!({
+                "workspace_id": format!("ws-{index}"),
+                "label": "w".repeat(MAX_TEXT_UTF16_UNITS),
+            }))
+            .collect::<Vec<_>>());
+        assert!(matches!(
+            Normalizer::default()
+                .normalize_snapshot_value(workspace_heavy, "2026-07-31T00:00:00Z"),
+            Err(AdapterError::Remote(message))
+                if message == "normalized snapshot exceeds browser frame limit"
+        ));
     }
     #[test]
     fn mise_time_accumulates_from_first_sighting_and_resets_on_end() {
@@ -471,7 +741,7 @@ mod tests {
         let out = n
             .normalize_snapshot_value(json!({"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}), "b")
             .unwrap();
-        assert_eq!(out.ended_ids, vec!["p-1"]);
+        assert_eq!(out.ended_ids, vec!["t-1"]);
     }
 
     #[test]
@@ -488,8 +758,8 @@ mod tests {
             .normalize_snapshot_value(snapshot, "after-message")
             .unwrap();
 
-        assert_eq!(first.agents[0].id, "p-1");
-        assert_eq!(after_message.agents[0].id, "p-1");
+        assert_eq!(first.agents[0].id, "t-1");
+        assert_eq!(after_message.agents[0].id, "t-1");
         assert!(after_message.ended_ids.is_empty());
     }
     #[test]
@@ -502,6 +772,40 @@ mod tests {
         assert!(n
             .normalize_snapshot_value(json!({"version":"0.7.5","protocol":17,"agents":[{}],"workspaces":[],"tabs":[],"panes":[],"layouts":[]}), "a")
             .is_err());
+    }
+
+    #[test]
+    fn rejects_empty_or_duplicate_identity_before_mutating_lifecycle_state() {
+        let mut normalizer = Normalizer::default();
+        normalizer
+            .normalize_snapshot_value(raw("working"), "2026-07-31T00:00:00Z")
+            .unwrap();
+        let before = (
+            normalizer.previous_ids.clone(),
+            normalizer.entered_at.clone(),
+            normalizer.first_seen.clone(),
+        );
+        for (invalid, expected) in [
+            (
+                json!({"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[{"terminal_id":"","pane_id":"p","agent_status":"idle"}]}),
+                "valid terminal identity and pane locator",
+            ),
+            (
+                json!({"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[{"terminal_id":"same","pane_id":"p-1","agent_status":"idle"},{"terminal_id":"same","pane_id":"p-2","agent_status":"idle"}]}),
+                "terminal identities are unique",
+            ),
+        ] {
+            let error = normalizer
+                .normalize_snapshot_value(invalid, "later")
+                .expect_err("invalid identity");
+            assert!(matches!(&error, AdapterError::IncompatibleSnapshot { .. }));
+            assert!(error
+                .source_diagnostic()
+                .is_some_and(|diagnostic| diagnostic.next_action.contains(expected)));
+            assert_eq!(normalizer.previous_ids, before.0);
+            assert_eq!(normalizer.entered_at, before.1);
+            assert_eq!(normalizer.first_seen, before.2);
+        }
     }
 
     #[test]
@@ -559,30 +863,34 @@ mod tests {
         let cases = [
             (
                 include_str!("../tests/fixtures/snapshot-herdr-0.7.5-p17.json"),
+                "fictional-terminal-17",
                 "fictional-pane-17",
                 AgentState::Working,
                 "Example Kitchen",
             ),
             (
                 include_str!("../tests/fixtures/snapshot-herdr-0.8.0-p19.json"),
+                "fictional-terminal-19",
                 "fictional-pane-19",
                 AgentState::Blocked,
                 "/work/example-pantry",
             ),
             (
                 include_str!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json"),
+                "fictional-terminal-20",
                 "fictional-pane-20",
                 AgentState::Working,
                 "Example Kitchen",
             ),
         ];
-        for (fixture, id, state, workspace) in cases {
+        for (fixture, id, pane_id, state, workspace) in cases {
             let mut normalizer = Normalizer::default();
             let normalized = normalizer
                 .normalize_snapshot_value(serde_json::from_str(fixture).unwrap(), "fixture-time")
                 .unwrap();
             assert_eq!(normalized.agents.len(), 1);
             assert_eq!(normalized.agents[0].id, id);
+            assert_eq!(normalized.agents[0].pane_id.as_deref(), Some(pane_id));
             assert_eq!(normalized.agents[0].state, state);
             assert_eq!(normalized.agents[0].workspace, workspace);
         }
@@ -602,6 +910,7 @@ mod tests {
             "panes": [],
             "layouts": [],
             "agents": [{
+                "terminal_id": "t-1",
                 "pane_id": "p-1",
                 "workspace_id": "ws-1",
                 "agent": "codex",
@@ -617,6 +926,8 @@ mod tests {
 
         assert_eq!(snapshot.agents.len(), 1);
         assert_eq!(snapshot.agents[0].state, AgentState::Working);
+        assert_eq!(snapshot.agents[0].agent_kind.as_deref(), Some("codex"));
+        assert!(snapshot.agents[0].model.is_empty());
     }
 
     #[test]
@@ -646,6 +957,7 @@ mod tests {
             "panes": [],
             "layouts": [],
             "agents": [{
+                "terminal_id": "t-unknown",
                 "pane_id": "p-unknown",
                 "workspace_id": "",
                 "agent": "codex",

@@ -61,6 +61,10 @@ pub struct AgentRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_known: Option<bool>,
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_kind: Option<String>,
     pub name: String,
     pub state: AgentState,
     pub progress: Option<f64>,
@@ -68,7 +72,16 @@ pub struct AgentRecord {
     pub accent_index: u8,
     pub model: String,
     pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
     pub session: SessionStats,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRecord {
+    pub id: String,
+    pub label: String,
 }
 
 impl SessionStats {
@@ -95,6 +108,8 @@ pub enum AgentStateEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         source_diagnostic: Option<SourceDiagnostic>,
         agents: Vec<AgentRecord>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspaces: Option<Vec<WorkspaceRecord>>,
     },
     Delta {
         version: u8,
@@ -133,6 +148,7 @@ mod tests {
             "snapshot.v1.json",
             "snapshot-provenance.v1.json",
             "snapshot-demo-unsupported.v1.json",
+            "snapshot-workspaces.v1.json",
             "delta-upsert.v1.json",
             "delta-remove.v1.json",
             "heartbeat.v1.json",

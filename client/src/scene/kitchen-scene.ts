@@ -1,5 +1,6 @@
 import {
   Application,
+  CanvasTextMetrics,
   CanvasTextPipe,
   CanvasTextSystem,
   Container,
@@ -30,6 +31,7 @@ import { tokens } from "../theme/tokens";
 import {
   computeFreezerLayout,
   computeLayout,
+  reconcileStationSlots,
   type FreezerLayout,
   type Rect,
   type SceneLayout,
@@ -61,6 +63,7 @@ import {
   passBellGeometry,
   sceneIdentityHash,
   stationIdentityLabels,
+  stationCollisionIds,
   stationTicketGeometry,
   stationWorkspaceLabel,
   type BlockedPlacement,
@@ -88,8 +91,17 @@ export interface SceneHit {
     "kind" | "queueOrdinal" | "queueTotal"
   >;
 }
+export interface PageMetadata {
+  totalCount: number;
+  visibleCount: number;
+  capacity: number;
+  pageIndex: number;
+  pageCount: number;
+  pagerLayout: SceneLayout["pagerLayout"];
+}
 export interface KitchenSceneOptions {
   onHitLayout?: (hits: readonly SceneHit[]) => void;
+  onPageLayout?: (page: PageMetadata) => void;
   systemDark?: MediaQueryList;
   reducedMotion?: ReducedMotionPreference;
 }
@@ -114,6 +126,8 @@ export interface SceneMetrics {
     BlockedPlacement & { timerText: string; exiting: boolean }
   >;
   blockedIndicators: number;
+  escalationBlockedAgents: number;
+  page: PageMetadata & { visibleIds: readonly string[] };
   stateIndicators: Record<string, number>;
   endedEntries: number;
   view: "kitchen" | "freezer";
@@ -218,6 +232,7 @@ export class KitchenScene {
   private escalationLayer = new Container();
   private escalationGraphic = new Graphics();
   private escalationSignature = "";
+  private escalationBlockedAgents = 0;
   private busserLayer = new Container();
   private busserSweeps = new BusserSweepTimeline();
   private busserGraphics = new Map<string, Graphics>();
@@ -238,6 +253,8 @@ export class KitchenScene {
   private blockedPlacementMetrics: SceneMetrics["blockedPlacements"] = {};
   private hits: SceneHit[] = [];
   private lastHitSignature = "";
+  private lastPageSignature = "";
+  private requestedPage = 0;
   private focusedId: string | null = null;
   private lastTheme: ResolvedTheme | null = null;
   private lastAtmosphere: boolean | null = null;
@@ -264,6 +281,7 @@ export class KitchenScene {
     passEdges: 0,
   };
   private layout!: SceneLayout;
+  private stationSlots: (string | null)[] = [];
   private freezerLayout: FreezerLayout | null = null;
   private view: "kitchen" | "freezer" = "kitchen";
   private lastLiveIds = "";
@@ -382,8 +400,12 @@ export class KitchenScene {
     );
   }
   focus(id: string | null) {
-    if (this.focusedId === id) return;
+    if (this.focusedId === id) {
+      if (id) this.reveal(id);
+      return;
+    }
     this.focusedId = id;
+    if (id && this.reveal(id)) return;
     if (this.layout && this.view === "kitchen") {
       this.drawStations(performance.now());
       destroyChildren(this.boardLayer);
@@ -398,6 +420,42 @@ export class KitchenScene {
     this.view = view;
     this.redraw();
   }
+  previousPage() {
+    this.setPage(this.requestedPage - 1);
+  }
+  nextPage() {
+    this.setPage(this.requestedPage + 1);
+  }
+  reveal(id: string) {
+    if (!this.app.renderer || this.view !== "kitchen") return false;
+    const occupiedIds = this.stationSlots.filter(
+        (slot): slot is string => slot !== null,
+      ),
+      index = occupiedIds.indexOf(id);
+    if (index < 0) return false;
+    const layout = computeLayout(
+        this.host.clientWidth || innerWidth,
+        this.host.clientHeight || innerHeight,
+        this.stationSlots,
+        this.requestedPage,
+      ),
+      page = Math.floor(index / layout.capacity);
+    if (page === layout.pageIndex) return false;
+    this.setPage(page);
+    return true;
+  }
+  private setPage(page: number) {
+    if (!this.app.renderer || this.view !== "kitchen") return;
+    const layout = computeLayout(
+      this.host.clientWidth || innerWidth,
+      this.host.clientHeight || innerHeight,
+      this.stationSlots,
+      page,
+    );
+    if (layout.pageIndex === this.layout?.pageIndex) return;
+    this.requestedPage = layout.pageIndex;
+    this.redraw();
+  }
   metrics(): SceneMetrics {
     const idlePoses: Record<string, IdlePose> = {},
       stateIndicators: Record<string, number> = {},
@@ -407,7 +465,7 @@ export class KitchenScene {
       activeFocusBounds: Record<string, Rect> = {},
       activeFocusCornerSizes: Record<string, number> = {},
       snapshot = this.store.snapshot(),
-      agents = [...snapshot.agents.values()];
+      agents = [...snapshot.visibleAgents.values()];
     for (const agent of agents) {
       const pose = this.idlePoses.get(agent.id);
       if (agent.targetState === "idle" && pose) idlePoses[agent.id] = pose;
@@ -472,6 +530,11 @@ export class KitchenScene {
       activeFocusCornerSizes,
       blockedPlacements: { ...this.blockedPlacementMetrics },
       blockedIndicators,
+      escalationBlockedAgents: this.escalationBlockedAgents,
+      page: {
+        ...this.pageMetadata(),
+        visibleIds: this.layout?.visibleIds ?? [],
+      },
       stateIndicators,
       endedEntries: snapshot.board.length,
       view: this.view,
@@ -518,7 +581,7 @@ export class KitchenScene {
       this.transitions.reconcile();
       this.retainedBlocked.clear();
     }
-    const ids = [...snapshot.agents.keys()],
+    const ids = [...snapshot.visibleAgents.keys()],
       liveIds = ids.join("|"),
       boardIds = snapshot.board.map((entry) => entry.id).join("|"),
       boardSelection = snapshot.board.some(
@@ -543,7 +606,10 @@ export class KitchenScene {
     const snapshot = this.store.snapshot();
     this.lastTheme = this.resolvedTheme();
     this.lastAtmosphere = snapshot.settings.atmosphere;
-    this.lastLiveIds = [...snapshot.agents.keys()].join("|");
+    const liveIds = [...snapshot.visibleAgents.keys()],
+      liveKey = liveIds.join("|"),
+      rosterChanged = liveKey !== this.lastLiveIds;
+    this.lastLiveIds = liveKey;
     this.lastBoardIds = snapshot.board.map((entry) => entry.id).join("|");
     this.boardSelection = snapshot.board.some(
       (item) => item.id === snapshot.selectedId,
@@ -552,16 +618,45 @@ export class KitchenScene {
       : null;
     const width = this.host.clientWidth || innerWidth,
       height = this.host.clientHeight || innerHeight,
-      layoutChanged =
-        this.layout &&
-        (this.layout.wall.width !== width ||
-          this.app.renderer.height !== height);
+      nextSlots = reconcileStationSlots(this.stationSlots, liveIds);
+    let nextLayout = computeLayout(
+      width,
+      height,
+      nextSlots,
+      this.requestedPage,
+    );
+    const occupiedIds = nextSlots.filter((id): id is string => id !== null),
+      anchor = [this.focusedId, snapshot.selectedId].find(
+        (id): id is string => id !== null && occupiedIds.includes(id),
+      );
+    if (rosterChanged && anchor && !nextLayout.visibleIds.includes(anchor))
+      nextLayout = computeLayout(
+        width,
+        height,
+        nextSlots,
+        Math.floor(occupiedIds.indexOf(anchor) / nextLayout.capacity),
+      );
+    this.requestedPage = nextLayout.pageIndex;
+    const layoutChanged =
+      this.layout &&
+      (this.layout.wall.width !== width ||
+        this.app.renderer.height !== height ||
+        nextSlots.length !== this.stationSlots.length ||
+        this.layout.visibleIds.join("|") !== nextLayout.visibleIds.join("|"));
     if (layoutChanged) {
       this.transitions.reconcile();
       this.retainedBlocked.clear();
+      this.busserSweeps.clear();
+      for (const graphic of this.busserGraphics.values()) {
+        this.busserLayer.removeChild(graphic);
+        graphic.destroy();
+      }
+      this.busserGraphics.clear();
       this.store.reconcileRendered(undefined, true);
     }
-    this.layout = computeLayout(width, height, [...snapshot.agents.keys()]);
+    this.stationSlots = nextSlots;
+    this.layout = nextLayout;
+    this.publishPage();
     this.app.renderer.resize(width, height);
     const kitchen = this.view === "kitchen";
     this.stationLayer.visible = kitchen;
@@ -1234,26 +1329,34 @@ export class KitchenScene {
     this.atmosphereMetrics.workingContact =
       this.lastAtmosphere &&
       (snapshot.mode === "live" || snapshot.mode === "demo")
-        ? [...snapshot.agents.values()].filter(
+        ? [...snapshot.visibleAgents.values()].filter(
             (agent) => agent.targetState === "working",
           ).length
         : 0;
     for (const id of this.retainedBlocked.keys()) {
-      const agent = snapshot.agents.get(id);
+      const agent = snapshot.visibleAgents.get(id);
       if (!agent || (this.reducedMotion && agent.targetState !== "blocked"))
         this.retainedBlocked.delete(id);
     }
-    const blockedIds = orderedBlockedAgents([...snapshot.agents.values()]).map(
-        (agent) => agent.id,
-      ),
+    const blockedIds = orderedBlockedAgents([
+        ...snapshot.visibleAgents.values(),
+      ]).map((agent) => agent.id),
       exiting = [...this.retainedBlocked.values()].filter(
         (retained) =>
-          snapshot.agents.get(retained.id)?.targetState !== "blocked",
+          snapshot.visibleAgents.get(retained.id)?.targetState !== "blocked",
       ),
-      placements = blockedPlacements(this.layout, blockedIds, exiting);
+      placements = blockedPlacements(
+        this.layout,
+        blockedIds,
+        exiting,
+        blockedIds,
+      );
     this.blockedPlacementMetrics = {};
+    const collisionIds = stationCollisionIds([
+      ...snapshot.visibleAgents.values(),
+    ]);
     for (const [id, placement] of placements) {
-      const agent = snapshot.agents.get(id)!;
+      const agent = snapshot.visibleAgents.get(id)!;
       const retained = {
         ...placement,
         timerText: formatElapsed(
@@ -1270,7 +1373,7 @@ export class KitchenScene {
       };
     this.hits = this.hits.filter((hit) => hit.kind !== "station");
     for (const station of this.layout.stations) {
-      const agent = snapshot.agents.get(station.id);
+      const agent = snapshot.visibleAgents.get(station.id);
       if (!agent) continue;
       active.add(agent.id);
       let view = this.stationViews.get(agent.id);
@@ -1286,6 +1389,7 @@ export class KitchenScene {
         index,
         now,
         placements.get(agent.id) ?? this.retainedBlocked.get(agent.id),
+        collisionIds.has(agent.id),
       );
       this.stationLayer.addChild(view.node);
       const placement = placements.get(agent.id);
@@ -1318,6 +1422,23 @@ export class KitchenScene {
       this.lastHitSignature = signature;
       this.options.onHitLayout?.(this.hits);
     }
+  }
+  private pageMetadata(): PageMetadata {
+    return {
+      totalCount: this.layout?.totalCount ?? 0,
+      visibleCount: this.layout?.visibleIds.length ?? 0,
+      capacity: this.layout?.capacity ?? 1,
+      pageIndex: this.layout?.pageIndex ?? 0,
+      pageCount: this.layout?.pageCount ?? 1,
+      pagerLayout: this.layout?.pagerLayout ?? "standard",
+    };
+  }
+  private publishPage() {
+    const page = this.pageMetadata(),
+      signature = `${page.totalCount}:${page.visibleCount}:${page.capacity}:${page.pageIndex}:${page.pageCount}:${page.pagerLayout}`;
+    if (signature === this.lastPageSignature) return;
+    this.lastPageSignature = signature;
+    this.options.onPageLayout?.(page);
   }
   private createStationView(agent: AgentMachine): StationView {
     const p = getTheme().palette,
@@ -1363,6 +1484,7 @@ export class KitchenScene {
     index: number,
     now: number,
     placement?: BlockedPlacement,
+    colliding = false,
   ) {
     const snapshot = this.store.snapshot(),
       p = getTheme().palette,
@@ -1514,21 +1636,38 @@ export class KitchenScene {
         agent.progress === null ? "null" : Math.round(agent.progress * 1000),
       nameFontSize = Math.max(9, 2.1 * u),
       statusFontSize = Math.max(8, 1.8 * u),
-      nameCharacters = Math.max(
+      initialNameCharacters = Math.max(
         tokens.scene.layout.stationNameMinCharacters,
         Math.floor(
           (rect.width - 2 * u) /
             (nameFontSize * tokens.scene.layout.stationNameCharacterWidth),
         ),
       ),
+      maxNameWidth = rect.width - 2 * u;
+    name.style.fontSize = nameFontSize;
+    let nameCharacters = initialNameCharacters;
+    let identity = stationIdentityLabels(
+      agent,
+      state,
+      wallNow,
+      nameCharacters,
+      state === "blocked" ? placement : undefined,
+      colliding,
+    );
+    while (
+      nameCharacters > 1 &&
+      CanvasTextMetrics.measureText(identity.name, name.style).width >
+        maxNameWidth
+    )
       identity = stationIdentityLabels(
         agent,
         state,
         wallNow,
-        nameCharacters,
+        --nameCharacters,
         state === "blocked" ? placement : undefined,
-      ),
-      dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}:${this.lastAtmosphere}`,
+        colliding,
+      );
+    const dataSignature = `${geometrySignature}:${identity.signature}:${identity.status}:${state}:${agent.stateKnown}:${idlePose ?? "none"}:${progress}:${elapsedText}:${selected}:${focused}:${passX}:${passY}:${this.reducedMotion}:${this.lastAtmosphere}`,
       dynamicSignature = `${dataSignature}:${animationFrame}:${transitionFrame}`,
       exitComplete =
         state !== "blocked" &&
@@ -1733,7 +1872,6 @@ export class KitchenScene {
     const colors = p.scene.stationState;
     name.text = identity.name;
     name.style.fill = p.scene.stationName[index];
-    name.style.fontSize = nameFontSize;
     name.position.set(rect.width / 2, 32 * u);
     label.text =
       agent.stateKnown === false ? "UNKNOWN · PREP" : identity.status;
@@ -1742,7 +1880,13 @@ export class KitchenScene {
     label.style.wordWrap = true;
     label.style.breakWords = false;
     label.style.wordWrapWidth = Math.max(0, rect.width - 2 * u);
-    label.position.set(rect.width / 2, 37 * u);
+    label.position.set(
+      rect.width / 2,
+      Math.max(37 * u, name.y + name.height + Math.max(1, u)),
+    );
+    const labelOverflow = Math.max(0, label.y + label.height - rect.height);
+    name.y -= labelOverflow;
+    label.y -= labelOverflow;
     node.alpha = 1;
   }
   private tick(deltaMs: number) {
@@ -1762,7 +1906,7 @@ export class KitchenScene {
       this.store.reconcileRendered();
       const motion = sceneMotionPolicy(this.reducedMotion);
       if (motion.steam && this.atmosphereHasWork(snapshot)) {
-        for (const agent of snapshot.agents.values()) {
+        for (const agent of snapshot.visibleAgents.values()) {
           if (agent.targetState === "working") {
             const lastSteam = this.lastSteam.get(agent.id) ?? 0;
             if (now - lastSteam < prepFrameInterval(agent.progress)) continue;
@@ -1783,7 +1927,7 @@ export class KitchenScene {
           }
         }
         for (const id of this.lastSteam.keys())
-          if (!snapshot.agents.has(id)) this.lastSteam.delete(id);
+          if (!snapshot.visibleAgents.has(id)) this.lastSteam.delete(id);
         this.particles.update(visualDelta);
       } else {
         this.lastSteam.clear();
@@ -1859,7 +2003,7 @@ export class KitchenScene {
         this.busserGraphics.delete(id);
       }
       const view = this.stationViews.get(id),
-        liveAgentIds = new Set(this.store.snapshot().agents.keys());
+        liveAgentIds = new Set(this.store.snapshot().visibleAgents.keys());
       if (view && shouldDisposeRetainedStation(liveAgentIds, id))
         this.disposeStation(id, view);
     }
@@ -1894,6 +2038,7 @@ export class KitchenScene {
       pulseFrame =
         motion.escalation && blocked.length ? Math.floor(now / 125) : 0,
       signature = `${blocked.length}:${stage}:${pulseFrame}:${this.reducedMotion}:${this.resolvedTheme()}:${this.layout.unit}:${this.app.renderer.width}:${this.app.renderer.height}`;
+    this.escalationBlockedAgents = blocked.length;
     if (signature === this.escalationSignature) return;
     this.escalationSignature = signature;
     const p = getTheme().palette,
@@ -1955,7 +2100,7 @@ export class KitchenScene {
       this.view === "kitchen" &&
       snapshot.settings.atmosphere &&
       (snapshot.mode === "live" || snapshot.mode === "demo") &&
-      [...snapshot.agents.values()].some(
+      [...snapshot.visibleAgents.values()].some(
         (agent) => agent.targetState === "working",
       )
     );
