@@ -1257,6 +1257,16 @@ test("real fixture service summary cycles every blocked cook without moving stat
       await expect(summary).toContainText(`Shown ${count} of ${count}`);
       await expect(summary).toContainText("Hidden plated 0");
       await expect(summary).toContainText("Oldest blocked: Cook00");
+      expect(await summary.locator("strong").allTextContents()).toEqual([
+        "Observed",
+        "Working",
+        "Blocked",
+        "Plated",
+        "Unknown",
+        "Shown",
+        "Hidden plated",
+        "Oldest blocked:",
+      ]);
       const initialMetrics = (await sceneMetrics(page))!;
       const summaryBox = (await summary.boundingBox())!,
         canvasBox = (await page.locator(".canvasHost").boundingBox())!;
