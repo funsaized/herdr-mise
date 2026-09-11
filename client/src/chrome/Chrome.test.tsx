@@ -95,6 +95,20 @@ describe("chrome interactions", () => {
     expect(screen.getByText("DEMO SERVICE")).toBeTruthy();
     rerender(
       <ModeTreatment
+        mode="demo"
+        sourceStatus="unavailableSocket"
+        lastUpdateSeconds={0}
+        intentionalPreview
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain(
+      "Intentional preview — deterministic mock feed. Nothing here is real.",
+    );
+    expect(screen.getByRole("status").textContent).not.toContain(
+      "socket unavailable",
+    );
+    rerender(
+      <ModeTreatment
         mode="disconnected"
         sourceStatus="connected"
         lastUpdateSeconds={14}

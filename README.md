@@ -14,7 +14,9 @@ servers. It is a window, not an office.
 
 ![Seven AI cooks under dinner lighting move through idle, working, blocked, and plated stations, open and dismiss details, then visit two ended cooks in the freezer](docs/assets/herdr-mise-demo.gif)
 
-[Visual playground](docs/operations.md#visual-playground).
+[Visual playground](https://herdr-mise.s11a.com/) — choose a deterministic
+scene and roster in the preview explorer, then load it as a shareable URL. See
+the [playground guide](docs/operations.md#visual-playground) for local use.
 
 | Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |

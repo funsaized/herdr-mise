@@ -212,6 +212,90 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
   ).toBe(true);
 });
 
+test("preview explorer controls remain operable at 320 by 320 CSS pixels", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 320 });
+  await page.goto("/?preset=mixed&agents=6");
+  const explorer = page.getByRole("complementary", {
+      name: "Preview explorer",
+    }),
+    details = explorer.locator("details"),
+    summary = explorer.getByText("Preview explorer", { exact: true });
+  const pagerNext = page.getByRole("button", { name: "Next", exact: true }),
+    summaryBox = (await summary.boundingBox())!;
+  if (await pagerNext.count()) {
+    const pagerNextBox = (await pagerNext.boundingBox())!;
+    expect(
+      summaryBox.x < pagerNextBox.x + pagerNextBox.width &&
+        summaryBox.x + summaryBox.width > pagerNextBox.x &&
+        summaryBox.y < pagerNextBox.y + pagerNextBox.height &&
+        summaryBox.y + summaryBox.height > pagerNextBox.y,
+    ).toBe(false);
+  }
+  await summary.focus();
+  expect(
+    await summary.evaluate((element) => getComputedStyle(element).outlineStyle),
+  ).not.toBe("none");
+  await page.keyboard.press("Enter");
+  await expect(details).toHaveAttribute("open", "");
+  const scene = explorer.getByRole("combobox", { name: "Scene" });
+  await scene.focus();
+  await expect(scene).toBeFocused();
+  expect(
+    await scene.evaluate((element) => getComputedStyle(element).outlineStyle),
+  ).not.toBe("none");
+  await page.keyboard.press("b");
+  await expect(scene).toHaveValue("blocked");
+  const cooks = explorer.getByRole("combobox", { name: "Cooks" });
+  await cooks.focus();
+  await page.keyboard.press("0");
+  await expect(cooks).toHaveValue("0");
+  await expect(explorer.getByRole("button", { name: "Replay" })).toBeVisible();
+  const links = explorer.getByRole("link");
+  await expect(links).toHaveCount(2);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  for (const control of await explorer
+    .locator("summary, select, button, a")
+    .all()) {
+    const controlBox = (await control.boundingBox())!;
+    expect(controlBox.width).toBeGreaterThanOrEqual(44);
+    expect(controlBox.height).toBeGreaterThanOrEqual(44);
+  }
+  for (const button of await page.locator(".visualTuiControls button").all())
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 640, height: 720 });
+  expect((await explorer.boundingBox())!.width).toBeGreaterThanOrEqual(320);
+  await page.setViewportSize({ width: 320, height: 320 });
+  const box = (await explorer.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(320);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(320);
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(details).not.toHaveAttribute("open", "");
+  await expect(summary).toBeFocused();
+  if (await pagerNext.count()) {
+    await pagerNext.click();
+    await expect(page.getByText(/Page 2 of/)).toBeVisible();
+  }
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await expect(explorer).toHaveCount(0);
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await expect(explorer).toBeVisible();
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("complementary", { name: /(?:details|session summary)$/ }),
+  ).toBeVisible();
+  await expect(explorer).toHaveCount(0);
+  await page.getByRole("button", { name: "Close panel" }).click();
+  await expect(explorer).toBeVisible();
+});
+
 test("renderer failure keeps a visible operable agent list", async ({
   page,
 }) => {

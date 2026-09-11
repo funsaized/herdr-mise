@@ -821,7 +821,12 @@ test("authoritative fixture state sequence drives history accents poses prep and
         ),
       ),
     ),
-    sockets = new Set<Socket>();
+    sockets = new Set<Socket>(),
+    escapedRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).origin !== appUrl)
+      escapedRequests.push(request.url());
+  });
   let snapshot = baseline;
   const fixtureServer = createServer((socket) => {
     sockets.add(socket);
@@ -858,6 +863,13 @@ test("authoritative fixture state sequence drives history accents poses prep and
       })
       .toBe(200);
     await page.goto(`${appUrl}/?stats`);
+    await expect(
+      page.getByRole("complementary", { name: "Preview explorer" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: /Install for Herdr|Source/ }),
+    ).toHaveCount(0);
+    expect(escapedRequests).toEqual([]);
     const sequenceStation = page.getByRole("button", {
       name: "example-cook, Working — on the fire, open details",
     });
@@ -1161,6 +1173,7 @@ test("authoritative fixture state sequence drives history accents poses prep and
         workingContact: 0,
         freezerAccents: 0,
       });
+    expect(escapedRequests).toEqual([]);
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();
@@ -2881,6 +2894,110 @@ test("invalid preset and count fall back to mixed x 6", async ({ page }) => {
   const names = await collectStationNames(page, 6);
   expect([...names].sort()).toEqual([...expectedNames("mixed", 6)].sort());
   expect(errors).toEqual([]);
+});
+
+test("preview explorer reloads shareable scenes and preserves larger URL rosters", async ({
+  page,
+}) => {
+  const sockets: string[] = [],
+    escapedRequests: string[] = [];
+  page.on("websocket", (socket) => sockets.push(socket.url()));
+  page.on("request", (request) => {
+    if (new URL(request.url()).origin !== "http://127.0.0.1:4174")
+      escapedRequests.push(request.url());
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/?preset=working&agents=2&theme=dinner&stats");
+  const explorer = page.getByRole("complementary", {
+      name: "Preview explorer",
+    }),
+    demoPlacard = placard(page);
+  await expect(explorer).toBeVisible();
+  await explorer.getByText("Preview explorer", { exact: true }).click();
+  await expect(demoPlacard).toContainText(
+    "Intentional preview — deterministic mock feed. Nothing here is real.",
+  );
+  await explorer
+    .getByRole("combobox", { name: "Scene" })
+    .selectOption("blocked");
+  await explorer.getByRole("button", { name: "Load preview" }).click();
+  await expect(page).toHaveURL(
+    /\?preset=blocked&agents=2&theme=dinner&stats=?$/,
+  );
+  await expect(
+    page.locator('.stationA11yMirror button[aria-label*="Blocked —"]'),
+  ).toHaveCount(2);
+  await explorer.getByText("Preview explorer", { exact: true }).click();
+  await explorer.getByRole("combobox", { name: "Cooks" }).selectOption("0");
+  await explorer.getByRole("button", { name: "Load preview" }).click();
+  await expect(page).toHaveURL(
+    /\?preset=blocked&agents=0&theme=dinner&stats=?$/,
+  );
+  await expect(page.locator(".stationA11yMirror button")).toHaveCount(0);
+  await explorer.getByText("Preview explorer", { exact: true }).click();
+  await explorer.getByRole("combobox", { name: "Cooks" }).selectOption("12");
+  await explorer.getByRole("combobox", { name: "Scene" }).selectOption("mixed");
+  await explorer.getByRole("button", { name: "Load preview" }).click();
+  await expect(page).toHaveURL(
+    /\?preset=mixed&agents=12&theme=dinner&stats=?$/,
+  );
+  await explorer.getByText("Preview explorer", { exact: true }).click();
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toHaveValue(
+    "mixed",
+  );
+  await expect(explorer.getByRole("combobox", { name: "Cooks" })).toHaveValue(
+    "12",
+  );
+  await expect(page.locator(".stationA11yMirror button")).toHaveCount(12);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await expect(
+    explorer.getByRole("link", { name: "Install for Herdr" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/funsaized/herdr-mise#quick-start",
+  );
+  await expect(explorer.getByRole("link", { name: "Source" })).toHaveAttribute(
+    "href",
+    "https://github.com/funsaized/herdr-mise",
+  );
+  await expect(
+    page.getByRole("button", {
+      name: /^Codex, Blocked — .*open details$/,
+    }),
+  ).toHaveCount(1, { timeout: 7_000 });
+  const currentUrl = page.url();
+  await Promise.all([
+    page.waitForNavigation(),
+    explorer.getByRole("button", { name: "Replay" }).click(),
+  ]);
+  expect(page.url()).toBe(currentUrl);
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toHaveCount(1);
+  const explorerBox = await explorer.boundingBox(),
+    placardBox = await demoPlacard.boundingBox();
+  expect(explorerBox).not.toBeNull();
+  expect(placardBox).not.toBeNull();
+  expect(explorerBox!.x).toBeGreaterThanOrEqual(0);
+  expect(explorerBox!.x + explorerBox!.width).toBeLessThanOrEqual(320);
+  expect(boxesIntersect(explorerBox!, placardBox!)).toBe(false);
+  await page.goto("/?preset=mixed&agents=30");
+  await expect(page.locator(".disconnectScrim")).toHaveCount(0);
+  await explorer.getByText("Preview explorer", { exact: true }).click();
+  await expect(explorer.getByRole("combobox", { name: "Cooks" })).toHaveValue(
+    "30",
+  );
+  await expect(
+    explorer.getByRole("option", { name: "30 — URL roster", selected: true }),
+  ).toHaveCount(1);
+  expect(sockets).toEqual([]);
+  expect(escapedRequests).toEqual([]);
 });
 
 test("visual mode never touches persisted storage", async ({ page }) => {

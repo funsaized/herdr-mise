@@ -6,7 +6,7 @@ export function isInteractiveKeyboardTarget(target: EventTarget | null) {
     target instanceof Element &&
     Boolean(
       target.closest(
-        "input, select, textarea, button, a[href], [contenteditable='true'], [role='textbox']",
+        "input, select, textarea, button, summary, a[href], [contenteditable='true'], [role='textbox']",
       ),
     )
   );

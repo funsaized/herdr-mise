@@ -24,6 +24,7 @@ export function ModeTreatment({
   scopeUnavailableLabel = null,
   clearedCount,
   onRevealCleared,
+  intentionalPreview = false,
 }: {
   mode: CoarseSlice["mode"];
   sourceStatus: CoarseSlice["sourceStatus"];
@@ -34,6 +35,7 @@ export function ModeTreatment({
   scopeUnavailableLabel?: string | null;
   clearedCount?: number;
   onRevealCleared?(): void;
+  intentionalPreview?: boolean;
 }) {
   const detail = sourceDiagnostic
     ? sourceStatus === "unsupportedProtocol"
@@ -54,8 +56,9 @@ export function ModeTreatment({
         <h2>DEMO SERVICE</h2>
         <hr />
         <p>
-          Mock feed — {sourceStatusText[sourceStatus]}
-          {detail}. Nothing here is real.
+          {intentionalPreview
+            ? "Intentional preview — deterministic mock feed. Nothing here is real."
+            : `Mock feed — ${sourceStatusText[sourceStatus]}${detail}. Nothing here is real.`}
         </p>
         <small>POSTED PER ORDINANCE 86.86</small>
       </div>

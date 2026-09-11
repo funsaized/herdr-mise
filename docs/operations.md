@@ -200,13 +200,21 @@ calling the native constructor. The real `AgentWebSocketClient` still opens
 client side. Source: `client/src/main.tsx`,
 `client/src/runtime.ts`, `client/src/visual-harness.ts`.
 
+The visual build adds a collapsed **Preview explorer** to the browser chrome.
+Its native scene and cook selectors update the existing query contract while
+preserving unrelated parameters, then reload the page and reset ephemeral demo
+state. **Replay** reloads the current URL without changing its parameters.
+**Install for Herdr** and **Source** are ordinary user-initiated links. Explorer
+choices intentionally are not persisted. The explorer, links, and
+intentional-preview source copy are omitted from the default embedded build.
+
 #### Query contract
 
-| Parameter | Accepted values                              | Default | Notes                                                                     |
-| --------- | -------------------------------------------- | ------- | ------------------------------------------------------------------------- |
-| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed` | `mixed` | Any other value falls back to `mixed`.                                    |
-| `agents`  | Integer from `1` through `12`                | `6`     | Absent, non-integer, non-finite, or out-of-range values fall back to `6`. |
-| `theme`   | `light\|dinner`                              | `light` | `dinner` selects the existing dark lighting.                              |
+| Parameter | Accepted values                              | Default | Notes                                                          |
+| --------- | -------------------------------------------- | ------- | -------------------------------------------------------------- |
+| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed` | `mixed` | Any other value falls back to `mixed`.                         |
+| `agents`  | Integer from `0` through `30`                | `6`     | The explorer offers `0`–`12`; invalid values fall back to `6`. |
+| `theme`   | `light\|dinner`                              | `light` | `dinner` selects the existing dark lighting.                   |
 
 Parsing and validation are concentrated in
 `parseVisualConfig` (`client/src/visual-harness.ts`); both the
@@ -238,8 +246,9 @@ client and the test suite prove the defaults and fallbacks.
 - `idle` — prep loops, no ticket; records start 12 seconds into
   the state.
 - `working` — flame + steam, white ticket, green edge; records
-  start 18 seconds into the state and progress is `(index + 1) / 13`
-  per cook.
+  start 18 seconds into the state and progress is
+  `((index % 12) + 1) / 13` per cook, repeating the bounded 12-cook
+  sequence for larger URL rosters.
 - `blocked` — red-ring arcs, elapsed timer chip; `stateEnteredAt`
   is `now − 45 s` at feed construction so the scene reads as
   blocked but not yet escalated.

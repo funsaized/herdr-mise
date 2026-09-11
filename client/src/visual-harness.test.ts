@@ -13,6 +13,8 @@ import {
   installVisualWebSocket,
   isVisualMode,
   parseVisualConfig,
+  visualAgentCounts,
+  visualPresets,
 } from "./visual-harness";
 import { stationIdentityLabels } from "./scene/kitchen-scene";
 
@@ -51,6 +53,20 @@ it("tracks reduced-motion changes in both directions and cleans up its media-que
 });
 
 describe("visual harness configuration", () => {
+  it("exposes the preview explorer options", () => {
+    expect(visualPresets).toEqual([
+      "idle",
+      "working",
+      "blocked",
+      "done",
+      "ended",
+      "mixed",
+    ]);
+    expect(visualAgentCounts).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ]);
+  });
+
   it("parses every supported scene control", () => {
     expect(parseVisualConfig("?preset=done&agents=2&theme=dinner")).toEqual({
       preset: "done",
@@ -63,7 +79,7 @@ describe("visual harness configuration", () => {
       agents: 30,
       theme: "light",
     });
-    for (let agents = 1; agents <= 30; agents += 1) {
+    for (let agents = 0; agents <= 30; agents += 1) {
       expect(parseVisualConfig(`?agents=${agents}`).agents).toBe(agents);
     }
   });
@@ -91,7 +107,7 @@ describe("visual harness configuration", () => {
   });
 
   it("constructs stable protocol feeds for all supported counts and active presets", () => {
-    for (const agents of [1, 2, 6, 12] as const)
+    for (const agents of [1, 2, 6, 12, 30] as const)
       for (const preset of ["idle", "working", "blocked", "done"] as const) {
         const feed = buildVisualFeed({ preset, agents, theme: "light" });
         expect(feed).toHaveLength(1);
@@ -107,7 +123,10 @@ describe("visual harness configuration", () => {
           );
           expect(feed[0].agents.map((agent) => agent.progress)).toEqual(
             preset === "working"
-              ? Array.from({ length: agents }, (_, index) => (index + 1) / 13)
+              ? Array.from(
+                  { length: agents },
+                  (_, index) => ((index % 12) + 1) / 13,
+                )
               : Array(agents).fill(null),
           );
         }
