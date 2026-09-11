@@ -203,18 +203,29 @@ export function Chrome(props: ChromeProps) {
       <section className="serviceStrip" aria-label="Observed service summary">
         <div>
           <strong>Observed</strong>
-          <span>Working {props.coarse.working}</span>
-          <span>Blocked {props.coarse.blocked}</span>
-          <span>Plated {props.coarse.plated}</span>
-          <span>Unknown {props.coarse.unknown}</span>
+          <span>
+            <strong>Working</strong> {props.coarse.working}
+          </span>
+          <span>
+            <strong>Blocked</strong> {props.coarse.blocked}
+          </span>
+          <span>
+            <strong>Plated</strong> {props.coarse.plated}
+          </span>
+          <span>
+            <strong>Unknown</strong> {props.coarse.unknown}
+          </span>
         </div>
         <div>
           <span>
-            Shown {props.coarse.visible} of {props.coarse.count}
+            <strong>Shown</strong> {props.coarse.visible} of{" "}
+            {props.coarse.count}
           </span>
-          <span>Hidden plated {props.coarse.hiddenDone}</span>
           <span>
-            Oldest blocked: {oldestBlocked?.name ?? "None"}
+            <strong>Hidden plated</strong> {props.coarse.hiddenDone}
+          </span>
+          <span>
+            <strong>Oldest blocked:</strong> {oldestBlocked?.name ?? "None"}
             {oldestBlocked
               ? ` · ${formatDuration(now - Date.parse(oldestBlocked.stateEnteredAt))}`
               : ""}

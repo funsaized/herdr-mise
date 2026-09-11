@@ -388,6 +388,18 @@ describe("chrome interactions", () => {
     expect(summary.textContent).toContain("Shown 2 of 2");
     expect(summary.textContent).toContain("Oldest blocked: Oldest cook");
     expect(summary.textContent).not.toContain("Outside cook");
+    expect(
+      [...summary.querySelectorAll("strong")].map((label) => label.textContent),
+    ).toEqual([
+      "Observed",
+      "Working",
+      "Blocked",
+      "Plated",
+      "Unknown",
+      "Shown",
+      "Hidden plated",
+      "Oldest blocked:",
+    ]);
     const button = screen.getByRole("button", {
       name: "Next blocked: Oldest cook",
     });
