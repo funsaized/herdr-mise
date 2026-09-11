@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AgentStateEvent } from "../../protocol/generated/agent-state-event";
 import { AgentStore } from "./state/store";
 import { AgentWebSocketClient } from "./state/ws-client";
 import {
@@ -241,7 +242,7 @@ describe("visual harness configuration", () => {
 });
 
 describe("visual WebSocket boundary", () => {
-  it("moves the mixed-feed hero through working, blocked, answered, working, and done", async () => {
+  it("emits the blocked burst in store order before continuing the hero lifecycle", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-08-01T15:00:00.000Z"));
     const target = {} as { WebSocket?: typeof WebSocket };
@@ -250,9 +251,19 @@ describe("visual WebSocket boundary", () => {
       agents: 6,
       theme: "light",
     });
-    const socket = new target.WebSocket!("ws://visual/ws");
-    const messages: unknown[] = [];
-    socket.onmessage = (event) => messages.push(JSON.parse(String(event.data)));
+    const socket = new target.WebSocket!("ws://visual/ws"),
+      store = new AgentStore({ now: Date.now, setTimeout, clearTimeout }),
+      transitions: string[] = [],
+      messages: unknown[] = [];
+    store.onEvent((event) => {
+      if (event.type === "state" && event.from !== undefined)
+        transitions.push(`${event.agentId}:${event.to}`);
+    });
+    socket.onmessage = (event) => {
+      const message = JSON.parse(String(event.data)) as AgentStateEvent;
+      messages.push(message);
+      store.apply(message);
+    };
     await vi.runAllTicks();
     const heroEvents = () =>
       messages.flatMap((event) => {
@@ -277,6 +288,11 @@ describe("visual WebSocket boundary", () => {
     expect(heroEvents()).toEqual(["working"]);
     await vi.advanceTimersByTimeAsync(1);
     expect(heroEvents()).toEqual(["working", "blocked"]);
+    expect(transitions).toEqual([
+      "visual-agent-1:blocked",
+      "visual-agent-3:blocked",
+      "visual-agent-2:working",
+    ]);
     await vi.advanceTimersByTimeAsync(1_999);
     expect(heroEvents()).toEqual(["working", "blocked"]);
     await vi.advanceTimersByTimeAsync(1);
@@ -325,6 +341,7 @@ describe("visual WebSocket boundary", () => {
       ),
     ).toBe(true);
     socket.close();
+    store.destroy();
   });
 
   it("shows a generic temporary answer cue only after blocked returns to working", () => {

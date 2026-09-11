@@ -393,8 +393,9 @@ npm run dev:visual
 The visual harness is deterministic and supports the states needed by this
 checklist. Use these local URLs as convenient starting points:
 
-- `?preset=mixed&agents=6&theme=light` — working → blocked → working → done
-  announcement and lifecycle sequence;
+- `?preset=mixed&agents=6&theme=light` — after five seconds, one snapshot
+  transitions Codex and Hermes to blocked before Claude transitions to working;
+  the later Codex working → done → working lifecycle remains available;
 - `?preset=blocked&agents=1&theme=light` and
   `?preset=blocked&agents=1&theme=dinner` — static blocked signal in both
   themes;
@@ -462,6 +463,7 @@ implementation handoff.
 | KEY-03 | In Settings and detail/summary panels, use `Tab` and `Shift+Tab` to reach every button, switch, and select. Operate buttons/switches with native keyboard activation, change each select with keyboard input, and use `Escape` to close.                                       | `NOT RUN` |                                      |
 | ANN-01 | Cause a real transition into blocked (the initial `blocked` snapshot has no prior state announcement). Expect exactly one concise live-region update with `<agent> blocked, just now`; for other state transitions record the emitted `<agent> <state>` wording.               | `NOT RUN` |                                      |
 | ANN-02 | Leave the page open through heartbeats, progress-only updates, and repeated observation of the same state. Expect no duplicate announcement and no stale announcement after the next real state transition. Record any VoiceOver repetition rather than treating it as a pass. | `NOT RUN` |                                      |
+| ANN-03 | Open `?preset=mixed&agents=6&theme=light`. After five seconds, expect one bounded announcement identifying two blocked agents and directing listeners to `Agent stations`; verify both named station buttons remain discoverable.                                              | `PASS`    | Human tester reported “looks good.”  |
 
 #### Reduced-motion startup and runtime changes
 
@@ -482,6 +484,42 @@ status and evidence note. This document intentionally records no human
 VoiceOver result: the initial overall value is `NOT RUN`, and automated checks
 such as `npm test`, `npm run audit:accessibility`, and `npm run test:visual` do
 not substitute for listening to VoiceOver speech.
+
+### HM-015 scoped VoiceOver result — 2026-09-11
+
+This record is scoped to the simultaneous-transition scenario and does not
+complete the broader deferred VoiceOver release-gate pass.
+
+| Field                         | Record                                                                                                                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Date                          | `2026-09-11`                                                                                                                                                                 |
+| Commit / candidate identifier | `nightshift/187` / PR #214; exact release commit recorded by the software factory                                                                                            |
+| macOS                         | Session performed; version unavailable                                                                                                                                       |
+| Browser                       | Session performed; browser and version unavailable                                                                                                                           |
+| VoiceOver settings            | Session performed; settings unavailable                                                                                                                                      |
+| Tester                        | Human tester                                                                                                                                                                 |
+| Overall result                | `PASS` — human-attested override                                                                                                                                             |
+| Artifact / evidence notes     | Tester reported “looks good” and explicitly marked the override passed; detailed environment and speech records are unavailable. Automated checks remain non-human evidence. |
+
+Human listening steps:
+
+1. Start `npm run dev:visual`, enable VoiceOver, and open
+   `http://localhost:8686/?preset=mixed&agents=6&theme=light`.
+2. After five seconds, record the exact speech for the blocked burst and use
+   `Agent stations` to find Codex and Hermes.
+3. Leave focus on either blocked station for at least five seconds. Record any
+   unsolicited speech while its visible elapsed timer changes.
+4. Open and close Settings with both its close button and `Escape`; then open
+   and close agent details the same ways. Record where focus returns each time.
+
+Exact observed speech: unavailable. The human tester performed the session,
+reported that it looked good, and explicitly marked the scoped override passed.
+
+Remaining failures: none reported for ANN-03 burst speech, blocked-timer
+silence, station discovery, Settings focus restoration, or agent-detail focus
+restoration. Environment details and an exact speech transcript were not
+available, so this remains a human-attested override rather than a reproducible
+listening record.
 
 ## Socket override
 

@@ -225,7 +225,7 @@ describe("semantic station controls", () => {
       />,
     );
     const control = screen.getByRole("button", {
-      name: /Codex, Blocked — at the pass, queue 1 of 2, 1m \d+s blocked, open details/,
+      name: "Codex, Blocked — at the pass, queue 1 of 2, open details",
     });
     expect(control.getAttribute("tabindex")).toBe("-1");
     expect(control.getAttribute("aria-describedby")).toBe("station-tooltip-a");
@@ -352,7 +352,7 @@ describe("semantic station controls", () => {
     );
     expect(
       screen.getByRole("button", {
-        name: /Blocked — waiting at station, queue 2 of 2, 1m 5s blocked/,
+        name: /Blocked — waiting at station, queue 2 of 2, open details/,
       }),
     ).toBeTruthy();
     rerender(
@@ -362,7 +362,7 @@ describe("semantic station controls", () => {
       />,
     );
     expect(
-      screen.getByRole("button", { name: /Blocked — waiting, 1m 5s blocked/ }),
+      screen.getByRole("button", { name: /Blocked — waiting, open details/ }),
     ).toBeTruthy();
   });
   it("keeps the accessible label contract explicit for every human state", () => {

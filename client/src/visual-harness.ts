@@ -235,13 +235,43 @@ export function installVisualWebSocket(
         agents = snapshot?.type === "snapshot" ? snapshot.agents : [],
         hero = agents[0];
       if (!hero) return;
+      this.lifecycleTimers.push(
+        globalThis.setTimeout(() => {
+          if (this.readyState !== VisualWebSocket.OPEN) return;
+          const enteredAt = new Date().toISOString(),
+            burstAgents =
+              agents.length < 3
+                ? [
+                    { ...hero, state: "blocked" as const, progress: null },
+                    ...agents.slice(1),
+                  ]
+                : [
+                    { ...hero, state: "blocked" as const, progress: null },
+                    {
+                      ...agents[2]!,
+                      state: "blocked" as const,
+                      progress: null,
+                    },
+                    {
+                      ...agents[1]!,
+                      state: "working" as const,
+                      progress: 0.64,
+                    },
+                    ...agents.slice(3),
+                  ];
+          this.onmessage?.({
+            data: JSON.stringify({
+              ...snapshot,
+              agents: burstAgents.map((record, index) =>
+                index < Math.min(3, agents.length)
+                  ? { ...record, stateEnteredAt: enteredAt }
+                  : record,
+              ),
+            }),
+          });
+        }, 5_000),
+      );
       const phases = [
-        {
-          delay: 5_000,
-          agent: hero,
-          state: "blocked" as const,
-          progress: null,
-        },
         {
           delay: 7_000,
           agent: hero,
