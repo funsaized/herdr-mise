@@ -689,17 +689,38 @@ select:focus-visible {
   }
 }
 @media (max-width: 480px) {
+  .canvasHost {
+    bottom: 208px;
+  }
   .serviceStrip {
     right: 8px;
     bottom: 48px;
     left: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     max-width: none;
     align-items: stretch;
-    flex-direction: column;
-    gap: 5px;
+    gap: 3px 6px;
+    padding: 5px 7px;
+    font-size: 10px;
+  }
+  .serviceStrip div:first-child {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .serviceStrip div:nth-child(2) {
+    min-width: 0;
+    gap: 2px 6px;
+  }
+  .serviceStrip div:nth-child(2) span:last-child {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .serviceStrip button {
-    align-self: flex-start;
+    align-self: end;
   }
   .panel ~ .serviceStrip {
     top: 112px;

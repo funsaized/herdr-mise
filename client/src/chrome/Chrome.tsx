@@ -163,7 +163,7 @@ export function Chrome(props: ChromeProps) {
         </div>
         <button
           type="button"
-          disabled={!nextBlocked}
+          disabled={props.view === "freezer" || !nextBlocked}
           aria-label={
             nextBlocked
               ? `Next blocked: ${nextBlocked.name}`

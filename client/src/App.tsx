@@ -241,10 +241,11 @@ export function App() {
         [index]?.focus();
     }, []),
     nextBlocked = useCallback(() => {
+      if (view === "freezer") return;
       const { agents, focusedId } = focusState.current,
         next = nextBlockedAgent(agents, focusedId);
       if (next) focusSemantic(next.id);
-    }, [focusSemantic]);
+    }, [focusSemantic, view]);
   useLayoutEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (isGlobalEscape(event)) {

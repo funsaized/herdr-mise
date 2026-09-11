@@ -965,8 +965,10 @@ test("real fixture service summary cycles every blocked cook without moving stat
     ),
     sockets = new Set<Socket>();
   let snapshot = "";
-  const setRoster = (count: number) => {
-      const states = ["blocked", "working", "idle", "done"];
+  const setRoster = (count: number, allBlocked = false) => {
+      const states = allBlocked
+        ? ["blocked"]
+        : ["blocked", "working", "idle", "done"];
       snapshot = JSON.stringify({
         result: {
           snapshot: {
@@ -1017,6 +1019,7 @@ test("real fixture service summary cycles every blocked cook without moving stat
       })
       .toBe(200);
     await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 320, height: 640 });
     await page.goto(`${appUrl}/?stats`);
     for (const count of [4, 16, 30]) {
       setRoster(count);
@@ -1031,6 +1034,14 @@ test("real fixture service summary cycles every blocked cook without moving stat
       await expect(summary).toContainText("Hidden plated 0");
       await expect(summary).toContainText("Oldest blocked: Cook00");
       const initialMetrics = (await sceneMetrics(page))!;
+      const summaryBox = (await summary.boundingBox())!,
+        canvasBox = (await page.locator(".canvasHost").boundingBox())!;
+      expect(
+        Object.values(initialMetrics.stationStatusBounds).filter((status) =>
+          boxesIntersect(summaryBox, status),
+        ),
+        `summary ${JSON.stringify(summaryBox)}; canvas ${JSON.stringify(canvasBox)}`,
+      ).toEqual([]);
       expect(Object.keys(initialMetrics.blockedPlacements)).toHaveLength(
         blockedCount,
       );
@@ -1060,6 +1071,36 @@ test("real fixture service summary cycles every blocked cook without moving stat
       expect(focused.size).toBe(blockedCount);
       expect((await sceneMetrics(page))!.stationCells).toEqual(stations);
     }
+    setRoster(12, true);
+    const summary = page.getByRole("region", {
+      name: "Observed service summary",
+    });
+    await expect(summary).toContainText("Blocked 12", { timeout: 10_000 });
+    await expect
+      .poll(async () =>
+        Object.keys((await sceneMetrics(page))!.blockedPlacements),
+      )
+      .toHaveLength(12);
+    const summaryBox = (await summary.boundingBox())!,
+      statusBounds = Object.values(
+        (await sceneMetrics(page))!.stationStatusBounds,
+      );
+    expect(
+      statusBounds.filter((status) => boxesIntersect(summaryBox, status)),
+    ).toEqual([]);
+    await page.getByRole("button", { name: "Freezer" }).click();
+    await expect(
+      page.getByRole("button", { name: /Next blocked:/ }),
+    ).toBeDisabled();
+    await page.keyboard.press("b");
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.view)
+      .toBe("freezer");
+    await expect
+      .poll(async () =>
+        Object.keys((await sceneMetrics(page))!.activeFocusBounds),
+      )
+      .toHaveLength(0);
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();

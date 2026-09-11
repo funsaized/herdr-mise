@@ -216,6 +216,13 @@ describe("chrome interactions", () => {
   it("exposes a native boolean freezer toggle", () => {
     const store = new AgentStore(),
       toggle = vi.fn();
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "live",
+      sourceStatus: "connected",
+      agents: [{ ...record, state: "blocked" }],
+    });
     render(
       <Chrome
         store={store}
@@ -238,6 +245,11 @@ describe("chrome interactions", () => {
     );
     const button = screen.getByRole("button", { name: "Freezer" });
     expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: "Next blocked: refactor-auth",
+      }).disabled,
+    ).toBe(true);
     fireEvent.click(button);
     expect(toggle).toHaveBeenCalledOnce();
   });
