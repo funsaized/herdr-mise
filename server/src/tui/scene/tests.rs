@@ -554,6 +554,9 @@ fn fixture_backed_responsive_composition_matrix() {
     let blocked = normalize(include_str!(
         "../../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
     ));
+    let unknown = normalize(include_str!(
+        "../../../tests/fixtures/snapshot-unknown-fields.json"
+    ));
     let source = blocked.agents.first().unwrap();
     let table_for = |count: usize| {
         let agents = (0..count)
@@ -568,6 +571,9 @@ fn fixture_backed_responsive_composition_matrix() {
         snapshot(AppMode::Live, SourceStatus::Connected, None, agents)
     };
     let empty_table = snapshot(AppMode::Live, SourceStatus::Connected, None, empty.agents);
+    let unknown_table = snapshot(AppMode::Live, SourceStatus::Connected, None, unknown.agents);
+    let unknown_output = text(&render_capability(&unknown_table, 160, 48, false));
+    assert!(unknown_output.contains("B 0 · P 0 · U 1"));
 
     for (width, height) in [(80, 24), (110, 40), (160, 48)] {
         for count in [0, 1, 6, 12] {
@@ -589,6 +595,7 @@ fn fixture_backed_responsive_composition_matrix() {
                         "{width}x{height}/{count}/{scene_supported} missing {required:?}"
                     );
                 }
+                assert!(output.contains("OBSERVED W"));
                 assert!(!output.contains("tick "));
 
                 if count == 0 {
@@ -623,6 +630,17 @@ fn fixture_backed_responsive_composition_matrix() {
                     }
                 }
             }
+        }
+    }
+
+    for count in [4, 16, 30] {
+        let table = table_for(count);
+        for scene_supported in [true, false] {
+            let output = text(&render_capability(&table, 160, 48, scene_supported));
+            assert!(output.contains(&format!("B {count}")));
+            assert!(output.contains(&format!("SHOWN {count}/{count}")));
+            assert!(output.contains("HIDDEN 0"));
+            assert!(output.contains("OLDEST BLOCKED Cook00"));
         }
     }
 

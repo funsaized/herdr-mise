@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -21,6 +22,7 @@ import {
   freezerAnnouncement,
   semanticAgents,
   semanticAgentsEqual,
+  nextBlockedAgent,
   semanticStateWords,
   type SemanticAgent,
 } from "./state/semantic-stations";
@@ -317,6 +319,26 @@ export function App() {
     )
       ? tooltipAgentIdCandidate
       : null;
+  const focusState = useRef({ controls, agents, focusedId });
+  useLayoutEffect(() => {
+    focusState.current = { controls, agents, focusedId };
+  }, [agents, controls, focusedId]);
+  const focusSemantic = useCallback((id: string) => {
+      setFocusedId(id);
+      sceneRef.current?.focus(id);
+      const index = focusState.current.controls.findIndex(
+        (control) => control.id === id,
+      );
+      document
+        .querySelectorAll<HTMLButtonElement>(".stationA11yMirror button")
+        [index]?.focus();
+    }, []),
+    nextBlocked = useCallback(() => {
+      if (view === "freezer") return;
+      const { agents, focusedId } = focusState.current,
+        next = nextBlockedAgent(agents, focusedId ?? coarse.selectedId);
+      if (next) focusSemantic(next.id);
+    }, [coarse.selectedId, focusSemantic, view]);
   useLayoutEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (isGlobalEscape(event)) {
@@ -349,6 +371,11 @@ export function App() {
         setStatsOpen((value) => !value);
         return;
       }
+      if (event.key.toLowerCase() === "b" && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        nextBlocked();
+        return;
+      }
       const stationIds = controls.map((agent) => agent.id);
       if (!stationIds.length) return;
       if (
@@ -377,9 +404,7 @@ export function App() {
                 : stationIds.length - 1
               : (index + direction + stationIds.length) % stationIds.length,
           next = stationIds[nextIndex]!;
-        setFocusedId(next);
-        sceneRef.current?.focus(next);
-        semanticStationButton(next)?.focus();
+        focusSemantic(next);
         return;
       }
       if (event.key === "Enter" && focusedId) {
@@ -392,7 +417,15 @@ export function App() {
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
-  }, [coarse.selectedId, controls, focusedId, settingsOpen, view]);
+  }, [
+    coarse.selectedId,
+    controls,
+    focusSemantic,
+    focusedId,
+    nextBlocked,
+    settingsOpen,
+    view,
+  ]);
   useEffect(() => {
     if (coarse.selectedId === null && semanticRestoreRef.current) {
       semanticRestoreRef.current.focus();
@@ -437,15 +470,6 @@ export function App() {
     setView(next);
     if (next === "kitchen") setAnnouncement("Kitchen");
   };
-  const nextBlocked = () => {
-    if (!blockedAgents.length) return;
-    const current = focusedId ?? coarse.selectedId,
-      currentIndex = blockedAgents.findIndex((agent) => agent.id === current),
-      next = blockedAgents[(currentIndex + 1) % blockedAgents.length]!;
-    setFocusedId(next.id);
-    sceneRef.current?.focus(next.id);
-    semanticStationButton(next.id)?.focus();
-  };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
   return (
     <main
@@ -485,8 +509,7 @@ export function App() {
             ? (semanticStationButton(hit.id) ?? null)
             : null;
           if (hit) {
-            setFocusedId(hit.id);
-            sceneRef.current?.focus(hit.id);
+            focusSemantic(hit.id);
           }
         }}
         onPointerMove={pointerMove}
@@ -526,6 +549,7 @@ export function App() {
           onDismissHint={dismissHint}
           view={view}
           onToggleFreezer={toggleFreezer}
+          onNextBlocked={nextBlocked}
           onRevealCleared={() => clientStore.revealCleared()}
         />
       </div>

@@ -422,11 +422,14 @@ defensive and stores the truthful final state, which is what
   | - StatsOverlay              |        | - Escalation (bell glow,      |
   | - First-run hint            |        |   screen-edge vignette)       |
   | - Semantic station controls |        |                               |
+  | - Observed service summary  |        |                               |
   | - Live state announcements  |        | One ticker. One canvas.       |
   |                             |        | Reads from AgentStore inside |
   | Reads coarse slices only:   |        | the ticker. Per-frame values |
   |   - source/visible/cleared, |        | bypass React.                 |
-  |   - blocked, done,          |        |                               |
+  |   - working/blocked/plated, |        |                               |
+  |   - unknown,                |        |                               |
+  |   - done, blocked elsewhere,|        |                               |
   |   - mode, selectedId,       |        |                               |
   |   - settings                |        |                               |
   +--------------+--------------+        +---------------+---------------+
@@ -448,6 +451,13 @@ re-enters the same snapshot-first reconnect path.
 The coarse slice reports non-ended source records, the locally visible projection,
 and done records cleared from presentation separately. Blocked and done totals are
 visible-only; connected live empty mode requires a zero-record source snapshot.
+
+The renderer-local service summary counts only observed states in its
+working/blocked/plated buckets. Explicitly unknown records have their own bucket;
+locally dismissed done records remain in the source total and plated count until
+the source removes or changes them. `B` / the native **Next blocked** button uses
+oldest valid `stateEnteredAt`, then stable agent ID, and changes semantic/canvas
+focus without changing selection or station layout.
 
 `scripts/audit-pixi-architecture.mjs` enforces the boundary in CI by
 forbidding direct WebGL, custom renderer, or shader imports in the

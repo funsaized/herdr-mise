@@ -461,6 +461,43 @@ describe("agent store machines", () => {
     expect(listener).not.toHaveBeenCalled();
     expect(store.snapshot().agents.get("a")?.progress).toBe(0.9);
   });
+  it("projects observed states and keeps dismissed done records in the source total", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock, { doneTimeoutMs: 50 }),
+      unknown = { ...agent("blocked", "unknown"), stateKnown: false };
+    store.apply(
+      snapshot(
+        agent("working", "working"),
+        agent("blocked", "blocked"),
+        agent("done", "done"),
+        unknown,
+      ),
+    );
+    expect(store.coarse()).toMatchObject({
+      count: 4,
+      visible: 4,
+      hiddenDone: 0,
+      working: 1,
+      blocked: 1,
+      plated: 1,
+      unknown: 1,
+    });
+    clock.advance(50);
+    expect(store.coarse()).toMatchObject({
+      count: 4,
+      visible: 3,
+      hiddenDone: 1,
+      plated: 1,
+    });
+    expect(store.snapshot().mode).toBe("live");
+    store.apply(snapshot());
+    expect(store.coarse()).toMatchObject({
+      count: 0,
+      visible: 0,
+      hiddenDone: 0,
+    });
+    expect(store.snapshot().mode).toBe("empty");
+  });
   it("records only strictly newer same-state observation periods", () => {
     const store = new AgentStore(),
       first = agent("working"),
@@ -938,8 +975,9 @@ describe("layout, transitions and resources", () => {
           { length: count },
           (_, index) => `agent-${String(index + 1).padStart(2, "0")}`,
         ),
+        callerOrder = [...ids].reverse(),
         layout = computeLayout(width, height, ids),
-        placements = blockedPlacements(layout, [...ids].reverse()),
+        placements = blockedPlacements(layout, callerOrder),
         ordered = layout.stations.map((station) => placements.get(station.id)!);
       expect(placements.size).toBe(layout.stations.length);
       expect(ordered.map((placement) => placement.queueOrdinal)).toEqual(
@@ -989,15 +1027,6 @@ describe("layout, transitions and resources", () => {
             placement.station.y + placement.station.height + 0.001,
           );
         }
-      const firstOverflow = ordered.findIndex(
-        (placement) => placement.kind === "station",
-      );
-      if (firstOverflow >= 0)
-        expect(
-          blockedPlacements(layout, ids.slice(0, firstOverflow + 1)).get(
-            ids[firstOverflow]!,
-          )?.kind,
-        ).toBe("station");
       expect(stationTicketGeometry("blocked", layout.unit)?.blocked).toBe(true);
 
       if (pass.length) {

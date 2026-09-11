@@ -57,10 +57,16 @@ export interface StoreSnapshot {
   lastUpdateAt: number;
 }
 export interface CoarseSlice {
+  count: number;
+  visible: number;
+  hiddenDone: number;
+  working: number;
+  blocked: number;
+  plated: number;
+  unknown: number;
   sourceCount: number;
   visibleCount: number;
   clearedCount: number;
-  blocked: number;
   done: number;
   blockedElsewhere: number;
   mode: AppMode;
@@ -151,13 +157,34 @@ export class AgentStore {
     };
   }
   coarse(): CoarseSlice {
-    const values = [...this.visibleAgents().values()];
+    const values = [...this.agents.values()],
+      scopedValues = values.filter(
+        (agent) =>
+          this.selectedWorkspaceId === null ||
+          agent.workspaceId === this.selectedWorkspaceId,
+      ),
+      visibleValues = [...this.visibleAgents().values()],
+      known = scopedValues.filter((agent) => agent.stateKnown !== false),
+      hiddenDone = scopedValues.filter((agent) =>
+        this.dismissedDone.has(agent.id),
+      ).length;
     return {
+      count: scopedValues.length,
+      visible: visibleValues.length,
+      hiddenDone,
+      working: known.filter((agent) => agent.targetState === "working").length,
+      blocked: visibleValues.filter(
+        (agent) =>
+          agent.stateKnown !== false && agent.targetState === "blocked",
+      ).length,
+      plated: known.filter((agent) => agent.targetState === "done").length,
+      unknown: scopedValues.filter((agent) => agent.stateKnown === false)
+        .length,
       sourceCount: this.agents.size,
-      visibleCount: values.length,
+      visibleCount: visibleValues.length,
       clearedCount: this.dismissedDone.size,
-      blocked: values.filter((a) => a.targetState === "blocked").length,
-      done: values.filter((a) => a.targetState === "done").length,
+      done: visibleValues.filter((agent) => agent.targetState === "done")
+        .length,
       blockedElsewhere: this.blockedElsewhereCount(),
       mode: this.mode,
       sourceStatus: this.sourceStatus,
@@ -284,7 +311,7 @@ export class AgentStore {
     }
     this.pruneInvisibleSelection();
     this.mode =
-      this.agents.size === 0 &&
+      this.agents.size + this.dismissedDone.size === 0 &&
       event.mode === "live" &&
       this.sourceStatus === "connected"
         ? "empty"
@@ -530,10 +557,16 @@ function sameWorkspaces(
 }
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
+    a.count === b.count &&
+    a.visible === b.visible &&
+    a.hiddenDone === b.hiddenDone &&
+    a.working === b.working &&
+    a.blocked === b.blocked &&
+    a.plated === b.plated &&
+    a.unknown === b.unknown &&
     a.sourceCount === b.sourceCount &&
     a.visibleCount === b.visibleCount &&
     a.clearedCount === b.clearedCount &&
-    a.blocked === b.blocked &&
     a.done === b.done &&
     a.blockedElsewhere === b.blockedElsewhere &&
     a.mode === b.mode &&

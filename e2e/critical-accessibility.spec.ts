@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels", async ({
+test("blocked summary agents and settings remain keyboard-accessible at 320 CSS pixels", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -10,6 +10,21 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
   await expect(
     page.getByRole("status").filter({ hasText: "DEMO SERVICE" }),
   ).toBeVisible();
+  const summary = page.getByRole("region", {
+      name: "Observed service summary",
+    }),
+    summaryBox = (await summary.boundingBox())!;
+  await expect(summary).toContainText("Blocked 12");
+  expect(summaryBox.x).toBeGreaterThanOrEqual(0);
+  expect(summaryBox.x + summaryBox.width).toBeLessThanOrEqual(320);
+  const nextBlocked = page.getByRole("button", { name: /Next blocked:/ });
+  await expect(nextBlocked).toBeEnabled();
+  expect(await nextBlocked.getAttribute("aria-live")).toBeNull();
+  await nextBlocked.click();
+  await expect(page.locator(".stationA11yMirror button:focus")).toHaveAttribute(
+    "aria-label",
+    /Blocked — .*open details/,
+  );
   await page.locator("body").click({ position: { x: 1, y: 1 } });
   await page.keyboard.press("ArrowLeft");
   const station = page.locator(".stationA11yMirror button:focus"),
@@ -50,8 +65,13 @@ test("blocked agents and settings remain keyboard-accessible at 320 CSS pixels",
   await page.keyboard.press("Enter");
   const settingsPanel = page.getByRole("complementary", { name: "Settings" });
   await expect(settingsPanel).toBeVisible();
+  const movedSummaryBox = (await summary.boundingBox())!,
+    settingsBox = (await settingsPanel.boundingBox())!;
+  expect(
+    movedSummaryBox.y + movedSummaryBox.height <= settingsBox.y ||
+      settingsBox.y + settingsBox.height <= movedSummaryBox.y,
+  ).toBe(true);
   if (selectedBox) {
-    const settingsBox = (await settingsPanel.boundingBox())!;
     expect(settingsBox.y).toBeGreaterThanOrEqual(
       selectedBox.y + selectedBox.height,
     );

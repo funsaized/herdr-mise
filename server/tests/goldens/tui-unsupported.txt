@@ -3,16 +3,16 @@ TEXT 00 "MISE — DEMO SERVICE                                                  
 STYLE 00 000..019 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 01 "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19, 20; upgrade or downgrade Herdr to "
 TEXT 02 "a tested release, then retry. Nothing here is real. · Workspace: All                                          "
-TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
-TEXT 04 "┌Kitchen status · 0-0/0 · 0 blocked──────────────────────────────────────────────────────────────────────────┐"
-TEXT 05 "│AGENT            STATE                  ELAPSED               WORKSPACE        TICKETS RUNTIME              │"
-STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
-TEXT 06 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
-TEXT 07 "┌86 BOARD────────────────────────────────────────────────────────────────────────────────────────────────────┐"
-STYLE 07 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
-TEXT 08 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
+TEXT 03 "OBSERVED W 0 · B 0 · P 0 · U 0 · SHOWN 0/0 · HIDDEN 0 · OLDEST BLOCKED None                                   "
+TEXT 04 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
+TEXT 05 "┌Kitchen status · 0-0/0 · 0 blocked──────────────────────────────────────────────────────────────────────────┐"
+TEXT 06 "│AGENT            STATE                  ELAPSED               WORKSPACE        TICKETS RUNTIME              │"
+STYLE 06 001..109 fg=Reset bg=Reset mod=BOLD skip=false
+TEXT 07 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
+TEXT 08 "┌86 BOARD────────────────────────────────────────────────────────────────────────────────────────────────────┐"
 STYLE 08 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
-TEXT 09 "                                                                                                              "
+TEXT 09 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
+STYLE 09 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false
 TEXT 10 "                                                                                                              "
 TEXT 11 "                                                                                                              "
 TEXT 12 "                                                                                                              "
@@ -26,4 +26,4 @@ TEXT 19 "                                                                       
 TEXT 20 "                                                                                                              "
 TEXT 21 "                                                                                                              "
 TEXT 22 "                                                                                                              "
-TEXT 23 "w scope · a all · q / Esc quit · 86 0/64                                                                      "
+TEXT 23 "q / Esc quit · b next blocked · w scope · a all · 86 0/64                                                     "

@@ -1172,6 +1172,171 @@ test("authoritative fixture state sequence drives history accents poses prep and
   }
 });
 
+test("real fixture service summary cycles every blocked cook without moving stations", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-mise-summary-")),
+    port = await availablePort(),
+    appUrl = `http://127.0.0.1:${port}`,
+    socketPath = join(directory, "herdr.sock"),
+    source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.0-p19.json",
+        ),
+        "utf8",
+      ),
+    ),
+    sockets = new Set<Socket>();
+  let snapshot = "";
+  const setRoster = (count: number, allBlocked = false) => {
+      const states = allBlocked
+        ? ["blocked"]
+        : ["blocked", "working", "idle", "done"];
+      snapshot = JSON.stringify({
+        result: {
+          snapshot: {
+            ...source,
+            agents: Array.from({ length: count }, (_, index) => ({
+              ...source.agents[0],
+              terminal_id: `fixture-terminal-${String(index).padStart(2, "0")}`,
+              pane_id: `fixture-${String(index).padStart(2, "0")}`,
+              display_agent: `Cook${String(index).padStart(2, "0")}`,
+              agent_status: states[index % states.length],
+              agent_session: { value: `fixture-session-${index}` },
+            })),
+          },
+        },
+      });
+    },
+    fixtureServer = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      let request = "";
+      socket.on("data", (chunk) => {
+        request += chunk;
+        if (!request.includes("\n")) return;
+        const method = JSON.parse(request).method;
+        if (method === "session.snapshot") socket.end(`${snapshot}\n`);
+        else socket.write('{"result":{"type":"subscription_started"}}\n');
+      });
+    });
+  setRoster(4);
+  await new Promise<void>((resolve, reject) => {
+    fixtureServer.once("error", reject);
+    fixtureServer.listen(socketPath, resolve);
+  });
+  const app = spawn("target/debug/herdr-mise", [], {
+    env: {
+      ...process.env,
+      HERDR_MISE_PORT: String(port),
+      HERDR_SOCKET_PATH: socketPath,
+    },
+    stdio: "ignore",
+  });
+  try {
+    await expect
+      .poll(async () => {
+        try {
+          return (await fetch(appUrl)).status;
+        } catch {
+          return 0;
+        }
+      })
+      .toBe(200);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(`${appUrl}/?stats`);
+    for (const count of [4, 16, 30]) {
+      setRoster(count);
+      const blockedCount = Math.ceil(count / 4),
+        summary = page.getByRole("region", {
+          name: "Observed service summary",
+        });
+      await expect(summary).toContainText(`Blocked ${blockedCount}`, {
+        timeout: 10_000,
+      });
+      await expect(summary).toContainText(`Shown ${count} of ${count}`);
+      await expect(summary).toContainText("Hidden plated 0");
+      await expect(summary).toContainText("Oldest blocked: Cook00");
+      const initialMetrics = (await sceneMetrics(page))!;
+      const summaryBox = (await summary.boundingBox())!,
+        canvasBox = (await page.locator(".canvasHost").boundingBox())!;
+      expect(canvasBox).toEqual({ x: 0, y: 0, width: 320, height: 640 });
+      expect(
+        Object.values(initialMetrics.stationStatusBounds).filter((status) =>
+          boxesIntersect(summaryBox, status),
+        ),
+        `summary ${JSON.stringify(summaryBox)}; canvas ${JSON.stringify(canvasBox)}`,
+      ).toEqual([]);
+      expect(
+        Object.keys(initialMetrics.blockedPlacements).length,
+      ).toBeGreaterThan(0);
+      expect(
+        Object.keys(initialMetrics.blockedPlacements).length,
+      ).toBeLessThanOrEqual(blockedCount);
+      const stationBounds = Object.values(initialMetrics.stationCells),
+        focused = new Set<string>();
+      let firstFocused = "";
+      for (let index = 0; index <= blockedCount; index++) {
+        await page.keyboard.press("b");
+        await expect
+          .poll(async () =>
+            Object.keys((await sceneMetrics(page))!.activeFocusBounds),
+          )
+          .toHaveLength(1);
+        const focusedId = Object.keys(
+          (await sceneMetrics(page))!.activeFocusBounds,
+        )[0]!;
+        if (index === 0) firstFocused = focusedId;
+        else if (index === blockedCount) expect(focusedId).toBe(firstFocused);
+        focused.add(focusedId);
+      }
+      expect(focused.size).toBe(blockedCount);
+      expect(Object.values((await sceneMetrics(page))!.stationCells)).toEqual(
+        stationBounds,
+      );
+    }
+    setRoster(12, true);
+    const summary = page.getByRole("region", {
+      name: "Observed service summary",
+    });
+    await expect(summary).toContainText("Blocked 12", { timeout: 10_000 });
+    await expect
+      .poll(
+        async () =>
+          Object.keys((await sceneMetrics(page))!.blockedPlacements).length,
+      )
+      .toBeGreaterThan(0);
+    const summaryBox = (await summary.boundingBox())!,
+      statusBounds = Object.values(
+        (await sceneMetrics(page))!.stationStatusBounds,
+      );
+    expect(
+      statusBounds.filter((status) => boxesIntersect(summaryBox, status)),
+    ).toEqual([]);
+    await page.getByRole("button", { name: "Freezer" }).click();
+    await expect(
+      page.getByRole("button", { name: /Next blocked:/ }),
+    ).toBeDisabled();
+    await page.keyboard.press("b");
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.view)
+      .toBe("freezer");
+    await expect
+      .poll(async () =>
+        Object.keys((await sceneMetrics(page))!.activeFocusBounds),
+      )
+      .toHaveLength(0);
+  } finally {
+    app.kill("SIGTERM");
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("fixture-backed duplicate identity inspection", async ({
   page,
   context,

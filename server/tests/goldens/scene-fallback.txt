@@ -47,8 +47,82 @@ CELL 01 031..032 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 CELL 01 032..033 symbol="A" fg=Reset bg=Reset mod=NONE diff=None
 CELL 01 033..035 symbol="l" fg=Reset bg=Reset mod=NONE diff=None
 CELL 01 035..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-TEXT 02 "                                                                               "
-CELL 02 000..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+TEXT 02 "OBSERVED W 0 · B 0 · P 0 · U 0 · SHOWN 1/1 · HIDDEN 0 · OLDEST BLOCKED None    "
+CELL 02 000..001 symbol="O" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 001..002 symbol="B" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 002..003 symbol="S" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 003..004 symbol="E" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 004..005 symbol="R" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 005..006 symbol="V" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 006..007 symbol="E" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 007..008 symbol="D" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 008..009 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 009..010 symbol="W" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 010..011 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 011..012 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 012..013 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 013..014 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 014..015 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 015..016 symbol="B" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 016..017 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 017..018 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 018..019 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 019..020 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 020..021 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 021..022 symbol="P" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 022..023 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 023..024 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 024..025 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 025..026 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 026..027 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 027..028 symbol="U" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 028..029 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 029..030 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 030..031 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 031..032 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 032..033 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 033..034 symbol="S" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 034..035 symbol="H" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 035..036 symbol="O" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 036..037 symbol="W" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 037..038 symbol="N" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 038..039 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 039..040 symbol="1" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 040..041 symbol="/" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 041..042 symbol="1" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 042..043 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 043..044 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 044..045 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 045..046 symbol="H" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 046..047 symbol="I" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 047..049 symbol="D" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 049..050 symbol="E" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 050..051 symbol="N" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 051..052 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 052..053 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 053..054 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 054..055 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 055..056 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 056..057 symbol="O" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 057..058 symbol="L" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 058..059 symbol="D" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 059..060 symbol="E" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 060..061 symbol="S" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 061..062 symbol="T" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 062..063 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 063..064 symbol="B" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 064..065 symbol="L" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 065..066 symbol="O" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 066..067 symbol="C" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 067..068 symbol="K" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 068..069 symbol="E" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 069..070 symbol="D" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 070..071 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 071..072 symbol="N" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 072..073 symbol="o" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 073..074 symbol="n" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 074..075 symbol="e" fg=Reset bg=Reset mod=NONE diff=None
+CELL 02 075..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 TEXT 03 "───────────────────────────────────────────────────────────────────────────────"
 CELL 03 000..079 symbol="─" fg=Reset bg=Reset mod=NONE diff=None
 TEXT 04 "┌Kitchen status · 1-1/1 · 0 blocked───────────────────────────────────────────┐"
@@ -220,7 +294,7 @@ TEXT 20 "                                                                       
 CELL 20 000..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 TEXT 21 "                                                                               "
 CELL 21 000..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-TEXT 22 "bind warning · w scope · a all · q / Esc quit · 86 0/64                        "
+TEXT 22 "bind warning · q / Esc quit · b next blocked · w scope · a all · 86 0/64       "
 CELL 22 000..001 symbol="b" fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 001..002 symbol="i" fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 002..003 symbol="n" fg=Reset bg=Reset mod=NONE diff=None
@@ -236,43 +310,60 @@ CELL 22 011..012 symbol="g" fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 012..013 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 013..014 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 014..015 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 015..016 symbol="w" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 015..016 symbol="q" fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 016..017 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 017..018 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 018..019 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 019..020 symbol="o" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 020..021 symbol="p" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 021..022 symbol="e" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 017..018 symbol="/" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 018..019 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 019..020 symbol="E" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 020..021 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 021..022 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 022..023 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 023..024 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 024..025 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 025..026 symbol="a" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 026..027 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 027..028 symbol="a" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 028..030 symbol="l" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 030..031 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 031..032 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 032..033 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 033..034 symbol="q" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 034..035 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 035..036 symbol="/" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 023..024 symbol="q" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 024..025 symbol="u" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 025..026 symbol="i" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 026..027 symbol="t" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 027..028 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 028..029 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 029..030 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 030..031 symbol="b" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 031..032 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 032..033 symbol="n" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 033..034 symbol="e" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 034..035 symbol="x" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 035..036 symbol="t" fg=Reset bg=Reset mod=NONE diff=None
 CELL 22 036..037 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 037..038 symbol="E" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 038..039 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 039..040 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 040..041 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 041..042 symbol="q" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 042..043 symbol="u" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 043..044 symbol="i" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 044..045 symbol="t" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 045..046 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 046..047 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 047..048 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 048..049 symbol="8" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 049..050 symbol="6" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 050..051 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 051..052 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 052..053 symbol="/" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 053..054 symbol="6" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 054..055 symbol="4" fg=Reset bg=Reset mod=NONE diff=None
-CELL 22 055..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 037..038 symbol="b" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 038..039 symbol="l" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 039..040 symbol="o" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 040..041 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 041..042 symbol="k" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 042..043 symbol="e" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 043..044 symbol="d" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 044..045 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 045..046 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 046..047 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 047..048 symbol="w" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 048..049 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 049..050 symbol="s" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 050..051 symbol="c" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 051..052 symbol="o" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 052..053 symbol="p" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 053..054 symbol="e" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 054..055 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 055..056 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 056..057 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 057..058 symbol="a" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 058..059 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 059..060 symbol="a" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 060..062 symbol="l" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 062..063 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 063..064 symbol="·" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 064..065 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 065..066 symbol="8" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 066..067 symbol="6" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 067..068 symbol=" " fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 068..069 symbol="0" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 069..070 symbol="/" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 070..071 symbol="6" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 071..072 symbol="4" fg=Reset bg=Reset mod=NONE diff=None
+CELL 22 072..079 symbol=" " fg=Reset bg=Reset mod=NONE diff=None

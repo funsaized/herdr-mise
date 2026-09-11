@@ -198,6 +198,42 @@ fn format_duration(milliseconds: u64) -> String {
     }
 }
 
+pub(super) fn service_line(table: &AgentTable, now: DateTime<Utc>, scope: Option<&str>) -> String {
+    let summary = table.service_summary_scoped(scope);
+    let oldest = table
+        .blocked_agents()
+        .into_iter()
+        .find(|agent| scope.is_none_or(|id| agent.workspace_id.as_deref() == Some(id)))
+        .map_or_else(
+            || "None".into(),
+            |agent| {
+                let milliseconds = DateTime::parse_from_rfc3339(&agent.state_entered_at)
+                    .ok()
+                    .map(|entered| {
+                        now.signed_duration_since(entered.with_timezone(&Utc))
+                            .num_milliseconds()
+                            .max(0) as u64
+                    })
+                    .unwrap_or(0);
+                format!(
+                    "{} {}",
+                    sanitize_external(&agent.name),
+                    format_duration(milliseconds)
+                )
+            },
+        );
+    format!(
+        "OBSERVED W {} · B {} · P {} · U {} · SHOWN {}/{} · HIDDEN {} · OLDEST BLOCKED {oldest}",
+        summary.working,
+        summary.blocked,
+        summary.plated,
+        summary.unknown,
+        summary.visible,
+        summary.visible + summary.hidden_done,
+        summary.hidden_done,
+    )
+}
+
 fn state_label(state: &AgentState) -> &'static str {
     match state {
         AgentState::Idle => "IDLE / PREPPING",
@@ -374,18 +410,24 @@ fn fallback_layout(
 pub(crate) fn table_window(
     area: Rect,
     table: &AgentTable,
+    now: DateTime<Utc>,
+    scope: &Scope,
     selected_id: Option<&str>,
     requested_offset: usize,
 ) -> TableWindow {
-    let agents = table.agents().collect::<Vec<_>>();
+    let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
     let (title, source_copy) = status_lines(
         table.mode(),
         table.source_status(),
         table.source_diagnostic(),
         agents.len(),
     );
-    let header =
-        Paragraph::new(vec![Line::from(title), Line::from(source_copy)]).wrap(Wrap { trim: true });
+    let header = Paragraph::new(vec![
+        Line::from(title),
+        Line::from(format!("{source_copy} · {}", scope_summary(table, scope))),
+        Line::from(service_line(table, now, scope.id.as_deref())),
+    ])
+    .wrap(Wrap { trim: true });
     let header_content_height = u16::try_from(header.line_count(area.width)).unwrap_or(u16::MAX);
     fallback_layout(
         area,
@@ -424,6 +466,7 @@ pub(crate) fn draw_scoped(
             Style::default().add_modifier(Modifier::BOLD),
         )),
         Line::from(format!("{source_copy} · {}", scope_summary(table, scope))),
+        Line::from(service_line(table, now, scope.id.as_deref())),
     ])
     .wrap(Wrap { trim: true });
     let header_content_height =
@@ -564,9 +607,9 @@ pub(crate) fn draw_scoped(
         areas[4]
     };
     let keys = if selected.is_some() {
-        "Tab / Shift+Tab inspect · w scope · a all · Esc close · q quit"
+        "Tab / Shift+Tab inspect · b next blocked · w scope · a all · Esc close · q quit"
     } else {
-        "w scope · a all · q / Esc quit"
+        "q / Esc quit · b next blocked · w scope · a all"
     };
     let board = format!("86 {}/{BOARD_CAP}", table.board().len());
     let status = warning.map_or_else(
@@ -1175,7 +1218,15 @@ mod tests {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal
                 .draw(|frame| {
-                    *offset = table_window(frame.area(), &table, selected, *offset).offset;
+                    *offset = table_window(
+                        frame.area(),
+                        &table,
+                        now,
+                        &Scope::default(),
+                        selected,
+                        *offset,
+                    )
+                    .offset;
                     scene::draw_view_scoped(
                         frame,
                         &table,
@@ -1207,7 +1258,7 @@ mod tests {
                 initial.contains("/30 · 1 blocked"),
                 "{width}x{height}: {initial:?}"
             );
-            assert!(!initial.contains("Cook29"));
+            assert!(!initial.contains("│Cook29"));
 
             let mut selected = None;
             for index in 0..30 {

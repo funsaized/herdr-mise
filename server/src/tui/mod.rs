@@ -268,17 +268,27 @@ fn handle_key_with_scope(
         retain_selection(selected_id, table, scope);
         false
     } else if code == KeyCode::Char('b') {
-        let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
-        let start = selected_id
-            .as_ref()
-            .and_then(|id| agents.iter().position(|agent| &agent.id == id))
-            .map_or(0, |index| index + 1);
-        if let Some(agent) = (0..agents.len())
-            .map(|step| &agents[(start + step) % agents.len()])
-            .find(|agent| agent.state == crate::protocol::AgentState::Blocked)
-        {
-            *selected_id = Some(agent.id.clone());
+        let agents = table
+            .blocked_agents()
+            .into_iter()
+            .filter(|agent| {
+                scope
+                    .id
+                    .as_deref()
+                    .is_none_or(|id| agent.workspace_id.as_deref() == Some(id))
+            })
+            .collect::<Vec<_>>();
+        if agents.is_empty() {
+            return false;
         }
+        let current = selected_id
+            .as_ref()
+            .and_then(|id| agents.iter().position(|agent| &agent.id == id));
+        *selected_id = Some(
+            agents[current.map_or(0, |index| (index + 1) % agents.len())]
+                .id
+                .clone(),
+        );
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
         let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
@@ -354,9 +364,15 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
         reconcile_scope(&mut scope, &table);
         let now = Utc::now();
         terminal.draw(|frame| {
-            table_offset =
-                view::table_window(frame.area(), &table, selected_id.as_deref(), table_offset)
-                    .offset;
+            table_offset = view::table_window(
+                frame.area(),
+                &table,
+                now,
+                &scope,
+                selected_id.as_deref(),
+                table_offset,
+            )
+            .offset;
             scene::draw_view_scoped(
                 frame,
                 &table,
@@ -583,6 +599,76 @@ mod tests {
         });
         retain_selection(&mut selected, &table, &Scope::default());
         assert_eq!(selected, None);
+    }
+
+    #[test]
+    fn blocked_key_cycles_oldest_first_and_wraps() {
+        use crate::protocol::{
+            AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats, SourceStatus,
+        };
+        let blocked = |id: &str, entered: &str| AgentRecord {
+            state_known: Some(true),
+            id: id.into(),
+            pane_id: None,
+            agent_kind: None,
+            name: id.into(),
+            state: AgentState::Blocked,
+            progress: None,
+            state_entered_at: entered.into(),
+            accent_index: 0,
+            model: String::new(),
+            workspace: String::new(),
+            workspace_id: None,
+            session: SessionStats {
+                tickets_available: None,
+                runtime_ms: 0,
+                tickets: 0,
+            },
+        };
+        let mut table = AgentTable::default();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents: vec![
+                blocked("newer", "2026-08-01T12:02:00Z"),
+                blocked("oldest", "2026-08-01T12:01:00Z"),
+            ],
+            workspaces: None,
+        });
+        let shutdown = CancellationToken::new();
+        let mut selected = None;
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('b'),
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("oldest"));
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('b'),
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("newer"));
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('b'),
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown
+        ));
+        assert_eq!(selected.as_deref(), Some("oldest"));
     }
 
     #[test]

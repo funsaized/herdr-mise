@@ -259,6 +259,7 @@ describe("chrome interactions", () => {
         onDismissHint: dismiss,
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onNextBlocked: () => {},
         onRevealCleared: () => {},
       },
       { rerender } = render(<Chrome {...props} />);
@@ -290,6 +291,13 @@ describe("chrome interactions", () => {
   it("exposes a native boolean freezer toggle", () => {
     const store = new AgentStore(),
       toggle = vi.fn();
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "live",
+      sourceStatus: "connected",
+      agents: [{ ...record, state: "blocked" }],
+    });
     render(
       <Chrome
         store={store}
@@ -307,13 +315,85 @@ describe("chrome interactions", () => {
         onDismissHint={() => {}}
         view="freezer"
         onToggleFreezer={toggle}
+        onNextBlocked={() => {}}
         onRevealCleared={() => {}}
       />,
     );
     const button = screen.getByRole("button", { name: "Freezer" });
     expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: "Next blocked: refactor-auth",
+      }).disabled,
+    ).toBe(true);
     fireEvent.click(button);
     expect(toggle).toHaveBeenCalledOnce();
+  });
+  it("shows observed service counts and names the next blocked target", () => {
+    const store = new AgentStore(),
+      next = vi.fn(),
+      oldest = {
+        ...record,
+        id: "oldest",
+        name: "Oldest cook",
+        workspaceId: "one",
+        state: "blocked" as const,
+        stateEnteredAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+      outside = {
+        ...oldest,
+        id: "outside",
+        name: "Outside cook",
+        workspaceId: "two",
+        stateEnteredAt: new Date(Date.now() - 120_000).toISOString(),
+      };
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "live",
+      sourceStatus: "connected",
+      agents: [oldest, { ...record, id: "newer", workspaceId: "one" }, outside],
+      workspaces: [
+        { id: "one", label: "One" },
+        { id: "two", label: "Two" },
+      ],
+    });
+    store.selectWorkspace("one");
+    render(
+      <Chrome
+        store={store}
+        coarse={store.coarse()}
+        hoveredId={null}
+        focusedId={null}
+        hits={[]}
+        settingsOpen={false}
+        statsOpen={false}
+        lastUpdateSeconds={0}
+        metrics={{ drawCalls: 0, socketBytesPerSecond: 0 }}
+        onCloseSettings={() => {}}
+        onOpenSettings={() => {}}
+        hintVisible={false}
+        onDismissHint={() => {}}
+        view="kitchen"
+        onToggleFreezer={() => {}}
+        onNextBlocked={next}
+        onRevealCleared={() => {}}
+      />,
+    );
+    const summary = screen.getByRole("region", {
+      name: "Observed service summary",
+    });
+    expect(summary.textContent).toContain("Working 1");
+    expect(summary.textContent).toContain("Blocked 1");
+    expect(summary.textContent).toContain("Shown 2 of 2");
+    expect(summary.textContent).toContain("Oldest blocked: Oldest cook");
+    expect(summary.textContent).not.toContain("Outside cook");
+    const button = screen.getByRole("button", {
+      name: "Next blocked: Oldest cook",
+    });
+    expect(button.closest("[aria-live]")).toBeNull();
+    fireEvent.click(button);
+    expect(next).toHaveBeenCalledOnce();
   });
   it("reveals locally cleared plated cooks with a native live-only control", () => {
     const reveal = vi.fn(),
@@ -387,6 +467,7 @@ describe("chrome interactions", () => {
         onDismissHint: () => {},
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onNextBlocked: () => {},
         onRevealCleared: () => {},
       },
       { rerender } = render(<Chrome {...props} />);
@@ -434,6 +515,7 @@ describe("chrome interactions", () => {
         onDismissHint: () => {},
         view: "kitchen" as const,
         onToggleFreezer: () => {},
+        onNextBlocked: () => {},
         onRevealCleared: () => {},
       },
       { rerender } = render(<Chrome {...props} />),

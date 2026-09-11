@@ -413,6 +413,43 @@ select:focus-visible {
   border-color: var(--text);
   font-weight: var(--fontRowLabelWeight);
 }
+.serviceStrip {
+  position: absolute;
+  z-index: 8;
+  left: 14px;
+  bottom: 68px;
+  display: flex;
+  align-items: center;
+  gap: var(--spaceRow);
+  max-width: calc(100vw - 220px);
+  padding: 7px 10px;
+  color: var(--textMuted);
+  background: var(--panelSoft);
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusSmall);
+  font-size: var(--fontSecondarySize);
+}
+.serviceStrip div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+}
+.serviceStrip strong {
+  color: var(--text);
+}
+.serviceStrip button {
+  flex: none;
+  padding: 5px 8px;
+  color: var(--buttonText);
+  background: var(--text);
+  border: 1px solid var(--text);
+  border-radius: var(--radiusSmall);
+  cursor: pointer;
+}
+.serviceStrip button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
 .workspaceScope {
   position: absolute;
   z-index: 8;
@@ -773,6 +810,42 @@ select:focus-visible {
 @media (max-width: 900px), (max-height: 640px) {
   .visualTuiFigure {
     display: none;
+  }
+}
+@media (max-width: 480px) {
+  .serviceStrip {
+    right: 8px;
+    bottom: 92px;
+    left: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    max-width: none;
+    align-items: stretch;
+    gap: 3px 6px;
+    padding: 5px 7px;
+    font-size: 10px;
+  }
+  .serviceStrip div:first-child {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .serviceStrip div:nth-child(2) {
+    min-width: 0;
+    gap: 2px 6px;
+  }
+  .serviceStrip div:nth-child(2) span:last-child {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .serviceStrip button {
+    align-self: end;
+  }
+  .panel ~ .serviceStrip {
+    top: 112px;
+    bottom: auto;
   }
 }
 :where(.appShell[data-pager-layout="narrow"]) {

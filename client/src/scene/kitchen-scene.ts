@@ -68,6 +68,7 @@ import {
   stationWorkspaceLabel,
   type BlockedPlacement,
 } from "./geometry";
+import { orderedBlockedAgents } from "../state/semantic-stations";
 
 export {
   blockedPlacements,
@@ -1337,16 +1338,19 @@ export class KitchenScene {
       if (!agent || (this.reducedMotion && agent.targetState !== "blocked"))
         this.retainedBlocked.delete(id);
     }
-    const blockedIds = [...snapshot.visibleAgents.values()]
-        .filter((agent) => agent.targetState === "blocked")
-        .map((agent) => agent.id),
+    const blockedIds = orderedBlockedAgents([
+        ...snapshot.visibleAgents.values(),
+      ]).map((agent) => agent.id),
       exiting = [...this.retainedBlocked.values()].filter(
         (retained) =>
           snapshot.visibleAgents.get(retained.id)?.targetState !== "blocked",
       ),
-      placements = blockedPlacements(this.layout, blockedIds, exiting, [
-        ...snapshot.visibleAgents.keys(),
-      ]);
+      placements = blockedPlacements(
+        this.layout,
+        blockedIds,
+        exiting,
+        blockedIds,
+      );
     this.blockedPlacementMetrics = {};
     const collisionIds = stationCollisionIds([
       ...snapshot.visibleAgents.values(),

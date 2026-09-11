@@ -33,6 +33,8 @@ import { clientStore } from "./runtime";
 import {
   freezerAnnouncement,
   humanStateWords,
+  nextBlockedAgent,
+  orderedBlockedAgents,
   semanticAgentsEqual,
   semanticStationLabel,
   type SemanticAgent,
@@ -434,6 +436,35 @@ it("announces dismissal and reveal while removing the cleared station control", 
   expect(
     screen.getByRole("button", { name: /Example cook, Done — plated/ }),
   ).toBeTruthy();
+});
+
+it("orders valid blocked timestamps oldest-first and cycles every target", () => {
+  const blocked = (id: string, stateEnteredAt: string): SemanticAgent => ({
+      id,
+      name: id,
+      workspace: "",
+      stateKnown: true,
+      paneId: undefined,
+      agentKind: undefined,
+      targetState: "blocked",
+      stateEnteredAt,
+    }),
+    agents = [
+      blocked("z", "2026-08-01T12:00:00Z"),
+      blocked("b", "2026-08-01T11:00:00Z"),
+      blocked("a", "2026-08-01T11:00:00Z"),
+      blocked("invalid", "unknown"),
+      { ...blocked("hidden", "2026-08-01T10:00:00Z"), stateKnown: false },
+    ];
+  expect(orderedBlockedAgents(agents).map(({ id }) => id)).toEqual([
+    "a",
+    "b",
+    "z",
+    "invalid",
+  ]);
+  expect(nextBlockedAgent(agents, null)?.id).toBe("a");
+  expect(nextBlockedAgent(agents, "a")?.id).toBe("b");
+  expect(nextBlockedAgent(agents, "invalid")?.id).toBe("a");
 });
 
 it("announces truthful freezer capacity", () => {
