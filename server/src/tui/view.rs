@@ -203,8 +203,7 @@ pub(super) fn service_line(table: &AgentTable, now: DateTime<Utc>, scope: Option
     let oldest = table
         .blocked_agents()
         .into_iter()
-        .filter(|agent| scope.is_none_or(|id| agent.workspace_id.as_deref() == Some(id)))
-        .next()
+        .find(|agent| scope.is_none_or(|id| agent.workspace_id.as_deref() == Some(id)))
         .map_or_else(
             || "None".into(),
             |agent| {
