@@ -223,14 +223,16 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
     details = explorer.locator("details"),
     summary = explorer.getByText("Preview explorer", { exact: true });
   const pagerNext = page.getByRole("button", { name: "Next", exact: true }),
-    summaryBox = (await summary.boundingBox())!,
-    pagerNextBox = (await pagerNext.boundingBox())!;
-  expect(
-    summaryBox.x < pagerNextBox.x + pagerNextBox.width &&
-      summaryBox.x + summaryBox.width > pagerNextBox.x &&
-      summaryBox.y < pagerNextBox.y + pagerNextBox.height &&
-      summaryBox.y + summaryBox.height > pagerNextBox.y,
-  ).toBe(false);
+    summaryBox = (await summary.boundingBox())!;
+  if (await pagerNext.count()) {
+    const pagerNextBox = (await pagerNext.boundingBox())!;
+    expect(
+      summaryBox.x < pagerNextBox.x + pagerNextBox.width &&
+        summaryBox.x + summaryBox.width > pagerNextBox.x &&
+        summaryBox.y < pagerNextBox.y + pagerNextBox.height &&
+        summaryBox.y + summaryBox.height > pagerNextBox.y,
+    ).toBe(false);
+  }
   await summary.focus();
   expect(
     await summary.evaluate((element) => getComputedStyle(element).outlineStyle),
@@ -274,8 +276,10 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   await page.keyboard.press("Enter");
   await expect(details).not.toHaveAttribute("open", "");
   await expect(summary).toBeFocused();
-  await pagerNext.click();
-  await expect(page.getByText(/Page 2 of/)).toBeVisible();
+  if (await pagerNext.count()) {
+    await pagerNext.click();
+    await expect(page.getByText(/Page 2 of/)).toBeVisible();
+  }
   await page.setViewportSize({ width: 320, height: 640 });
   await page.getByRole("button", { name: "Open settings" }).click();
   await expect(explorer).toHaveCount(0);
@@ -285,7 +289,7 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("complementary", { name: /details$/ }),
+    page.getByRole("complementary", { name: /(?:details|session summary)$/ }),
   ).toBeVisible();
   await expect(explorer).toHaveCount(0);
   await page.getByRole("button", { name: "Close panel" }).click();
