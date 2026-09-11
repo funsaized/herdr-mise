@@ -75,7 +75,7 @@ describe("state announcements", () => {
     store.destroy();
   });
 
-  it("disambiguates duplicate blocked names like semantic station controls", () => {
+  it("disambiguates a single blocked transition like semantic station controls", () => {
     vi.useFakeTimers();
     const clock = scheduler(),
       store = new AgentStore(clock),
@@ -90,16 +90,15 @@ describe("state announcements", () => {
     store.apply({ ...snapshot, agents });
     store.apply({
       ...snapshot,
-      agents: agents.map((agent) => ({
-        ...agent,
-        state: "blocked" as const,
-        progress: null,
-      })),
+      agents: [
+        { ...agents[0]!, state: "blocked" as const, progress: null },
+        agents[1]!,
+      ],
     });
     vi.advanceTimersByTime(100);
 
     expect(announce).toHaveBeenCalledWith(
-      "2 agents blocked: refactor-agent · refactor · pane-01 and refactor-agent · refactor · pane-02. Use Agent stations to open details.",
+      "refactor-agent · refactor · pane-01 blocked, just now",
     );
     controller.destroy();
     store.destroy();

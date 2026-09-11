@@ -6,8 +6,7 @@ import type {
   StoreEvent,
 } from "../state/store";
 
-const BURST_MS = 100,
-  MAX_NAME_LENGTH = 40;
+const BURST_MS = 100;
 
 type StateEvent = Extract<StoreEvent, { type: "state" }>;
 
@@ -15,13 +14,6 @@ const nativeScheduler: Pick<Scheduler, "setTimeout" | "clearTimeout"> = {
   setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
   clearTimeout: (id) => globalThis.clearTimeout(id as number),
 };
-
-function boundedName(name: string, maxLength = MAX_NAME_LENGTH) {
-  const characters = Array.from(name);
-  if (characters.length <= maxLength) return name;
-  const head = Math.floor((maxLength - 1) / 2);
-  return `${characters.slice(0, head).join("")}…${characters.slice(-(maxLength - head - 1)).join("")}`;
-}
 
 export class StateAnnouncementController {
   private pending = new Map<string, StateEvent>();
@@ -51,9 +43,13 @@ export class StateAnnouncementController {
       return;
     }
     if (event.type === "busser") {
-      const agent = this.store.snapshot().agents.get(event.agentId);
+      const snapshot = this.store.snapshot(),
+        agent = snapshot.agents.get(event.agentId),
+        name = semanticStationNames([...snapshot.agents.values()]).get(
+          event.agentId,
+        );
       if (agent)
-        this.announce(`${boundedName(agent.name)} cleared from the kitchen`);
+        this.announce(`${name ?? agent.name} cleared from the kitchen`);
       return;
     }
     if (event.type !== "state" || event.from === undefined) return;
@@ -64,7 +60,8 @@ export class StateAnnouncementController {
 
   private flush() {
     this.timer = null;
-    const snapshot = this.store.snapshot();
+    const snapshot = this.store.snapshot(),
+      stationNames = semanticStationNames([...snapshot.agents.values()]);
     const transitions = [...this.pending.values()].filter((event) => {
       const agent = snapshot.agents.get(event.agentId);
       return agent?.targetState === event.to;
@@ -75,7 +72,7 @@ export class StateAnnouncementController {
       const event = transitions[0]!,
         agent = snapshot.agents.get(event.agentId)!;
       this.announce(
-        `${boundedName(agent.name)} ${event.to}${event.to === "blocked" ? ", just now" : ""}`,
+        `${stationNames.get(event.agentId) ?? agent.name} ${event.to}${event.to === "blocked" ? ", just now" : ""}`,
       );
       return;
     }
@@ -86,7 +83,7 @@ export class StateAnnouncementController {
         : [];
     });
     if (blocked.length > 0) {
-      this.announce(blockedSummary(blocked, [...snapshot.agents.values()]));
+      this.announce(blockedSummary(blocked, stationNames));
       return;
     }
     this.announce(
@@ -97,13 +94,12 @@ export class StateAnnouncementController {
 
 function blockedSummary(
   agents: readonly AgentMachine[],
-  allAgents: readonly AgentMachine[],
+  stationNames: ReadonlyMap<string, string>,
 ) {
   const count = agents.length,
-    stationNames = semanticStationNames(allAgents),
     names = agents
       .slice(0, 2)
-      .map((agent) => boundedName(stationNames.get(agent.id) ?? agent.name));
+      .map((agent) => stationNames.get(agent.id) ?? agent.name);
   const identities =
     count === 1
       ? names[0]
