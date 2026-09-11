@@ -493,7 +493,7 @@ complete the broader deferred VoiceOver release-gate pass.
 | Field                         | Record                                                                                                                                                                       |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Date                          | `2026-09-11`                                                                                                                                                                 |
-| Commit / candidate identifier | `e13d27a1ce87da1f17a2b11f21d85edbd9b44274` plus the uncommitted HM-015 working tree                                                                                          |
+| Commit / candidate identifier | `837407073dc71c3f1f0410f396e1762fb2814e61`                                                                                                                                   |
 | macOS                         | Session performed; version unavailable                                                                                                                                       |
 | Browser                       | Session performed; browser and version unavailable                                                                                                                           |
 | VoiceOver settings            | Session performed; settings unavailable                                                                                                                                      |
