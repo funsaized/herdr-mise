@@ -34,6 +34,11 @@ const CleanupArguments = z.object({
 });
 
 const GENERATED_PATHS = [
+  ".opencode/.gitignore",
+  ".opencode/bun.lock",
+  ".opencode/node_modules",
+  ".opencode/package-lock.json",
+  ".opencode/package.json",
   "target",
   "target-linux-x64",
   "node_modules",
@@ -350,7 +355,10 @@ export async function cleanupWorkspace(
     )
   ).stdout;
   const removedPaths: string[] = [];
-  for (const path of GENERATED_PATHS) {
+  const generatedPaths = sourceStatus
+    ? GENERATED_PATHS
+    : [...GENERATED_PATHS, ".swamp"];
+  for (const path of generatedPaths) {
     const target = resolve(subject, path);
     const found = await Deno.lstat(target).then(
       () => true,

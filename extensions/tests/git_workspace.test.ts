@@ -37,7 +37,10 @@ Deno.test("prepares and safely reuses a dirty isolated worktree", async () => {
     await git(root, "init", "--bare", "--quiet", remote);
     await git(seed, "init", "--quiet", "--initial-branch=main");
     await Deno.writeTextFile(`${seed}/value.txt`, "one\n");
-    await Deno.writeTextFile(`${seed}/.gitignore`, "client/*.tsbuildinfo\n");
+    await Deno.writeTextFile(
+      `${seed}/.gitignore`,
+      "client/*.tsbuildinfo\n.swamp/\n",
+    );
     await git(seed, "add", "value.txt", ".gitignore");
     await git(
       seed,
@@ -121,6 +124,8 @@ Deno.test("prepares and safely reuses a dirty isolated worktree", async () => {
     }
     await Deno.mkdir(`${second.subjectRoot}/target`);
     await Deno.writeTextFile(`${second.subjectRoot}/target/artifact`, "large");
+    await Deno.mkdir(`${second.subjectRoot}/.swamp`);
+    await Deno.writeTextFile(`${second.subjectRoot}/.swamp/audit`, "preserve");
     const preserved = await cleanupWorkspace(control, {
       workItem: "67",
       subjectRoot: second.subjectRoot,
@@ -131,11 +136,31 @@ Deno.test("prepares and safely reuses a dirty isolated worktree", async () => {
       (await Deno.lstat(`${second.subjectRoot}/target`).then(
         () => true,
         () => false,
+      )) ||
+      !(await Deno.lstat(`${second.subjectRoot}/.swamp/audit`).then(
+        () => true,
+        () => false,
       ))
     ) {
       throw new Error("dirty workspace cleanup was not safely bounded");
     }
     await git(second.subjectRoot, "checkout", "--", "value.txt");
+    await Deno.mkdir(`${second.subjectRoot}/.opencode/node_modules`, {
+      recursive: true,
+    });
+    await Deno.writeTextFile(
+      `${second.subjectRoot}/.opencode/.gitignore`,
+      "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore\n",
+    );
+    await Deno.writeTextFile(
+      `${second.subjectRoot}/.opencode/package.json`,
+      "{}",
+    );
+    await Deno.writeTextFile(
+      `${second.subjectRoot}/.opencode/package-lock.json`,
+      "{}",
+    );
+    await Deno.writeTextFile(`${second.subjectRoot}/.opencode/bun.lock`, "");
     await Deno.mkdir(`${second.subjectRoot}/client`);
     await Deno.writeTextFile(
       `${second.subjectRoot}/client/tsconfig.app.tsbuildinfo`,
@@ -152,10 +177,18 @@ Deno.test("prepares and safely reuses a dirty isolated worktree", async () => {
     if (
       !removed.removed ||
       removed.preserved ||
+      !removed.removedPaths.includes(".opencode/.gitignore") ||
+      !removed.removedPaths.includes(".opencode/bun.lock") ||
+      !removed.removedPaths.includes(".opencode/node_modules") ||
+      !removed.removedPaths.includes(".opencode/package-lock.json") ||
+      !removed.removedPaths.includes(".opencode/package.json") ||
+      !removed.removedPaths.includes(".swamp") ||
       !removed.removedPaths.includes("client/tsconfig.app.tsbuildinfo") ||
       !removed.removedPaths.includes("client/tsconfig.node.tsbuildinfo")
     ) {
-      throw new Error("clean workspace was not removed");
+      throw new Error(
+        `clean workspace was not removed: ${JSON.stringify(removed)}`,
+      );
     }
     const replayed = await cleanupWorkspace(control, {
       workItem: "67",
