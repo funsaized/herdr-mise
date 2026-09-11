@@ -40,6 +40,8 @@ const GENERATED_PATHS = [
   "client/node_modules",
   "client/dist",
   "client/dist-visual",
+  "client/tsconfig.app.tsbuildinfo",
+  "client/tsconfig.node.tsbuildinfo",
   "dist",
   "perf/artifacts",
   "e2e/artifacts",

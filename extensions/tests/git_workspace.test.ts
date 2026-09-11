@@ -37,7 +37,8 @@ Deno.test("prepares and safely reuses a dirty isolated worktree", async () => {
     await git(root, "init", "--bare", "--quiet", remote);
     await git(seed, "init", "--quiet", "--initial-branch=main");
     await Deno.writeTextFile(`${seed}/value.txt`, "one\n");
-    await git(seed, "add", "value.txt");
+    await Deno.writeTextFile(`${seed}/.gitignore`, "client/*.tsbuildinfo\n");
+    await git(seed, "add", "value.txt", ".gitignore");
     await git(
       seed,
       "-c",
@@ -135,11 +136,25 @@ Deno.test("prepares and safely reuses a dirty isolated worktree", async () => {
       throw new Error("dirty workspace cleanup was not safely bounded");
     }
     await git(second.subjectRoot, "checkout", "--", "value.txt");
+    await Deno.mkdir(`${second.subjectRoot}/client`);
+    await Deno.writeTextFile(
+      `${second.subjectRoot}/client/tsconfig.app.tsbuildinfo`,
+      "generated",
+    );
+    await Deno.writeTextFile(
+      `${second.subjectRoot}/client/tsconfig.node.tsbuildinfo`,
+      "generated",
+    );
     const removed = await cleanupWorkspace(control, {
       workItem: "67",
       subjectRoot: second.subjectRoot,
     });
-    if (!removed.removed || removed.preserved) {
+    if (
+      !removed.removed ||
+      removed.preserved ||
+      !removed.removedPaths.includes("client/tsconfig.app.tsbuildinfo") ||
+      !removed.removedPaths.includes("client/tsconfig.node.tsbuildinfo")
+    ) {
       throw new Error("clean workspace was not removed");
     }
     const replayed = await cleanupWorkspace(control, {
