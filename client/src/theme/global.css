@@ -813,9 +813,6 @@ select:focus-visible {
   }
 }
 @media (max-width: 480px) {
-  .canvasHost {
-    bottom: 252px;
-  }
   .serviceStrip {
     right: 8px;
     bottom: 92px;

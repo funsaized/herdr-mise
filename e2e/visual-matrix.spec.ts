@@ -1263,6 +1263,7 @@ test("real fixture service summary cycles every blocked cook without moving stat
       const initialMetrics = (await sceneMetrics(page))!;
       const summaryBox = (await summary.boundingBox())!,
         canvasBox = (await page.locator(".canvasHost").boundingBox())!;
+      expect(canvasBox).toEqual({ x: 0, y: 0, width: 320, height: 640 });
       expect(
         Object.values(initialMetrics.stationStatusBounds).filter((status) =>
           boxesIntersect(summaryBox, status),
