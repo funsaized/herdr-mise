@@ -16,8 +16,8 @@ List the smallest set of steps that demonstrates the problem.
 
 ## Environment
 
-- herdr-mise version or commit:
-- Herdr version:
+- Exact `herdr-mise --version` output:
+- Exact `herdr-mise --diagnostic` output:
 - Operating system and architecture:
 - Affected surface (browser or TUI):
 - Source mode and visible condition (for example Demo and Blocked, or Live and

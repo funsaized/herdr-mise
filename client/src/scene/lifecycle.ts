@@ -1,5 +1,6 @@
 import type { Rect } from "./layout";
 import type { AgentMachine } from "../state/store";
+import { tokens } from "../theme/tokens";
 
 export const BUSSER_SWEEP_MS = 700;
 export interface BusserSweepSample {
@@ -51,10 +52,34 @@ export function sceneMotionPolicy(reduced: boolean) {
 export function sceneContinuousMotion(
   reduced: boolean,
   agents: Iterable<Pick<AgentMachine, "targetState">>,
+  active: {
+    transitions?: number;
+    particles?: number;
+    busserSweeps?: number;
+    doneFlourish?: boolean;
+  } = {},
 ) {
   return (
-    !reduced && [...agents].some((agent) => agent.targetState === "working")
+    !reduced &&
+    ([...agents].some((agent) => agent.targetState === "working") ||
+      !!active.transitions ||
+      !!active.particles ||
+      !!active.busserSweeps ||
+      !!active.doneFlourish)
   );
+}
+export function sceneDiscreteWakeDelay(
+  reduced: boolean,
+  agents: Iterable<Pick<AgentMachine, "targetState">>,
+  animatedIdle: boolean,
+) {
+  const states = [...agents];
+  if (states.some((agent) => agent.targetState === "blocked"))
+    return reduced
+      ? tokens.scene.cook.blocked.reducedMotionFrameMs
+      : tokens.scene.cook.blocked.frameMs[1];
+  if (!reduced && animatedIdle) return tokens.scene.cook.idleFrameMs;
+  return null;
 }
 export class BusserSweepTimeline {
   private sweeps = new Map<string, { rect: Rect; startedAt: number }>();

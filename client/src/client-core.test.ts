@@ -499,22 +499,26 @@ describe("agent store machines", () => {
     expect(store.snapshot().mode).toBe("empty");
   });
   it("records only strictly newer same-state observation periods", () => {
-    const store = new AgentStore(),
+    const clock = new FakeClock(),
+      store = new AgentStore(clock),
       first = agent("working"),
       reentered = { ...first, stateEnteredAt: "2026-07-31T00:00:00.500Z" },
       events: string[] = [];
     store.onEvent((event) => events.push(event.type));
     store.apply(snapshot(first));
     events.length = 0;
+    clock.advance(100);
     store.setDisconnected();
+    clock.advance(100);
     store.apply(snapshot(reentered));
     store.apply(upsert(reentered));
     store.apply(
       upsert({ ...first, stateEnteredAt: "2026-07-30T23:59:59.999Z" }),
     );
     expect(store.snapshot().agents.get("a")?.history).toEqual([
-      { state: "working", startedAt: Date.parse(first.stateEnteredAt) },
-      { state: "working", startedAt: Date.parse(reentered.stateEnteredAt) },
+      { state: "working", startedAt: 0 },
+      { state: "gap", startedAt: 100 },
+      { state: "working", startedAt: 200 },
     ]);
     expect(events.filter((event) => event === "state")).toHaveLength(0);
   });
@@ -1196,7 +1200,7 @@ describe("layout, transitions and resources", () => {
       now,
       18,
     );
-    expect(answered.status).toBe("ANSWER RECEIVED");
+    expect(answered.status).toBe("WORK RESUMED");
   });
   it("caps banquet identity labels so adjacent 12-agent cells retain separation", () => {
     const ids = Array.from(
@@ -1456,10 +1460,8 @@ describe("theme boundary and bell", () => {
       agents: [record("reconnect-agent", "blocked", clock.time - 1_000)],
     });
     bell.tick();
-    expect(bell.log.slice(-2).map(({ reason }) => reason)).toEqual([
-      "fast",
-      "vignette",
-    ]);
+    expect(bell.log).toHaveLength(beforeDisconnect + 1);
+    expect(bell.log.at(-1)?.reason).toBe("enter");
 
     clock.advance(1);
     const beforeReuse = bell.log.length;
@@ -1478,7 +1480,7 @@ describe("theme boundary and bell", () => {
         ({ agentId, reason }) =>
           agentId === "reconnect-agent" && reason === "enter",
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
 
     sendRemove(sockets[1]!, "reconnect-agent");
     store.setSettings({ sound: false });

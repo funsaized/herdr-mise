@@ -90,6 +90,7 @@ test.beforeEach(async ({ page }, testInfo) => {
 
 test("visual demo service at comp viewport", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.clock.install({ time: 1_700_000_000_000 });
   await page.addInitScript(() =>
     localStorage.setItem("mise-bell-hint", "dismissed"),
@@ -266,14 +267,151 @@ test("PR-3 browser event-to-next-frame scheduling (not source-to-pixel)", async 
   );
   expect(latency).toBeLessThanOrEqual(250);
 });
+test("visible scene renders only on lifecycle demand", async ({ page }) => {
+  await page.addInitScript(() => {
+    const native = requestAnimationFrame.bind(window);
+    let frames = 0,
+      lastFrame = -1;
+    window.requestAnimationFrame = (callback) =>
+      native((time) => {
+        if (time !== lastFrame) frames++;
+        lastFrame = time;
+        callback(time);
+      });
+    Object.defineProperty(window, "__rafCount", { value: () => frames });
+  });
+  await page.goto("/?stats");
+  await expect(page.locator("canvas")).toBeVisible();
+  const counts = () =>
+      page.evaluate(() => ({
+        renders: (
+          window as unknown as {
+            __miseSceneMetrics(): { renderCount: number; rafCount: number };
+          }
+        ).__miseSceneMetrics().renderCount,
+        raf: (
+          window as unknown as {
+            __miseSceneMetrics(): { renderCount: number; rafCount: number };
+          }
+        ).__miseSceneMetrics().rafCount,
+        globalRaf: (window as unknown as { __rafCount(): number }).__rafCount(),
+      })),
+    measure = async (duration: number) => {
+      const before = await counts();
+      await page.waitForTimeout(duration);
+      const after = await counts();
+      return {
+        renders: after.renders - before.renders,
+        raf: after.raf - before.raf,
+        globalRaf: after.globalRaf - before.globalRaf,
+      };
+    },
+    working = { ...agents[0]!, state: "working", progress: 0.5 },
+    idle = { ...working, state: "idle", progress: null };
+  await send(page, { ...snapshot, agents: [working] });
+  await page.waitForTimeout(1_200);
+  const workingWindow = await measure(300);
+  expect(workingWindow.renders).toBeGreaterThan(0);
+  expect(workingWindow.raf).toBeGreaterThan(0);
+
+  const transitionBefore = await counts();
+  await send(page, {
+    version: 1,
+    type: "delta",
+    mode: "demo",
+    operation: "upsert",
+    agent: idle,
+  });
+  await expect
+    .poll(async () => (await counts()).renders, { timeout: 250 })
+    .toBeGreaterThan(transitionBefore.renders);
+  const transitionWindow = await measure(300);
+  expect(transitionWindow.renders).toBeGreaterThan(0);
+
+  await send(page, {
+    ...snapshot,
+    agents: agents.map((agent) => ({
+      ...agent,
+      state: "idle",
+      progress: null,
+    })),
+  });
+  await page.waitForTimeout(1_200);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Performance.enable");
+  const before = await cdp.send("Performance.getMetrics"),
+    countsBefore = await counts(),
+    startedAt = Date.now();
+  await page.waitForTimeout(2_000);
+  const after = await cdp.send("Performance.getMetrics"),
+    wall = (Date.now() - startedAt) / 1000,
+    countsAfter = await counts(),
+    cpu =
+      ((metric(after.metrics, "TaskDuration") -
+        metric(before.metrics, "TaskDuration")) /
+        wall) *
+      100;
+  console.log(
+    `Visible idle fixed 2000 ms window — baseline: 1.816% CPU, 15 renders, 121 scene rAF; demand-driven: ${cpu.toFixed(3)}% CPU, ${countsAfter.renders - countsBefore.renders} renders, ${countsAfter.raf - countsBefore.raf} scene rAF (${countsAfter.globalRaf - countsBefore.globalRaf} global)`,
+  );
+  expect(countsAfter.renders - countsBefore.renders).toBeLessThanOrEqual(4);
+  expect(countsAfter.raf - countsBefore.raf).toBeLessThanOrEqual(4);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForTimeout(300);
+  const reducedIdle = await measure(2_000);
+  expect(reducedIdle.renders).toBeLessThanOrEqual(1);
+  expect(reducedIdle.raf).toBeLessThanOrEqual(1);
+  expect(reducedIdle.globalRaf).toBeLessThanOrEqual(1);
+
+  await send(page, { ...snapshot, agents: [] });
+  await page.waitForTimeout(300);
+  const empty = await measure(2_000);
+  expect(empty.renders).toBeLessThanOrEqual(1);
+  expect(empty.raf).toBeLessThanOrEqual(1);
+  expect(empty.globalRaf).toBeLessThanOrEqual(1);
+
+  await send(page, {
+    ...snapshot,
+    agents: [
+      {
+        ...working,
+        state: "blocked",
+        stateEnteredAt: new Date().toISOString(),
+      },
+    ],
+  });
+  await page.waitForTimeout(200);
+  const blockedBefore = await counts();
+  await expect
+    .poll(async () => (await counts()).renders, { timeout: 1_500 })
+    .toBeGreaterThan(blockedBefore.renders);
+
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await send(page, { ...snapshot, agents: [] });
+  await page.waitForTimeout(300);
+  const feedBefore = await counts();
+  await send(page, {
+    version: 1,
+    type: "delta",
+    mode: "demo",
+    operation: "upsert",
+    agent: working,
+  });
+  await expect
+    .poll(async () => (await counts()).renders, { timeout: 250 })
+    .toBeGreaterThan(feedBefore.renders);
+});
 test("PR-4 hidden CPU and resume", async ({ page }) => {
   test.setTimeout(75_000);
   await page.addInitScript(() => {
     const native = requestAnimationFrame.bind(window);
-    let frames = 0;
+    let frames = 0,
+      lastFrame = -1;
     window.requestAnimationFrame = (callback) =>
       native((time) => {
-        frames++;
+        if (time !== lastFrame) frames++;
+        lastFrame = time;
         callback(time);
       });
     Object.defineProperty(window, "__rafCount", { value: () => frames });
