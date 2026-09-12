@@ -7,6 +7,11 @@ const VerifyArguments = z.object({
   expectedGitHead: z.string().regex(/^[0-9a-f]{40}$/),
   subjectRoot: z.string().min(1).default("."),
 });
+const PreviewArguments = z.object({
+  sourceRoot: z.string().min(1),
+  expectedCommit: z.string().regex(/^[0-9a-f]{40}$/),
+  expectedTag: z.string().regex(/^preview-\d{4}-\d{2}-\d{2}-[0-9a-f]{12}$/),
+});
 
 type Context = {
   globalArgs: z.infer<typeof GlobalArguments>;
@@ -63,6 +68,30 @@ const Result = z.object({
   durationMs: z.number().int().nonnegative(),
 });
 
+const CanaryVerdict = z.enum(["passed", "failed", "unavailable"]);
+const PreviewCanaryResult = z.object({
+  status: z.enum(["passed", "failed"]),
+  repository: z.literal("https://github.com/herdrdev/herdr.git"),
+  tag: z.string(),
+  commit: z.string().regex(/^[0-9a-f]{40}$/),
+  tree: z.string().regex(/^[0-9a-f]{40}$/),
+  cargoLockSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  sourceClean: z.boolean(),
+  build: CanaryVerdict,
+  sandbox: z.object({
+    bwrap: z.boolean(),
+    noEgress: z.boolean(),
+    credentialsHidden: z.boolean(),
+    filesystemSentinelHidden: z.boolean(),
+  }),
+  transcript: z.array(z.string()).max(80),
+  cleanupCompleted: z.boolean(),
+  error: z.string().optional(),
+  startedAt: z.iso.datetime(),
+  completedAt: z.iso.datetime(),
+  durationMs: z.number().int().nonnegative(),
+});
+
 async function output(
   command: string,
   args: string[],
@@ -99,6 +128,325 @@ async function sha256(path: string) {
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+async function command(
+  executable: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+  signal?: AbortSignal,
+) {
+  const timeout = AbortSignal.timeout(45 * 60 * 1000);
+  return await new Deno.Command(executable, {
+    args,
+    cwd,
+    env,
+    clearEnv: true,
+    stdin: "null",
+    stdout: "piped",
+    stderr: "piped",
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  }).output();
+}
+
+export function previewSandboxArgs(
+  source: string,
+  cargoHome: string,
+  rustSysroot: string,
+  scratch: string,
+) {
+  const args = [
+    "--die-with-parent",
+    "--new-session",
+    "--unshare-user",
+    "--unshare-pid",
+    "--unshare-ipc",
+    "--unshare-uts",
+    "--unshare-net",
+    "--cap-drop",
+    "ALL",
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--tmpfs",
+    "/tmp",
+    "--tmpfs",
+    "/run",
+    "--ro-bind",
+    source,
+    "/src",
+    "--dir",
+    "/cargo",
+    "--ro-bind",
+    rustSysroot,
+    "/rust",
+    "--bind",
+    scratch,
+    "/work",
+  ];
+  for (const name of ["registry", "git"]) {
+    const path = `${cargoHome}/${name}`;
+    try {
+      Deno.statSync(path);
+      args.push("--ro-bind", path, `/cargo/${name}`);
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+  }
+  for (const path of ["/usr", "/bin", "/lib", "/lib64"]) {
+    try {
+      Deno.statSync(path);
+      args.push("--ro-bind", path, path);
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+  }
+  return args;
+}
+
+const probeScript = String.raw`
+set -eu
+command -v getent >/dev/null
+command -v python3 >/dev/null
+test -e /src/Cargo.toml
+test ! -e "$CREDENTIAL_SENTINEL" && touch /work/credentials-hidden
+test ! -e "$FILESYSTEM_SENTINEL" && touch /work/filesystem-sentinel-hidden
+! getent hosts github.com >/dev/null 2>&1 && touch /work/dns-denied
+! python3 -c 'import socket; socket.create_connection(("1.1.1.1",443),1)' >/dev/null 2>&1 && touch /work/https-denied
+! python3 -c 'import socket; socket.create_connection(("10.0.0.1",443),1)' >/dev/null 2>&1 && touch /work/private-network-denied
+! python3 -c 'import socket; socket.create_connection(("169.254.169.254",80),1)' >/dev/null 2>&1 && touch /work/metadata-denied
+`;
+
+async function previewCanary(
+  args: z.infer<typeof PreviewArguments>,
+  context: Context,
+) {
+  const started = Date.now();
+  const root = await subjectRoot(context.repoDir, args.sourceRoot);
+  const runGit = (gitArgs: string[]) => output("git", gitArgs, root, context);
+  const repository = await runGit(["remote", "get-url", "origin"]);
+  if (repository !== "https://github.com/herdrdev/herdr.git")
+    throw new Error(`unexpected preview remote: ${repository}`);
+  const commit = await runGit(["rev-parse", "HEAD"]);
+  const tagCommit = await runGit([
+    "rev-parse",
+    `refs/tags/${args.expectedTag}^{commit}`,
+  ]);
+  if (commit !== args.expectedCommit || tagCommit !== args.expectedCommit)
+    throw new Error("preview tag and HEAD do not match the discovered commit");
+  const tree = await runGit(["rev-parse", "HEAD^{tree}"]);
+  if (await runGit(["status", "--porcelain", "--untracked-files=all"]))
+    throw new Error("preview checkout is not clean");
+  const lock = await sha256(`${root}/Cargo.lock`);
+  const scratch = await Deno.makeTempDir({ prefix: "herdr-preview-canary-" });
+  let status: "passed" | "failed" = "failed";
+  let build: "passed" | "failed" | "unavailable" = "unavailable";
+  let stage = "dependency acquisition";
+  let errorMessage: string | undefined;
+  let cleanupCompleted = false;
+  const transcript = ["source identity verified"];
+  const sandboxEvidence = {
+    bwrap: false,
+    noEgress: false,
+    credentialsHidden: false,
+    filesystemSentinelHidden: false,
+  };
+  try {
+    const cargoHome = `${scratch}/cargo-home`;
+    const empty = `${scratch}/empty`;
+    const work = `${scratch}/work`;
+    await Promise.all([cargoHome, empty, work].map((path) => Deno.mkdir(path)));
+    const trustedEnv = {
+      PATH: Deno.env.get("PATH") ?? "/usr/bin:/bin",
+      HOME: `${scratch}/fetch-home`,
+      CARGO_HOME: cargoHome,
+      RUSTUP_HOME:
+        Deno.env.get("RUSTUP_HOME") ?? `${Deno.env.get("HOME")}/.rustup`,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      CARGO_NET_GIT_FETCH_WITH_CLI: "false",
+    };
+    await Deno.mkdir(trustedEnv.HOME);
+    const fetched = await command(
+      "cargo",
+      ["fetch", "--locked", "--manifest-path", `${root}/Cargo.toml`],
+      empty,
+      trustedEnv,
+      context.signal,
+    );
+    if (!fetched.success)
+      throw new Error(
+        `locked dependency acquisition failed: ${new TextDecoder().decode(fetched.stderr).slice(-2000)}`,
+      );
+    transcript.push(
+      "locked dependencies acquired from empty working directory",
+    );
+    stage = "bwrap availability check";
+    const bwrap = await command(
+      "bwrap",
+      ["--version"],
+      empty,
+      { PATH: trustedEnv.PATH },
+      context.signal,
+    );
+    if (!bwrap.success)
+      throw new Error("bwrap is mandatory for preview execution");
+    const sysroot = await output(
+      "rustc",
+      ["--print", "sysroot"],
+      empty,
+      context,
+    );
+    await Deno.writeTextFile(`${work}/canary.sh`, probeScript);
+    await Promise.all([
+      Deno.writeTextFile(`${scratch}/credential-sentinel`, "must stay hidden"),
+      Deno.writeTextFile(`${scratch}/filesystem-sentinel`, "must stay hidden"),
+    ]);
+    stage = "sandbox control probes";
+    const probes = await command(
+      "bwrap",
+      [
+        ...previewSandboxArgs(root, cargoHome, sysroot, work),
+        "--clearenv",
+        "--setenv",
+        "PATH",
+        "/rust/bin:/usr/bin:/bin",
+        "--setenv",
+        "CARGO_HOME",
+        "/cargo",
+        "--setenv",
+        "CREDENTIAL_SENTINEL",
+        `${scratch}/credential-sentinel`,
+        "--setenv",
+        "FILESYSTEM_SENTINEL",
+        `${scratch}/filesystem-sentinel`,
+        "/bin/sh",
+        "/work/canary.sh",
+      ],
+      empty,
+      { PATH: trustedEnv.PATH },
+      context.signal,
+    );
+    sandboxEvidence.bwrap = probes.success;
+    const markerExists = async (name: string) => {
+      try {
+        return (await Deno.stat(`${work}/${name}`)).isFile;
+      } catch (error) {
+        if (error instanceof Deno.errors.NotFound) return false;
+        throw error;
+      }
+    };
+    sandboxEvidence.credentialsHidden =
+      await markerExists("credentials-hidden");
+    sandboxEvidence.filesystemSentinelHidden = await markerExists(
+      "filesystem-sentinel-hidden",
+    );
+    sandboxEvidence.noEgress = (
+      await Promise.all(
+        [
+          "dns-denied",
+          "https-denied",
+          "private-network-denied",
+          "metadata-denied",
+        ].map(markerExists),
+      )
+    ).every(Boolean);
+    if (!probes.success) throw new Error("sandbox control probes failed");
+    transcript.push(
+      "sandbox credential, filesystem, and no-egress probes passed",
+    );
+    await Deno.remove(`${work}/canary.sh`);
+    await Deno.mkdir(`${work}/home`);
+    stage = "sandboxed offline build";
+    build = "failed";
+    const built = await command(
+      "bwrap",
+      [
+        ...previewSandboxArgs(root, cargoHome, sysroot, work),
+        "--clearenv",
+        "--setenv",
+        "PATH",
+        "/rust/bin:/usr/bin:/bin",
+        "--setenv",
+        "HOME",
+        "/work/home",
+        "--setenv",
+        "XDG_CONFIG_HOME",
+        "/work/home/config",
+        "--setenv",
+        "XDG_DATA_HOME",
+        "/work/home/data",
+        "--setenv",
+        "XDG_CACHE_HOME",
+        "/work/home/cache",
+        "--setenv",
+        "XDG_RUNTIME_DIR",
+        "/work/run",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "CARGO_HOME",
+        "/cargo",
+        "--setenv",
+        "RUSTC",
+        "/rust/bin/rustc",
+        "/bin/sh",
+        "-c",
+        "mkdir -p /work/home/config /work/home/data /work/home/cache /work/run /work/target && /rust/bin/cargo build --locked --offline --manifest-path /src/Cargo.toml --target-dir /work/target --bin herdr",
+      ],
+      empty,
+      { PATH: trustedEnv.PATH },
+      context.signal,
+    );
+    if (!built.success) throw new Error("sandboxed offline build failed");
+    build = "passed";
+    if ((await sha256(`${root}/Cargo.lock`)) !== lock)
+      throw new Error("Cargo.lock changed during canary");
+    transcript.push("cargo --locked --offline completed inside bwrap");
+    status = "passed";
+  } catch {
+    errorMessage = `${stage} failed`;
+    transcript.push(errorMessage);
+  } finally {
+    try {
+      await Deno.remove(scratch, { recursive: true });
+      cleanupCompleted = true;
+    } catch {
+      status = "failed";
+      errorMessage = errorMessage
+        ? `${errorMessage}; cleanup failed`
+        : "cleanup failed";
+      transcript.push("cleanup failed");
+    }
+  }
+  const result: z.infer<typeof PreviewCanaryResult> = {
+    status,
+    repository,
+    tag: args.expectedTag,
+    commit,
+    tree,
+    cargoLockSha256: lock,
+    sourceClean: true,
+    build,
+    sandbox: sandboxEvidence,
+    transcript,
+    cleanupCompleted,
+    error: errorMessage,
+    startedAt: new Date(started).toISOString(),
+    completedAt: new Date().toISOString(),
+    durationMs: Date.now() - started,
+  };
+  const handle = await context.writeResource(
+    "preview-canary-result",
+    "preview-canary-result",
+    result,
+  );
+  if (result.status === "failed")
+    throw new Error(result.error ?? "preview canary failed");
+  return { dataHandles: [handle] };
 }
 
 async function runChecks(
@@ -208,7 +556,7 @@ async function runChecks(
 /** Project-specific Rust verification model. */
 export const model = {
   type: "@funsaized/herdr-mise-rust",
-  version: "2026.08.28.1",
+  version: "2026.09.12.1",
   globalArguments: GlobalArguments,
   resources: {
     result: {
@@ -216,6 +564,13 @@ export const model = {
       schema: Result,
       lifetime: "30d",
       garbageCollection: 20,
+    },
+    "preview-canary-result": {
+      description:
+        "Sanitized source-built Herdr preview compatibility evidence",
+      schema: PreviewCanaryResult,
+      lifetime: "7d",
+      garbageCollection: 8,
     },
   },
   methods: {
@@ -283,6 +638,12 @@ export const model = {
           context,
         );
       },
+    },
+    previewCanary: {
+      description:
+        "Build and probe a pinned Herdr preview in mandatory bwrap isolation",
+      arguments: PreviewArguments,
+      execute: previewCanary,
     },
   },
 };

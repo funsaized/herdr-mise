@@ -1030,6 +1030,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn preview_canary_adapter_accepts_stable_and_diagnoses_preview_over_unix_socket() {
+        async fn normalize_fixture(
+            bytes: &'static [u8],
+        ) -> Result<NormalizedSnapshot, AdapterError> {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("preview-canary.sock");
+            let listener = UnixListener::bind(&path)
+                .unwrap_or_else(|error| panic!("required socket integration unavailable: {error}"));
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = String::new();
+                let mut stream = BufReader::new(&mut stream);
+                stream.read_line(&mut request).await.unwrap();
+                assert_eq!(
+                    serde_json::from_str::<Value>(&request).unwrap()["method"],
+                    "session.snapshot"
+                );
+                let value: Value = serde_json::from_slice(bytes).unwrap();
+                stream
+                    .get_mut()
+                    .write_all(serde_json::to_string(&value).unwrap().as_bytes())
+                    .await
+                    .unwrap();
+                stream.get_mut().write_all(b"\n").await.unwrap();
+            });
+            let value = fetch_snapshot(&path, Duration::from_secs(1)).await.unwrap();
+            server.await.unwrap();
+            Normalizer::default().normalize_snapshot_value(value, "2026-09-12T00:00:00Z")
+        }
+
+        let stable = normalize_fixture(include_bytes!(
+            "../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ))
+        .await
+        .unwrap();
+        assert_eq!(stable.agents.len(), 1);
+        assert!(matches!(
+            normalize_fixture(include_bytes!(
+                "../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json"
+            ))
+            .await,
+            Err(AdapterError::Protocol(22))
+        ));
+    }
+
+    #[tokio::test]
     async fn response_timeout_is_bounded() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("silent.sock");

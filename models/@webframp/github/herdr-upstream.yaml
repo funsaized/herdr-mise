@@ -9,4 +9,4 @@ methods: {}
 reports:
   require:
     - name: '@funsaized/herdr-release-discovery'
-      methods: [list_releases]
+      methods: [discover_herdr_releases]
