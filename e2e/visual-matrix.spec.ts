@@ -157,7 +157,7 @@ const FULL_STATUSES = new Set([
   "BLOCKED AT STATION",
   "PLATED",
   "86'D",
-  "ANSWER RECEIVED",
+  "WORK RESUMED",
   "UNKNOWN · PREP",
 ]);
 
@@ -883,10 +883,10 @@ test("authoritative fixture state sequence drives history accents poses prep and
         name: "example-cook details",
       }),
       stateAge = sequenceDetails
-        .locator(".fact", { hasText: "Time in state" })
+        .locator(".fact", { hasText: "Observation age" })
         .locator("b"),
       periods = sequenceDetails.getByRole("list", {
-        name: "Observed state periods",
+        name: "Mise observation history",
       });
     await expect.poll(() => stateAge.textContent()).toMatch(/^[2-9]\d*s$/);
     await expect(periods.getByRole("listitem")).toHaveCount(1);

@@ -116,7 +116,7 @@ it("requests pane identity and keeps selected details across a fixture move", ()
   expect(within(details).getByText(beforeWorkspace.label)).toBeTruthy();
   expect(within(details).getByText(beforeAgent.pane_id)).toBeTruthy();
   expect(
-    within(details).getByLabelText("Session history").querySelectorAll("li"),
+    within(details).getByLabelText("Observed in Mise").querySelectorAll("li"),
   ).toHaveLength(1);
 
   act(() =>
@@ -167,7 +167,7 @@ it("requests pane identity and keeps selected details across a fixture move", ()
   );
   expect(
     within(movedDetails)
-      .getByLabelText("Session history")
+      .getByLabelText("Observed in Mise")
       .querySelectorAll("li"),
   ).toHaveLength(1);
   expect(clientStore.coarse().selectedId).toBe(beforeAgent.terminal_id);

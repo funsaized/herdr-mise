@@ -112,7 +112,7 @@ export function stationIdentityLabels(
     } as const,
     answered = state === "working" && (agent.answerReceivedUntil ?? 0) > now,
     status = answered
-      ? "ANSWER RECEIVED"
+      ? "WORK RESUMED"
       : state === "blocked" && blockedPlacement
         ? `${blockedPlacement.kind === "pass" ? "AT THE PASS" : "BLOCKED AT STATION"} · ${blockedPlacement.queueOrdinal}/${blockedPlacement.queueTotal}`
         : labels[state];
