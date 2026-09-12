@@ -3,16 +3,28 @@ use std::net::SocketAddr;
 use herdr_mise_server::{
     feed::Feed,
     protocol::{AgentRecord, AgentState, AppMode, SessionStats},
-    runtime::{parse_mode, Mode},
+    runtime::{parse_command, Command, Mode},
     tui::{state::AgentTable, BindWarning},
 };
 
 #[test]
-fn arguments_preserve_default_and_accept_only_tui() {
-    assert_eq!(parse_mode(Vec::<String>::new()).unwrap(), Mode::Http);
-    assert_eq!(parse_mode(["--tui".to_string()]).unwrap(), Mode::Tui);
-    assert!(parse_mode(["--unknown".to_string()]).is_err());
-    assert!(parse_mode(["--tui".to_string(), "extra".to_string()]).is_err());
+fn arguments_preserve_modes_and_accept_one_documented_option() {
+    assert_eq!(
+        parse_command(Vec::<String>::new()).unwrap(),
+        Command::Run(Mode::Http)
+    );
+    for (argument, expected) in [
+        ("--tui", Command::Run(Mode::Tui)),
+        ("--help", Command::Help),
+        ("-h", Command::Help),
+        ("--version", Command::Version),
+        ("-V", Command::Version),
+        ("--diagnostic", Command::Diagnostic),
+    ] {
+        assert_eq!(parse_command([argument.to_string()]).unwrap(), expected);
+    }
+    assert!(parse_command(["--unknown".to_string()]).is_err());
+    assert!(parse_command(["--tui".to_string(), "extra".to_string()]).is_err());
 }
 
 #[test]

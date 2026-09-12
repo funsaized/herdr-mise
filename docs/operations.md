@@ -806,6 +806,36 @@ treating all hosted checks as enforced.
 
 ## Diagnostics
 
+### CLI diagnostic
+
+Use the local binary's bounded, read-only summary when reporting startup or
+Herdr compatibility problems:
+
+```sh
+herdr-mise --version
+herdr-mise --diagnostic
+```
+
+`--diagnostic` performs one socket discovery, snapshot fetch, and adapter
+normalization attempt with a two-second bound. An unavailable source is a
+successful diagnostic result. The command does not start the feed, bind TCP,
+enter terminal raw mode, retry, or monitor subsequent health. Its
+`source_status` is therefore point-in-time only; `http_address` reports the
+configured loopback address, not a listening server. Invalid `HERDR_MISE_PORT`
+still fails closed.
+
+The stable fields are `version`, `supported_protocols`, `source_status`, and
+`http_address`. Output excludes socket/home/workspace paths, adapter error text,
+agent records, and Herdr payloads. A sanitized bug-report sample is:
+
+```text
+herdr-mise 0.2.0
+version=0.2.0
+supported_protocols=17,19,20
+source_status=unavailableSocket
+http_address=http://127.0.0.1:8686
+```
+
 ### `?stats` overlay
 
 Append `?stats` to the URL once. The chrome renders a draw-call and

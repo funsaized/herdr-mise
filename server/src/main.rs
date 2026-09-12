@@ -1,16 +1,52 @@
 use std::time::Duration;
 
 use herdr_mise_server::{
+    adapter::{self, Normalizer},
     discovery,
     feed::Feed,
-    runtime::{self, Mode},
+    protocol::SourceStatus,
+    runtime::{self, Command, Mode},
     service, tui,
 };
 use tokio_util::sync::CancellationToken;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mode = runtime::parse_mode(std::env::args().skip(1))?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    match runtime::parse_command(std::env::args().skip(1))? {
+        Command::Help => println!("{}", runtime::HELP),
+        Command::Version => println!("herdr-mise {}", env!("CARGO_PKG_VERSION")),
+        Command::Diagnostic => tokio::runtime::Runtime::new()?.block_on(diagnostic())?,
+        Command::Run(mode) => tokio::runtime::Runtime::new()?.block_on(run(mode))?,
+    }
+    Ok(())
+}
+
+async fn diagnostic() -> Result<(), Box<dyn std::error::Error>> {
+    let port = runtime::parse_http_port_env(std::env::var("HERDR_MISE_PORT"))?;
+    let status =
+        match adapter::fetch_snapshot(&discovery::discover_socket(), Duration::from_secs(2))
+            .await
+            .and_then(|snapshot| {
+                Normalizer::default()
+                    .normalize_snapshot_value(snapshot, &chrono::Utc::now().to_rfc3339())
+            }) {
+            Ok(_) => SourceStatus::Connected,
+            Err(error) => error.source_status(),
+        };
+    let protocols = adapter::supported_protocols()
+        .into_iter()
+        .map(|protocol| protocol.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let status = serde_json::to_string(&status)?;
+
+    println!("version={}", env!("CARGO_PKG_VERSION"));
+    println!("supported_protocols={protocols}");
+    println!("source_status={}", status.trim_matches('"'));
+    println!("http_address=http://{}", runtime::http_address(port));
+    Ok(())
+}
+
+async fn run(mode: Mode) -> Result<(), Box<dyn std::error::Error>> {
     let http_address = runtime::http_address(runtime::parse_http_port_env(std::env::var(
         "HERDR_MISE_PORT",
     ))?);
