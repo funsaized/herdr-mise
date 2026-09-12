@@ -31,7 +31,7 @@ export interface BoardEntry {
   finalState: AgentRecord["state"];
 }
 export interface StatePeriod {
-  state: AgentRecord["state"];
+  state: AgentRecord["state"] | "unknown" | "gap";
   startedAt: number;
 }
 export interface AgentMachine extends AgentRecord {
@@ -40,6 +40,7 @@ export interface AgentMachine extends AgentRecord {
   transitionStartedAt: number;
   clearAt: number | null;
   answerReceivedUntil: number | null;
+  observedEnteredAt?: number;
   revision: number;
   history: readonly StatePeriod[];
 }
@@ -269,9 +270,28 @@ export class AgentStore {
     this.emitCoarse();
     this.emitChange();
   }
-  setDisconnected(reason: ClientDisconnectReason = null) {
+  setDisconnected(
+    lastValidFrameAt = this.scheduler.now(),
+    reason: ClientDisconnectReason = null,
+  ) {
     const nextReason = reason ?? this.disconnectReason;
-    if (this.mode !== "disconnected" || this.disconnectReason !== nextReason) {
+    let historyChanged = false;
+    for (const [id, agent] of this.agents) {
+      if (agent.history.at(-1)?.state !== "gap") {
+        historyChanged = true;
+        const gap: StatePeriod = { state: "gap", startedAt: lastValidFrameAt };
+        this.agents.set(id, {
+          ...agent,
+          answerReceivedUntil: null,
+          history: [...agent.history, gap].slice(-HISTORY_LIMIT),
+        });
+      }
+    }
+    if (
+      historyChanged ||
+      this.mode !== "disconnected" ||
+      this.disconnectReason !== nextReason
+    ) {
       this.mode = "disconnected";
       this.disconnectReason = nextReason;
       this.emitCoarse();
@@ -349,30 +369,34 @@ export class AgentStore {
       this.end(agent, now);
       return;
     }
-    const stateChanged = prior?.targetState !== agent.state;
-    const initialHistory: readonly StatePeriod[] = [
-      { state: agent.state, startedAt: enteredAt },
-    ];
-    const lastObservedAt = prior?.history.at(-1)?.startedAt;
+    const stateChanged = prior?.targetState !== agent.state,
+      provenanceChanged =
+        (prior?.stateKnown === false) !== (agent.stateKnown === false),
+      observedState = agent.stateKnown === false ? "unknown" : agent.state,
+      observation: StatePeriod = { state: observedState, startedAt: now };
+    const initialHistory: readonly StatePeriod[] = [observation];
     const sameStateReentered =
       !stateChanged &&
-      lastObservedAt !== undefined &&
+      prior !== undefined &&
       Number.isFinite(parsedEnteredAt) &&
-      enteredAt > lastObservedAt;
+      enteredAt > (prior.observedEnteredAt ?? Date.parse(prior.stateEnteredAt));
     const newerDoneGeneration =
       prior?.targetState === "done" &&
       agent.state === "done" &&
       sameStateReentered;
     const history = prior
-      ? stateChanged || sameStateReentered
-        ? [
-            ...prior.history,
-            { state: agent.state, startedAt: enteredAt },
-          ].slice(-HISTORY_LIMIT)
-        : prior.history
+      ? stateChanged || provenanceChanged || sameStateReentered
+        ? [...prior.history, observation].slice(-HISTORY_LIMIT)
+        : prior.history.at(-1)?.state === "gap"
+          ? [...prior.history, observation].slice(-HISTORY_LIMIT)
+          : prior.history
       : initialHistory;
     const answerReceivedUntil =
-      prior?.targetState === "blocked" && agent.state === "working"
+      prior?.targetState === "blocked" &&
+      prior.stateKnown !== false &&
+      prior.history.at(-1)?.state === "blocked" &&
+      agent.state === "working" &&
+      agent.stateKnown !== false
         ? now + 2_000
         : agent.state === "working"
           ? (prior?.answerReceivedUntil ?? null)
@@ -392,6 +416,9 @@ export class AgentStore {
             : (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
           : null,
       answerReceivedUntil,
+      observedEnteredAt: stateChanged
+        ? enteredAt
+        : Math.max(prior?.observedEnteredAt ?? -Infinity, enteredAt),
       revision: (prior?.revision ?? 0) + 1,
       history,
     };

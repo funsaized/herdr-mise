@@ -27,6 +27,7 @@ export class AgentWebSocketClient {
   private bytes: { at: number; count: number }[] = [];
   private invalidMessages = 0;
   private recoveringRejectedState = false;
+  private lastValidFrameAt: number | null = null;
   constructor(
     private url: string,
     private store: AgentStore,
@@ -61,7 +62,10 @@ export class AgentWebSocketClient {
       socket.close();
       this.scheduler.clearTimeout(this.staleTimer);
       this.staleTimer = null;
-      this.store.setDisconnected(incompatible ? "incompatibleFeed" : null);
+      this.store.setDisconnected(
+        this.lastValidFrameAt ?? this.scheduler.now(),
+        incompatible ? "incompatibleFeed" : null,
+      );
       if (this.reconnectTimer === null)
         this.reconnectTimer = this.scheduler.setTimeout(() => {
           this.reconnectTimer = null;
@@ -95,6 +99,7 @@ export class AgentWebSocketClient {
         }
         if (outcome.kind === "noise") return;
         const parsed = outcome.event;
+        this.lastValidFrameAt = this.scheduler.now();
         if (parsed.type === "snapshot") {
           this.store.apply(parsed);
           hasSnapshot = true;
