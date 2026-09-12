@@ -77,6 +77,15 @@ The project ships a native Rust executable, so npm is not an appropriate
 distribution registry. Publishing there would add a Node prerequisite and a
 post-install binary downloader without improving the user experience.
 
+### Linux ARM64 feasibility
+
+**Later (no-go), September 12, 2026.** The demand gate in issue #195 failed:
+there is no recorded evidence of two independently interested users or one
+recurring deployment, so native feasibility and recurring release cost were
+not trialed and the three-target release contract remains unchanged. See the
+[decision record](docs/linux-arm64-feasibility-2026-09.md) for the blocker and
+evidence required to reconsider it.
+
 Per-distribution Linux repositories are excluded because they would introduce
 repository signing, metadata publication, distro compatibility, and multiple
 package formats. Linuxbrew and the standalone installer cover the existing
