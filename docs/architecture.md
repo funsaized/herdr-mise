@@ -96,10 +96,20 @@ fresh timestamps and accent. Mise never reads `agent_session` as identity.
 
 Process modes (parsed in `server/src/runtime.rs`; no CLI crate):
 
-| Invocation         | Behavior                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| `herdr-mise`       | HTTP server only. Default; unchanged.                                              |
-| `herdr-mise --tui` | TUI on the controlling terminal **and** HTTP server concurrently. What Herdr runs. |
+| Invocation                    | Behavior                                                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `herdr-mise`                  | HTTP server only. Default; unchanged.                                                                 |
+| `herdr-mise --tui`            | TUI on the controlling terminal **and** HTTP server concurrently. What Herdr runs.                    |
+| `herdr-mise --diagnostic`     | One read-only, two-second-bounded Herdr source probe; starts no service or TUI.                       |
+| `herdr-mise --help` / `-h`    | Prints usage without constructing the Tokio runtime or reading environment state.                     |
+| `herdr-mise --version` / `-V` | Prints the Cargo package version without constructing the Tokio runtime or reading environment state. |
+
+The diagnostic resolves the same socket as `Feed`, fetches one snapshot, and
+passes it through the same adapter normalizer. It reports only package version,
+manifest-backed supported protocols, typed source status, and configured
+loopback HTTP address. Source health is point-in-time, not a claim that the HTTP
+service is listening or that Herdr will remain available. Socket paths, adapter
+errors, workspaces, agents, and payloads never enter the output.
 
 `--tui` rules:
 
@@ -177,7 +187,7 @@ the same process serves the browser app on its configured loopback port.
   +----------------------------------------------------------------+
   |  herdr-mise server process (Rust)                              |
   |                                                                |
-  |   main.rs        tokio::main, binds 127.0.0.1:8686, axum srv  |
+  |   main.rs        sync CLI dispatch; Tokio runtime for server/diagnostic |
   |   discovery.rs   HERDR_SOCKET_PATH > XDG > HOME > ./.config    |
   |   feed.rs        Atomic mode/status/roster, startup retry,     |
   |                  Live/Demo, 1.25 s coalescer                   |

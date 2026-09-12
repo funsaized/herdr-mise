@@ -83,12 +83,14 @@ test "$(cat "$install_root/herdr-mise/0.2.0-rc.1/artifact-sha256")" = \
 test -x "$install_root/herdr-mise/0.1.0/bin/herdr-mise"
 test ! -e "$install_root/herdr-mise/current.next"
 test ! -L "$install_root/herdr-mise/current.next"
+"$install_root/herdr-mise/current/bin/herdr-mise" --version
 "$install_root/herdr-mise/current/bin/herdr-mise" --tui
 ```
 
-The final command is the bounded manual launch check: confirm the first render,
-then press `q`. Do not launch the default server for this gate; it could hang the
-procedure or collide with the retained dogfood listener.
+The version command must print the exact accepted RC identity. The final command
+is the bounded manual launch check: confirm the first render, then press `q`.
+Do not launch the default server for this gate; it could hang the procedure or
+collide with the retained dogfood listener.
 
 To test clean uninstall, first select a different current version, then run
 `sh scripts/uninstall-acceptance-artifact.sh INSTALL_ROOT VERSION`. The command

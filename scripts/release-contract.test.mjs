@@ -17,6 +17,7 @@ const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const cargo = readFileSync("server/Cargo.toml", "utf8");
 const cargoVersion = cargo.match(/^version = "([^"]+)"$/m)?.[1];
 const packager = readFileSync("scripts/package-release.sh", "utf8");
+const releaseValidator = readFileSync("scripts/validate-release.sh", "utf8");
 const artifactVerifier = readFileSync(
   "scripts/verify-release-artifact.sh",
   "utf8",
@@ -64,7 +65,7 @@ test("stable release contract handles the public upgrade truthfully", () => {
   );
   assert.match(stableAcceptance, /current\/bin\/herdr-mise" --tui/);
   assert.match(stableAcceptance, /confirm the first render,\s+then press `q`/i);
-  assert.doesNotMatch(stableAcceptance, /current\/bin\/herdr-mise" --version/);
+  assert.match(stableAcceptance, /current\/bin\/herdr-mise" --version/);
   assert.match(
     stableAcceptance,
     /VoiceOver speech\/focus listening remains outside[\s\S]*not recorded as `PASS`/,
@@ -346,6 +347,11 @@ test("release version has one authoritative SemVer value", () => {
   );
   assert.ok(packager.includes("server/Cargo.toml"));
   assert.match(packager, /version=\$\(sed /);
+  assert.ok(artifactVerifier.includes("server/Cargo.toml"));
+  assert.match(artifactVerifier, /"\$binary" --help/);
+  assert.match(artifactVerifier, /"\$binary" --version/);
+  assert.match(releaseValidator, /scripts\/package-release\.sh/);
+  assert.match(releaseValidator, /scripts\/verify-release-artifact\.sh/);
   assert.match(
     workflow,
     /node scripts\/release-policy\.mjs classify-tag "\$GITHUB_REF_NAME"/,

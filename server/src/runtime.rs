@@ -42,13 +42,26 @@ pub enum Mode {
     Tui,
 }
 
-pub fn parse_mode(args: impl IntoIterator<Item = String>) -> Result<Mode, String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Command {
+    Run(Mode),
+    Help,
+    Version,
+    Diagnostic,
+}
+
+pub const HELP: &str = "Usage: herdr-mise [OPTION]\n\nOptions:\n  --tui         Run the TUI and HTTP server\n  --diagnostic  Print a bounded local diagnostic\n  -h, --help    Print help\n  -V, --version Print version";
+
+pub fn parse_command(args: impl IntoIterator<Item = String>) -> Result<Command, String> {
     let args = args.into_iter().collect::<Vec<_>>();
     match args.as_slice() {
-        [] => Ok(Mode::Http),
-        [flag] if flag == "--tui" => Ok(Mode::Tui),
+        [] => Ok(Command::Run(Mode::Http)),
+        [flag] if flag == "--tui" => Ok(Command::Run(Mode::Tui)),
+        [flag] if flag == "--help" || flag == "-h" => Ok(Command::Help),
+        [flag] if flag == "--version" || flag == "-V" => Ok(Command::Version),
+        [flag] if flag == "--diagnostic" => Ok(Command::Diagnostic),
         _ => Err(format!(
-            "usage: herdr-mise [--tui] (unexpected arguments: {})",
+            "{HELP}\n\nUnexpected arguments: {}",
             args.join(" ")
         )),
     }

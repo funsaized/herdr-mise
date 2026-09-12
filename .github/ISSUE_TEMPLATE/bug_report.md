@@ -16,7 +16,8 @@ List the smallest set of steps that demonstrates the problem.
 
 ## Environment
 
-- herdr-mise version or commit:
+- Exact `herdr-mise --version` output:
+- Exact `herdr-mise --diagnostic` output:
 - Operating system and architecture:
 - Browser, if applicable:
 
