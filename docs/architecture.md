@@ -136,8 +136,9 @@ the same process serves the browser app on its configured loopback port.
   |   |  Chrome.tsx       |      |  layout.ts                 |    |
   |   |  (mounts in       |      |  particles.ts              |    |
   |   |   cssLayer, not   |      |  transition.ts             |    |
-  |   |   in per-frame)   |      |  (Ticker: stopped while    |    |
-  |   |                   |      |   hidden or disconnected)  |    |
+  |   |   in per-frame)   |      |  (owned demand ticker:     |    |
+  |   |                   |      |   stopped when settled,    |    |
+  |   |                   |      |   hidden, or disconnected) |    |
   |   |  Subscribes to    |      |                            |    |
   |   |  coarse slices    |      |                            |    |
   |   |  only             |      |  Reads from store inside   |    |
@@ -423,7 +424,7 @@ defensive and stores the truthful final state, which is what
   | - First-run hint            |        |   screen-edge vignette)       |
   | - Semantic station controls |        |                               |
   | - Observed service summary  |        |                               |
-  | - Live state announcements  |        | One ticker. One canvas.       |
+  | - Live state announcements  |        | One owned ticker. One canvas. |
   |                             |        | Reads from AgentStore inside |
   | Reads coarse slices only:   |        | the ticker. Per-frame values |
   |   - source/visible/cleared, |        | bypass React.                 |
@@ -458,6 +459,14 @@ locally dismissed done records remain in the source total and plated count until
 the source removes or changes them. `B` / the native **Next blocked** button uses
 oldest valid `stateEnteredAt`, then stable agent ID, and changes semantic/canvas
 focus without changing selection or station layout.
+
+`KitchenScene` owns its Pixi ticker and runs it only while visible work needs
+continuous frames: working cooks, transitions, particles, busser sweeps, or the
+brief done flourish. Settled blocked and animated-idle treatments use one native
+timeout to request a single update and render at their bounded cadence; empty
+and reduced-motion unblocked scenes schedule no timeout. Feed, resize, theme,
+focus, view, and motion-preference changes invalidate immediately. Hidden and
+disconnected scenes stop both the ticker and timeout, then reconcile on resume.
 
 `scripts/audit-pixi-architecture.mjs` enforces the boundary in CI by
 forbidding direct WebGL, custom renderer, or shader imports in the
