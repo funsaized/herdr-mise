@@ -7,6 +7,7 @@ import type {
 } from "../../../protocol/generated/agent-state-event";
 import snapshot from "../../../protocol/fixtures/snapshot.v1.json";
 import unsupported from "../../../protocol/fixtures/snapshot-demo-unsupported.v1.json";
+import provenance from "../../../protocol/fixtures/snapshot-provenance.v1.json";
 import { AgentStore, defaultSettings } from "../state/store";
 import { AgentWebSocketClient, type SocketLike } from "../state/ws-client";
 import {
@@ -587,7 +588,7 @@ describe("chrome interactions", () => {
       expect(screen.getByText("Ended at")).toBeTruthy();
       expect(screen.getByText("Final state")).toBeTruthy();
       expect(screen.getByText("Unavailable")).toBeTruthy();
-      expect(screen.queryByLabelText("Session history")).toBeNull();
+      expect(screen.queryByLabelText("Observed in Mise")).toBeNull();
       expect(screen.queryByText(/View transcript in herdr/i)).toBeNull();
       expect(document.querySelector('a[href^="herdr://session/"]')).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
@@ -620,6 +621,11 @@ describe("chrome interactions", () => {
     const { unmount } = render(<Tooltip agent={agent} hit={hit} />);
     expect(screen.getByRole("tooltip").textContent).toContain(
       "Blocked — waiting at station · queue 6 of 12",
+    );
+    expect(screen.getByRole("tooltip").textContent).toContain("observed");
+    expect(screen.getByRole("tooltip").textContent).toContain("Mise time");
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "Upstream age unavailable",
     );
     expect(screen.getByRole("tooltip").id).toBe("station-tooltip-a");
     expect(screen.getByRole("tooltip").getAttribute("data-placement")).toBe(
@@ -660,9 +666,9 @@ describe("chrome interactions", () => {
     expect(screen.getByText("app")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByText("Tickets this session")).toBeTruthy();
-    expect(screen.getByLabelText("Session history")).toBeTruthy();
+    expect(screen.getByLabelText("Observed in Mise")).toBeTruthy();
     expect(
-      screen.getByRole("list", { name: "Observed state periods" }),
+      screen.getByRole("list", { name: "Mise observation history" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("listitem", { name: /Idle — prepping period 1,/ }),
@@ -742,30 +748,89 @@ describe("chrome interactions", () => {
     expect(screen.getByText("Attempt 3:")).toBeTruthy();
     expect(screen.getByText("pane-🥘-moved")).toBeTruthy();
   });
-  it("distinguishes observed zero tickets from unknown source state", () => {
-    const store = new AgentStore();
-    store.apply({
-      version: 1,
-      type: "snapshot",
-      mode: "live",
-      sourceStatus: "connected",
-      agents: [
-        {
-          ...record,
-          stateKnown: false,
-          session: { runtimeMs: 0, tickets: 0, ticketsAvailable: true },
-        },
-      ],
-    });
+  it("renders fixture-decoded unknown provenance without an idle history label", () => {
+    const store = new AgentStore(),
+      socket = new FakeSocket(),
+      client = new AgentWebSocketClient("ws://test", store, () => socket);
+    client.start();
+    socket.open();
+    socket.message(provenance);
     render(
       <DetailCard
-        agent={store.snapshot().agents.get(record.id)!}
+        agent={store.snapshot().agents.get("fictional-unknown")!}
         onClose={() => {}}
       />,
     );
     expect(screen.getByText("UNKNOWN — AT PREP")).toBeTruthy();
-    expect(screen.getByText("0")).toBeTruthy();
+    expect(
+      screen.getByRole("listitem", { name: /Unknown state period 1,/ })
+        .textContent,
+    ).toBe("UNKNOWN");
+    expect(screen.queryByRole("listitem", { name: /Idle/ })).toBeNull();
+    expect(screen.getByText("Mise time")).toBeTruthy();
+    expect(screen.getByText("Upstream session age")).toBeTruthy();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(4);
+    client.stop();
     store.destroy();
+  });
+  it("renders a stale-socket gap and a fresh observation without a resumed cue", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const store = new AgentStore(),
+      sockets: FakeSocket[] = [],
+      client = new AgentWebSocketClient("ws://test", store, () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      }),
+      observed = {
+        ...provenance,
+        agents: [
+          {
+            ...provenance.agents[0],
+            state: "blocked" as const,
+            stateKnown: true,
+          },
+        ],
+      };
+    client.start();
+    sockets[0]!.open();
+    sockets[0]!.message(observed);
+    vi.advanceTimersByTime(2_900);
+    const view = render(
+      <DetailCard
+        agent={store.snapshot().agents.get("fictional-unknown")!}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("Paused during gap")).toBeTruthy();
+    vi.advanceTimersByTime(1_000);
+    sockets[1]!.open();
+    sockets[1]!.message({
+      ...observed,
+      agents: [
+        {
+          ...observed.agents[0],
+          state: "working",
+          stateEnteredAt: "2026-09-05T00:01:00Z",
+        },
+      ],
+    });
+    const agent = store.snapshot().agents.get("fictional-unknown")!;
+    view.rerender(<DetailCard agent={agent} onClose={() => {}} />);
+    expect(
+      screen.getByRole("listitem", { name: /Disconnected gap period 2,/ })
+        .textContent,
+    ).toBe("GAP");
+    expect(
+      screen.getByRole("listitem", {
+        name: /Working — on the fire period 3,.*to now/,
+      }),
+    ).toBeTruthy();
+    expect(agent.answerReceivedUntil).toBeNull();
+    client.stop();
+    store.destroy();
+    vi.useRealTimers();
   });
   it("shows DEMO SERVICE for an empty unsupported websocket snapshot", () => {
     const store = new AgentStore(),
