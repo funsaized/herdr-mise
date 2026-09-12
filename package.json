@@ -15,6 +15,7 @@
     "smoke": "sh scripts/smoke-release.sh",
     "validate:release": "sh scripts/validate-release.sh",
     "measure:server": "sh scripts/measure-server.sh target/release/herdr-mise",
+    "measure:tui": "python3 scripts/measure-tui.py",
     "typecheck": "npm --prefix client run typecheck",
     "lint": "oxlint --deny-warnings .",
     "test": "node --test scripts/*.test.mjs && npm --prefix client run test",

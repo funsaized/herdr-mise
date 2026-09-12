@@ -826,6 +826,19 @@ CPU budgets. It also writes the raw evidence under
 `scripts/measure-server.sh path/to/herdr-mise` and the artifact
 directory with `HERDR_MISE_ARTIFACT_DIR=...`.
 
+Measure the release TUI through a real Unix socket and POSIX PTY with:
+
+```sh
+cargo build --release --locked --bin herdr-mise
+npm run measure:tui -- --verify
+```
+
+The harness reports repeated median CPU, RSS, and PTY bytes per second for idle,
+working, blocked, and reduced-motion profiles at 120×42 and 79×23. Pass
+`--binary <path> --commit <full-sha> --label <before|after>` to compare preserved
+binaries with accurate provenance; JSON evidence is written under the ignored
+`perf/artifacts/` directory.
+
 ### Smoke test
 
 `scripts/smoke-release.sh` is the all-in-one boot check: spawn the
