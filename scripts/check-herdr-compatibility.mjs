@@ -82,12 +82,55 @@ export function auditWorkflow(workflow) {
     errors.push("compatibility workflow uses pull_request_target");
   }
   if (
-    /secrets\.|gh release (?:create|upload|edit|delete)|\bpublish\b|git push|git tag/i.test(
+    /secrets\.|GH_TOKEN|GITHUB_TOKEN|gh release (?:create|upload|edit|delete)|\bpublish\b|git push|git tag/i.test(
       workflow,
     )
   ) {
     errors.push("compatibility workflow is publishing or uses secrets");
   }
+  if (!/persist-credentials:\s*false/g.test(workflow))
+    errors.push("compatibility workflow persists checkout credentials");
+  if (
+    !/actions\/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/.test(
+      workflow,
+    ) ||
+    !/retention-days:\s*7/.test(workflow)
+  )
+    errors.push("compatibility workflow lacks bounded pinned canary upload");
+  return errors;
+}
+
+export function auditPreviewCanaryContract(model, discovery, workflow) {
+  const errors = [];
+  for (const required of [
+    "--unshare-user",
+    "--unshare-pid",
+    "--unshare-net",
+    "--cap-drop",
+    "--ro-bind",
+    "cargo build --locked --offline",
+    "credential-sentinel",
+    "169.254.169.254",
+  ])
+    if (!model.includes(required))
+      errors.push(`preview canary missing ${required}`);
+  if (
+    !discovery.includes("api.github.com") ||
+    /GH_TOKEN|GITHUB_TOKEN/.test(discovery)
+  )
+    errors.push("release discovery is not credential-free public API access");
+  for (const required of [
+    "preview.commit",
+    'data.latest("herdr-preview-source", "clone").attributes.path',
+  ])
+    if (!workflow.includes(required))
+      errors.push(`preview workflow missing ${required}`);
+  if (
+    /release (?:create|upload)|\bpublish(?:ing)?\b|git push/i.test(
+      model + discovery + workflow,
+    )
+  )
+    errors.push("preview lane has publishing capability");
   return errors;
 }
 
@@ -240,6 +283,25 @@ export function checkCompatibility(args = []) {
       errors.push(`${entry.release}: workflow commit drift`);
   }
   errors.push(...auditWorkflow(workflow));
+  const previewFixturePath =
+    "server/tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json";
+  const previewFixture = JSON.parse(read(previewFixturePath));
+  errors.push(
+    ...auditFixture(previewFixture).map(
+      (error) => `${previewFixturePath}: ${error}`,
+    ),
+  );
+  if (manifest.supported.some((entry) => entry.fixture === previewFixturePath))
+    errors.push(
+      "preview fixture entered the supported compatibility authority",
+    );
+  errors.push(
+    ...auditPreviewCanaryContract(
+      read("extensions/models/herdr_mise_rust.ts"),
+      read("extensions/models/github_herdr_release.ts"),
+      read("workflows/workflow-herdr-release-discovery.yaml"),
+    ),
+  );
 
   const upstreamArgs = args
     .filter((arg) => arg.startsWith("--upstream="))

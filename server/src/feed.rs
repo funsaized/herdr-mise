@@ -869,6 +869,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn preview_canary_feed_moves_from_supported_live_to_preview_diagnostic() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("preview-canary-feed.sock");
+        let listener = UnixListener::bind(&path)
+            .unwrap_or_else(|error| panic!("required socket integration unavailable: {error}"));
+        let serve_preview = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let server_preview = Arc::clone(&serve_preview);
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    break;
+                };
+                let serve_preview = Arc::clone(&server_preview);
+                tokio::spawn(async move {
+                    let mut stream = BufReader::new(stream);
+                    let mut request = String::new();
+                    stream.read_line(&mut request).await.unwrap();
+                    let request: serde_json::Value = serde_json::from_str(&request).unwrap();
+                    if request["method"] == "events.subscribe" {
+                        stream.get_mut().write_all(b"{\"id\":\"herdr-mise-events\",\"result\":{\"type\":\"subscription_started\"}}\n").await.unwrap();
+                        std::future::pending::<()>().await;
+                    }
+                    let response: &'static [u8] =
+                        if serve_preview.load(std::sync::atomic::Ordering::SeqCst) {
+                            include_bytes!(
+                                "../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json"
+                            )
+                        } else {
+                            include_bytes!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json")
+                        };
+                    let value: serde_json::Value = serde_json::from_slice(response).unwrap();
+                    stream
+                        .get_mut()
+                        .write_all(serde_json::to_string(&value).unwrap().as_bytes())
+                        .await
+                        .unwrap();
+                    stream.get_mut().write_all(b"\n").await.unwrap();
+                });
+            }
+        });
+        let shutdown = CancellationToken::new();
+        let feed = Feed::start(path, Duration::from_millis(50), shutdown.clone()).await;
+        wait_for_source_status(&feed, SourceStatus::Connected).await;
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot { mode: AppMode::Live, source_status: SourceStatus::Connected, agents, .. }
+                if agents.len() == 1 && agents[0].id == "fictional-terminal-20"
+        ));
+        serve_preview.store(true, std::sync::atomic::Ordering::SeqCst);
+        wait_for_source_status(&feed, SourceStatus::UnsupportedProtocol).await;
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot {
+                mode: AppMode::Live,
+                source_status: SourceStatus::UnsupportedProtocol,
+                source_diagnostic: Some(SourceDiagnostic {
+                    observed_protocol: 22,
+                    ..
+                }),
+                ..
+            }
+        ));
+        shutdown.cancel();
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn fifty_hz_source_is_coalesced_to_four_hz() {
         let feed = Feed::fixed(AppMode::Live, vec![record(0.0)]).await;
         let mut changes = feed.subscribe();

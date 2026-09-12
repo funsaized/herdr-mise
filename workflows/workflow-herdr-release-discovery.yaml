@@ -5,16 +5,48 @@ jobs:
   - name: main
     description: Discover published upstream releases without changing supported protocols.
     steps:
-      - name: list-releases
+      - name: discover-releases
         task:
           type: model_method
           modelIdOrName: herdr-upstream
-          methodName: list_releases
-          inputs:
-            repo: herdrdev/herdr
+          methodName: discover_herdr_releases
+          inputs: {}
         dependsOn: []
         weight: 0
         allowFailure: false
+      - name: clone-preview
+        task:
+          type: model_method
+          modelIdOrName: herdr-preview-source
+          methodName: clone
+          inputs:
+            url: https://github.com/herdrdev/herdr.git
+            branch: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview.tag }}
+            path: .swamp/preview/herdr
+            depth: 1
+        dependsOn:
+          - step: discover-releases
+            condition:
+              type: succeeded
+        guard: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview != null }}
+        weight: 0
+        allowFailure: true
+      - name: preview-canary
+        task:
+          type: model_method
+          modelIdOrName: verification-rust
+          methodName: previewCanary
+          inputs:
+            sourceRoot: ${{ data.latest("herdr-preview-source", "clone").attributes.path }}
+            expectedCommit: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview.commit }}
+            expectedTag: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview.tag }}
+        dependsOn:
+          - step: clone-preview
+            condition:
+              type: succeeded
+        guard: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview != null }}
+        weight: 0
+        allowFailure: true
     dependsOn: []
     weight: 0
-version: 1
+version: 2

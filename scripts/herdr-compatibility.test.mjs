@@ -12,6 +12,7 @@ import test from "node:test";
 import {
   auditAdapterFixtureMappings,
   auditFixture,
+  auditPreviewCanaryContract,
   auditWorkflow,
   checkCompatibility,
   tableFor,
@@ -140,9 +141,30 @@ test("scheduled compatibility workflow is immutable, read-only, and non-publishi
   assert.match(workflow, /npm run check:herdr-compatibility/);
   assert.doesNotMatch(
     workflow,
-    /secrets\.|gh release (?:create|upload|edit|delete)|publish|git push|git tag/i,
+    /secrets\.|GH_TOKEN|GITHUB_TOKEN|gh release (?:create|upload|edit|delete)|publish|git push|git tag/i,
   );
   assert.match(workflow, /swamp workflow run herdr-release-discovery/);
+});
+
+test("preview canary is immutable credential-free sandboxed advisory evidence", () => {
+  const model = readFileSync("extensions/models/herdr_mise_rust.ts", "utf8");
+  const discovery = readFileSync(
+    "extensions/models/github_herdr_release.ts",
+    "utf8",
+  );
+  const workflow = readFileSync(
+    "workflows/workflow-herdr-release-discovery.yaml",
+    "utf8",
+  );
+  assert.deepEqual(auditPreviewCanaryContract(model, discovery, workflow), []);
+  const fixture = JSON.parse(
+    readFileSync(
+      "server/tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json",
+      "utf8",
+    ),
+  );
+  assert.deepEqual(auditFixture(fixture), []);
+  assert.doesNotMatch(readFileSync(manifestPath, "utf8"), /preview|p22/);
 });
 
 test("workflow audit rejects privileged triggers and additional permission declarations", () => {

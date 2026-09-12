@@ -916,6 +916,22 @@ Herdr to a tested release and retry. Malformed or incomplete snapshots remain
 credential-free, and does not contact the network. The scheduled/manual
 workflow additionally checks source at the immutable commits recorded there.
 
+That workflow has two lanes. The stable job verifies the supported matrix. The
+separate advisory lane discovers stable candidates and exactly the newest
+preview through credential-free public GitHub API reads, dereferences its tag
+to an immutable commit, clones that tag, and source-builds it on a disposable
+Ubuntu runner. Preview build scripts and the daemon run only inside mandatory
+`bwrap` user/PID/proc/mount/network namespaces with read-only source,
+toolchain, and locked dependencies, writable scratch, cleared credentials, and
+no egress. Failure or absence of a preview is reported but does not weaken the
+stable regression or alter support.
+
+The uploaded seven-day JSON is sanitized advisory evidence. Check source tag,
+commit, tree, `Cargo.lock` digest, sandboxed build result, negative
+credential/filesystem/network probes, and cleanup separately. This lane does
+not measure event latency or justify changing the production one-second polling
+interval or subscriptions.
+
 - Add support only after inspecting an immutable upstream commit. Add one
   manually sanitized fictional fixture, its manifest row, and adapter mapping
   coverage together, then update both marked public tables and run all gates.
