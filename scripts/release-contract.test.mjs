@@ -348,6 +348,8 @@ test("release version has one authoritative SemVer value", () => {
   assert.ok(packager.includes("server/Cargo.toml"));
   assert.match(packager, /version=\$\(sed /);
   assert.ok(artifactVerifier.includes("server/Cargo.toml"));
+  assert.match(artifactVerifier, /server\.listen\(0,"127\.0\.0\.1"/);
+  assert.match(artifactVerifier, /export HERDR_MISE_PORT="\$port"/);
   assert.match(artifactVerifier, /"\$binary" --help/);
   assert.match(artifactVerifier, /"\$binary" --version/);
   assert.match(releaseValidator, /scripts\/package-release\.sh/);

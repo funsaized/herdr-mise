@@ -7,7 +7,8 @@ set -eu
 
 archive=${1:?usage: verify-release-artifact.sh dist/herdr-mise-<target>.tar.gz}
 checksum="$archive.sha256"
-port=${HERDR_MISE_PORT:-8686}
+port=$(node -e 'const net=require("node:net"),server=net.createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close()})')
+export HERDR_MISE_PORT="$port"
 work=$(mktemp -d)
 pid=""
 trap '[ -n "$pid" ] && kill -INT "$pid" 2>/dev/null || true; rm -rf "$work"' EXIT INT TERM
