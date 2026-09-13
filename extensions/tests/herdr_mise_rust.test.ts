@@ -30,7 +30,6 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
     "--unshare-user",
     "--unshare-pid",
     "--unshare-net",
-    "--cap-drop",
     "--proc",
     "--ro-bind",
   ]) {
@@ -38,10 +37,8 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
   }
   if (args.includes("/repo") || args.includes(Deno.env.get("HOME") ?? "~"))
     throw new Error("sandbox exposes the repository or host home");
-  if (args.indexOf("--unshare-net") > args.indexOf("--cap-drop"))
-    throw new Error(
-      "network namespace must initialize before capabilities drop",
-    );
+  if (args.includes("--cap-add"))
+    throw new Error("sandbox must retain bwrap's default empty capability set");
   const registry = args.indexOf(`${cargo}/registry`);
   if (registry < 1 || args[registry - 1] !== "--ro-bind")
     throw new Error("sandbox dependency cache is not read-only");

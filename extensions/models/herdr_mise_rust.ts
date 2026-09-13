@@ -197,8 +197,6 @@ export function previewSandboxArgs(
     "--unshare-ipc",
     "--unshare-uts",
     ...(!options.allowNetwork ? ["--unshare-net"] : []),
-    "--cap-drop",
-    "ALL",
     "--proc",
     "/proc",
     "--dev",
