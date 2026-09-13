@@ -11,6 +11,13 @@ import {
 } from "../models/verification_evidence.ts";
 
 const bytes = (value = "") => new TextEncoder().encode(value);
+const hasBwrap = (Deno.env.get("PATH") ?? "").split(":").some((path) => {
+  try {
+    return Deno.statSync(`${path}/bwrap`).isFile;
+  } catch {
+    return false;
+  }
+});
 const success = (stdout = "") =>
   ({
     success: true,
@@ -67,7 +74,7 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
 
 Deno.test({
   name: "preview canary proves real bwrap filesystem and network isolation",
-  ignore: Deno.build.os !== "linux",
+  ignore: Deno.build.os !== "linux" || !hasBwrap,
   async fn() {
     const root = await Deno.makeTempDir({ prefix: "preview-bwrap-test-" });
     const source = `${root}/source`;
