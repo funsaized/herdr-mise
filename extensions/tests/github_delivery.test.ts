@@ -1,4 +1,5 @@
 import {
+  compatibilityDispatchArgs,
   extension,
   requireSubject,
   requireManagedSuccess,
@@ -9,6 +10,7 @@ const subject = {
   state: "OPEN",
   isDraft: false,
   baseRefName: "main",
+  headRefName: "nightshift/188",
   headRefOid: sha,
 };
 
@@ -32,6 +34,49 @@ Deno.test("delivery accepts only the exact open non-draft main subject", () => {
   }
 });
 
+Deno.test("compatibility dispatch derives only the verified PR head ref", () => {
+  const methods = Object.assign({}, ...extension.methods);
+  if (
+    !methods.dispatch_compatibility.arguments.safeParse({
+      prNumber: 188,
+      headSha: sha,
+    }).success
+  )
+    throw new Error("Exact compatibility dispatch identity was rejected");
+  const args = compatibilityDispatchArgs(subject, sha);
+  if (
+    JSON.stringify(args) !==
+    JSON.stringify([
+      "workflow",
+      "run",
+      "herdr-compatibility-drift.yml",
+      "--repo",
+      "funsaized/herdr-mise",
+      "--ref",
+      subject.headRefName,
+    ])
+  )
+    throw new Error(
+      `Unexpected compatibility dispatch: ${JSON.stringify(args)}`,
+    );
+  for (const change of [
+    { headRefName: "--help" },
+    { headRefName: undefined },
+    { headRefOid: "b".repeat(40) },
+  ]) {
+    let rejected = false;
+    try {
+      compatibilityDispatchArgs({ ...subject, ...change }, sha);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected)
+      throw new Error(
+        `Accepted unsafe compatibility ref: ${JSON.stringify(change)}`,
+      );
+  }
+});
+
 Deno.test("delivery schemas reject flags and missing identities", () => {
   const methods = Object.assign({}, ...extension.methods);
   for (const input of [
@@ -41,6 +86,8 @@ Deno.test("delivery schemas reject flags and missing identities", () => {
   ]) {
     if (methods.dispatch_managed.arguments.safeParse(input).success)
       throw new Error("Unsafe dispatch input accepted");
+    if (methods.dispatch_compatibility.arguments.safeParse(input).success)
+      throw new Error("Unsafe compatibility dispatch input accepted");
     if (methods.merge_delivery.arguments.safeParse(input).success)
       throw new Error("Unsafe merge input accepted");
   }

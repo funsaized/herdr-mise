@@ -1,0 +1,21 @@
+{
+  "version": "0.9.0-preview",
+  "protocol": 22,
+  "workspaces": [
+    { "workspace_id": "fictional-preview-kitchen", "label": "Example Preview Kitchen" }
+  ],
+  "tabs": [],
+  "panes": [],
+  "layouts": [],
+  "agents": [
+    {
+      "terminal_id": "fictional-preview-terminal",
+      "pane_id": "fictional-preview-pane",
+      "workspace_id": "fictional-preview-kitchen",
+      "display_agent": "example-preview-cook",
+      "agent_status": "blocked",
+      "state_change_seq": 7,
+      "agent_session": { "value": "fictional-preview-session" }
+    }
+  ]
+}

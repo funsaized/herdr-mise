@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -82,12 +82,21 @@ export function auditWorkflow(workflow) {
     errors.push("compatibility workflow uses pull_request_target");
   }
   if (
-    /secrets\.|gh release (?:create|upload|edit|delete)|\bpublish\b|git push|git tag/i.test(
+    /secrets\.|GH_TOKEN|GITHUB_TOKEN|gh release (?:create|upload|edit|delete)|\bpublish\b|git push|git tag/i.test(
       workflow,
     )
   ) {
     errors.push("compatibility workflow is publishing or uses secrets");
   }
+  if (!/persist-credentials:\s*false/g.test(workflow))
+    errors.push("compatibility workflow persists checkout credentials");
+  if (
+    !/actions\/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/.test(
+      workflow,
+    ) ||
+    !/retention-days:\s*7/.test(workflow)
+  )
+    errors.push("compatibility workflow lacks bounded pinned canary upload");
   return errors;
 }
 
@@ -240,7 +249,21 @@ export function checkCompatibility(args = []) {
       errors.push(`${entry.release}: workflow commit drift`);
   }
   errors.push(...auditWorkflow(workflow));
-
+  for (const name of readdirSync(resolve(root, "server/tests/fixtures")).filter(
+    (name) =>
+      name.startsWith("snapshot-herdr-preview-") && name.endsWith(".json"),
+  )) {
+    const path = `server/tests/fixtures/${name}`;
+    errors.push(
+      ...auditFixture(JSON.parse(read(path))).map(
+        (error) => `${path}: ${error}`,
+      ),
+    );
+    if (manifest.supported.some((entry) => entry.fixture === path))
+      errors.push(
+        "preview fixture entered the supported compatibility authority",
+      );
+  }
   const upstreamArgs = args
     .filter((arg) => arg.startsWith("--upstream="))
     .map((arg) => arg.slice(11));

@@ -4,6 +4,7 @@ import { z } from "npm:zod@4.4.3";
 const repo = "funsaized/herdr-mise";
 const Sha = z.string().regex(/^[0-9a-f]{40}$/);
 const Pr = z.number().int().positive();
+const Head = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9/_-]+$/);
 type Context = {
   signal?: AbortSignal;
   writeResource: (
@@ -58,7 +59,7 @@ async function view(prNumber: number, signal?: AbortSignal) {
         "--repo",
         repo,
         "--json",
-        "number,url,state,isDraft,headRefOid,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
+        "number,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup",
       ],
       signal,
     ),
@@ -73,6 +74,22 @@ export function requireSubject(pr: Record<string, unknown>, headSha: string) {
   ) {
     throw new Error("Expected exact open, non-draft PR head against main");
   }
+}
+
+export function compatibilityDispatchArgs(
+  pr: Record<string, unknown>,
+  headSha: string,
+) {
+  requireSubject(pr, headSha);
+  return [
+    "workflow",
+    "run",
+    "herdr-compatibility-drift.yml",
+    "--repo",
+    repo,
+    "--ref",
+    Head.parse(pr.headRefName),
+  ];
 }
 
 export function requireManagedSuccess(checks: Array<Record<string, unknown>>) {
@@ -154,26 +171,53 @@ export const extension = {
     {
       dispatch_compatibility: {
         description:
-          "Dispatch the non-publishing compatibility and discovery check from trusted main",
-        arguments: z.object({}),
-        execute: async (_args: Record<string, never>, context: Context) => {
-          await gh(
-            [
-              "workflow",
-              "run",
-              "herdr-compatibility-drift.yml",
-              "--repo",
-              repo,
-              "--ref",
-              "main",
-            ],
-            context.signal,
+          "Dispatch the non-publishing compatibility and discovery check for an exact PR head",
+        arguments: z.object({ prNumber: Pr, headSha: Sha }),
+        execute: async (
+          args: { prNumber: number; headSha: string },
+          context: Context,
+        ) => {
+          const command = compatibilityDispatchArgs(
+            await view(args.prNumber, context.signal),
+            args.headSha,
           );
+          await gh(command, context.signal);
           return record(context, "compatibility-dispatch", {
-            controlRef: "main",
+            ...args,
+            headRef: command[6],
             accepted: true,
           });
         },
+      },
+    },
+    {
+      inspect_compatibility: {
+        description: "Inspect the latest compatibility run for an exact commit",
+        arguments: z.object({ headSha: Sha }),
+        execute: async (args: { headSha: string }, context: Context) =>
+          record(
+            context,
+            "compatibility-run",
+            JSON.parse(
+              await gh(
+                [
+                  "run",
+                  "list",
+                  "--repo",
+                  repo,
+                  "--workflow",
+                  "herdr-compatibility-drift.yml",
+                  "--commit",
+                  args.headSha,
+                  "--limit",
+                  "1",
+                  "--json",
+                  "databaseId,status,conclusion,headSha,url,createdAt",
+                ],
+                context.signal,
+              ),
+            ),
+          ),
       },
     },
     {
@@ -217,7 +261,7 @@ export const extension = {
         description:
           "Open or reuse a same-repository backlog PR using existing gh authentication",
         arguments: z.object({
-          head: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9/_-]+$/),
+          head: Head,
           title: z.string().min(1).max(256),
           body: z.string().max(65000),
         }),

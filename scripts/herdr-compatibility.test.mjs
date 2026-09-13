@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -140,9 +141,34 @@ test("scheduled compatibility workflow is immutable, read-only, and non-publishi
   assert.match(workflow, /npm run check:herdr-compatibility/);
   assert.doesNotMatch(
     workflow,
-    /secrets\.|gh release (?:create|upload|edit|delete)|publish|git push|git tag/i,
+    /secrets\.|GH_TOKEN|GITHUB_TOKEN|gh release (?:create|upload|edit|delete)|publish|git push|git tag/i,
   );
   assert.match(workflow, /swamp workflow run herdr-release-discovery/);
+});
+
+test("preview canary is immutable credential-free sandboxed advisory evidence", () => {
+  const extensionRunner = readFileSync("scripts/test-extensions.mjs", "utf8");
+  const scheduledWorkflow = readFileSync(
+    ".github/workflows/herdr-compatibility-drift.yml",
+    "utf8",
+  );
+  assert.match(scheduledWorkflow, /npm run test:extensions/);
+  assert.match(extensionRunner, /--allow-run=bwrap,/);
+  const previewFixtures = readdirSync("server/tests/fixtures")
+    .filter(
+      (name) =>
+        name.startsWith("snapshot-herdr-preview-") && name.endsWith(".json"),
+    )
+    .map((name) => `server/tests/fixtures/${name}`);
+  assert.ok(previewFixtures.length > 0);
+  for (const path of previewFixtures)
+    assert.deepEqual(auditFixture(JSON.parse(readFileSync(path, "utf8"))), []);
+  const supportedFixtures = new Set(
+    JSON.parse(readFileSync(manifestPath, "utf8")).supported.map(
+      ({ fixture }) => fixture,
+    ),
+  );
+  assert.ok(previewFixtures.every((path) => !supportedFixtures.has(path)));
 });
 
 test("workflow audit rejects privileged triggers and additional permission declarations", () => {
