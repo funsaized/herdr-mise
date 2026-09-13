@@ -124,6 +124,32 @@ The product also includes the native terminal UI. Run
 render goldens, bounded particles, and terminal cleanup. It does not replace the
 public-artifact terminal journey below.
 
+## Supplemental release endurance evidence
+
+The opt-in Chromium endurance profile supplements, but does not replace, the
+stable acceptance document. Run `npm run perf:endurance` for the full default
+480 minutes against the candidate release commit. Retain the generated JSONL
+samples and summary outside the repository with the release evidence. The
+summary must truthfully record its requested duration, start, end, actual
+elapsed time, all four 30/60-agent by one/three-client scenarios, environment
+identity, completed-session and reconnect counts, and per-scenario trends.
+
+Evidence is publishable only when the run completed all eight hours on an
+active desktop, lifecycle invariants passed, and no retained-object, browser
+memory, or server RSS trend is proportional to completed sessions or
+reconnects. The summary must contain no `evidenceLimitations`; for example, a
+host that denies `ps` process sampling can validate the product boundary but
+cannot produce publishable endurance evidence. A same-environment baseline
+comparison must reject mismatched OS, hardware, browser, Playwright, or graphics
+identity. Run the documented injected-leak comparison separately and retain its
+expected nonzero result.
+
+The checked-in artifacts remain ignored because they are host-specific.
+External copies must not contain fixture payloads, agent or workspace names,
+or local paths. `scripts/measure-server.sh` remains the short one-sample release
+resource guard, and `scripts/acceptance-soak.sh` remains the public-artifact
+uptime evidence; neither is replaced by this profile.
+
 ## Exact manual matrix
 
 Every row begins `NOT_RUN`. The tester replaces the sentinel timestamp only after
