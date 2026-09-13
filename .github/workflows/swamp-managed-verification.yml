@@ -283,8 +283,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/diagnostics"
           swamp report get @swamp/workflow-summary --workflow verification --json \
             --repo-dir "$CONTROL_ROOT" > "$RUNNER_TEMP/diagnostics/workflow-summary.json" 2>&1 || true
-          node -e "const fs=require('node:fs');const p=process.argv[1];fs.writeFileSync(p,fs.readFileSync(p,'utf8').replaceAll(process.env.RUNNER_TEMP,'\u003crunner-temp\u003e'))" \
-            "$RUNNER_TEMP/diagnostics/workflow-summary.json"
+          swamp data query 'modelName == "verification-root" && name.startsWith("log-")' \
+            --select '{"name": name, "content": content}' --json --repo-dir "$CONTROL_ROOT" \
+            > "$RUNNER_TEMP/verification-logs.json" 2>&1 || true
+          node -e "const fs=require('node:fs');const root=process.env.RUNNER_TEMP;const summary=process.argv[1];fs.writeFileSync(summary,fs.readFileSync(summary,'utf8').replaceAll(root,'<runner-temp>'));console.log(fs.readFileSync(process.argv[2],'utf8').slice(-131072).replaceAll(root,'<runner-temp>'))" \
+            "$RUNNER_TEMP/diagnostics/workflow-summary.json" \
+            "$RUNNER_TEMP/verification-logs.json"
+          rm -f "$RUNNER_TEMP/verification-logs.json"
+          exit 1
       - name: Retain browser failure artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
