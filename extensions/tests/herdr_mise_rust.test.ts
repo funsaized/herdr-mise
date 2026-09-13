@@ -63,6 +63,7 @@ Deno.test({
   ignore: Deno.build.os !== "linux",
   async fn() {
     const root = await Deno.makeTempDir({ prefix: "preview-bwrap-test-" });
+    await Deno.chmod(root, 0o711);
     const source = `${root}/source`;
     const cargo = `${root}/cargo`;
     const rust = `${root}/rust`;

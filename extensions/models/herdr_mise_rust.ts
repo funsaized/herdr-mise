@@ -351,6 +351,7 @@ export async function previewCanary(
     sourceClean = true;
     transcript.push("source identity verified");
     scratch = await Deno.makeTempDir({ prefix: "herdr-preview-canary-" });
+    await Deno.chmod(scratch, 0o711);
     const cargoHome = `${scratch}/cargo-home`;
     const empty = `${scratch}/empty`;
     const work = `${scratch}/work`;
