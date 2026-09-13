@@ -28,6 +28,8 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
     "--die-with-parent",
     "--new-session",
     "--unshare-user",
+    "--uid",
+    "--gid",
     "--unshare-pid",
     "--unshare-net",
     "--cap-drop",
