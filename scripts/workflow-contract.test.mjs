@@ -339,6 +339,14 @@ export function auditWorkflowContract(
     if (!managed.includes(`name: ${artifact}`))
       errors.push(`managed executor: ${artifact} is missing`);
   }
+  if (
+    !managed.includes('name.startsWith("log-")') ||
+    !managed.includes("slice(-131072)") ||
+    !managed.includes('> "$RUNNER_TEMP/verification-logs.json"') ||
+    !managed.includes('rm -f "$RUNNER_TEMP/verification-logs.json"') ||
+    !managed.includes("          exit 1")
+  )
+    errors.push("managed executor: failed verification logs are not retained");
   if ((managed.match(/^          overwrite: false$/gm) ?? []).length !== 3)
     errors.push("managed executor: artifacts must disable overwrite");
   if (
