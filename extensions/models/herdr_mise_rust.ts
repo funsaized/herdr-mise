@@ -281,11 +281,16 @@ export function assertPublicLockedDependencies(lockfile: string) {
     'source = "registry+https://github.com/rust-lang/crates.io-index"';
   for (const line of lockfile.split("\n")) {
     if (line === canonical) continue;
+    const normalized = line.replace(
+      /\\u([\da-fA-F]{4})|\\U([\da-fA-F]{8})/g,
+      (_, short, long) =>
+        String.fromCodePoint(Number.parseInt(short ?? long, 16)),
+    );
     if (
       /^\s*(?:(?:[\w-]+|"[^"]*"|'[^']*')\s*\.\s*)*(?:source(?=[\s=.]|$)|["']source["'])/.test(
-        line,
+        normalized,
       ) ||
-      /[{,]\s*(?:source(?=[\s=.]|$)|["']source["'])/.test(line)
+      /[{,]\s*(?:source(?=[\s=.]|$)|["']source["'])/.test(normalized)
     )
       throw new Error("Cargo.lock contains an unsupported dependency source");
   }
@@ -674,7 +679,7 @@ async function runChecks(
 /** Project-specific Rust verification model. */
 export const model = {
   type: "@funsaized/herdr-mise-rust",
-  version: "2026.09.12.2",
+  version: "2026.09.12.3",
   globalArguments: GlobalArguments,
   resources: {
     result: {

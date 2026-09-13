@@ -165,6 +165,8 @@ Deno.test("preview canary accepts only canonical Cargo.lock sources", () => {
     `${canonical} # comment`,
     `${canonical} junk`,
     `"source" = "registry+https://github.com/rust-lang/crates.io-index"`,
+    String.raw`"sour\u0063e" = "registry+https://github.com/rust-lang/crates.io-index"`,
+    String.raw`"\u0073ource" = "registry+https://github.com/rust-lang/crates.io-index"`,
     `'source' = "registry+https://github.com/rust-lang/crates.io-index"`,
     'source.value = "registry+https://github.com/rust-lang/crates.io-index"',
     'package.source = "registry+https://github.com/rust-lang/crates.io-index"',
@@ -320,6 +322,7 @@ Deno.test("preview canary rejects unsafe and noncanonical initial Cargo.lock fil
     'source = "git+https://example.invalid/secret-dependency"\n',
     "source = 'registry+https://github.com/rust-lang/crates.io-index'\n",
     `"source" = "registry+https://github.com/rust-lang/crates.io-index"\n`,
+    String.raw`"sour\u0063e" = "registry+https://github.com/rust-lang/crates.io-index"\n`,
   ];
   for (const lockfile of rejected) {
     const fixture = await runPreviewFixture((source) =>
