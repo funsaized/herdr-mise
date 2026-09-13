@@ -191,6 +191,36 @@ export const extension = {
       },
     },
     {
+      inspect_compatibility: {
+        description: "Inspect the latest compatibility run for an exact commit",
+        arguments: z.object({ headSha: Sha }),
+        execute: async (args: { headSha: string }, context: Context) =>
+          record(
+            context,
+            "compatibility-run",
+            JSON.parse(
+              await gh(
+                [
+                  "run",
+                  "list",
+                  "--repo",
+                  repo,
+                  "--workflow",
+                  "herdr-compatibility-drift.yml",
+                  "--commit",
+                  args.headSha,
+                  "--limit",
+                  "1",
+                  "--json",
+                  "databaseId,status,conclusion,headSha,url,createdAt",
+                ],
+                context.signal,
+              ),
+            ),
+          ),
+      },
+    },
+    {
       inspect_delivery: {
         description:
           "Read authenticated identity, PR checks, and recent managed runs",

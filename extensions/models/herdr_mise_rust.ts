@@ -196,6 +196,7 @@ export function previewSandboxArgs(
     "--unshare-pid",
     "--unshare-ipc",
     "--unshare-uts",
+    ...(!options.allowNetwork ? ["--unshare-net"] : []),
     "--cap-drop",
     "ALL",
     "--proc",
@@ -218,7 +219,6 @@ export function previewSandboxArgs(
     "--chdir",
     "/work",
   ];
-  if (!options.allowNetwork) args.push("--unshare-net");
   if (options.writableCargoHome) {
     args.push("--bind", cargoHome, "/cargo");
   } else {
