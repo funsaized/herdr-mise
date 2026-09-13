@@ -229,19 +229,21 @@ export function Chrome(props: ChromeProps) {
       {!primaryPanelOpen && hoverAgent && hoverHit && (
         <Tooltip agent={hoverAgent} hit={hoverHit} />
       )}
-      {!props.settingsOpen && selectedAgent && (
+      {!props.settingsOpen && selectedAgent && props.view !== "freezer" && (
         <DetailCard
           agent={selectedAgent}
           hit={selectedHit}
           onClose={() => props.store.select(null)}
         />
       )}
-      {!props.settingsOpen && selectedBoard && (
-        <SessionSummary
-          entry={selectedBoard}
-          onClose={() => props.store.select(null)}
-        />
-      )}
+      {!props.settingsOpen &&
+        selectedBoard &&
+        (props.view === "freezer" || !selectedAgent) && (
+          <SessionSummary
+            entry={selectedBoard}
+            onClose={() => props.store.select(null)}
+          />
+        )}
       {props.settingsOpen && (
         <SettingsPanel
           settings={props.coarse.settings}

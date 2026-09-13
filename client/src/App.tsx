@@ -20,6 +20,8 @@ import { clientStore, hintPersistence } from "./runtime";
 import { isGlobalEscape, isInteractiveKeyboardTarget } from "./keyboard";
 import {
   freezerAnnouncement,
+  freezerInspectorLabel,
+  freezerInspectorName,
   semanticAgents,
   semanticAgentsEqual,
   nextBlockedAgent,
@@ -97,7 +99,7 @@ const initialPage: PageMetadata = {
 function semanticStationButton(id: string) {
   return [
     ...document.querySelectorAll<HTMLButtonElement>(
-      ".stationA11yMirror button",
+      ".stationA11yMirror button, .freezerInspector button",
     ),
   ].find((button) => button.dataset.agentId === id);
 }
@@ -134,12 +136,12 @@ export function App() {
   useEffect(() => clientStore.subscribeCoarse(setCoarse), []);
   useEffect(
     () =>
-      clientStore.subscribe(() =>
+      clientStore.subscribe(() => {
         setAgents((previous) => {
           const next = semanticAgents(clientStore.snapshot().visibleAgents);
           return semanticAgentsEqual(previous, next) ? previous : next;
-        }),
-      ),
+        });
+      }),
     [],
   );
   useEffect(() => {
@@ -228,7 +230,7 @@ export function App() {
     }, 1_000);
     return () => window.clearInterval(timer);
   }, [statsOpen]);
-  const boardEntries = clientStore.snapshot().board,
+  const boardEntries = coarse.board,
     renderedIds = new Set(
       hits.filter((hit) => hit.kind === "station").map((hit) => hit.id),
     ),
@@ -247,22 +249,7 @@ export function App() {
     visibleBlocked = blockedAgents.filter((agent) =>
       renderedIds.has(agent.id),
     ).length,
-    spiritAgents = hits
-      .filter((hit) => hit.kind === "spirit")
-      .flatMap((hit) => {
-        const entry = boardEntries.find((item) => item.id === hit.id);
-        return entry
-          ? [
-              {
-                id: entry.id,
-                name: entry.name,
-                workspace: "",
-                targetState: "ended" as const,
-                stateEnteredAt: new Date(entry.endedAt).toISOString(),
-              },
-            ]
-          : [];
-      }),
+    visibleSpirits = hits.filter((hit) => hit.kind === "spirit").length,
     kitchenControls = [
       ...(page.pageCount === 1
         ? [...agents].sort(
@@ -295,7 +282,7 @@ export function App() {
             : [];
         }),
     ],
-    controls = view === "freezer" ? spiritAgents : kitchenControls,
+    controls = view === "freezer" ? [] : kitchenControls,
     tooltipAgentIdCandidate =
       !settingsOpen && coarse.selectedId === null
         ? (hoveredId ?? focusedId)
@@ -308,16 +295,13 @@ export function App() {
   const focusState = useRef({ controls, agents, focusedId });
   useLayoutEffect(() => {
     focusState.current = { controls, agents, focusedId };
-  }, [agents, controls, focusedId]);
+  });
+  // Stable identity keeps the global keyboard listener from churning while DOM focus moves.
+  // oxlint-disable-next-line react/preserve-manual-memoization
   const focusSemantic = useCallback((id: string) => {
       setFocusedId(id);
       sceneRef.current?.focus(id);
-      const index = focusState.current.controls.findIndex(
-        (control) => control.id === id,
-      );
-      document
-        .querySelectorAll<HTMLButtonElement>(".stationA11yMirror button")
-        [index]?.focus();
+      semanticStationButton(id)?.focus();
     }, []),
     nextBlocked = useCallback(() => {
       if (view === "freezer") return;
@@ -331,8 +315,13 @@ export function App() {
         if (settingsOpen) setSettingsOpen(false);
         else if (coarse.selectedId) clientStore.select(null);
         else if (view === "freezer") {
+          setFocusedId(null);
+          sceneRef.current?.focus(null);
           setView("kitchen");
           setAnnouncement("Kitchen");
+          document
+            .querySelector<HTMLButtonElement>(".settingsTrigger.freezerTrigger")
+            ?.focus();
         }
         return;
       }
@@ -362,7 +351,7 @@ export function App() {
         nextBlocked();
         return;
       }
-      const stationIds = controls.map((agent) => agent.id);
+      const stationIds = focusState.current.controls.map((agent) => agent.id);
       if (!stationIds.length) return;
       if (
         ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(
@@ -405,7 +394,6 @@ export function App() {
     return () => window.removeEventListener("keydown", keyboard);
   }, [
     coarse.selectedId,
-    controls,
     focusSemantic,
     focusedId,
     nextBlocked,
@@ -414,7 +402,12 @@ export function App() {
   ]);
   useEffect(() => {
     if (coarse.selectedId === null && semanticRestoreRef.current) {
-      semanticRestoreRef.current.focus();
+      (semanticRestoreRef.current.isConnected
+        ? semanticRestoreRef.current
+        : document.querySelector<HTMLButtonElement>(
+            ".settingsTrigger.freezerTrigger",
+          )
+      )?.focus();
       semanticRestoreRef.current = null;
     }
   }, [coarse.selectedId]);
@@ -454,7 +447,13 @@ export function App() {
     setFocusedId(null);
     sceneRef.current?.focus(null);
     setView(next);
-    if (next === "kitchen") setAnnouncement("Kitchen");
+    if (next === "freezer") {
+      const newest = boardEntries.at(-1);
+      if (newest) requestAnimationFrame(() => focusSemantic(newest.id));
+    } else {
+      clientStore.select(null);
+      setAnnouncement("Kitchen");
+    }
   };
   const canvasClass = `canvasHost${settingsOpen ? " dimmed" : ""}${coarse.mode === "disconnected" ? " disconnected" : ""}`;
   return (
@@ -501,23 +500,51 @@ export function App() {
         onPointerMove={pointerMove}
         onPointerLeave={() => setHoveredId(null)}
       />
-      <SemanticStationControls
-        agents={controls}
-        label={view === "freezer" ? "Ended chefs" : undefined}
-        tooltipAgentId={tooltipAgentId}
-        page={view === "kitchen" ? page : undefined}
-        blockedTotal={blockedAgents.length}
-        blockedVisible={visibleBlocked}
-        onPreviousPage={() => sceneRef.current?.previousPage()}
-        onNextPage={() => sceneRef.current?.nextPage()}
-        onNextBlocked={nextBlocked}
-        onSelect={(id, element) => {
-          semanticRestoreRef.current = element;
-          setFocusedId(id);
-          sceneRef.current?.focus(id);
-          clientStore.select(id);
-        }}
-      />
+      {view === "kitchen" && (
+        <SemanticStationControls
+          agents={controls}
+          tooltipAgentId={tooltipAgentId}
+          page={page}
+          blockedTotal={blockedAgents.length}
+          blockedVisible={visibleBlocked}
+          onPreviousPage={() => sceneRef.current?.previousPage()}
+          onNextPage={() => sceneRef.current?.nextPage()}
+          onNextBlocked={nextBlocked}
+          onSelect={(id, element) => {
+            semanticRestoreRef.current = element;
+            setFocusedId(id);
+            sceneRef.current?.focus(id);
+            clientStore.select(id);
+          }}
+        />
+      )}
+      {view === "freezer" && (
+        <nav className="freezerInspector" aria-label="Ended chefs">
+          {boardEntries.length === 0 ? (
+            <p>No ended sessions</p>
+          ) : (
+            [...boardEntries].reverse().map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                data-agent-id={entry.id}
+                aria-current={
+                  coarse.selectedId === entry.id ? "true" : undefined
+                }
+                aria-label={freezerInspectorLabel(entry, boardEntries)}
+                onClick={(event) => {
+                  semanticRestoreRef.current = event.currentTarget;
+                  setFocusedId(entry.id);
+                  sceneRef.current?.focus(entry.id);
+                  clientStore.select(entry.id);
+                }}
+              >
+                {freezerInspectorName(entry, boardEntries)}
+              </button>
+            ))
+          )}
+        </nav>
+      )}
       <div className="chromeLayer">
         <Chrome
           store={clientStore}
@@ -546,7 +573,7 @@ export function App() {
         aria-atomic="true"
       >
         {view === "freezer"
-          ? freezerAnnouncement(spiritAgents.length, boardEntries.length)
+          ? freezerAnnouncement(visibleSpirits, boardEntries.length)
           : announcement}
       </div>
     </main>

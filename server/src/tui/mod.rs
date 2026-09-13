@@ -156,6 +156,15 @@ pub(crate) fn retain_selection(
     }
 }
 
+fn retain_board_selection(selected_id: &mut Option<String>, table: &AgentTable) {
+    if selected_id
+        .as_ref()
+        .is_some_and(|id| table.board_entry(id).is_none())
+    {
+        *selected_id = None;
+    }
+}
+
 fn reconcile_scope(scope: &mut Scope, table: &AgentTable) {
     match scope.id.as_deref() {
         None => scope.label = None,
@@ -213,6 +222,19 @@ pub(super) const KEY_QUIT: &str = "q quit";
 pub(super) const KEY_QUIT_ESC: &str = "q / Esc quit";
 pub(super) const KEY_KITCHEN: &str = "f kitchen";
 pub(super) const KEY_ESC_KITCHEN: &str = "Esc kitchen";
+pub(super) fn freezer_keys(selected: bool, compact: bool) -> String {
+    if compact {
+        if selected {
+            "Tab inspect · Esc close".into()
+        } else {
+            "Tab inspect · Esc kitchen".into()
+        }
+    } else if selected {
+        format!("{KEY_INSPECT} · {KEY_KITCHEN} · {KEY_ESC_CLOSE} · {KEY_QUIT}")
+    } else {
+        format!("{KEY_INSPECT} · {KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}")
+    }
+}
 pub(super) const HELP_LINES: [&str; 8] = [
     KEY_HELP,
     KEY_INSPECT,
@@ -259,15 +281,15 @@ fn handle_key_with_scope(
             SceneView::Freezer => SceneView::Kitchen,
         };
         false
-    } else if code == KeyCode::Char('w') {
+    } else if code == KeyCode::Char('w') && *view == SceneView::Kitchen {
         cycle_scope(scope, table);
         retain_selection(selected_id, table, scope);
         false
-    } else if code == KeyCode::Char('a') {
+    } else if code == KeyCode::Char('a') && *view == SceneView::Kitchen {
         select_all(scope);
         retain_selection(selected_id, table, scope);
         false
-    } else if code == KeyCode::Char('b') {
+    } else if code == KeyCode::Char('b') && *view == SceneView::Kitchen {
         let agents = table
             .blocked_agents()
             .into_iter()
@@ -291,6 +313,25 @@ fn handle_key_with_scope(
         );
         false
     } else if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
+        if *view == SceneView::Freezer {
+            let entries = table.board().iter().rev().collect::<Vec<_>>();
+            if entries.is_empty() {
+                *selected_id = None;
+                return false;
+            }
+            let current = selected_id
+                .as_ref()
+                .and_then(|id| entries.iter().position(|entry| &entry.id == id));
+            let index = if code == KeyCode::BackTab {
+                current.map_or(entries.len() - 1, |index| {
+                    (index + entries.len() - 1) % entries.len()
+                })
+            } else {
+                current.map_or(0, |index| (index + 1) % entries.len())
+            };
+            *selected_id = Some(entries[index].id.clone());
+            return false;
+        }
         let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
         if agents.is_empty() {
             *selected_id = None;
@@ -355,21 +396,27 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
     let mut selected_id = None;
+    let mut freezer_selected_id = None;
     let mut table_offset = 0;
     let mut view = SceneView::default();
     let mut help_open = false;
     let mut scope = Scope::default();
     loop {
         retain_selection(&mut selected_id, &table, &scope);
+        retain_board_selection(&mut freezer_selected_id, &table);
         reconcile_scope(&mut scope, &table);
         let now = Utc::now();
         terminal.draw(|frame| {
+            let active_selected = match view {
+                SceneView::Kitchen => selected_id.as_deref(),
+                SceneView::Freezer => freezer_selected_id.as_deref(),
+            };
             table_offset = view::table_window(
                 frame.area(),
                 &table,
                 now,
                 &scope,
-                selected_id.as_deref(),
+                active_selected,
                 table_offset,
             )
             .offset;
@@ -381,7 +428,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 tick,
                 capabilities.color_mode,
                 capabilities.scene_supported,
-                selected_id.as_deref(),
+                active_selected,
                 table_offset,
                 view,
                 help_open,
@@ -406,7 +453,13 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 FeedDecision::Closed => break,
             },
             event = events.next() => match event {
-                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && handle_key_with_scope(key.code, &table, &mut selected_id, &mut view, &mut help_open, &mut scope, &shutdown) => break,
+                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && {
+                    let active_selected = match view {
+                        SceneView::Kitchen => &mut selected_id,
+                        SceneView::Freezer => &mut freezer_selected_id,
+                    };
+                    handle_key_with_scope(key.code, &table, active_selected, &mut view, &mut help_open, &mut scope, &shutdown)
+                } => break,
                 Some(Err(error)) => return Err(error),
                 None => break,
                 _ => {}

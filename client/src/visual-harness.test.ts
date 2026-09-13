@@ -79,7 +79,7 @@ describe("visual harness configuration", () => {
       agents: 30,
       theme: "light",
     });
-    for (let agents = 0; agents <= 30; agents += 1) {
+    for (let agents = 0; agents <= 50; agents += 1) {
       expect(parseVisualConfig(`?agents=${agents}`).agents).toBe(agents);
     }
   });
@@ -87,7 +87,7 @@ describe("visual harness configuration", () => {
   it("uses deterministic defaults for absent and unsupported values", () => {
     const fallback = { preset: "mixed", agents: 6, theme: "light" };
     expect(parseVisualConfig("")).toEqual(fallback);
-    for (const agents of ["nope", "1.5", "Infinity", "31"]) {
+    for (const agents of ["nope", "1.5", "Infinity", "51"]) {
       expect(parseVisualConfig(`?preset=nope&agents=${agents}`)).toEqual(
         fallback,
       );

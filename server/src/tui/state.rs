@@ -9,9 +9,11 @@ pub(crate) const BOARD_CAP: usize = 64;
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoardEntry {
     pub id: String,
+    source_id: String,
     pub name: String,
     pub runtime_ms: u64,
     pub tickets: u64,
+    pub tickets_available: Option<bool>,
     pub final_state: AgentState,
 }
 
@@ -124,6 +126,12 @@ impl AgentTable {
     pub fn board(&self) -> &[BoardEntry] {
         &self.board
     }
+    pub fn board_entry(&self, id: &str) -> Option<(usize, &BoardEntry)> {
+        self.board
+            .iter()
+            .enumerate()
+            .find(|(_, entry)| entry.id == id)
+    }
     pub fn service_summary(&self) -> ServiceSummary {
         self.service_summary_scoped(None)
     }
@@ -220,31 +228,25 @@ impl AgentTable {
             if let Some(index) = self
                 .board
                 .iter()
-                .rposition(|entry| same_identity(&entry.id, &agent.id))
+                .rposition(|entry| same_identity(entry, &agent.id))
             {
                 let mut existing = self.board.remove(index);
                 existing.name = agent.name;
                 existing.runtime_ms = agent.session.runtime_ms;
                 existing.tickets = agent.session.tickets;
+                existing.tickets_available = agent.session.tickets_available;
                 self.board.insert(index, existing);
                 return;
             }
         }
-        let id = if prior_final_state.is_some()
-            && self
-                .board
-                .iter()
-                .any(|entry| same_identity(&entry.id, &agent.id))
-        {
-            format!("{}:{}", agent.id, self.board.len())
-        } else {
-            agent.id.clone()
-        };
+        let id = next_board_id(&self.board, &agent.id);
         self.board.push(BoardEntry {
             id,
+            source_id: agent.id,
             name: agent.name,
             runtime_ms: agent.session.runtime_ms,
             tickets: agent.session.tickets,
+            tickets_available: agent.session.tickets_available,
             final_state: prior_final_state.unwrap_or(AgentState::Ended),
         });
         self.trim_board();
@@ -257,8 +259,18 @@ impl AgentTable {
     }
 }
 
-fn same_identity(entry_id: &str, agent_id: &str) -> bool {
-    entry_id == agent_id || entry_id.starts_with(&format!("{agent_id}:"))
+fn same_identity(entry: &BoardEntry, agent_id: &str) -> bool {
+    entry.source_id == agent_id
+}
+
+fn next_board_id(board: &[BoardEntry], agent_id: &str) -> String {
+    if !board.iter().any(|entry| entry.id == agent_id) {
+        return agent_id.into();
+    }
+    (1..)
+        .map(|suffix| format!("{agent_id}:{suffix}"))
+        .find(|id| !board.iter().any(|entry| entry.id == *id))
+        .unwrap_or_else(|| unreachable!("unbounded board identity space"))
 }
 
 #[cfg(test)]
@@ -535,6 +547,27 @@ mod tests {
         assert_eq!(table.board().len(), 2);
         assert_eq!(table.board()[1].name, "replay-a");
         assert_eq!(table.board()[1].final_state, AgentState::Blocked);
+    }
+
+    #[test]
+    fn retained_ids_stay_unique_across_source_id_collisions_and_cap_reuse() {
+        let mut table = AgentTable::default();
+        for _ in 0..BOARD_CAP {
+            table.apply(upsert(record("a", AgentState::Working, 1, 1)));
+            table.apply(upsert(record("a", AgentState::Ended, 2, 2)));
+        }
+        table.apply(upsert(record("a:1", AgentState::Working, 3, 3)));
+        table.apply(upsert(record("a:1", AgentState::Ended, 4, 4)));
+        table.apply(upsert(record("a", AgentState::Working, 5, 5)));
+        table.apply(upsert(record("a", AgentState::Ended, 6, 6)));
+        let ids = table
+            .board()
+            .iter()
+            .map(|entry| entry.id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(table.board().len(), BOARD_CAP);
+        assert_eq!(ids.len(), BOARD_CAP);
+        assert_eq!(table.board().last().unwrap().runtime_ms, 6);
     }
 
     #[test]

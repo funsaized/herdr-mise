@@ -11,6 +11,7 @@ import {
 import type { AgentRecord } from "../../protocol/generated/agent-state-event";
 import beforeMove from "../../server/tests/fixtures/snapshot-herdr-0.8.2-p20.json";
 import afterMove from "../../server/tests/fixtures/snapshot-herdr-0.8.2-p20-moved.json";
+const sceneFocus = vi.hoisted(() => vi.fn());
 vi.mock("./scene/kitchen-scene", () => ({
   KitchenScene: class {
     init() {
@@ -18,7 +19,7 @@ vi.mock("./scene/kitchen-scene", () => ({
     }
     destroy() {}
     setView() {}
-    focus() {}
+    focus = sceneFocus;
     hitTest() {
       return undefined;
     }
@@ -32,6 +33,8 @@ import { SemanticStationControls } from "./chrome/SemanticStationControls";
 import { clientStore } from "./runtime";
 import {
   freezerAnnouncement,
+  freezerInspectorLabel,
+  freezerInspectorName,
   humanStateWords,
   nextBlockedAgent,
   orderedBlockedAgents,
@@ -39,6 +42,7 @@ import {
   semanticStationLabel,
   type SemanticAgent,
 } from "./state/semantic-stations";
+import { BOARD_LIMIT } from "./state/store";
 import { isGlobalEscape, isInteractiveKeyboardTarget } from "./keyboard";
 
 class FakeWebSocket {
@@ -58,6 +62,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   FakeWebSocket.instances = [];
+  sceneFocus.mockClear();
   clientStore.select(null);
   clientStore.apply({
     version: 1,
@@ -65,6 +70,13 @@ afterEach(() => {
     mode: "live",
     operation: "remove",
     agentId: beforeMove.agents[0].terminal_id,
+  });
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "demo",
+    sourceStatus: "connected",
+    agents: [],
   });
   clientStore.apply({
     version: 1,
@@ -467,7 +479,265 @@ it("orders valid blocked timestamps oldest-first and cycles every target", () =>
   expect(nextBlockedAgent(agents, "invalid")?.id).toBe("a");
 });
 
-it("announces truthful freezer capacity", () => {
-  expect(freezerAnnouncement(4, 12)).toBe("Freezer, 4 of 12 ended chefs shown");
-  expect(freezerAnnouncement(0, 0)).toBe("Freezer, 0 of 0 ended chefs shown");
+it("announces empty, decorative vs inspectable, overflow, and latest-50 freezer capacity", () => {
+  expect(freezerAnnouncement(0, 0)).toBe("Freezer empty, no ended sessions");
+  expect(freezerAnnouncement(1, 1)).toBe(
+    "Freezer, 1 decorative spirit, 1 inspectable session",
+  );
+  expect(freezerAnnouncement(4, 4)).toBe(
+    "Freezer, 4 decorative spirits, 4 inspectable sessions",
+  );
+  expect(freezerAnnouncement(4, 12)).toBe(
+    "Freezer, 4 decorative spirits, 12 inspectable sessions, 8 not shown as spirits",
+  );
+  expect(freezerAnnouncement(4, BOARD_LIMIT)).toBe(
+    `Freezer, 4 decorative spirits, ${BOARD_LIMIT} inspectable sessions, ${BOARD_LIMIT - 4} not shown as spirits, latest ${BOARD_LIMIT} retained`,
+  );
+  expect(freezerAnnouncement(BOARD_LIMIT, BOARD_LIMIT)).toBe(
+    `Freezer, ${BOARD_LIMIT} decorative spirits, ${BOARD_LIMIT} inspectable sessions, latest ${BOARD_LIMIT} retained`,
+  );
+});
+
+it("distinguishes repeated freezer names with ended time or retained ordinal", () => {
+  const first = {
+      id: "a",
+      name: "Codex",
+      endedAt: Date.parse("2026-08-13T12:00:00Z"),
+    },
+    later = {
+      id: "a:1",
+      name: "Codex",
+      endedAt: Date.parse("2026-08-13T12:05:00Z"),
+    },
+    sameMinute = {
+      id: "a:2",
+      name: "Codex",
+      endedAt: first.endedAt,
+    },
+    unique = { id: "b", name: "Opus", endedAt: first.endedAt };
+  expect(freezerInspectorName(unique, [first, unique])).toBe("Opus");
+  expect(freezerInspectorName(first, [first, later])).toBe(
+    `Codex · ${new Date(first.endedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+  );
+  expect(freezerInspectorName(first, [first, sameMinute])).toBe(
+    "Codex · 1 of 2",
+  );
+  expect(freezerInspectorName(sameMinute, [first, sameMinute])).toBe(
+    "Codex · 2 of 2",
+  );
+  expect(freezerInspectorLabel(first, [first, sameMinute])).toBe(
+    "Codex · 1 of 2, retained 1 of 2, Ended — 86'd, open details",
+  );
+});
+
+it("lists ended sessions, restores focus, and clears scene focus on Escape", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const cook = (
+    id: string,
+    name: string,
+    state: AgentRecord["state"] = "working",
+  ): AgentRecord => ({
+    id,
+    name,
+    state,
+    progress: state === "ended" ? 1 : null,
+    stateEnteredAt: "2026-08-13T12:00:00Z",
+    accentIndex: 0,
+    model: "codex",
+    workspace: "/work",
+    session: { runtimeMs: 1_000, tickets: 1 },
+  });
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [cook("cook-a", "Alpha"), cook("cook-b", "Beta")],
+  });
+  clientStore.apply({
+    version: 1,
+    type: "delta",
+    mode: "live",
+    operation: "upsert",
+    agent: cook("cook-a", "Alpha", "ended"),
+  });
+  clientStore.apply({
+    version: 1,
+    type: "delta",
+    mode: "live",
+    operation: "upsert",
+    agent: cook("cook-b", "Beta", "ended"),
+  });
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Freezer" }));
+  const nav = screen.getByRole("navigation", { name: "Ended chefs" });
+  const buttons = within(nav).getAllByRole("button");
+  expect(buttons.map((button) => button.textContent)).toEqual([
+    "Beta",
+    "Alpha",
+  ]);
+  expect(buttons.map((button) => button.getAttribute("data-agent-id"))).toEqual(
+    ["cook-b", "cook-a"],
+  );
+  expect(screen.getByLabelText("Agent state announcements").textContent).toBe(
+    "Freezer, 0 decorative spirits, 2 inspectable sessions, 2 not shown as spirits",
+  );
+  fireEvent.click(buttons[0]!);
+  expect(buttons[0]!.getAttribute("aria-current")).toBe("true");
+  expect(clientStore.coarse().selectedId).toBe("cook-b");
+  expect(screen.getByLabelText("Beta session summary")).toBeTruthy();
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.queryByLabelText("Beta session summary")).toBeNull();
+  expect(clientStore.coarse().selectedId).toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: "Freezer" })
+      .getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(document.activeElement).toBe(buttons[0]);
+  act(() => {
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: cook("cook-b", "Replacement Beta"),
+    });
+  });
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(
+    screen
+      .getByRole("button", { name: "Freezer" })
+      .getAttribute("aria-pressed"),
+  ).toBe("false");
+  expect(screen.queryByRole("navigation", { name: "Ended chefs" })).toBeNull();
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Freezer" }),
+  );
+  expect(sceneFocus).toHaveBeenLastCalledWith(null);
+});
+
+it("restores focus to the freezer trigger when the selected session is evicted", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const cook = (id: string, state: AgentRecord["state"]): AgentRecord => ({
+    id,
+    name: id,
+    state,
+    progress: state === "ended" ? 1 : null,
+    stateEnteredAt: "2026-08-13T12:00:00Z",
+    accentIndex: 0,
+    model: "codex",
+    workspace: "/work",
+    session: { runtimeMs: 1_000, tickets: 1 },
+  });
+  for (let index = 0; index < BOARD_LIMIT; index++) {
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: cook(`cook-${index}`, "working"),
+    });
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: cook(`cook-${index}`, "ended"),
+    });
+  }
+  render(<App />);
+  const freezer = screen.getByRole("button", { name: "Freezer" });
+  fireEvent.click(freezer);
+  const oldest = within(screen.getByRole("navigation", { name: "Ended chefs" }))
+    .getAllByRole("button")
+    .at(-1)!;
+  fireEvent.click(oldest);
+  act(() => {
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: cook("replacement", "working"),
+    });
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: cook("replacement", "ended"),
+    });
+  });
+  expect(oldest.isConnected).toBe(false);
+  expect(clientStore.coarse().selectedId).toBeNull();
+  expect(document.activeElement).toBe(freezer);
+});
+
+it("selects the exact reused board id and shows an empty freezer inspector", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const pane: AgentRecord = {
+    id: "p-1",
+    name: "Codex",
+    state: "working",
+    progress: null,
+    stateEnteredAt: "2026-08-13T12:00:00Z",
+    accentIndex: 0,
+    model: "codex",
+    workspace: "/work",
+    session: { runtimeMs: 1_000, tickets: 1 },
+  };
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Freezer" }));
+  expect(screen.getByText("No ended sessions")).toBeTruthy();
+  expect(screen.getByLabelText("Agent state announcements").textContent).toBe(
+    "Freezer empty, no ended sessions",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Freezer" }));
+  act(() => {
+    clientStore.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "live",
+      sourceStatus: "connected",
+      agents: [pane],
+    });
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: { ...pane, state: "ended" },
+    });
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: { ...pane, state: "idle" },
+    });
+    clientStore.apply({
+      version: 1,
+      type: "delta",
+      mode: "live",
+      operation: "upsert",
+      agent: {
+        ...pane,
+        state: "ended",
+        session: { runtimeMs: 2_000, tickets: 3 },
+      },
+    });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Freezer" }));
+  const buttons = within(
+    screen.getByRole("navigation", { name: "Ended chefs" }),
+  ).getAllByRole("button");
+  expect(buttons.map((button) => button.getAttribute("data-agent-id"))).toEqual(
+    ["p-1:1", "p-1"],
+  );
+  fireEvent.click(buttons[0]!);
+  expect(buttons[0]!.getAttribute("aria-current")).toBe("true");
+  expect(clientStore.coarse().selectedId).toBe("p-1:1");
+  expect(screen.getByLabelText("Codex session summary")).toBeTruthy();
+  expect(screen.getByText("2s")).toBeTruthy();
 });

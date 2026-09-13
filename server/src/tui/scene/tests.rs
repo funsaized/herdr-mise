@@ -378,7 +378,7 @@ fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
     assert!(text(&buffer).contains("WALK-IN FREEZER"));
     assert!(text(&buffer).contains("MISE — LIVE"));
     assert!(text(&buffer).contains("86 64/64"));
-    assert!(text(&buffer).contains("FROZEN 4/64 · 60 MORE ON 86 BOARD"));
+    assert!(text(&buffer).contains("FROZEN 4/64 · 60 HIDDEN · LATEST 64 RETAINED"));
     for name in ["COOK EX…-58", "COOK EX…-59", "COOK EX…-60", "COOK EX…-61"] {
         assert!(text(&buffer).contains(name));
     }
@@ -436,13 +436,27 @@ fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
         "observed 23",
         "upgrade or downgrade Herdr",
         "Nothing here",
-        "FREEZER EMPTY · 86 0/64",
+        "FREEZER EMPTY · NO ENDED SESSIONS · LIMIT 64",
     ] {
         assert!(
             output.contains(expected),
             "missing {expected:?} in {output:?}"
         );
     }
+    let warning = text(&render_view_with_warning(
+        &table,
+        80,
+        24,
+        9,
+        None,
+        SceneView::Freezer,
+        false,
+        Some("HTTP 127.0.0.1:8686 unavailable"),
+    ));
+    assert!(
+        warning.contains("HTTP 127.0.0.1:8686 unavailable"),
+        "{warning}"
+    );
 }
 
 #[test]

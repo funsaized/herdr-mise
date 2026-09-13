@@ -1,4 +1,4 @@
-import type { AgentMachine } from "./store";
+import { BOARD_LIMIT, type AgentMachine, type BoardEntry } from "./store";
 import { stationCollisionIds, workspaceDisplayName } from "../scene/geometry";
 
 export const humanStateWords = {
@@ -8,8 +8,48 @@ export const humanStateWords = {
   done: "Done — plated",
   ended: "Ended — 86'd",
 } as const;
-export function freezerAnnouncement(visible: number, total: number) {
-  return `Freezer, ${visible} of ${total} ended chefs shown`;
+export function freezerAnnouncement(visible: number, inspectable: number) {
+  if (inspectable === 0) return "Freezer empty, no ended sessions";
+  const spirits =
+    visible === 1 ? "1 decorative spirit" : `${visible} decorative spirits`;
+  const sessions =
+    inspectable === 1
+      ? "1 inspectable session"
+      : `${inspectable} inspectable sessions`;
+  const overflow =
+    visible < inspectable
+      ? `, ${inspectable - visible} not shown as spirits`
+      : "";
+  const retention =
+    inspectable >= BOARD_LIMIT ? `, latest ${BOARD_LIMIT} retained` : "";
+  return `Freezer, ${spirits}, ${sessions}${overflow}${retention}`;
+}
+function formatEndedClock(endedAt: number) {
+  return new Date(endedAt).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+export function freezerInspectorName(
+  entry: Pick<BoardEntry, "id" | "name" | "endedAt">,
+  board: readonly Pick<BoardEntry, "id" | "name" | "endedAt">[],
+) {
+  const sameName = board.filter((item) => item.name === entry.name);
+  if (sameName.length === 1) return entry.name;
+  const clock = formatEndedClock(entry.endedAt);
+  if (
+    sameName.filter((item) => formatEndedClock(item.endedAt) === clock)
+      .length === 1
+  )
+    return `${entry.name} · ${clock}`;
+  const ordinal = sameName.findIndex((item) => item.id === entry.id) + 1;
+  return `${entry.name} · ${ordinal} of ${sameName.length}`;
+}
+export function freezerInspectorLabel(
+  entry: Pick<BoardEntry, "id" | "name" | "endedAt">,
+  board: readonly Pick<BoardEntry, "id" | "name" | "endedAt">[],
+) {
+  return `${freezerInspectorName(entry, board)}, retained ${board.findIndex((item) => item.id === entry.id) + 1} of ${board.length}, ${humanStateWords.ended}, open details`;
 }
 export type SemanticAgent = Pick<
   AgentMachine,

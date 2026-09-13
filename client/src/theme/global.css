@@ -439,6 +439,7 @@ summary:focus-visible {
 }
 .freezerTrigger {
   right: 92px;
+  min-height: 44px;
 }
 .freezerTrigger[aria-pressed="true"] {
   color: var(--buttonText);
@@ -855,6 +856,54 @@ summary:focus-visible {
   padding: 0;
   border: 0;
 }
+.freezerInspector {
+  position: absolute;
+  z-index: 12;
+  right: 14px;
+  bottom: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(280px, calc(100vw - 28px));
+  max-height: min(40vh, 320px);
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 6px;
+  color: var(--text);
+  background: var(--panelSoft);
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusControl);
+  box-shadow: var(--shadowSmall);
+}
+.freezerInspector p {
+  margin: 0;
+  padding: 8px 6px;
+  color: var(--textMuted);
+  font-size: var(--fontSecondarySize);
+}
+.freezerInspector button {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radiusSmall);
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--fontSecondarySize);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.freezerInspector button:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: -3px;
+}
+.freezerInspector button[aria-current="true"] {
+  color: var(--buttonText);
+  background: var(--text);
+  border-color: var(--text);
+}
 .kitchenPager {
   position: fixed;
   z-index: 12;
@@ -1016,6 +1065,16 @@ summary:focus-visible {
   .freezerTrigger {
     right: 14px;
     bottom: 48px;
+  }
+  .freezerInspector {
+    right: 8px;
+    bottom: 156px;
+    left: 8px;
+    width: auto;
+    max-height: 28vh;
+  }
+  &:has(.panel) .freezerInspector {
+    bottom: calc(22vh + 60px);
   }
   .panel {
     inset: auto 8px 52px;

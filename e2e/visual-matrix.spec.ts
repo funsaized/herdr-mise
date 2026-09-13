@@ -527,13 +527,14 @@ test("native freezer control renders only visible board spirits and preserves Es
     page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
   ).toHaveCount(12);
   await expect(page.getByLabel("Agent state announcements")).toHaveText(
-    "Freezer, 12 of 12 ended chefs shown",
+    "Freezer, 12 decorative spirits, 12 inspectable sessions",
   );
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur(),
-  );
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("Enter");
+  const newest = page
+    .getByRole("navigation", { name: "Ended chefs" })
+    .getByRole("button")
+    .first();
+  await newest.focus();
+  await newest.press("Enter");
   await expect(
     page.locator('aside[aria-label$="session summary"]'),
   ).toBeVisible();
@@ -542,6 +543,7 @@ test("native freezer control renders only visible board spirits and preserves Es
     page.locator('aside[aria-label$="session summary"]'),
   ).toHaveCount(0);
   await expect(freezer).toHaveAttribute("aria-pressed", "true");
+  await expect(newest).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(freezer).toHaveAttribute("aria-pressed", "false");
   await expect
@@ -1125,8 +1127,24 @@ test("authoritative fixture state sequence drives history accents poses prep and
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
     ).toHaveCount(4);
     await expect(page.getByLabel("Agent state announcements")).toHaveText(
-      "Freezer, 4 of 4 ended chefs shown",
+      "Freezer, 4 decorative spirits, 4 inspectable sessions",
     );
+    const newestEnded = page
+      .getByRole("navigation", { name: "Ended chefs" })
+      .getByRole("button")
+      .first();
+    await newestEnded.click();
+    await expect(
+      page.locator('aside[aria-label$="session summary" i]'),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(newestEnded).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Freezer" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await page.getByRole("button", { name: "Freezer" }).click();
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
@@ -1331,7 +1349,7 @@ test("real fixture service summary cycles every blocked cook without moving stat
   }
 });
 
-test("fixture-backed duplicate identity inspection", async ({
+test("fixture-backed repeated lifetimes survive cap eviction with source-id lookalikes", async ({
   page,
   context,
 }) => {
@@ -1377,7 +1395,7 @@ test("fixture-backed duplicate identity inspection", async ({
   };
   source.agents.push({
     ...source.agents[0],
-    terminal_id: "terminal-two",
+    terminal_id: "terminal-one:1",
     pane_id: locatorTwo,
     workspace_id: "two",
   });
@@ -1460,20 +1478,95 @@ test("fixture-backed duplicate identity inspection", async ({
     await expect(details).toContainText(movedLocator, { timeout: 5_000 });
     await expect(details).toContainText("very-long-shared-workspace");
 
+    const repeatedAgent = { ...source.agents[0] },
+      lookalikeAgent = { ...source.agents[1] };
     source.agents = [];
     snapshot = JSON.stringify({ result: { snapshot: source } });
     await page.getByRole("button", { name: "Freezer" }).click();
     const ended = page.getByRole("navigation", { name: "Ended chefs" });
+    await expect(ended.locator('[data-agent-id="terminal-one"]')).toBeAttached({
+      timeout: 5_000,
+    });
     await expect(
-      ended.getByRole("button", {
-        name: /same chef · Unavailable · terminal-one, Ended/,
-      }),
-    ).toBeAttached({ timeout: 5_000 });
-    await expect(
-      ended.getByRole("button", {
-        name: /same chef · Unavailable · terminal-two, Ended/,
-      }),
+      ended.locator('[data-agent-id="terminal-one:1"]'),
     ).toBeAttached();
+
+    await page.keyboard.press("Escape");
+    const activeStations = page.getByRole("navigation", {
+      name: "Agent stations",
+    });
+    for (const endedEntries of [3, 4]) {
+      source.agents = [repeatedAgent];
+      snapshot = JSON.stringify({ result: { snapshot: source } });
+      await expect(
+        activeStations.locator(
+          '[data-agent-id="terminal-one"][aria-label*="Blocked"]',
+        ),
+      ).toBeAttached({ timeout: 5_000 });
+      source.agents = [];
+      snapshot = JSON.stringify({ result: { snapshot: source } });
+      await expect
+        .poll(async () => (await sceneMetrics(page))?.endedEntries)
+        .toBe(endedEntries);
+    }
+
+    source.agents = [
+      lookalikeAgent,
+      ...Array.from({ length: 47 }, (_, index) => ({
+        ...repeatedAgent,
+        terminal_id: `retained-${index}`,
+        pane_id: `retained-pane-${index}`,
+        display_agent: `retained chef ${index}`,
+      })),
+    ];
+    snapshot = JSON.stringify({ result: { snapshot: source } });
+    await expect(
+      activeStations.locator('button[aria-label*="Blocked"]'),
+    ).toHaveCount(48, { timeout: 5_000 });
+    source.agents = [];
+    snapshot = JSON.stringify({ result: { snapshot: source } });
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.endedEntries, {
+        timeout: 10_000,
+      })
+      .toBe(50);
+
+    await page.getByRole("button", { name: "Freezer" }).click();
+    const retained = page
+        .getByRole("navigation", { name: "Ended chefs" })
+        .getByRole("button"),
+      retainedIds = await retained.evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("data-agent-id")),
+      );
+    expect(retainedIds).toHaveLength(50);
+    expect(new Set(retainedIds).size).toBe(50);
+    expect(retainedIds).not.toContain("terminal-one");
+    expect(retainedIds).not.toContain("terminal-one:1");
+    expect(retainedIds).toEqual(
+      expect.arrayContaining([
+        "terminal-one:2",
+        "terminal-one:3",
+        "terminal-one:1:1",
+      ]),
+    );
+    await expect(page.getByLabel("Agent state announcements")).toContainText(
+      "50 inspectable sessions",
+    );
+    await expect(page.getByLabel("Agent state announcements")).toContainText(
+      "latest 50 retained",
+    );
+    const repeatedLifetime = ended.locator('[data-agent-id="terminal-one:2"]'),
+      nextRepeatedLifetime = ended.locator('[data-agent-id="terminal-one:3"]');
+    await repeatedLifetime.click();
+    await expect(
+      page.getByRole("complementary", { name: "same chef session summary" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(repeatedLifetime).toBeFocused();
+    await nextRepeatedLifetime.click();
+    await expect(
+      page.getByRole("complementary", { name: "same chef session summary" }),
+    ).toBeVisible();
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();
@@ -1697,17 +1790,15 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
   }
 });
 
-test("freezer matrix discloses empty full and bounded overflow scenes", async ({
+test("freezer matrix discloses and traverses 0 4 12 and 50 retained sessions", async ({
   page,
 }) => {
   const errors = watchErrors(page);
   for (const [viewport, capacity] of [
     [{ width: 1280, height: 720 }, 20],
-    [{ width: 800, height: 500 }, 4],
-    [{ width: 390, height: 844 }, 6],
     [{ width: 320, height: 640 }, 2],
   ] as const) {
-    for (const total of [0, 1, 12]) {
+    for (const total of [0, 4, 12, 50]) {
       await page.setViewportSize(viewport);
       await page.goto(`/?preset=ended&agents=${total}&stats`);
       await page.getByRole("button", { name: "Freezer" }).click();
@@ -1723,10 +1814,52 @@ test("freezer matrix discloses empty full and bounded overflow scenes", async ({
         page
           .getByRole("navigation", { name: "Ended chefs" })
           .getByRole("button"),
-      ).toHaveCount(visible);
+      ).toHaveCount(total);
+      const inspector = await page.locator(".freezerInspector").boundingBox(),
+        service = await page.locator(".serviceStrip").boundingBox();
+      expect(inspector).not.toBeNull();
+      expect(service).not.toBeNull();
+      expect(boxesIntersect(inspector!, service!)).toBe(false);
+      const retention = total === 50 ? ", latest 50 retained" : "";
       await expect(page.getByLabel("Agent state announcements")).toHaveText(
-        `Freezer, ${visible} of ${total} ended chefs shown`,
+        total === 0
+          ? "Freezer empty, no ended sessions"
+          : `Freezer, ${visible} decorative spirits, ${total} inspectable sessions${visible < total ? `, ${total - visible} not shown as spirits` : ""}${retention}`,
       );
+      if (total > 0) {
+        const buttons = page
+          .getByRole("navigation", { name: "Ended chefs" })
+          .getByRole("button");
+        expect(
+          await buttons.evaluateAll((items) =>
+            items.map((item) => item.getAttribute("data-agent-id")),
+          ),
+        ).toEqual(
+          Array.from(
+            { length: total },
+            (_, index) => `visual-agent-${total - index}`,
+          ),
+        );
+        await buttons.last().click();
+        const summary = page.getByRole("complementary", {
+          name: "mise-01 session summary",
+        });
+        await expect(summary).toBeVisible();
+        if (viewport.width === 320) {
+          const inspector = await page
+              .locator(".freezerInspector")
+              .boundingBox(),
+            service = await page.locator(".serviceStrip").boundingBox(),
+            summaryBox = await summary.boundingBox();
+          expect(inspector).not.toBeNull();
+          expect(service).not.toBeNull();
+          expect(summaryBox).not.toBeNull();
+          expect(boxesIntersect(inspector!, service!)).toBe(false);
+          expect(boxesIntersect(inspector!, summaryBox!)).toBe(false);
+        }
+        await page.keyboard.press("Escape");
+        await expect(buttons.last()).toBeFocused();
+      }
       if (total === 12 && viewport.width === 1280) {
         const bounds = Object.values(
           (await sceneMetrics(page))!.spiritPoseBounds,
