@@ -44,6 +44,7 @@ import {
   drawPrepPose,
   drawStatePose,
   idleAnimationFrame,
+  idlePoseIsAnimated,
   IdlePoseAssignments,
   prepFrameInterval,
   reducedIdlePoseSample,
@@ -106,6 +107,8 @@ export interface KitchenSceneOptions {
   reducedMotion?: ReducedMotionPreference;
 }
 export interface SceneMetrics {
+  renderCount: number;
+  rafCount: number;
   drawCalls: number;
   stationRebuilds: number;
   stationDisposals: number;
@@ -189,6 +192,7 @@ import {
   shouldReconcileBusserClear,
   sceneMotionPolicy,
   sceneContinuousMotion,
+  sceneDiscreteWakeDelay,
 } from "./lifecycle";
 export {
   BUSSER_SWEEP_MS,
@@ -198,6 +202,7 @@ export {
   shouldReconcileBusserClear,
   sceneMotionPolicy,
   sceneContinuousMotion,
+  sceneDiscreteWakeDelay,
 } from "./lifecycle";
 const worldText = (fill: string, fontSize: number) => ({
   fontFamily: getTheme().palette.typography.worldFamily,
@@ -217,15 +222,23 @@ export class KitchenScene {
   readonly particles = new ParticlePool();
   readonly transitions = new TransitionEngine();
   readonly bell: BellController;
-  private readonly ticker = Ticker.system;
+  private readonly ticker = new Ticker();
+  private wakeTimer: number | null = null;
   private dirty = true;
+  private renderCount = 0;
+  private rafCount = 0;
   private readonly renderFrame = () => {
     if (this.dirty) {
       this.app.render();
+      this.renderCount++;
       this.dirty = false;
     }
+    this.settleDemand();
   };
-  private readonly updateFrame = (ticker: Ticker) => this.tick(ticker.deltaMS);
+  private readonly updateFrame = (ticker: Ticker) => {
+    this.rafCount++;
+    this.tick(ticker.deltaMS);
+  };
   private room = new Container();
   private stationLayer = new Container();
   private particleLayer = new Container();
@@ -329,6 +342,7 @@ export class KitchenScene {
       preference: "webgl",
       resolution: devicePixelRatio || 1,
       autoStart: false,
+      gcActive: false,
       skipExtensionImports: true,
     });
     if (this.destroyed) {
@@ -346,6 +360,7 @@ export class KitchenScene {
     );
     this.escalationLayer.addChild(this.escalationGraphic);
     this.instrumentDrawCalls();
+    this.app.renderer.scheduler.destroy();
     for (let i = 0; i < this.particles.particles.length; i++) {
       const dot = new Graphics();
       this.steamNodes.push(dot);
@@ -366,7 +381,6 @@ export class KitchenScene {
     document.addEventListener("visibilitychange", this.visibleHandler);
     this.systemDark.addEventListener("change", this.themeHandler);
     this.redraw();
-    if (!document.hidden) this.ticker.start();
   }
   destroy() {
     this.destroyed = true;
@@ -380,8 +394,11 @@ export class KitchenScene {
     this.host.removeEventListener("pointerdown", this.pointerHandler);
     document.removeEventListener("visibilitychange", this.visibleHandler);
     this.systemDark.removeEventListener("change", this.themeHandler);
+    this.clearWakeTimer();
+    this.ticker.stop();
     this.ticker.remove(this.updateFrame);
     this.ticker.remove(this.renderFrame);
+    this.ticker.destroy();
     this.bell.destroy();
     this.particles.releaseAll();
     this.busserSweeps.clear();
@@ -410,7 +427,7 @@ export class KitchenScene {
       this.drawStations(performance.now());
       destroyChildren(this.boardLayer);
       this.drawBoard(paletteIndex(this.resolvedTheme()));
-      this.dirty = true;
+      this.invalidate();
     } else if (this.view === "freezer") {
       this.redraw();
     }
@@ -516,6 +533,8 @@ export class KitchenScene {
         (agent) => agent.targetState === "blocked",
       ).length;
     return {
+      renderCount: this.renderCount,
+      rafCount: this.rafCount,
       drawCalls: this.lastDrawCalls,
       stationRebuilds: this.stationRebuilds,
       stationDisposals: this.stationDisposals,
@@ -551,7 +570,7 @@ export class KitchenScene {
         activeParticles,
         activeTransitions,
         activeBusserSweeps,
-        continuous: sceneContinuousMotion(this.reducedMotion, agents),
+        continuous: this.hasContinuousMotion(agents),
         preferenceChanges: this.preferenceChanges,
       },
     };
@@ -570,11 +589,10 @@ export class KitchenScene {
       this.drawParticles();
     }
     if (document.hidden) {
-      this.ticker.stop();
+      this.suspend();
       return;
     }
-    if (snapshot.mode === "disconnected") this.ticker.stop();
-    else this.ticker.start();
+    if (snapshot.mode === "disconnected") this.suspend();
     const now = performance.now();
     this.store.reconcileRendered(undefined, force);
     if (force) {
@@ -599,7 +617,7 @@ export class KitchenScene {
     )
       this.redraw();
     else if (this.view === "kitchen") this.drawStations(now);
-    this.dirty = true;
+    this.invalidate();
   }
   private redraw() {
     if (!this.app.renderer) return;
@@ -691,7 +709,7 @@ export class KitchenScene {
       );
       this.drawFreezer();
     }
-    this.dirty = true;
+    this.invalidate();
   }
   private drawFreezer() {
     const layout = this.freezerLayout;
@@ -1937,7 +1955,7 @@ export class KitchenScene {
       this.drawStations(now);
       this.drawEscalation(now);
       if (motion.busser) this.drawBusserSweeps(now);
-      this.dirty = true;
+      this.invalidate();
     }
   }
   private onStoreEvent(event: StoreEvent) {
@@ -1969,8 +1987,7 @@ export class KitchenScene {
     const graphic = new Graphics();
     this.busserGraphics.set(event.agentId, graphic);
     this.busserLayer.addChild(graphic);
-    if (!document.hidden && this.store.snapshot().mode !== "disconnected")
-      this.ticker.start();
+    this.invalidate();
   }
   private drawBusserSweeps(now: number) {
     const p = getTheme().palette,
@@ -2124,14 +2141,76 @@ export class KitchenScene {
     this.escalationSignature = "";
     this.reconcile(true);
     this.drawEscalation(performance.now());
-    this.dirty = true;
+    this.invalidate();
   }
   private onVisibility() {
-    if (document.hidden) this.ticker.stop();
-    else {
-      this.reconcile(true);
-      if (this.store.snapshot().mode !== "disconnected") this.ticker.start();
+    if (document.hidden) this.suspend();
+    else this.reconcile(true);
+  }
+  private invalidate() {
+    this.clearWakeTimer();
+    this.dirty = true;
+    if (this.canRun()) this.ticker.start();
+  }
+  private canRun() {
+    return (
+      !this.destroyed &&
+      !document.hidden &&
+      this.store.snapshot().mode !== "disconnected"
+    );
+  }
+  private hasContinuousMotion(
+    agents = [...this.store.snapshot().visibleAgents.values()],
+  ) {
+    const now = Date.now();
+    return sceneContinuousMotion(this.reducedMotion, agents, {
+      transitions: this.transitions.activeCount(),
+      particles: this.particles.activeCount,
+      busserSweeps: this.busserSweeps.size,
+      doneFlourish: agents.some(
+        (agent) =>
+          agent.targetState === "done" &&
+          now - Date.parse(agent.stateEnteredAt) <
+            tokens.scene.cook.done.flourishMs,
+      ),
+    });
+  }
+  private settleDemand() {
+    if (!this.canRun()) {
+      this.suspend();
+      return;
     }
+    const agents = [...this.store.snapshot().visibleAgents.values()];
+    if (this.view === "kitchen" && this.hasContinuousMotion(agents)) {
+      this.clearWakeTimer();
+      return;
+    }
+    this.ticker.stop();
+    this.clearWakeTimer();
+    if (this.view !== "kitchen") return;
+    const delay = sceneDiscreteWakeDelay(
+      this.reducedMotion,
+      agents,
+      agents.some(
+        (agent) =>
+          agent.targetState === "idle" &&
+          idlePoseIsAnimated(this.idlePoses.get(agent.id) ?? "lean"),
+      ),
+    );
+    if (delay !== null)
+      this.wakeTimer = window.setTimeout(() => {
+        this.wakeTimer = null;
+        this.invalidate();
+      }, delay);
+  }
+  private clearWakeTimer() {
+    if (this.wakeTimer === null) return;
+    window.clearTimeout(this.wakeTimer);
+    this.wakeTimer = null;
+  }
+  private suspend() {
+    this.clearWakeTimer();
+    this.ticker.stop();
   }
   private instrumentDrawCalls() {
     const renderer = this.app.renderer as typeof this.app.renderer & {

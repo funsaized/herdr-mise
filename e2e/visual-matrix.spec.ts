@@ -12,6 +12,7 @@ import {
   computeLayout,
   reconcileStationSlots,
 } from "../client/src/scene/layout";
+import { startFixtureApp } from "./fixture-app";
 
 const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const STATE_WORDS = {
@@ -48,6 +49,8 @@ function watchErrors(page: Page) {
 }
 
 type MotionMetrics = {
+  renderCount: number;
+  rafCount: number;
   motion: {
     reduced: boolean;
     activeParticles: number;
@@ -155,7 +158,7 @@ const FULL_STATUSES = new Set([
   "BLOCKED AT STATION",
   "PLATED",
   "86'D",
-  "ANSWER RECEIVED",
+  "WORK RESUMED",
   "UNKNOWN · PREP",
 ]);
 
@@ -603,13 +606,7 @@ test("responsive mixed focus follows live stations onto the 86 board", async ({
 test("workspace scope follows stable identity without hiding blocked attention", async ({
   page,
 }) => {
-  const directory = await mkdtemp(
-      join(tmpdir(), "herdr-mise-workspace-scope-"),
-    ),
-    port = await availablePort(),
-    appUrl = `http://127.0.0.1:${port}`,
-    socketPath = join(directory, "herdr.sock"),
-    initial = JSON.parse(
+  const initial = JSON.parse(
       await readFile(
         join(
           process.cwd(),
@@ -618,44 +615,13 @@ test("workspace scope follows stable identity without hiding blocked attention",
         "utf8",
       ),
     ),
-    sockets = new Set<Socket>();
-  let snapshot = JSON.stringify({ result: { snapshot: initial } });
-  const fixtureServer = createServer((socket) => {
-    sockets.add(socket);
-    socket.on("close", () => sockets.delete(socket));
-    let request = "";
-    socket.on("data", (chunk) => {
-      request += chunk;
-      if (!request.includes("\n")) return;
-      const method = JSON.parse(request).method;
-      if (method === "session.snapshot") socket.end(`${snapshot}\n`);
-      else socket.write('{"result":{"type":"subscription_started"}}\n');
+    fixture = await startFixtureApp({
+      prefix: "herdr-mise-workspace-scope-",
+      snapshot: initial,
     });
-  });
-  await new Promise<void>((resolve, reject) => {
-    fixtureServer.once("error", reject);
-    fixtureServer.listen(socketPath, resolve);
-  });
-  const app = spawn("target/debug/herdr-mise", [], {
-    env: {
-      ...process.env,
-      HERDR_MISE_PORT: String(port),
-      HERDR_SOCKET_PATH: socketPath,
-    },
-    stdio: "ignore",
-  });
   try {
-    await expect
-      .poll(async () => {
-        try {
-          return (await fetch(appUrl)).status;
-        } catch {
-          return 0;
-        }
-      })
-      .toBe(200);
     await page.setViewportSize({ width: 320, height: 640 });
-    await page.goto(`${appUrl}/?stats`);
+    await page.goto(`${fixture.appUrl}/?stats`);
     const selector = page.getByRole("combobox", { name: "Workspace" });
     await expect(selector).toHaveValue("");
     await expect(page.getByRole("option")).toHaveText([
@@ -709,7 +675,7 @@ test("workspace scope follows stable identity without hiding blocked attention",
     await selector.selectOption("scope-workspace-one");
     const renamed = structuredClone(initial);
     renamed.workspaces[0].label = "renamed";
-    snapshot = JSON.stringify({ result: { snapshot: renamed } });
+    fixture.setSnapshot(renamed);
     await expect(selector).toHaveValue("scope-workspace-one");
     await expect(page.getByRole("option", { name: "renamed" })).toBeAttached({
       timeout: 10_000,
@@ -731,7 +697,7 @@ test("workspace scope follows stable identity without hiding blocked attention",
         agent_status: "working",
       },
     ];
-    snapshot = JSON.stringify({ result: { snapshot: removed } });
+    fixture.setSnapshot(removed);
     await expect(selector).toHaveValue("scope-workspace-one", {
       timeout: 10_000,
     });
@@ -751,10 +717,7 @@ test("workspace scope follows stable identity without hiding blocked attention",
     expectInside(unavailableBox!, { x: 0, y: 0, width: 320, height: 640 });
     expect(boxesIntersect(scopeBox!, unavailableBox!)).toBe(false);
   } finally {
-    app.kill("SIGTERM");
-    for (const socket of sockets) socket.destroy();
-    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
-    await rm(directory, { recursive: true, force: true });
+    await fixture.close();
   }
 });
 
@@ -883,10 +846,10 @@ test("authoritative fixture state sequence drives history accents poses prep and
         name: "example-cook details",
       }),
       stateAge = sequenceDetails
-        .locator(".fact", { hasText: "Time in state" })
+        .locator(".fact", { hasText: "Observation age" })
         .locator("b"),
       periods = sequenceDetails.getByRole("list", {
-        name: "Observed state periods",
+        name: "Mise observation history",
       });
     await expect.poll(() => stateAge.textContent()).toMatch(/^[2-9]\d*s$/);
     await expect(periods.getByRole("listitem")).toHaveCount(1);
@@ -920,6 +883,11 @@ test("authoritative fixture state sequence drives history accents poses prep and
     await expect
       .poll(async () => (await sceneMetrics(page))?.motion.activeParticles)
       .toBeGreaterThan(0);
+    const workingRenderCount = (await sceneMetrics(page))!.renderCount;
+    await page.waitForTimeout(300);
+    expect((await sceneMetrics(page))!.renderCount).toBeGreaterThan(
+      workingRenderCount,
+    );
     expect((await sceneMetrics(page))?.atmosphere.workingContact).toBe(1);
     expect(
       (await sceneMetrics(page))?.motion.activeParticles,
@@ -1113,6 +1081,12 @@ test("authoritative fixture state sequence drives history accents poses prep and
           rows: [{}, {}, {}],
         },
       });
+    await page.waitForTimeout(1_200);
+    const emptyRenderCount = (await sceneMetrics(page))!.renderCount;
+    await page.waitForTimeout(2_000);
+    expect(
+      (await sceneMetrics(page))!.renderCount - emptyRenderCount,
+    ).toBeLessThanOrEqual(1);
     const rows = (await sceneMetrics(page))?.board.rows
       .map((row) => row.text)
       .sort(([left], [right]) => left!.localeCompare(right!));

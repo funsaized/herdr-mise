@@ -441,15 +441,15 @@ implementation handoff.
 
 #### Roles, names, and status surfaces
 
-| ID    | Action and expected result                                                                                                                                                                                                                                                                | Status    | Observed VoiceOver speech / evidence |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------ |
-| VO-01 | Open Settings with the `Open settings` button. VoiceOver exposes a complementary panel named `Settings`, its `Settings` heading, and a `Close settings` button.                                                                                                                           | `NOT RUN` |                                      |
-| VO-02 | In Settings, verify a `Service bell` switch exposes its on/off state; `Light`, `Dinner`, and `System` are buttons exposing pressed state; and selects are named `Done timeout`, `Faster bell after`, and `Screen-edge glow after`.                                                        | `NOT RUN` |                                      |
-| VO-03 | Navigate the `Agent stations` navigation. Each station control is a button with a name shaped like `<agent>, <state>, open details`; verify the state words are human-readable (`Idle — prepping`, `Working — on the fire`, `Blocked — at the pass`, `Done — plated`, or `Ended — 86'd`). | `NOT RUN` |                                      |
-| VO-04 | Activate an agent station control. VoiceOver exposes a complementary panel named `<agent> details`, the agent heading, its state label, a `Close panel` button, and the `Model`, `Workspace`, `Time in state`, `Tickets this session`, and `Session history` text.                        | `NOT RUN` |                                      |
-| VO-05 | Open an 86 board row. VoiceOver exposes a complementary panel named `<agent> session summary`, the `86'D — SESSION ENDED` label, a `Close panel` button, and `Mise time`, `Tickets served`, `Ended at`, and `Final state` text.                                                           | `NOT RUN` |                                      |
-| VO-06 | When the corresponding condition is present, verify status/alert semantics: `DEMO SERVICE` and `Waiting for agents — start one in herdr` are `status` surfaces; `GAS LEAK — SERVICE SUSPENDED` is an `alert`.                                                                             | `NOT RUN` |                                      |
-| VO-07 | Verify the live region is named `Agent state announcements`, is polite, and is atomic. It should expose only the current announcement, not a stale concatenation of prior announcements.                                                                                                  | `NOT RUN` |                                      |
+| ID    | Action and expected result                                                                                                                                                                                                                                                                                                      | Status    | Observed VoiceOver speech / evidence |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------ |
+| VO-01 | Open Settings with the `Open settings` button. VoiceOver exposes a complementary panel named `Settings`, its `Settings` heading, and a `Close settings` button.                                                                                                                                                                 | `NOT RUN` |                                      |
+| VO-02 | In Settings, verify a `Service bell` switch exposes its on/off state; `Light`, `Dinner`, and `System` are buttons exposing pressed state; and selects are named `Done timeout`, `Faster bell after`, and `Screen-edge glow after`.                                                                                              | `NOT RUN` |                                      |
+| VO-03 | Navigate the `Agent stations` navigation. Each station control is a button with a name shaped like `<agent>, <state>, open details`; verify the state words are human-readable (`Idle — prepping`, `Working — on the fire`, `Blocked — at the pass`, `Done — plated`, or `Ended — 86'd`).                                       | `NOT RUN` |                                      |
+| VO-04 | Activate an agent station control. VoiceOver exposes a complementary panel named `<agent> details`, the agent heading, its state label, a `Close panel` button, and the `Agent kind`, `Workspace`, `Pane locator`, `Observation age`, `Mise time`, `Upstream session age`, `Tickets this session`, and `Observed in Mise` text. | `NOT RUN` |                                      |
+| VO-05 | Open an 86 board row. VoiceOver exposes a complementary panel named `<agent> session summary`, the `86'D — SESSION ENDED` label, a `Close panel` button, and `Mise time`, `Tickets served`, `Ended at`, and `Final state` text.                                                                                                 | `NOT RUN` |                                      |
+| VO-06 | When the corresponding condition is present, verify status/alert semantics: `DEMO SERVICE` and `Waiting for agents — start one in herdr` are `status` surfaces; `GAS LEAK — SERVICE SUSPENDED` is an `alert`.                                                                                                                   | `NOT RUN` |                                      |
+| VO-07 | Verify the live region is named `Agent state announcements`, is polite, and is atomic. It should expose only the current announcement, not a stale concatenation of prior announcements.                                                                                                                                        | `NOT RUN` |                                      |
 
 #### Focus, Escape, and restoration
 
@@ -808,6 +808,36 @@ treating all hosted checks as enforced.
 
 ## Diagnostics
 
+### CLI diagnostic
+
+Use the local binary's bounded, read-only summary when reporting startup or
+Herdr compatibility problems:
+
+```sh
+herdr-mise --version
+herdr-mise --diagnostic
+```
+
+`--diagnostic` performs one socket discovery, snapshot fetch, and adapter
+normalization attempt with a two-second bound. An unavailable source is a
+successful diagnostic result. The command does not start the feed, bind TCP,
+enter terminal raw mode, retry, or monitor subsequent health. Its
+`source_status` is therefore point-in-time only; `http_address` reports the
+configured loopback address, not a listening server. Invalid `HERDR_MISE_PORT`
+still fails closed.
+
+The stable fields are `version`, `supported_protocols`, `source_status`, and
+`http_address`. Output excludes socket/home/workspace paths, adapter error text,
+agent records, and Herdr payloads. A sanitized bug-report sample is:
+
+```text
+herdr-mise 0.2.0
+version=0.2.0
+supported_protocols=17,19,20
+source_status=unavailableSocket
+http_address=http://127.0.0.1:8686
+```
+
 ### `?stats` overlay
 
 Append `?stats` to the URL once. The chrome renders a draw-call and
@@ -818,6 +848,51 @@ toggle.
 The overlay is excluded from perf budgets when hidden. `npm run
 perf` toggles it from the harness via Playwright.
 
+### Release endurance profile
+
+The Chromium endurance profile is release-scoped and opt-in. It builds and
+boots the embedded release binary, serves the sanitized protocol-20 fixture
+through a temporary Herdr Unix socket, and drives the real WebSocket, browser
+store, DOM controls, and Pixi scene. It writes incremental JSONL samples and a
+machine-readable summary under the ignored `perf/artifacts/` directory. Those
+artifacts contain counts and environment identity only, never fixture payloads,
+agent or workspace labels, or local paths.
+
+Run the short integration validation on an active, unlocked desktop:
+
+```sh
+HERDR_MISE_ENDURANCE_DURATION_MINUTES=8 npm run perf:endurance
+```
+
+The publishable eight-hour baseline uses the default duration:
+
+```sh
+npm run perf:endurance
+```
+
+Only that 480-minute default is labeled all-day evidence. Preserve its summary
+outside the repository, then compare another full run on the same OS, hardware,
+Chromium, Playwright, and graphics environment:
+
+```sh
+HERDR_MISE_ENDURANCE_BASELINE=/absolute/path/to/clean-summary.json npm run perf:endurance
+```
+
+Verify the trend detector with an isolated, equally shortened candidate. This
+command must exit nonzero after writing its artifacts:
+
+```sh
+HERDR_MISE_ENDURANCE_DURATION_MINUTES=8 HERDR_MISE_ENDURANCE_INJECT_LEAK=1 HERDR_MISE_ENDURANCE_BASELINE=/absolute/path/to/clean-summary.json npm run perf:endurance
+```
+
+The matrix gives equal wall-clock time to 30 and 60 agents with one and three
+client pages. It alternates foreground/background phases, churns completed and
+joined sessions, and interrupts and restores the fixture source while pages
+remain open. Locking the screen, host sleep, thermal throttling, or foreground
+interference limits the evidence and must be recorded externally. The profile
+does not measure GPU utilization and cloned fixture agents do not prove Herdr
+daemon scalability.
+
 ### Server resource measurement
 
 `scripts/measure-server.sh` boots the binary with an isolated empty
@@ -827,6 +902,23 @@ CPU budgets. It also writes the raw evidence under
 `perf/artifacts/server-resource.log`. Override the binary with
 `scripts/measure-server.sh path/to/herdr-mise` and the artifact
 directory with `HERDR_MISE_ARTIFACT_DIR=...`.
+
+This remains the short, one-sample release RSS/CPU guard; endurance trends do
+not replace or weaken its budgets. Likewise, `scripts/acceptance-soak.sh`
+remains the public-binary uptime soak rather than a browser performance test.
+
+Measure the release TUI through a real Unix socket and POSIX PTY with:
+
+```sh
+cargo build --release --locked --bin herdr-mise
+npm run measure:tui -- --verify
+```
+
+The harness reports repeated median CPU, RSS, and PTY bytes per second for idle,
+working, blocked, and reduced-motion profiles at 120×42 and 79×23. Pass
+`--binary <path> --commit <full-sha> --label <before|after>` to compare preserved
+binaries with accurate provenance; JSON evidence is written under the ignored
+`perf/artifacts/` directory.
 
 ### Smoke test
 

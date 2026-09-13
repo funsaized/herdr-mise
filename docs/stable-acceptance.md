@@ -83,12 +83,14 @@ test "$(cat "$install_root/herdr-mise/0.2.0-rc.1/artifact-sha256")" = \
 test -x "$install_root/herdr-mise/0.1.0/bin/herdr-mise"
 test ! -e "$install_root/herdr-mise/current.next"
 test ! -L "$install_root/herdr-mise/current.next"
+"$install_root/herdr-mise/current/bin/herdr-mise" --version
 "$install_root/herdr-mise/current/bin/herdr-mise" --tui
 ```
 
-The final command is the bounded manual launch check: confirm the first render,
-then press `q`. Do not launch the default server for this gate; it could hang the
-procedure or collide with the retained dogfood listener.
+The version command must print the exact accepted RC identity. The final command
+is the bounded manual launch check: confirm the first render, then press `q`.
+Do not launch the default server for this gate; it could hang the procedure or
+collide with the retained dogfood listener.
 
 To test clean uninstall, first select a different current version, then run
 `sh scripts/uninstall-acceptance-artifact.sh INSTALL_ROOT VERSION`. The command
@@ -121,6 +123,32 @@ The product also includes the native terminal UI. Run
 `tui-test-suite`. This covers responsive layout selection, state semantics,
 render goldens, bounded particles, and terminal cleanup. It does not replace the
 public-artifact terminal journey below.
+
+## Supplemental release endurance evidence
+
+The opt-in Chromium endurance profile supplements, but does not replace, the
+stable acceptance document. Run `npm run perf:endurance` for the full default
+480 minutes against the candidate release commit. Retain the generated JSONL
+samples and summary outside the repository with the release evidence. The
+summary must truthfully record its requested duration, start, end, actual
+elapsed time, all four 30/60-agent by one/three-client scenarios, environment
+identity, completed-session and reconnect counts, and per-scenario trends.
+
+Evidence is publishable only when the run completed all eight hours on an
+active desktop, lifecycle invariants passed, and no retained-object, browser
+memory, or server RSS trend is proportional to completed sessions or
+reconnects. The summary must contain no `evidenceLimitations`; for example, a
+host that denies `ps` process sampling can validate the product boundary but
+cannot produce publishable endurance evidence. A same-environment baseline
+comparison must reject mismatched OS, hardware, browser, Playwright, or graphics
+identity. Run the documented injected-leak comparison separately and retain its
+expected nonzero result.
+
+The checked-in artifacts remain ignored because they are host-specific.
+External copies must not contain fixture payloads, agent or workspace names,
+or local paths. `scripts/measure-server.sh` remains the short one-sample release
+resource guard, and `scripts/acceptance-soak.sh` remains the public-artifact
+uptime evidence; neither is replaced by this profile.
 
 ## Exact manual matrix
 

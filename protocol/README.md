@@ -31,7 +31,8 @@ from labels or upstream focus. Legacy snapshots may omit both additions.
   `paneId` only when active name/basename pairs collide.
 - `runtimeMs` is time since this process first observed the terminal identity (Mise time),
   not the upstream session lifetime. Departure or process restart resets it.
-  State timestamps likewise describe observations, not unseen history.
+  Server `stateEnteredAt` timestamps mark server observations and preserve
+  same-state re-entry detection; they do not establish upstream session age.
 
 Herdr's process-scoped `state_change_seq` remains internal to the adapter. A
 strict increase between two known values for the same terminal identity proves
@@ -49,8 +50,13 @@ again. Upstream `revision` is unrelated and ignored. Neither value enters
 
 `snapshot-provenance.v1.json` covers unknown/unavailable and observed-zero
 records across the decoder, Rust schema round-trip, and detail presentation.
-Browser local history retains the latest 256 transitions; diagnostics retain
-one second in at most ten 100 ms buckets. Neither implies complete history.
+Browser history is timestamped by the browser when each observation arrives,
+starts with the current page, and resets on reload. It retains the latest 256
+entries, including explicit unknown observations and gaps beginning at the last
+valid WebSocket frame before a disconnect. A reconnect snapshot starts a fresh
+observation even when the state is unchanged. Diagnostics retain one second in
+at most ten 100 ms buckets. Neither history nor diagnostics implies complete
+upstream history.
 Polling cannot observe an exit and replacement that both occur between snapshots.
 
 The client additionally rejects messages over 4 MiB of string characters,

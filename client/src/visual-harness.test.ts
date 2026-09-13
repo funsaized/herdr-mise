@@ -363,7 +363,7 @@ describe("visual WebSocket boundary", () => {
     store.destroy();
   });
 
-  it("shows a generic temporary answer cue only after blocked returns to working", () => {
+  it("shows a temporary resumed cue only after blocked returns directly to working", () => {
     const now = Date.parse("2026-08-01T15:00:00.000Z"),
       store = new AgentStore({ now: () => now, setTimeout, clearTimeout });
     const hero = (state: "blocked" | "working") => ({
@@ -393,11 +393,55 @@ describe("visual WebSocket boundary", () => {
     store.apply(hero("working"));
     const agent = store.snapshot().agents.get("hero")!;
     expect(stationIdentityLabels(agent, "working", now).status).toContain(
-      "ANSWER RECEIVED",
+      "WORK RESUMED",
     );
     expect(
       stationIdentityLabels(agent, "working", now + 2_001).status,
     ).toContain("FIRE");
+  });
+
+  it("does not show the resumed cue across an observation gap", () => {
+    let now = Date.parse("2026-08-01T15:00:00.000Z");
+    const store = new AgentStore({
+      now: () => now,
+      setTimeout,
+      clearTimeout,
+    });
+    const record = (state: "blocked" | "working") => ({
+      id: "hero",
+      name: "Any agent",
+      state,
+      progress: null,
+      stateEnteredAt: new Date(now).toISOString(),
+      accentIndex: 0,
+      model: "codex",
+      workspace: "/work/any",
+      session: { runtimeMs: 1, tickets: 0 },
+    });
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "demo",
+      sourceStatus: "unavailableSocket",
+      agents: [record("blocked")],
+    });
+    now += 1_000;
+    store.setDisconnected(now);
+    now += 1_000;
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "demo",
+      sourceStatus: "unavailableSocket",
+      agents: [record("working")],
+    });
+    const agent = store.snapshot().agents.get("hero")!;
+    expect(agent.history.map(({ state }) => state)).toEqual([
+      "blocked",
+      "gap",
+      "working",
+    ]);
+    expect(stationIdentityLabels(agent, "working", now).status).toBe("FIRE");
   });
 
   it("does not show the answer cue for initial working or idle returning to working", () => {
