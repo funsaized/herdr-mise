@@ -211,6 +211,9 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
     ),
   ).toBe(true);
   await page.goto("/?preset=ended&agents=50&stats");
+  const hint = page.locator(".firstHint");
+  await hint.getByRole("button", { name: "Got it" }).click();
+  await expect(hint).toHaveCount(0);
   const freezer = page.getByRole("button", { name: "Freezer" });
   const freezerBox = (await freezer.boundingBox())!;
   expect(freezerBox.width).toBeGreaterThanOrEqual(44);

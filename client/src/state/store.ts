@@ -135,6 +135,7 @@ export class AgentStore {
   private doneTimers = new Map<string, unknown>();
   private doneGenerations = new Map<string, string>();
   private dismissedDone = new Map<string, string>();
+  private boardSuffixes = new Map<string, number>();
   constructor(
     private scheduler: Scheduler = nativeScheduler,
     settings: Partial<Settings> = {},
@@ -315,6 +316,7 @@ export class AgentStore {
     if (modeChanged) {
       for (const id of this.agents.keys()) this.remove(id);
       this.board = [];
+      this.boardSuffixes.clear();
       this.selectedId = null;
       this.dismissedDone.clear();
     }
@@ -485,8 +487,8 @@ export class AgentStore {
     this.remove(agent.id);
     const entry: BoardEntry = {
       id: prior
-        ? nextBoardId(this.board, agent.id)
-        : (existing?.id ?? nextBoardId(this.board, agent.id)),
+        ? this.nextBoardId(agent.id)
+        : (existing?.id ?? this.nextBoardId(agent.id)),
       sourceId: agent.id,
       name: agent.name,
       accentIndex: agent.accentIndex,
@@ -513,6 +515,23 @@ export class AgentStore {
       evicted.some((entry) => entry.id === this.selectedId)
     )
       this.selectedId = null;
+    for (const sourceId of new Set(evicted.map((entry) => entry.sourceId)))
+      if (
+        !this.agents.has(sourceId) &&
+        !this.board.some((entry) => entry.sourceId === sourceId)
+      )
+        this.boardSuffixes.delete(sourceId);
+  }
+  private nextBoardId(agentId: string) {
+    let suffix = this.boardSuffixes.get(agentId) ?? 0;
+    for (;;) {
+      const id = suffix === 0 ? agentId : `${agentId}:${suffix}`;
+      suffix++;
+      if (!this.board.some((entry) => entry.id === id)) {
+        this.boardSuffixes.set(agentId, suffix);
+        return id;
+      }
+    }
   }
   private remove(id: string) {
     this.cancelDone(id);
@@ -591,14 +610,6 @@ function lastBoardIndex(board: readonly BoardEntry[], agentId: string) {
     if (board[index]?.sourceId === agentId) return index;
   }
   return -1;
-}
-function nextBoardId(board: readonly BoardEntry[], agentId: string) {
-  const used = new Set(board.map((entry) => entry.id));
-  if (!used.has(agentId)) return agentId;
-  for (let n = 1; ; n++) {
-    const id = `${agentId}:${n}`;
-    if (!used.has(id)) return id;
-  }
 }
 function sameWorkspaces(
   a: readonly WorkspaceRecord[],

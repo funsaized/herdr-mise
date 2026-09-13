@@ -639,7 +639,7 @@ describe("agent store machines", () => {
       endedAt: before[1]?.endedAt,
     });
   });
-  it("reuses after the board cap without colliding ids and clears an evicted selection", () => {
+  it("keeps lifetime ids monotonic after the board cap and clears an evicted selection", () => {
     const store = new AgentStore();
     for (let i = 0; i < BOARD_LIMIT; i++) {
       store.apply(upsert(agent("working", "p-1")));
@@ -656,6 +656,9 @@ describe("agent store machines", () => {
     store.apply(upsert(agent("working", "p-1")));
     store.apply(upsert(agent("ended", "p-1")));
     expect(store.coarse().selectedId).toBeNull();
+    expect(store.snapshot().board.map((entry) => entry.id)).not.toContain(
+      "p-1",
+    );
     store.apply(upsert(agent("working", "p-1")));
     store.apply(upsert(agent("ended", "p-1")));
     const ids = store.snapshot().board.map((entry) => entry.id);
@@ -666,7 +669,7 @@ describe("agent store machines", () => {
         { length: BOARD_LIMIT - 1 },
         (_, index) => `p-1:${index + 2}`,
       ),
-      "p-1",
+      `p-1:${BOARD_LIMIT + 1}`,
     ]);
   });
   it("keeps projection ids unique when a source id resembles a lifetime id", () => {
