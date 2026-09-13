@@ -16,6 +16,7 @@ import {
   visualAgentCounts,
   visualPresets,
 } from "./visual-harness";
+import attentionTiming from "./attention-story.json";
 import { stationIdentityLabels } from "./scene/kitchen-scene";
 
 afterEach(() => vi.useRealTimers());
@@ -61,6 +62,7 @@ describe("visual harness configuration", () => {
       "done",
       "ended",
       "mixed",
+      "attention",
     ]);
     expect(visualAgentCounts).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
@@ -79,7 +81,7 @@ describe("visual harness configuration", () => {
       agents: 30,
       theme: "light",
     });
-    for (let agents = 0; agents <= 30; agents += 1) {
+    for (let agents = 0; agents <= 50; agents += 1) {
       expect(parseVisualConfig(`?agents=${agents}`).agents).toBe(agents);
     }
   });
@@ -87,7 +89,7 @@ describe("visual harness configuration", () => {
   it("uses deterministic defaults for absent and unsupported values", () => {
     const fallback = { preset: "mixed", agents: 6, theme: "light" };
     expect(parseVisualConfig("")).toEqual(fallback);
-    for (const agents of ["nope", "1.5", "Infinity", "31"]) {
+    for (const agents of ["nope", "1.5", "Infinity", "51"]) {
       expect(parseVisualConfig(`?preset=nope&agents=${agents}`)).toEqual(
         fallback,
       );
@@ -142,6 +144,7 @@ describe("visual harness configuration", () => {
         "done",
         "ended",
         "mixed",
+        "attention",
       ] as const) {
         for (const event of buildVisualFeed({
           preset,
@@ -261,6 +264,52 @@ describe("visual harness configuration", () => {
 });
 
 describe("visual WebSocket boundary", () => {
+  it("runs the attention story from working through one Codex block and back to working", async () => {
+    vi.useFakeTimers();
+    const target = {} as { WebSocket?: typeof WebSocket };
+    installVisualWebSocket(target, {
+      preset: "attention",
+      agents: 6,
+      theme: "light",
+    });
+    const socket = new target.WebSocket!("ws://visual/ws"),
+      messages: AgentStateEvent[] = [];
+    socket.onmessage = (event) =>
+      messages.push(JSON.parse(String(event.data)) as AgentStateEvent);
+    await vi.runAllTicks();
+    const states = () =>
+      messages.flatMap((event) =>
+        event.type === "snapshot"
+          ? event.agents.map((record) => `${record.name}:${record.state}`)
+          : event.type === "delta" && event.operation === "upsert"
+            ? [`${event.agent.name}:${event.agent.state}`]
+            : [],
+      );
+    expect(states()).toEqual([
+      "Codex:working",
+      "Claude:working",
+      "Hermes:working",
+      "OpenClaw:working",
+      "Gemini:working",
+      "Aider:working",
+    ]);
+    await vi.advanceTimersByTimeAsync(attentionTiming.blockedAtMs);
+    expect(states().at(-1)).toBe("Codex:blocked");
+    await vi.advanceTimersByTimeAsync(
+      attentionTiming.resumedAtMs - attentionTiming.blockedAtMs,
+    );
+    expect(states().slice(-2)).toEqual(["Codex:blocked", "Codex:working"]);
+    const snapshot = messages[0];
+    expect(snapshot?.type).toBe("snapshot");
+    if (snapshot?.type === "snapshot")
+      expect(snapshot.agents[0]).toMatchObject({
+        name: "Codex",
+        workspace: "/service/checkout-api",
+      });
+    socket.close();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("emits the blocked burst in store order before continuing the hero lifecycle", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-08-01T15:00:00.000Z"));
@@ -363,7 +412,7 @@ describe("visual WebSocket boundary", () => {
     store.destroy();
   });
 
-  it("shows a generic temporary answer cue only after blocked returns to working", () => {
+  it("shows a temporary resumed cue only after blocked returns directly to working", () => {
     const now = Date.parse("2026-08-01T15:00:00.000Z"),
       store = new AgentStore({ now: () => now, setTimeout, clearTimeout });
     const hero = (state: "blocked" | "working") => ({
@@ -393,11 +442,55 @@ describe("visual WebSocket boundary", () => {
     store.apply(hero("working"));
     const agent = store.snapshot().agents.get("hero")!;
     expect(stationIdentityLabels(agent, "working", now).status).toContain(
-      "ANSWER RECEIVED",
+      "WORK RESUMED",
     );
     expect(
       stationIdentityLabels(agent, "working", now + 2_001).status,
     ).toContain("FIRE");
+  });
+
+  it("does not show the resumed cue across an observation gap", () => {
+    let now = Date.parse("2026-08-01T15:00:00.000Z");
+    const store = new AgentStore({
+      now: () => now,
+      setTimeout,
+      clearTimeout,
+    });
+    const record = (state: "blocked" | "working") => ({
+      id: "hero",
+      name: "Any agent",
+      state,
+      progress: null,
+      stateEnteredAt: new Date(now).toISOString(),
+      accentIndex: 0,
+      model: "codex",
+      workspace: "/work/any",
+      session: { runtimeMs: 1, tickets: 0 },
+    });
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "demo",
+      sourceStatus: "unavailableSocket",
+      agents: [record("blocked")],
+    });
+    now += 1_000;
+    store.setDisconnected(now);
+    now += 1_000;
+    store.apply({
+      version: 1,
+      type: "snapshot",
+      mode: "demo",
+      sourceStatus: "unavailableSocket",
+      agents: [record("working")],
+    });
+    const agent = store.snapshot().agents.get("hero")!;
+    expect(agent.history.map(({ state }) => state)).toEqual([
+      "blocked",
+      "gap",
+      "working",
+    ]);
+    expect(stationIdentityLabels(agent, "working", now).status).toBe("FIRE");
   });
 
   it("does not show the answer cue for initial working or idle returning to working", () => {

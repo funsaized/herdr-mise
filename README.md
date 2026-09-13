@@ -12,7 +12,15 @@ _Gordon Ramsey_
 herdr-mise does not control agents, render their output, or aggregate remote
 servers. It is a window, not an office.
 
-![Seven AI cooks under dinner lighting move through idle, working, blocked, and plated stations, open and dismiss details, then visit two ended cooks in the freezer](docs/assets/herdr-mise-demo.gif)
+![Codex blocked on the checkout-api workspace in the demo kitchen](docs/assets/herdr-mise-demo-poster.png)
+
+Six cooks begin working. Codex then becomes blocked on `checkout-api`, its
+details open, and Codex resumes work before the 12-second story ends.
+[MP4](docs/assets/herdr-mise-demo.mp4) ·
+[WebM](docs/assets/herdr-mise-demo.webm) ·
+[GIF](docs/assets/herdr-mise-demo.gif) ·
+[poster](docs/assets/herdr-mise-demo-poster.png) ·
+[capture provenance](scripts/web-demo.capture.json)
 
 [Visual playground](https://herdr-mise.s11a.com/) — choose a deterministic
 scene and roster in the preview explorer, then load it as a shareable URL. See
@@ -24,7 +32,10 @@ the [playground guide](docs/operations.md#visual-playground) for local use.
 
 The binary also runs as a TUI for terminal work. These terminal chefs are lower level, so they're relegated to primitive kitchen tools:
 
-![The herdr-mise terminal demo moving from the kitchen to the walk-in freezer](docs/assets/herdr-mise-tui-demo.gif)
+![The static herdr-mise terminal demo kitchen](docs/assets/herdr-mise-tui-demo-poster.png)
+
+[Watch the TUI GIF](docs/assets/herdr-mise-tui-demo.gif) ·
+[TUI capture provenance](scripts/tui-demo.capture.json)
 
 Mise remains a localhost-only, read-only projection. The browser playground,
 terminal recording, and static fallbacks remain explicitly labeled

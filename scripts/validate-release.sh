@@ -12,3 +12,5 @@ grep -q 'herdr-mise-v\*-${{ matrix.target }}.tar.gz' .github/workflows/release.y
 grep -q 'sha256' .github/workflows/release.yml
 sh scripts/smoke-release.sh target/release/herdr-mise
 sh scripts/measure-server.sh target/release/herdr-mise
+archive=$(sh scripts/package-release.sh "" target/release/herdr-mise | sed -n '/\.tar\.gz$/p')
+sh scripts/verify-release-artifact.sh "$archive"

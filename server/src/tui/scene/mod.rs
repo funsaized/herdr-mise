@@ -14,9 +14,10 @@ use ratatui::{
 use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, PixelRect};
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
+    freezer_keys,
     state::{AgentTable, BoardEntry, BOARD_CAP},
-    theme, view, SceneView, HELP_LINES, KEY_ALL, KEY_ESC_CLOSE, KEY_ESC_KITCHEN, KEY_FREEZER,
-    KEY_HELP, KEY_INSPECT, KEY_KITCHEN, KEY_QUIT, KEY_QUIT_ESC, KEY_SCOPE,
+    theme, view, SceneView, HELP_LINES, KEY_ALL, KEY_ESC_CLOSE, KEY_FREEZER, KEY_HELP, KEY_INSPECT,
+    KEY_QUIT, KEY_QUIT_ESC, KEY_SCOPE,
 };
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceStatus};
 
@@ -498,15 +499,15 @@ pub(crate) fn draw_view_scoped(
     scope: &super::Scope,
 ) {
     let area = frame.area();
-    let inspection_too_tall = selected_id
-        .and_then(|id| {
-            table
-                .scoped_agents(scope.id.as_deref())
-                .find(|agent| agent.id == id)
-        })
-        .is_some_and(|agent| {
-            let available_height = match scene_view {
-                SceneView::Kitchen => match compute_layout(
+    let inspection_too_tall = scene_view == SceneView::Kitchen
+        && selected_id
+            .and_then(|id| {
+                table
+                    .scoped_agents(scope.id.as_deref())
+                    .find(|agent| agent.id == id)
+            })
+            .is_some_and(|agent| {
+                let available_height = match compute_layout(
                     area.width,
                     area.height.saturating_mul(2),
                     table.scoped_agents(scope.id.as_deref()).count(),
@@ -519,30 +520,25 @@ pub(crate) fn draw_view_scoped(
                         .unwrap_or(area.height)
                         .saturating_sub(cell_rect(layout.pass).bottom()),
                     LayoutDecision::Fallback => area.height,
-                },
-                SceneView::Freezer => {
-                    compute_freezer_layout(area.width, area.height.saturating_mul(2), &[])
-                        .map(|layout| {
-                            area.height
-                                .saturating_sub(layout.status.y / 2)
-                                .saturating_sub(2)
-                        })
-                        .unwrap_or(area.height)
-                }
-            };
-            view::inspect_height(agent, area.width.saturating_sub(4)) > available_height
-        });
+                };
+                view::inspect_height(agent, area.width.saturating_sub(4)) > available_height
+            });
     if !scene_supported || inspection_too_tall {
-        view::draw_scoped(
-            frame,
-            table,
-            warning,
-            now,
-            motion_tick(tick, reduced_motion),
-            selected_id,
-            table_offset,
-            scope,
-        );
+        match scene_view {
+            SceneView::Kitchen => view::draw_scoped(
+                frame,
+                table,
+                warning,
+                now,
+                motion_tick(tick, reduced_motion),
+                selected_id,
+                table_offset,
+                scope,
+            ),
+            SceneView::Freezer => {
+                view::draw_freezer_scoped(frame, table, warning, now, selected_id)
+            }
+        }
         if help_open {
             draw_help(frame, color_mode);
         }
@@ -1071,7 +1067,7 @@ fn draw_freezer(
     tick: u64,
     color_mode: ColorMode,
     selected_id: Option<&str>,
-    table_offset: usize,
+    _table_offset: usize,
     reduced_motion: bool,
     scope: &super::Scope,
 ) {
@@ -1083,16 +1079,7 @@ fn draw_freezer(
     let Some(layout) = compute_freezer_layout(area.width, area.height.saturating_mul(2), &ids)
     else {
         if area == frame.area() {
-            view::draw_scoped(
-                frame,
-                table,
-                warning,
-                now,
-                motion_tick(tick, reduced_motion),
-                selected_id,
-                table_offset,
-                scope,
-            );
+            view::draw_freezer_scoped(frame, table, warning, now, selected_id);
         }
         return;
     };
@@ -1338,17 +1325,21 @@ fn draw_freezer(
                 name,
                 Style::default()
                     .fg(mapped(theme::TEXT, color_mode))
-                    .add_modifier(Modifier::BOLD),
+                    .add_modifier(if selected_id == Some(entry.id.as_str()) {
+                        Modifier::BOLD | Modifier::REVERSED
+                    } else {
+                        Modifier::BOLD
+                    }),
             ),
         );
     }
     let shown = layout.spirits.len();
     let total = table.board().len();
     let caption = if total == 0 {
-        format!("FREEZER EMPTY · {}", board_count_text(table))
+        format!("FREEZER EMPTY · NO ENDED SESSIONS · LIMIT {BOARD_CAP}")
     } else {
         format!(
-            "FROZEN {shown}/{total} · {} MORE ON 86 BOARD",
+            "FROZEN {shown}/{total} · {} HIDDEN · LATEST {BOARD_CAP} RETAINED",
             total - shown
         )
     };
@@ -1363,11 +1354,11 @@ fn draw_freezer(
             Style::default().fg(mapped(theme::TEXT, color_mode)),
         ),
     );
-    if let Some(agent) = selected_id.and_then(|id| table.agents().find(|agent| agent.id == id)) {
+    if let Some((index, entry)) = selected_id.and_then(|id| table.board_entry(id)) {
         let width = area.width.saturating_sub(4);
-        let height = view::inspect_height(agent, width);
+        let height = view::freezer_inspect_height(entry, index + 1, total, width);
         frame.render_widget(
-            view::inspect_paragraph(agent).style(
+            view::freezer_inspect_paragraph(entry, index + 1, total).style(
                 Style::default()
                     .fg(mapped(theme::TEXT, color_mode))
                     .bg(mapped(theme::PANEL2, color_mode))
@@ -1381,7 +1372,10 @@ fn draw_freezer(
             ),
         );
     }
-    let keys = format!("{KEY_SCOPE} · {KEY_ALL} · {KEY_KITCHEN} · {KEY_ESC_KITCHEN} · {KEY_QUIT}");
+    let keys = freezer_keys(
+        selected_id.is_some(),
+        area.width <= theme::FREEZER_COMPACT_FOOTER_MAX_WIDTH,
+    );
     let connection_width = area.width.saturating_sub(keys.chars().count() as u16 + 5);
     let connection = footer_connection(table, warning, connection_width);
     render_line(

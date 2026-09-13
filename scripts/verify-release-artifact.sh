@@ -7,6 +7,8 @@ set -eu
 
 archive=${1:?usage: verify-release-artifact.sh dist/herdr-mise-<target>.tar.gz}
 checksum="$archive.sha256"
+port=$(node -e 'const net=require("node:net"),server=net.createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close()})')
+export HERDR_MISE_PORT="$port"
 work=$(mktemp -d)
 pid=""
 trap '[ -n "$pid" ] && kill -INT "$pid" 2>/dev/null || true; rm -rf "$work"' EXIT INT TERM
@@ -27,6 +29,11 @@ echo "archive_contents=executable and license notices"
 tar -C "$work" -xzf "$archive"
 binary="$work/herdr-mise"
 [ -x "$binary" ]
+version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml)
+[ -n "$version" ] || { echo "cannot read release version from server/Cargo.toml" >&2; exit 1; }
+"$binary" --help >/dev/null
+[ "$("$binary" --version)" = "herdr-mise $version" ] || { echo "packaged binary version mismatch" >&2; exit 1; }
+echo "cli_identity=ok herdr-mise $version"
 cmp LICENSE "$work/LICENSE"
 grep -q '^## Rust dependencies$' "$work/THIRD_PARTY_NOTICES.txt"
 grep -q '^## JavaScript dependencies$' "$work/THIRD_PARTY_NOTICES.txt"
@@ -52,7 +59,7 @@ HOME="$work/home" XDG_CONFIG_HOME="$work/config" XDG_RUNTIME_DIR="$work/runtime"
 pid=$!
 
 i=0
-until curl --fail --silent http://127.0.0.1:8686/ -o "$work/index.html" 2>/dev/null; do
+until curl --fail --silent "http://127.0.0.1:$port/" -o "$work/index.html" 2>/dev/null; do
   i=$((i + 1))
   [ "$i" -lt 400 ] || { echo "server did not become ready" >&2; cat "$work/server.log" >&2; exit 1; }
   sleep 0.05
@@ -60,21 +67,21 @@ done
 
 asset=$(sed -n 's/.*src="\([^"]*\.js\)".*/\1/p' "$work/index.html" | head -n 1)
 [ -n "$asset" ] || { echo "no hashed js asset referenced by index.html" >&2; exit 1; }
-mime=$(curl --fail --silent -o "$work/client.js" -w '%{content_type}' "http://127.0.0.1:8686/$asset")
+mime=$(curl --fail --silent -o "$work/client.js" -w '%{content_type}' "http://127.0.0.1:$port/$asset")
 [ -s "$work/client.js" ]
 case "$mime" in text/javascript*) ;; *) echo "unexpected asset MIME: $mime" >&2; exit 1 ;; esac
 echo "embedded_assets=ok $asset ($mime)"
 
-font_mime=$(curl --fail --silent -o "$work/font.ttf" -w '%{content_type}' "http://127.0.0.1:8686/fonts/instrument-sans-400.ttf")
+font_mime=$(curl --fail --silent -o "$work/font.ttf" -w '%{content_type}' "http://127.0.0.1:$port/fonts/instrument-sans-400.ttf")
 [ -s "$work/font.ttf" ]
 [ "$font_mime" = "font/ttf" ] || { echo "unexpected font MIME: $font_mime" >&2; exit 1; }
-notice_mime=$(curl --fail --silent -o "$work/font-license.txt" -w '%{content_type}' "http://127.0.0.1:8686/fonts/OFL-Instrument-Sans.txt")
+notice_mime=$(curl --fail --silent -o "$work/font-license.txt" -w '%{content_type}' "http://127.0.0.1:$port/fonts/OFL-Instrument-Sans.txt")
 case "$notice_mime" in text/plain*) ;; *) echo "unexpected font license MIME: $notice_mime" >&2; exit 1 ;; esac
 echo "embedded_fonts=ok ($font_mime; $notice_mime)"
 
 node -e '
 const timer=setTimeout(()=>{console.error("websocket timeout");process.exit(1)},3000);
-const ws=new WebSocket("ws://127.0.0.1:8686/ws");
+const ws=new WebSocket(`ws://127.0.0.1:${process.env.HERDR_MISE_PORT ?? 8686}/ws`);
 ws.onmessage=(event)=>{const value=JSON.parse(event.data);if(value.type!=="snapshot"||value.mode!=="demo"||value.agents.length!==12)process.exit(2);clearTimeout(timer);console.log(`demo_snapshot=ok mode=${value.mode} agents=${value.agents.length}`);process.exit(0)};
 ws.onerror=()=>process.exit(3);
 '

@@ -1,0 +1,66 @@
+{
+  "schema": "web-demo-capture-v1",
+  "capturedAt": "2026-09-13T09:20:17.761Z",
+  "sourceCommit": "7e45d2286630fdaad601989bb0601fab50a90276",
+  "query": "preset=attention&agents=6&theme=light",
+  "scenario": [
+    {
+      "atMs": 0,
+      "state": "working",
+      "caption": "Six cooks are working."
+    },
+    {
+      "atMs": 3000,
+      "state": "blocked",
+      "caption": "Codex is blocked on checkout-api."
+    },
+    {
+      "atMs": 8000,
+      "state": "working",
+      "caption": "Codex resumed work on checkout-api."
+    }
+  ],
+  "provenance": "deterministic client visual harness demo",
+  "sourceDimensions": {
+    "width": 1280,
+    "height": 720
+  },
+  "outputDimensions": {
+    "width": 960,
+    "height": 540
+  },
+  "frameRate": 20,
+  "frameCount": 240,
+  "durationSeconds": 12,
+  "semanticStatesObserved": ["working", "blocked", "working"],
+  "outputs": {
+    "gif": {
+      "path": "docs/assets/herdr-mise-demo.gif",
+      "codec": "gif",
+      "durationSeconds": 12,
+      "bytes": 629631,
+      "sha256": "b9bd7474af9cecc69b2873af6fed96fdaed956bbace26164495dcf010f9bb84b"
+    },
+    "mp4": {
+      "path": "docs/assets/herdr-mise-demo.mp4",
+      "codec": "h264",
+      "durationSeconds": 12,
+      "bytes": 116695,
+      "sha256": "081a1a4d52ee1b798e60975edff6c5b63a76ec72b09765448dde9f66bf0f6b23"
+    },
+    "webm": {
+      "path": "docs/assets/herdr-mise-demo.webm",
+      "codec": "vp9",
+      "durationSeconds": 12,
+      "bytes": 414994,
+      "sha256": "e23fc975d361da9568bd1e66796b02422b1f6e0ceff530106114f8a85342d108"
+    },
+    "poster": {
+      "path": "docs/assets/herdr-mise-demo-poster.png",
+      "codec": "png",
+      "durationSeconds": null,
+      "bytes": 180650,
+      "sha256": "873da7306d668183d9aac58b3c624c18d2e060f2637c835f3dab39e381fc65ef"
+    }
+  }
+}

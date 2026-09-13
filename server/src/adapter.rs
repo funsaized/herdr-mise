@@ -334,7 +334,8 @@ impl Normalizer {
             });
         }
         agents.sort_by(|a, b| a.id.cmp(&b.id));
-        let ended_ids: Vec<String> = self.previous_ids.difference(&current).cloned().collect();
+        let mut ended_ids: Vec<String> = self.previous_ids.difference(&current).cloned().collect();
+        ended_ids.sort();
         for id in &ended_ids {
             first_seen.remove(id);
             entered_at.remove(id);
@@ -742,6 +743,18 @@ mod tests {
             .normalize_snapshot_value(json!({"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}), "b")
             .unwrap();
         assert_eq!(out.ended_ids, vec!["t-1"]);
+    }
+
+    #[test]
+    fn simultaneous_disappearances_are_ordered_by_id() {
+        let mut n = Normalizer {
+            previous_ids: ["z", "a", "m"].into_iter().map(String::from).collect(),
+            ..Default::default()
+        };
+        let out = n
+            .normalize_snapshot_value(json!({"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}), "b")
+            .unwrap();
+        assert_eq!(out.ended_ids, ["a", "m", "z"]);
     }
 
     #[test]

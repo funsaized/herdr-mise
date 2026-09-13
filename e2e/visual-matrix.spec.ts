@@ -12,6 +12,7 @@ import {
   computeLayout,
   reconcileStationSlots,
 } from "../client/src/scene/layout";
+import { startFixtureApp } from "./fixture-app";
 
 const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const STATE_WORDS = {
@@ -25,7 +26,7 @@ const IDENTITIES = ["Codex", "Claude", "Hermes", "OpenClaw", "Gemini", "Aider"];
 function expectedNames(preset: string, count: number) {
   return new Set(
     Array.from({ length: count }, (_, index) => {
-      if (preset !== "mixed")
+      if (preset !== "mixed" && preset !== "attention")
         return `mise-${String(index + 1).padStart(2, "0")}`;
       const cycle = Math.floor(index / IDENTITIES.length) + 1;
       return `${IDENTITIES[index % IDENTITIES.length]}${cycle > 1 ? `-${cycle}` : ""}`;
@@ -48,6 +49,8 @@ function watchErrors(page: Page) {
 }
 
 type MotionMetrics = {
+  renderCount: number;
+  rafCount: number;
   motion: {
     reduced: boolean;
     activeParticles: number;
@@ -155,7 +158,7 @@ const FULL_STATUSES = new Set([
   "BLOCKED AT STATION",
   "PLATED",
   "86'D",
-  "ANSWER RECEIVED",
+  "WORK RESUMED",
   "UNKNOWN · PREP",
 ]);
 
@@ -330,6 +333,65 @@ test("reduced motion is static before blocked-scene startup in light and dinner 
         blockedIndicators: 1,
       });
   }
+  expect(errors).toEqual([]);
+});
+
+test("attention demo identifies Codex blocking checkout-api and resuming", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?preset=attention&agents=6&theme=light&stats");
+  await expect(placard(page)).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Agent stations" })
+      .getByRole("button"),
+  ).toHaveCount(6);
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toBeVisible();
+  const codex = page.getByRole("button", {
+      name: /Codex, Blocked — at the pass.*open details/,
+    }),
+    details = page.getByRole("complementary", { name: "Codex details" });
+  await expect(codex).toBeVisible({ timeout: 6_000 });
+  await expect(
+    page.locator('.stationA11yMirror button[aria-label*="Blocked —"]'),
+  ).toHaveCount(1);
+  await codex.evaluate((element) => element.click());
+  await expect(details).toContainText("BLOCKED — AT THE PASS");
+  await expect(details).toContainText("checkout-api");
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({
+      blockedIndicators: 1,
+      motion: {
+        reduced: true,
+        activeParticles: 0,
+        activeTransitions: 0,
+        activeBusserSweeps: 0,
+        continuous: false,
+      },
+    });
+  await expect(details).toContainText("WORKING — ON THE FIRE", {
+    timeout: 7_000,
+  });
+  await expect(details).toContainText("checkout-api");
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -524,13 +586,14 @@ test("native freezer control renders only visible board spirits and preserves Es
     page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
   ).toHaveCount(12);
   await expect(page.getByLabel("Agent state announcements")).toHaveText(
-    "Freezer, 12 of 12 ended chefs shown",
+    "Freezer, 12 decorative spirits, 12 inspectable sessions",
   );
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur(),
-  );
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("Enter");
+  const newest = page
+    .getByRole("navigation", { name: "Ended chefs" })
+    .getByRole("button")
+    .first();
+  await newest.focus();
+  await newest.press("Enter");
   await expect(
     page.locator('aside[aria-label$="session summary"]'),
   ).toBeVisible();
@@ -539,6 +602,7 @@ test("native freezer control renders only visible board spirits and preserves Es
     page.locator('aside[aria-label$="session summary"]'),
   ).toHaveCount(0);
   await expect(freezer).toHaveAttribute("aria-pressed", "true");
+  await expect(newest).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(freezer).toHaveAttribute("aria-pressed", "false");
   await expect
@@ -601,13 +665,7 @@ test("responsive mixed focus follows live stations onto the 86 board", async ({
 test("workspace scope follows stable identity without hiding blocked attention", async ({
   page,
 }) => {
-  const directory = await mkdtemp(
-      join(tmpdir(), "herdr-mise-workspace-scope-"),
-    ),
-    port = await availablePort(),
-    appUrl = `http://127.0.0.1:${port}`,
-    socketPath = join(directory, "herdr.sock"),
-    initial = JSON.parse(
+  const initial = JSON.parse(
       await readFile(
         join(
           process.cwd(),
@@ -616,44 +674,13 @@ test("workspace scope follows stable identity without hiding blocked attention",
         "utf8",
       ),
     ),
-    sockets = new Set<Socket>();
-  let snapshot = JSON.stringify({ result: { snapshot: initial } });
-  const fixtureServer = createServer((socket) => {
-    sockets.add(socket);
-    socket.on("close", () => sockets.delete(socket));
-    let request = "";
-    socket.on("data", (chunk) => {
-      request += chunk;
-      if (!request.includes("\n")) return;
-      const method = JSON.parse(request).method;
-      if (method === "session.snapshot") socket.end(`${snapshot}\n`);
-      else socket.write('{"result":{"type":"subscription_started"}}\n');
+    fixture = await startFixtureApp({
+      prefix: "herdr-mise-workspace-scope-",
+      snapshot: initial,
     });
-  });
-  await new Promise<void>((resolve, reject) => {
-    fixtureServer.once("error", reject);
-    fixtureServer.listen(socketPath, resolve);
-  });
-  const app = spawn("target/debug/herdr-mise", [], {
-    env: {
-      ...process.env,
-      HERDR_MISE_PORT: String(port),
-      HERDR_SOCKET_PATH: socketPath,
-    },
-    stdio: "ignore",
-  });
   try {
-    await expect
-      .poll(async () => {
-        try {
-          return (await fetch(appUrl)).status;
-        } catch {
-          return 0;
-        }
-      })
-      .toBe(200);
     await page.setViewportSize({ width: 320, height: 640 });
-    await page.goto(`${appUrl}/?stats`);
+    await page.goto(`${fixture.appUrl}/?stats`);
     const selector = page.getByRole("combobox", { name: "Workspace" });
     await expect(selector).toHaveValue("");
     await expect(page.getByRole("option")).toHaveText([
@@ -707,7 +734,7 @@ test("workspace scope follows stable identity without hiding blocked attention",
     await selector.selectOption("scope-workspace-one");
     const renamed = structuredClone(initial);
     renamed.workspaces[0].label = "renamed";
-    snapshot = JSON.stringify({ result: { snapshot: renamed } });
+    fixture.setSnapshot(renamed);
     await expect(selector).toHaveValue("scope-workspace-one");
     await expect(page.getByRole("option", { name: "renamed" })).toBeAttached({
       timeout: 10_000,
@@ -729,7 +756,7 @@ test("workspace scope follows stable identity without hiding blocked attention",
         agent_status: "working",
       },
     ];
-    snapshot = JSON.stringify({ result: { snapshot: removed } });
+    fixture.setSnapshot(removed);
     await expect(selector).toHaveValue("scope-workspace-one", {
       timeout: 10_000,
     });
@@ -749,14 +776,11 @@ test("workspace scope follows stable identity without hiding blocked attention",
     expectInside(unavailableBox!, { x: 0, y: 0, width: 320, height: 640 });
     expect(boxesIntersect(scopeBox!, unavailableBox!)).toBe(false);
   } finally {
-    app.kill("SIGTERM");
-    for (const socket of sockets) socket.destroy();
-    await new Promise<void>((resolve) => fixtureServer.close(() => resolve()));
-    await rm(directory, { recursive: true, force: true });
+    await fixture.close();
   }
 });
 
-test("authoritative fixture state sequence drives history accents poses prep and freezer spirits", async ({
+test("authoritative fixture drives rendered feed history accents poses prep and freezer spirits", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -881,10 +905,10 @@ test("authoritative fixture state sequence drives history accents poses prep and
         name: "example-cook details",
       }),
       stateAge = sequenceDetails
-        .locator(".fact", { hasText: "Time in state" })
+        .locator(".fact", { hasText: "Observation age" })
         .locator("b"),
       periods = sequenceDetails.getByRole("list", {
-        name: "Observed state periods",
+        name: "Mise observation history",
       });
     await expect.poll(() => stateAge.textContent()).toMatch(/^[2-9]\d*s$/);
     await expect(periods.getByRole("listitem")).toHaveCount(1);
@@ -918,6 +942,11 @@ test("authoritative fixture state sequence drives history accents poses prep and
     await expect
       .poll(async () => (await sceneMetrics(page))?.motion.activeParticles)
       .toBeGreaterThan(0);
+    const workingRenderCount = (await sceneMetrics(page))!.renderCount;
+    await page.waitForTimeout(300);
+    expect((await sceneMetrics(page))!.renderCount).toBeGreaterThan(
+      workingRenderCount,
+    );
     expect((await sceneMetrics(page))?.atmosphere.workingContact).toBe(1);
     expect(
       (await sceneMetrics(page))?.motion.activeParticles,
@@ -1111,6 +1140,12 @@ test("authoritative fixture state sequence drives history accents poses prep and
           rows: [{}, {}, {}],
         },
       });
+    await page.waitForTimeout(1_200);
+    const emptyRenderCount = (await sceneMetrics(page))!.renderCount;
+    await page.waitForTimeout(2_000);
+    expect(
+      (await sceneMetrics(page))!.renderCount - emptyRenderCount,
+    ).toBeLessThanOrEqual(1);
     const rows = (await sceneMetrics(page))?.board.rows
       .map((row) => row.text)
       .sort(([left], [right]) => left!.localeCompare(right!));
@@ -1151,8 +1186,24 @@ test("authoritative fixture state sequence drives history accents poses prep and
       page.getByRole("navigation", { name: "Ended chefs" }).getByRole("button"),
     ).toHaveCount(4);
     await expect(page.getByLabel("Agent state announcements")).toHaveText(
-      "Freezer, 4 of 4 ended chefs shown",
+      "Freezer, 4 decorative spirits, 4 inspectable sessions",
     );
+    const newestEnded = page
+      .getByRole("navigation", { name: "Ended chefs" })
+      .getByRole("button")
+      .first();
+    await newestEnded.click();
+    await expect(
+      page.locator('aside[aria-label$="session summary" i]'),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(newestEnded).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Freezer" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await page.getByRole("button", { name: "Freezer" }).click();
     await expect
       .poll(async () => sceneMetrics(page))
       .toMatchObject({
@@ -1357,7 +1408,7 @@ test("real fixture service summary cycles every blocked cook without moving stat
   }
 });
 
-test("fixture-backed duplicate identity inspection", async ({
+test("fixture-backed repeated lifetimes survive cap eviction with source-id lookalikes", async ({
   page,
   context,
 }) => {
@@ -1403,7 +1454,7 @@ test("fixture-backed duplicate identity inspection", async ({
   };
   source.agents.push({
     ...source.agents[0],
-    terminal_id: "terminal-two",
+    terminal_id: "terminal-one:1",
     pane_id: locatorTwo,
     workspace_id: "two",
   });
@@ -1486,20 +1537,95 @@ test("fixture-backed duplicate identity inspection", async ({
     await expect(details).toContainText(movedLocator, { timeout: 5_000 });
     await expect(details).toContainText("very-long-shared-workspace");
 
+    const repeatedAgent = { ...source.agents[0] },
+      lookalikeAgent = { ...source.agents[1] };
     source.agents = [];
     snapshot = JSON.stringify({ result: { snapshot: source } });
     await page.getByRole("button", { name: "Freezer" }).click();
     const ended = page.getByRole("navigation", { name: "Ended chefs" });
+    await expect(ended.locator('[data-agent-id="terminal-one"]')).toBeAttached({
+      timeout: 5_000,
+    });
     await expect(
-      ended.getByRole("button", {
-        name: /same chef · Unavailable · terminal-one, Ended/,
-      }),
-    ).toBeAttached({ timeout: 5_000 });
-    await expect(
-      ended.getByRole("button", {
-        name: /same chef · Unavailable · terminal-two, Ended/,
-      }),
+      ended.locator('[data-agent-id="terminal-one:1"]'),
     ).toBeAttached();
+
+    await page.keyboard.press("Escape");
+    const activeStations = page.getByRole("navigation", {
+      name: "Agent stations",
+    });
+    for (const endedEntries of [3, 4]) {
+      source.agents = [repeatedAgent];
+      snapshot = JSON.stringify({ result: { snapshot: source } });
+      await expect(
+        activeStations.locator(
+          '[data-agent-id="terminal-one"][aria-label*="Blocked"]',
+        ),
+      ).toBeAttached({ timeout: 5_000 });
+      source.agents = [];
+      snapshot = JSON.stringify({ result: { snapshot: source } });
+      await expect
+        .poll(async () => (await sceneMetrics(page))?.endedEntries)
+        .toBe(endedEntries);
+    }
+
+    source.agents = [
+      lookalikeAgent,
+      ...Array.from({ length: 47 }, (_, index) => ({
+        ...repeatedAgent,
+        terminal_id: `retained-${index}`,
+        pane_id: `retained-pane-${index}`,
+        display_agent: `retained chef ${index}`,
+      })),
+    ];
+    snapshot = JSON.stringify({ result: { snapshot: source } });
+    await expect(
+      activeStations.locator('button[aria-label*="Blocked"]'),
+    ).toHaveCount(48, { timeout: 5_000 });
+    source.agents = [];
+    snapshot = JSON.stringify({ result: { snapshot: source } });
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.endedEntries, {
+        timeout: 10_000,
+      })
+      .toBe(50);
+
+    await page.getByRole("button", { name: "Freezer" }).click();
+    const retained = page
+        .getByRole("navigation", { name: "Ended chefs" })
+        .getByRole("button"),
+      retainedIds = await retained.evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("data-agent-id")),
+      );
+    expect(retainedIds).toHaveLength(50);
+    expect(new Set(retainedIds).size).toBe(50);
+    expect(retainedIds).not.toContain("terminal-one");
+    expect(retainedIds).not.toContain("terminal-one:1");
+    expect(retainedIds).toEqual(
+      expect.arrayContaining([
+        "terminal-one:2",
+        "terminal-one:3",
+        "terminal-one:1:1",
+      ]),
+    );
+    await expect(page.getByLabel("Agent state announcements")).toContainText(
+      "50 inspectable sessions",
+    );
+    await expect(page.getByLabel("Agent state announcements")).toContainText(
+      "latest 50 retained",
+    );
+    const repeatedLifetime = ended.locator('[data-agent-id="terminal-one:2"]'),
+      nextRepeatedLifetime = ended.locator('[data-agent-id="terminal-one:3"]');
+    await repeatedLifetime.click();
+    await expect(
+      page.getByRole("complementary", { name: "same chef session summary" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(repeatedLifetime).toBeFocused();
+    await nextRepeatedLifetime.click();
+    await expect(
+      page.getByRole("complementary", { name: "same chef session summary" }),
+    ).toBeVisible();
   } finally {
     app.kill("SIGTERM");
     for (const socket of sockets) socket.destroy();
@@ -1723,17 +1849,15 @@ test("authoritative fixture keeps live kitchen after done-timeout dismissal and 
   }
 });
 
-test("freezer matrix discloses empty full and bounded overflow scenes", async ({
+test("freezer matrix discloses and traverses 0 4 12 and 50 retained sessions", async ({
   page,
 }) => {
   const errors = watchErrors(page);
   for (const [viewport, capacity] of [
     [{ width: 1280, height: 720 }, 20],
-    [{ width: 800, height: 500 }, 4],
-    [{ width: 390, height: 844 }, 6],
     [{ width: 320, height: 640 }, 2],
   ] as const) {
-    for (const total of [0, 1, 12]) {
+    for (const total of [0, 4, 12, 50]) {
       await page.setViewportSize(viewport);
       await page.goto(`/?preset=ended&agents=${total}&stats`);
       await page.getByRole("button", { name: "Freezer" }).click();
@@ -1749,10 +1873,52 @@ test("freezer matrix discloses empty full and bounded overflow scenes", async ({
         page
           .getByRole("navigation", { name: "Ended chefs" })
           .getByRole("button"),
-      ).toHaveCount(visible);
+      ).toHaveCount(total);
+      const inspector = await page.locator(".freezerInspector").boundingBox(),
+        service = await page.locator(".serviceStrip").boundingBox();
+      expect(inspector).not.toBeNull();
+      expect(service).not.toBeNull();
+      expect(boxesIntersect(inspector!, service!)).toBe(false);
+      const retention = total === 50 ? ", latest 50 retained" : "";
       await expect(page.getByLabel("Agent state announcements")).toHaveText(
-        `Freezer, ${visible} of ${total} ended chefs shown`,
+        total === 0
+          ? "Freezer empty, no ended sessions"
+          : `Freezer, ${visible} decorative spirits, ${total} inspectable sessions${visible < total ? `, ${total - visible} not shown as spirits` : ""}${retention}`,
       );
+      if (total > 0) {
+        const buttons = page
+          .getByRole("navigation", { name: "Ended chefs" })
+          .getByRole("button");
+        expect(
+          await buttons.evaluateAll((items) =>
+            items.map((item) => item.getAttribute("data-agent-id")),
+          ),
+        ).toEqual(
+          Array.from(
+            { length: total },
+            (_, index) => `visual-agent-${total - index}`,
+          ),
+        );
+        await buttons.last().click();
+        const summary = page.getByRole("complementary", {
+          name: "mise-01 session summary",
+        });
+        await expect(summary).toBeVisible();
+        if (viewport.width === 320) {
+          const inspector = await page
+              .locator(".freezerInspector")
+              .boundingBox(),
+            service = await page.locator(".serviceStrip").boundingBox(),
+            summaryBox = await summary.boundingBox();
+          expect(inspector).not.toBeNull();
+          expect(service).not.toBeNull();
+          expect(summaryBox).not.toBeNull();
+          expect(boxesIntersect(inspector!, service!)).toBe(false);
+          expect(boxesIntersect(inspector!, summaryBox!)).toBe(false);
+        }
+        await page.keyboard.press("Escape");
+        await expect(buttons.last()).toBeFocused();
+      }
       if (total === 12 && viewport.width === 1280) {
         const bounds = Object.values(
           (await sceneMetrics(page))!.spiritPoseBounds,
@@ -3200,7 +3366,7 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
     "https://herdr-mise.s11a.com/og.png",
   );
   const socialAlt =
-    "The herdr-mise demo kitchen showing agent stations and the DEMO SERVICE placard.";
+    "Codex blocked on checkout-api in the herdr-mise DEMO SERVICE kitchen.";
   await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
     "content",
     socialAlt,

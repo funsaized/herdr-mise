@@ -12,6 +12,7 @@ import { loadSettings, saveSettings } from "./settings-storage";
 export type AppMode = FeedMode | "empty" | "disconnected" | "connecting";
 export type ClientDisconnectReason = "incompatibleFeed" | null;
 export const HISTORY_LIMIT = 256;
+export const BOARD_LIMIT = 50;
 export interface Settings {
   sound: boolean;
   atmosphere: boolean;
@@ -22,6 +23,7 @@ export interface Settings {
 }
 export interface BoardEntry {
   id: string;
+  sourceId: string;
   name: string;
   accentIndex: number;
   runtimeMs: number;
@@ -31,7 +33,7 @@ export interface BoardEntry {
   finalState: AgentRecord["state"];
 }
 export interface StatePeriod {
-  state: AgentRecord["state"];
+  state: AgentRecord["state"] | "unknown" | "gap";
   startedAt: number;
 }
 export interface AgentMachine extends AgentRecord {
@@ -40,6 +42,7 @@ export interface AgentMachine extends AgentRecord {
   transitionStartedAt: number;
   clearAt: number | null;
   answerReceivedUntil: number | null;
+  observedEnteredAt?: number;
   revision: number;
   history: readonly StatePeriod[];
 }
@@ -57,6 +60,7 @@ export interface StoreSnapshot {
   lastUpdateAt: number;
 }
 export interface CoarseSlice {
+  board: readonly BoardEntry[];
   count: number;
   visible: number;
   hiddenDone: number;
@@ -131,6 +135,7 @@ export class AgentStore {
   private doneTimers = new Map<string, unknown>();
   private doneGenerations = new Map<string, string>();
   private dismissedDone = new Map<string, string>();
+  private boardSuffixes = new Map<string, number>();
   constructor(
     private scheduler: Scheduler = nativeScheduler,
     settings: Partial<Settings> = {},
@@ -169,6 +174,7 @@ export class AgentStore {
         this.dismissedDone.has(agent.id),
       ).length;
     return {
+      board: this.board,
       count: scopedValues.length,
       visible: visibleValues.length,
       hiddenDone,
@@ -269,9 +275,28 @@ export class AgentStore {
     this.emitCoarse();
     this.emitChange();
   }
-  setDisconnected(reason: ClientDisconnectReason = null) {
+  setDisconnected(
+    lastValidFrameAt = this.scheduler.now(),
+    reason: ClientDisconnectReason = null,
+  ) {
     const nextReason = reason ?? this.disconnectReason;
-    if (this.mode !== "disconnected" || this.disconnectReason !== nextReason) {
+    let historyChanged = false;
+    for (const [id, agent] of this.agents) {
+      if (agent.history.at(-1)?.state !== "gap") {
+        historyChanged = true;
+        const gap: StatePeriod = { state: "gap", startedAt: lastValidFrameAt };
+        this.agents.set(id, {
+          ...agent,
+          answerReceivedUntil: null,
+          history: [...agent.history, gap].slice(-HISTORY_LIMIT),
+        });
+      }
+    }
+    if (
+      historyChanged ||
+      this.mode !== "disconnected" ||
+      this.disconnectReason !== nextReason
+    ) {
       this.mode = "disconnected";
       this.disconnectReason = nextReason;
       this.emitCoarse();
@@ -291,6 +316,7 @@ export class AgentStore {
     if (modeChanged) {
       for (const id of this.agents.keys()) this.remove(id);
       this.board = [];
+      this.boardSuffixes.clear();
       this.selectedId = null;
       this.dismissedDone.clear();
     }
@@ -349,30 +375,34 @@ export class AgentStore {
       this.end(agent, now);
       return;
     }
-    const stateChanged = prior?.targetState !== agent.state;
-    const initialHistory: readonly StatePeriod[] = [
-      { state: agent.state, startedAt: enteredAt },
-    ];
-    const lastObservedAt = prior?.history.at(-1)?.startedAt;
+    const stateChanged = prior?.targetState !== agent.state,
+      provenanceChanged =
+        (prior?.stateKnown === false) !== (agent.stateKnown === false),
+      observedState = agent.stateKnown === false ? "unknown" : agent.state,
+      observation: StatePeriod = { state: observedState, startedAt: now };
+    const initialHistory: readonly StatePeriod[] = [observation];
     const sameStateReentered =
       !stateChanged &&
-      lastObservedAt !== undefined &&
+      prior !== undefined &&
       Number.isFinite(parsedEnteredAt) &&
-      enteredAt > lastObservedAt;
+      enteredAt > (prior.observedEnteredAt ?? Date.parse(prior.stateEnteredAt));
     const newerDoneGeneration =
       prior?.targetState === "done" &&
       agent.state === "done" &&
       sameStateReentered;
     const history = prior
-      ? stateChanged || sameStateReentered
-        ? [
-            ...prior.history,
-            { state: agent.state, startedAt: enteredAt },
-          ].slice(-HISTORY_LIMIT)
-        : prior.history
+      ? stateChanged || provenanceChanged || sameStateReentered
+        ? [...prior.history, observation].slice(-HISTORY_LIMIT)
+        : prior.history.at(-1)?.state === "gap"
+          ? [...prior.history, observation].slice(-HISTORY_LIMIT)
+          : prior.history
       : initialHistory;
     const answerReceivedUntil =
-      prior?.targetState === "blocked" && agent.state === "working"
+      prior?.targetState === "blocked" &&
+      prior.stateKnown !== false &&
+      prior.history.at(-1)?.state === "blocked" &&
+      agent.state === "working" &&
+      agent.stateKnown !== false
         ? now + 2_000
         : agent.state === "working"
           ? (prior?.answerReceivedUntil ?? null)
@@ -392,6 +422,9 @@ export class AgentStore {
             : (prior?.clearAt ?? now + this.settings.doneTimeoutMs)
           : null,
       answerReceivedUntil,
+      observedEnteredAt: stateChanged
+        ? enteredAt
+        : Math.max(prior?.observedEnteredAt ?? -Infinity, enteredAt),
       revision: (prior?.revision ?? 0) + 1,
       history,
     };
@@ -437,7 +470,11 @@ export class AgentStore {
         this.dismissedDone.set(id, generation);
         this.emitEvent({ type: "busser", agentId: id });
         this.emitEvent({ type: "clear", agentId: id });
-        if (this.selectedId === id) this.selectedId = null;
+        if (
+          this.selectedId === id &&
+          !this.board.some((entry) => entry.id === id)
+        )
+          this.selectedId = null;
         this.emitChange();
         this.emitCoarse();
       }, delay),
@@ -449,7 +486,10 @@ export class AgentStore {
       existing = existingIndex >= 0 ? this.board[existingIndex] : undefined;
     this.remove(agent.id);
     const entry: BoardEntry = {
-      id: prior && existing ? `${agent.id}:${now}` : (existing?.id ?? agent.id),
+      id: prior
+        ? this.nextBoardId(agent.id)
+        : (existing?.id ?? this.nextBoardId(agent.id)),
+      sourceId: agent.id,
       name: agent.name,
       accentIndex: agent.accentIndex,
       runtimeMs: agent.session.runtimeMs,
@@ -458,17 +498,48 @@ export class AgentStore {
       endedAt: prior ? now : (existing?.endedAt ?? now),
       finalState: prior?.targetState ?? existing?.finalState ?? "ended",
     };
-    if (existingIndex >= 0 && !prior) this.board[existingIndex] = entry;
-    else this.board.push(entry);
-    if (this.board.length > 50) this.board.splice(0, this.board.length - 50);
+    if (existingIndex >= 0 && !prior)
+      this.board = this.board.map((item, index) =>
+        index === existingIndex ? entry : item,
+      );
+    else this.board = [...this.board, entry];
+    this.trimBoard();
     this.emitEvent({ type: "ended", entry });
+  }
+  private trimBoard() {
+    if (this.board.length <= BOARD_LIMIT) return;
+    const evicted = this.board.slice(0, -BOARD_LIMIT);
+    this.board = this.board.slice(-BOARD_LIMIT);
+    if (
+      this.selectedId &&
+      evicted.some((entry) => entry.id === this.selectedId)
+    )
+      this.selectedId = null;
+    for (const sourceId of new Set(evicted.map((entry) => entry.sourceId)))
+      if (
+        !this.agents.has(sourceId) &&
+        !this.board.some((entry) => entry.sourceId === sourceId)
+      )
+        this.boardSuffixes.delete(sourceId);
+  }
+  private nextBoardId(agentId: string) {
+    let suffix = this.boardSuffixes.get(agentId) ?? 0;
+    for (;;) {
+      const id = suffix === 0 ? agentId : `${agentId}:${suffix}`;
+      suffix++;
+      if (!this.board.some((entry) => entry.id === id)) {
+        this.boardSuffixes.set(agentId, suffix);
+        return id;
+      }
+    }
   }
   private remove(id: string) {
     this.cancelDone(id);
     this.dismissedDone.delete(id);
     this.doneGenerations.delete(id);
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
-    if (this.selectedId === id) this.selectedId = null;
+    if (this.selectedId === id && !this.board.some((entry) => entry.id === id))
+      this.selectedId = null;
   }
   private blockedElsewhereCount() {
     if (this.selectedWorkspaceId === null) return 0;
@@ -535,10 +606,8 @@ export class AgentStore {
   }
 }
 function lastBoardIndex(board: readonly BoardEntry[], agentId: string) {
-  const prefix = `${agentId}:`;
   for (let index = board.length - 1; index >= 0; index--) {
-    const id = board[index]?.id;
-    if (id === agentId || id?.startsWith(prefix)) return index;
+    if (board[index]?.sourceId === agentId) return index;
   }
   return -1;
 }
@@ -557,6 +626,7 @@ function sameWorkspaces(
 }
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
+    a.board === b.board &&
     a.count === b.count &&
     a.visible === b.visible &&
     a.hiddenDone === b.hiddenDone &&

@@ -115,6 +115,53 @@ it("bounds the snapshot wait despite heartbeats and deltas", () => {
   client.stop();
   store.destroy();
 });
+it("uses the last valid heartbeat as the reconnect gap boundary", () => {
+  const { client, sockets, store } = connection();
+  const startedAt = Date.now(),
+    blocked = {
+      ...fixture,
+      agents: [
+        {
+          ...fixture.agents[0],
+          state: "blocked" as const,
+          stateEnteredAt: "2026-07-31T16:01:00Z",
+        },
+      ],
+    };
+  sockets[0]!.onmessage!({ data: JSON.stringify(blocked) });
+  const lastUpdateAt = store.snapshot().lastUpdateAt;
+  vi.advanceTimersByTime(2_000);
+  sockets[0]!.onmessage!({ data: JSON.stringify(heartbeat) });
+  expect(store.snapshot().lastUpdateAt).toBe(lastUpdateAt);
+  vi.advanceTimersByTime(2_900);
+  expect(
+    store.snapshot().agents.get(fixture.agents[0]!.id)?.history.at(-1),
+  ).toEqual({ state: "gap", startedAt: startedAt + 2_000 });
+
+  vi.advanceTimersByTime(1_000);
+  sockets[1]!.onopen!();
+  sockets[1]!.onmessage!({
+    data: JSON.stringify({
+      ...blocked,
+      agents: [
+        {
+          ...blocked.agents[0],
+          state: "working",
+          stateEnteredAt: "2026-07-31T16:02:00Z",
+        },
+      ],
+    }),
+  });
+  const resumed = store.snapshot().agents.get(fixture.agents[0]!.id)!;
+  expect(resumed.history.map(({ state }) => state)).toEqual([
+    "blocked",
+    "gap",
+    "working",
+  ]);
+  expect(resumed.answerReceivedUntil).toBeNull();
+  client.stop();
+  store.destroy();
+});
 it("rejects unsupported events without partial mutation", () => {
   const { client, sockets, store } = connection();
   sockets[0]!.onmessage!({ data: JSON.stringify(fixture) });
@@ -183,11 +230,25 @@ it("preserves explicit unknown and genuine zero from the shared protocol fixture
   expect(store.snapshot().agents.get("fictional-unknown")).toMatchObject({
     stateKnown: false,
     session: { ticketsAvailable: false },
+    history: [{ state: "unknown" }],
   });
   expect(store.snapshot().agents.get("fictional-zero")).toMatchObject({
     stateKnown: true,
     session: { tickets: 0, ticketsAvailable: true },
   });
+  store.apply({
+    ...provenance,
+    agents: provenance.agents.map((agent) =>
+      agent.id === "fictional-unknown" ? { ...agent, stateKnown: true } : agent,
+    ),
+  } as AgentStateEvent);
+  store.apply(provenance as AgentStateEvent);
+  expect(
+    store
+      .snapshot()
+      .agents.get("fictional-unknown")
+      ?.history.map(({ state }) => state),
+  ).toEqual(["unknown", "idle", "unknown"]);
   for (const value of [
     { ...provenance, extra: true },
     {
@@ -335,16 +396,22 @@ it("updates authoritative data without resurrecting an expired done generation",
 });
 it("retains only recent history under sustained state churn", () => {
   const store = new AgentStore();
+  store.apply(fixture as AgentStateEvent);
   for (let i = 0; i < 10000; i++)
-    store.apply(
-      upsert({
-        ...fixture.agents[0],
-        state: i % 2 ? "idle" : "working",
-        stateEnteredAt: new Date(i * 2000).toISOString(),
-      } as AgentRecord),
-    );
-  expect(
-    store.snapshot().agents.get(fixture.agents[0]!.id)!.history,
-  ).toHaveLength(HISTORY_LIMIT);
+    if (i % 8 === 0) store.setDisconnected();
+    else
+      store.apply(
+        upsert({
+          ...fixture.agents[0],
+          state: i % 2 ? "idle" : "working",
+          stateKnown: i % 3 !== 0,
+          stateEnteredAt: new Date(i * 2000).toISOString(),
+        } as AgentRecord),
+      );
+  const history = store.snapshot().agents.get(fixture.agents[0]!.id)!.history;
+  expect(history).toHaveLength(HISTORY_LIMIT);
+  expect(history.some(({ state }) => state === "unknown")).toBe(true);
+  expect(history.some(({ state }) => state === "gap")).toBe(true);
+  expect(history.at(-1)?.state).toBe("unknown");
   store.destroy();
 });

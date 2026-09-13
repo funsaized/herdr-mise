@@ -237,6 +237,7 @@ export const tokens = {
       },
       blocked: {
         frameMs: [500, 250],
+        reducedMotionFrameMs: 1_000,
         bobPeriodMs: [180, 90],
         bobUnits: [0.2, 0.4, 0.55],
         identitySpreadMs: 700,

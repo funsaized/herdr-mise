@@ -7,7 +7,12 @@ import {
   semanticStateWords,
   type SemanticAgent,
 } from "../state/semantic-stations";
-import type { AgentMachine, BoardEntry, StatePeriod } from "../state/store";
+import {
+  HISTORY_LIMIT,
+  type AgentMachine,
+  type BoardEntry,
+  type StatePeriod,
+} from "../state/store";
 import { tokens } from "../theme/tokens";
 import { formatDuration } from "./duration";
 import { FocusedPanel } from "./panel-support";
@@ -36,6 +41,7 @@ export function Tooltip({
   hit: SceneHit;
 }) {
   const now = useClock(true),
+    observation = currentObservation(agent),
     below = hit.rect.y < tokens.tooltipPlacement.topEdgeThreshold,
     style = {
       "--tooltipAnchor": `${hit.rect.x + hit.rect.width / 2}px`,
@@ -57,8 +63,12 @@ export function Tooltip({
       <strong>{agent.name}</strong>
       <span>{placementStateWords(agent, hit)}</span>
       <time>
-        {formatDuration(now - Date.parse(agent.stateEnteredAt))} in state
+        {observation.paused
+          ? "Observation paused"
+          : `${formatDuration(now - observation.startedAt)} observed`}
       </time>
+      <span>Mise time {formatDuration(agent.session.runtimeMs)}</span>
+      <span>Upstream age unavailable</span>
     </div>
   );
 }
@@ -90,26 +100,36 @@ function HistoryStrip({
   const start = history[0]?.startedAt ?? now,
     total = Math.max(1, now - start);
   return (
-    <section className="sessionHistory" aria-label="Session history">
-      <h3>SESSION HISTORY</h3>
-      <ul className="historyStrip" aria-label="Observed state periods">
+    <section className="sessionHistory" aria-label="Observed in Mise">
+      <h3>OBSERVED IN MISE</h3>
+      <p>
+        Starts with this page and resets on reload. Latest {HISTORY_LIMIT}{" "}
+        entries retained; disconnected time is marked as gaps.
+      </p>
+      <ul className="historyStrip" aria-label="Mise observation history">
         {history.map((period, index) => {
           const end = history[index + 1]?.startedAt ?? now,
             width = Math.max(1, ((end - period.startedAt) / total) * 100),
+            label = historyLabel(period.state),
             boundary = `${new Date(period.startedAt).toISOString()} to ${
               index + 1 < history.length ? new Date(end).toISOString() : "now"
             }`;
           return (
             <li
-              key={`${period.state}-${period.startedAt}`}
+              key={`${period.state}-${period.startedAt}-${index}`}
               data-state={period.state}
               style={{
                 width: `${width}%`,
-                background: historyColor(period.state),
+                background:
+                  period.state === "unknown" || period.state === "gap"
+                    ? undefined
+                    : historyColor(period.state),
               }}
-              title={humanStateWords[period.state]}
-              aria-label={`${humanStateWords[period.state]} period ${index + 1}, ${boundary}`}
-            />
+              title={label}
+              aria-label={`${label} period ${index + 1}, ${boundary}`}
+            >
+              <span>{historyShortLabel(period.state)}</span>
+            </li>
           );
         })}
       </ul>
@@ -131,6 +151,27 @@ function historyColor(state: StatePeriod["state"]) {
   if (state === "working") return tokens.semantic.flame;
   if (state === "done") return tokens.semantic.done;
   return tokens.scene.ticketDone;
+}
+
+function historyLabel(state: StatePeriod["state"]) {
+  if (state === "unknown") return "Unknown state";
+  if (state === "gap") return "Disconnected gap";
+  return humanStateWords[state];
+}
+
+function historyShortLabel(state: StatePeriod["state"]) {
+  if (state === "unknown") return "UNKNOWN";
+  if (state === "gap") return "GAP";
+  return state.toUpperCase();
+}
+
+function currentObservation(agent: AgentMachine) {
+  const latest = agent.history.at(-1),
+    observed = latest?.state === "gap" ? agent.history.at(-2) : latest;
+  return {
+    paused: latest?.state === "gap",
+    startedAt: observed?.startedAt ?? agent.transitionStartedAt,
+  };
 }
 
 const availableTickets = (value: number, available?: boolean) =>
@@ -156,6 +197,7 @@ export function DetailCard({
   onClose(): void;
 }) {
   const now = useClock(true),
+    observation = currentObservation(agent),
     color = stateColor(agent),
     [copyResult, setCopyResult] = useState({
       locator: "",
@@ -208,9 +250,13 @@ export function DetailCard({
             </button>
           )}
         </Fact>
-        <Fact label="Time in state">
-          {formatDuration(now - Date.parse(agent.stateEnteredAt))}
+        <Fact label="Observation age">
+          {observation.paused
+            ? "Paused during gap"
+            : formatDuration(now - observation.startedAt)}
         </Fact>
+        <Fact label="Mise time">{formatDuration(agent.session.runtimeMs)}</Fact>
+        <Fact label="Upstream session age">Unavailable</Fact>
         <Fact label="Tickets this session">
           {availableTickets(
             agent.session.tickets,

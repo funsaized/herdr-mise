@@ -4,7 +4,7 @@ import fixture from "../../../protocol/fixtures/snapshot.v1.json";
 import { AgentStore } from "../state/store";
 import { tokens } from "../theme/tokens";
 import { assignedIdlePose, IdlePoseAssignments } from "./idle-poses";
-import { sceneContinuousMotion } from "./kitchen-scene";
+import { sceneContinuousMotion, sceneDiscreteWakeDelay } from "./kitchen-scene";
 
 describe("feed to scene boundary", () => {
   it("preserves feed accents and assigns only the new idle poses", () => {
@@ -25,6 +25,15 @@ describe("feed to scene boundary", () => {
     expect(tokens.accents[idle.accentIndex]).toBe(tokens.accents[7]);
     expect(sceneContinuousMotion(false, agents.values())).toBe(true);
     expect(sceneContinuousMotion(false, [idle])).toBe(false);
+    expect(sceneContinuousMotion(true, agents.values())).toBe(false);
+    expect(sceneContinuousMotion(false, [idle], { transitions: 1 })).toBe(true);
+    expect(sceneDiscreteWakeDelay(false, [idle], true)).toBe(700);
+    expect(sceneDiscreteWakeDelay(false, [idle], false)).toBeNull();
+    expect(sceneDiscreteWakeDelay(true, [idle], true)).toBeNull();
+    const blocked = { ...idle, targetState: "blocked" as const };
+    expect(sceneDiscreteWakeDelay(false, [blocked], false)).toBe(250);
+    expect(sceneDiscreteWakeDelay(true, [blocked], false)).toBe(1_000);
+    expect(sceneDiscreteWakeDelay(false, [], false)).toBeNull();
 
     store.apply({
       version: 1,
