@@ -1,7 +1,7 @@
 {
   "schema": "web-demo-capture-v1",
-  "capturedAt": "2026-09-13T08:40:06.244Z",
-  "sourceCommit": "f59bedb1a952e3ecf063e27fabe54545470b9610",
+  "capturedAt": "2026-09-13T09:20:17.761Z",
+  "sourceCommit": "7e45d2286630fdaad601989bb0601fab50a90276",
   "query": "preset=attention&agents=6&theme=light",
   "scenario": [
     {
@@ -38,29 +38,29 @@
       "path": "docs/assets/herdr-mise-demo.gif",
       "codec": "gif",
       "durationSeconds": 12,
-      "bytes": 591211,
-      "sha256": "5b25a18f131b63d04b69d8c7462ea6d02791c7c6de2d9bcadc0d1f0311465d46"
+      "bytes": 629631,
+      "sha256": "b9bd7474af9cecc69b2873af6fed96fdaed956bbace26164495dcf010f9bb84b"
     },
     "mp4": {
       "path": "docs/assets/herdr-mise-demo.mp4",
       "codec": "h264",
       "durationSeconds": 12,
-      "bytes": 106753,
-      "sha256": "b73623ec377475e8bd69fa463d7bd4f92af5c2b7f0166fb4026a9e85e6689c69"
+      "bytes": 116695,
+      "sha256": "081a1a4d52ee1b798e60975edff6c5b63a76ec72b09765448dde9f66bf0f6b23"
     },
     "webm": {
       "path": "docs/assets/herdr-mise-demo.webm",
       "codec": "vp9",
       "durationSeconds": 12,
-      "bytes": 399641,
-      "sha256": "8fe610b07db12ee28533caa187667a0a9bff4ebfb7e5ded81321560254f92ea8"
+      "bytes": 414994,
+      "sha256": "e23fc975d361da9568bd1e66796b02422b1f6e0ceff530106114f8a85342d108"
     },
     "poster": {
       "path": "docs/assets/herdr-mise-demo-poster.png",
       "codec": "png",
       "durationSeconds": null,
-      "bytes": 161132,
-      "sha256": "e7247fce09b892f8e0fd0318d7c8a4955568730d3839543f47c6a365a3b16be0"
+      "bytes": 180650,
+      "sha256": "873da7306d668183d9aac58b3c624c18d2e060f2637c835f3dab39e381fc65ef"
     }
   }
 }

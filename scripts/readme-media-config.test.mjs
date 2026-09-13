@@ -10,6 +10,7 @@ import {
   captureIntervalMs,
   captureQuery,
   gifFrameRate,
+  mediaDurationBoundsSeconds,
   mediaOutputs,
   outputDimensions,
   remainingFrameDelay,
@@ -50,6 +51,37 @@ test("checked-in web metadata matches every checked-in output", async () => {
     { encoding: "utf8" },
   );
   assert.equal(sourceCommit.status, 0, sourceCommit.stderr);
+  const storyboard = spawnSync(
+    "git",
+    [
+      "cat-file",
+      "-e",
+      `${metadata.sourceCommit}:client/src/attention-story.json`,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(
+    storyboard.status,
+    0,
+    `${metadata.sourceCommit} lacks storyboard`,
+  );
+  const implementation = spawnSync(
+    "git",
+    [
+      "grep",
+      "-q",
+      "attentionTiming",
+      metadata.sourceCommit,
+      "--",
+      "client/src/visual-harness.ts",
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(
+    implementation.status,
+    0,
+    `${metadata.sourceCommit} lacks attention implementation`,
+  );
   assert.equal(metadata.query, captureQuery);
   assert.deepEqual(metadata.scenario, attentionStoryboard);
   assert.deepEqual(metadata.semanticStatesObserved, [
@@ -94,7 +126,10 @@ test("checked-in web metadata matches every checked-in output", async () => {
     assert.equal(video.height, outputDimensions.height);
     if (key !== "poster") {
       const duration = Number(details.format.duration);
-      assert.ok(duration >= 10 && duration <= 15);
+      assert.ok(
+        duration >= mediaDurationBoundsSeconds.min &&
+          duration <= mediaDurationBoundsSeconds.max,
+      );
       assert.equal(recorded.durationSeconds, duration);
     }
     if (key === "mp4" || key === "webm")

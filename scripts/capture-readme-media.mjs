@@ -18,6 +18,7 @@ import {
   captureFrameCount,
   captureQuery,
   gifFrameRate,
+  mediaDurationBoundsSeconds,
   mediaOutputs,
   outputDimensions,
   remainingFrameDelay,
@@ -328,8 +329,14 @@ try {
       video.height !== outputDimensions.height
     )
       throw new Error(`${key} codec or dimensions do not match configuration`);
-    if (key !== "poster" && (duration < 10 || duration > 15))
-      throw new Error(`${key} duration ${duration} is outside 10–15 seconds`);
+    if (
+      key !== "poster" &&
+      (duration < mediaDurationBoundsSeconds.min ||
+        duration > mediaDurationBoundsSeconds.max)
+    )
+      throw new Error(
+        `${key} duration ${duration} is outside ${mediaDurationBoundsSeconds.min}–${mediaDurationBoundsSeconds.max} seconds`,
+      );
     if (
       (key === "mp4" || key === "webm") &&
       details.streams.some((stream) => stream.codec_type === "audio")

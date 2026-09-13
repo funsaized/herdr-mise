@@ -2,6 +2,7 @@ import attentionTiming from "../client/src/attention-story.json" with { type: "j
 
 export const gifFrameRate = 20;
 export const captureDurationMs = 12_000;
+export const mediaDurationBoundsSeconds = { min: 10, max: 15 };
 export const captureIntervalMs = 1_000 / gifFrameRate;
 export const captureFrameCount = captureDurationMs / captureIntervalMs;
 export const captureQuery = "preset=attention&agents=6&theme=light";
