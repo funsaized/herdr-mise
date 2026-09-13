@@ -405,6 +405,15 @@ uses an accessible name such as `Codex, Blocked — at the pass, open details`.
 The blocked state is therefore communicated with text and shape as well as
 color or motion.
 
+The TUI has a separate startup-only contract. If
+`HERDR_MISE_REDUCED_MOTION` is present in the process environment at startup,
+reduced motion is enabled; unsetting it before startup restores normal motion.
+The TUI freezes animation ticks while feed state, elapsed text, and keyboard
+behavior continue. Unlike the browser media query, this setting is sampled by
+`startup_terminal_capabilities` only at process startup and does not change
+during the process (`server/src/tui/mod.rs`, `server/src/tui/scene/mod.rs`
+`motion_tick`).
+
 ### Run setup
 
 Run the local visual candidate from the repository root:
