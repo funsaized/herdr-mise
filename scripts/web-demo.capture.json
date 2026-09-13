@@ -1,7 +1,7 @@
 {
   "schema": "web-demo-capture-v1",
   "capturedAt": "2026-09-13T09:20:17.761Z",
-  "sourceCommit": "7e45d2286630fdaad601989bb0601fab50a90276",
+  "sourceCommit": "944aa493c38dd2ce0f5edc20efa734748836a0d3",
   "query": "preset=attention&agents=6&theme=light",
   "scenario": [
     {
