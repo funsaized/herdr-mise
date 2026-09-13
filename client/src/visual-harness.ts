@@ -4,10 +4,11 @@ import {
   type AgentState,
   type AgentStateEvent,
 } from "../../protocol/generated/agent-state-event";
+import attentionTiming from "./attention-story.json";
 import { BOARD_LIMIT } from "./state/store";
 import type { ThemeChoice } from "./theme/theme";
 
-export type VisualPreset = AgentState | "mixed";
+export type VisualPreset = AgentState | "mixed" | "attention";
 export type VisualAgentCount = number;
 export interface VisualConfig {
   preset: VisualPreset;
@@ -22,6 +23,7 @@ export const visualPresets = [
   "done",
   "ended",
   "mixed",
+  "attention",
 ] as const satisfies readonly VisualPreset[];
 export const visualAgentCounts = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
@@ -119,19 +121,21 @@ export function buildVisualFeed(
   config: VisualConfig,
   now = Date.now(),
 ): AgentStateEvent[] {
-  const mixed = config.preset === "mixed";
+  const named = config.preset === "mixed" || config.preset === "attention";
   const initialState =
     config.preset === "ended"
       ? "done"
-      : config.preset === "mixed"
+      : config.preset === "mixed" || config.preset === "attention"
         ? "working"
         : config.preset;
   const agents = Array.from({ length: config.agents }, (_, index) =>
     agent(
       index,
-      mixed ? mixedStates[index % mixedStates.length]! : initialState,
+      config.preset === "mixed"
+        ? mixedStates[index % mixedStates.length]!
+        : initialState,
       now,
-      mixed,
+      named,
     ),
   );
   const snapshot: AgentStateEvent = {
@@ -221,6 +225,7 @@ export function installVisualWebSocket(
         this.onopen?.();
         for (const event of feed)
           this.onmessage?.({ data: JSON.stringify(event) });
+        this.scheduleAttentionLifecycle();
         this.scheduleMixedLifecycle();
         this.heartbeatTimer = globalThis.setInterval(() => {
           if (this.readyState === VisualWebSocket.OPEN)
@@ -325,6 +330,43 @@ export function installVisualWebSocket(
               },
             };
             this.onmessage?.({ data: JSON.stringify(event) });
+          }, phase.delay),
+        );
+    }
+    private scheduleAttentionLifecycle() {
+      if (config.preset !== "attention") return;
+      const snapshot = feed[0],
+        hero = snapshot?.type === "snapshot" ? snapshot.agents[0] : undefined;
+      if (!hero) return;
+      for (const phase of [
+        {
+          delay: attentionTiming.blockedAtMs,
+          state: "blocked" as const,
+          progress: null,
+        },
+        {
+          delay: attentionTiming.resumedAtMs,
+          state: "working" as const,
+          progress: 0.78,
+        },
+      ])
+        this.lifecycleTimers.push(
+          globalThis.setTimeout(() => {
+            if (this.readyState !== VisualWebSocket.OPEN) return;
+            this.onmessage?.({
+              data: JSON.stringify({
+                version: PROTOCOL_VERSION,
+                type: "delta",
+                mode: "demo",
+                operation: "upsert",
+                agent: {
+                  ...hero,
+                  state: phase.state,
+                  progress: phase.progress,
+                  stateEnteredAt: new Date().toISOString(),
+                },
+              } satisfies AgentStateEvent),
+            });
           }, phase.delay),
         );
     }

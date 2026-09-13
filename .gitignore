@@ -8,6 +8,7 @@
 *.tsbuildinfo
 /e2e/artifacts/
 /docs/assets/.capture-demo.*/
+/docs/assets/.capture-web-*/
 /.hermes/
 /.claude/
 /.stable-acceptance-evidence.json

@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from "vite";
 const visualAssets = [
   ["../docs/assets/herdr-mise-tui-demo.gif", "tui-demo.gif"],
   ["../docs/assets/herdr-mise-tui-demo-poster.png", "tui-demo-poster.png"],
-  ["../docs/assets/working-service-1280x720.png", "og.png"],
+  ["../docs/assets/herdr-mise-demo-poster.png", "og.png"],
 ] as const;
 
 function visualSite(): Plugin {
@@ -69,7 +69,7 @@ function visualSite(): Plugin {
             attrs: {
               [name.startsWith("og:") ? "property" : "name"]: name,
               content:
-                "The herdr-mise demo kitchen showing agent stations and the DEMO SERVICE placard.",
+                "Codex blocked on checkout-api in the herdr-mise DEMO SERVICE kitchen.",
             },
             injectTo: "head" as const,
           })),

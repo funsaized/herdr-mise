@@ -210,11 +210,11 @@ intentional-preview source copy are omitted from the default embedded build.
 
 #### Query contract
 
-| Parameter | Accepted values                              | Default | Notes                                                          |
-| --------- | -------------------------------------------- | ------- | -------------------------------------------------------------- |
-| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed` | `mixed` | Any other value falls back to `mixed`.                         |
-| `agents`  | Integer from `0` through `50`                | `6`     | The explorer offers `0`–`12`; invalid values fall back to `6`. |
-| `theme`   | `light\|dinner`                              | `light` | `dinner` selects the existing dark lighting.                   |
+| Parameter | Accepted values                                         | Default | Notes                                                          |
+| --------- | ------------------------------------------------------- | ------- | -------------------------------------------------------------- |
+| `preset`  | `idle\|working\|blocked\|done\|ended\|mixed\|attention` | `mixed` | Any other value falls back to `mixed`.                         |
+| `agents`  | Integer from `0` through `50`                           | `6`     | The explorer offers `0`–`12`; invalid values fall back to `6`. |
+| `theme`   | `light\|dinner`                                         | `light` | `dinner` selects the existing dark lighting.                   |
 
 Parsing and validation are concentrated in
 `parseVisualConfig` (`client/src/visual-harness.ts`); both the
@@ -239,6 +239,11 @@ client and the test suite prove the defaults and fallbacks.
   `done`, because the harness emits a `done` snapshot first
   and then one `ended` upsert per record through the real
   store boundary — it does not synthesize ended-as-done.
+
+?preset=attention&agents=6&theme=light
+  Six named cooks begin working. After 3 seconds Codex alone blocks on
+  /service/checkout-api, then returns directly to working after 8 seconds.
+  Both lifecycle transitions use client/src/attention-story.json.
 ```
 
 #### What each preset draws
@@ -256,6 +261,8 @@ client and the test suite prove the defaults and fallbacks.
   8 seconds into the state and use the visible 10-minute default.
 - `ended` — cooks leave the kitchen and a row is appended to the
   86 board per record. No active cook is rendered.
+- `attention` — all six named identities begin working; Codex alone becomes
+  blocked on `/service/checkout-api` after 3 seconds and resumes after 8.
 
 #### Isolation guarantees
 
@@ -319,10 +326,18 @@ npm run capture:tui
 
 Run the script from a normal Ghostty shell, not a Herdr pane. TUI capture runs
 six deterministic demo agents, switches to the freezer, and exits without
-human choreography. Web capture reuses the deterministic Playwright sequence.
-Both commands replace their checked-in assets only after encoding and
-validation succeed. Re-run the same command whenever the demo changes. Neither
-capture requires Herdr.
+human choreography. Web capture uses
+`?preset=attention&agents=6&theme=light` at 1280×720. It opens Codex details
+only after the accessible station label reports blocked, adds a high-contrast
+caption, and changes that caption only after the station reports working again.
+The MP4, WebM, GIF, and blocked-phase poster come from the same 12-second frame
+sequence. Browser diagnostics, semantic ordering, codecs, dimensions, duration,
+audio absence, and non-empty files are checked before each staged file is
+renamed into place. `scripts/web-demo.capture.json` records the clean source
+commit, timeline, dimensions, durations, sizes, and hashes.
+
+Run web capture only from a clean committed tree. Re-run the same command
+whenever the demo changes. Neither capture requires Herdr.
 
 This is a client-development harness check, not full-product release
 acceptance. Use [CONTRIBUTING.md](../CONTRIBUTING.md#verification-commands) for

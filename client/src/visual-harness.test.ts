@@ -16,6 +16,7 @@ import {
   visualAgentCounts,
   visualPresets,
 } from "./visual-harness";
+import attentionTiming from "./attention-story.json";
 import { stationIdentityLabels } from "./scene/kitchen-scene";
 
 afterEach(() => vi.useRealTimers());
@@ -61,6 +62,7 @@ describe("visual harness configuration", () => {
       "done",
       "ended",
       "mixed",
+      "attention",
     ]);
     expect(visualAgentCounts).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
@@ -142,6 +144,7 @@ describe("visual harness configuration", () => {
         "done",
         "ended",
         "mixed",
+        "attention",
       ] as const) {
         for (const event of buildVisualFeed({
           preset,
@@ -261,6 +264,52 @@ describe("visual harness configuration", () => {
 });
 
 describe("visual WebSocket boundary", () => {
+  it("runs the attention story from working through one Codex block and back to working", async () => {
+    vi.useFakeTimers();
+    const target = {} as { WebSocket?: typeof WebSocket };
+    installVisualWebSocket(target, {
+      preset: "attention",
+      agents: 6,
+      theme: "light",
+    });
+    const socket = new target.WebSocket!("ws://visual/ws"),
+      messages: AgentStateEvent[] = [];
+    socket.onmessage = (event) =>
+      messages.push(JSON.parse(String(event.data)) as AgentStateEvent);
+    await vi.runAllTicks();
+    const states = () =>
+      messages.flatMap((event) =>
+        event.type === "snapshot"
+          ? event.agents.map((record) => `${record.name}:${record.state}`)
+          : event.type === "delta" && event.operation === "upsert"
+            ? [`${event.agent.name}:${event.agent.state}`]
+            : [],
+      );
+    expect(states()).toEqual([
+      "Codex:working",
+      "Claude:working",
+      "Hermes:working",
+      "OpenClaw:working",
+      "Gemini:working",
+      "Aider:working",
+    ]);
+    await vi.advanceTimersByTimeAsync(attentionTiming.blockedAtMs);
+    expect(states().at(-1)).toBe("Codex:blocked");
+    await vi.advanceTimersByTimeAsync(
+      attentionTiming.resumedAtMs - attentionTiming.blockedAtMs,
+    );
+    expect(states().slice(-2)).toEqual(["Codex:blocked", "Codex:working"]);
+    const snapshot = messages[0];
+    expect(snapshot?.type).toBe("snapshot");
+    if (snapshot?.type === "snapshot")
+      expect(snapshot.agents[0]).toMatchObject({
+        name: "Codex",
+        workspace: "/service/checkout-api",
+      });
+    socket.close();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("emits the blocked burst in store order before continuing the hero lifecycle", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-08-01T15:00:00.000Z"));
