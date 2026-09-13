@@ -783,7 +783,7 @@ mod tests {
     }
     use super::super::{
         handle_key_with_scope, reconcile_scope, retain_board_selection, retain_selection, scene,
-        SceneView, HELP_LINES, KEY_KITCHEN,
+        SceneView, HELP_LINES, KEY_ESC_KITCHEN,
     };
     use super::*;
     use crate::adapter::Normalizer;
@@ -886,7 +886,7 @@ mod tests {
             false,
         );
         assert!(
-            narrow_freezer.contains("Freezer empty · no ended sessions"),
+            narrow_freezer.contains("FREEZER EMPTY · NO ENDED SESSIONS · LIMIT 64"),
             "{narrow_freezer}"
         );
         assert!(!narrow_freezer.contains("Agent kind:"), "{narrow_freezer}");
@@ -1720,7 +1720,8 @@ mod tests {
 
         let freezer = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
         let freezer_fallback = render_scene(&table, 79, 23, selected.as_deref(), scene_view, false);
-        assert!(freezer_fallback.contains("> example-cook"));
+        assert!(freezer_fallback.contains("Freezer empty · no ended sessions"));
+        assert!(!freezer_fallback.contains("example-cook"));
         assert!(!freezer_fallback.contains("tick "));
         for output in [&kitchen, &freezer, &compact] {
             for line in HELP_LINES {
@@ -2253,7 +2254,7 @@ mod tests {
                 "supported: 17, 19, 20",
                 "upgrade or downgrade Herdr to a tested release, then retry",
                 "Nothing here is real",
-                KEY_KITCHEN,
+                KEY_ESC_KITCHEN,
             ] {
                 assert!(
                     freezer.contains(expected),
