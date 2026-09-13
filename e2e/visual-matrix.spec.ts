@@ -26,7 +26,7 @@ const IDENTITIES = ["Codex", "Claude", "Hermes", "OpenClaw", "Gemini", "Aider"];
 function expectedNames(preset: string, count: number) {
   return new Set(
     Array.from({ length: count }, (_, index) => {
-      if (preset !== "mixed")
+      if (preset !== "mixed" && preset !== "attention")
         return `mise-${String(index + 1).padStart(2, "0")}`;
       const cycle = Math.floor(index / IDENTITIES.length) + 1;
       return `${IDENTITIES[index % IDENTITIES.length]}${cycle > 1 ? `-${cycle}` : ""}`;
@@ -333,6 +333,65 @@ test("reduced motion is static before blocked-scene startup in light and dinner 
         blockedIndicators: 1,
       });
   }
+  expect(errors).toEqual([]);
+});
+
+test("attention demo identifies Codex blocking checkout-api and resuming", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?preset=attention&agents=6&theme=light&stats");
+  await expect(placard(page)).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Agent stations" })
+      .getByRole("button"),
+  ).toHaveCount(6);
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toBeVisible();
+  const codex = page.getByRole("button", {
+      name: /Codex, Blocked — at the pass.*open details/,
+    }),
+    details = page.getByRole("complementary", { name: "Codex details" });
+  await expect(codex).toBeVisible({ timeout: 6_000 });
+  await expect(
+    page.locator('.stationA11yMirror button[aria-label*="Blocked —"]'),
+  ).toHaveCount(1);
+  await codex.evaluate((element) => element.click());
+  await expect(details).toContainText("BLOCKED — AT THE PASS");
+  await expect(details).toContainText("checkout-api");
+  await expect
+    .poll(async () => sceneMetrics(page))
+    .toMatchObject({
+      blockedIndicators: 1,
+      motion: {
+        reduced: true,
+        activeParticles: 0,
+        activeTransitions: 0,
+        activeBusserSweeps: 0,
+        continuous: false,
+      },
+    });
+  await expect(details).toContainText("WORKING — ON THE FIRE", {
+    timeout: 7_000,
+  });
+  await expect(details).toContainText("checkout-api");
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -721,7 +780,7 @@ test("workspace scope follows stable identity without hiding blocked attention",
   }
 });
 
-test("authoritative fixture state sequence drives history accents poses prep and freezer spirits", async ({
+test("authoritative fixture drives rendered feed history accents poses prep and freezer spirits", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -3307,7 +3366,7 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
     "https://herdr-mise.s11a.com/og.png",
   );
   const socialAlt =
-    "The herdr-mise demo kitchen showing agent stations and the DEMO SERVICE placard.";
+    "Codex blocked on checkout-api in the herdr-mise DEMO SERVICE kitchen.";
   await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
     "content",
     socialAlt,
