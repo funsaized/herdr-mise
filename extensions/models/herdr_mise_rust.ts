@@ -193,6 +193,10 @@ export function previewSandboxArgs(
     "--die-with-parent",
     "--new-session",
     "--unshare-user",
+    "--uid",
+    String(Deno.uid()),
+    "--gid",
+    String(Deno.gid()),
     "--unshare-pid",
     "--unshare-ipc",
     "--unshare-uts",
@@ -351,17 +355,15 @@ export async function previewCanary(
     sourceClean = true;
     transcript.push("source identity verified");
     scratch = await Deno.makeTempDir({ prefix: "herdr-preview-canary-" });
-    await Deno.chmod(scratch, 0o711);
     const cargoHome = `${scratch}/cargo-home`;
     const empty = `${scratch}/empty`;
     const work = `${scratch}/work`;
     await Promise.all([cargoHome, empty, work].map((path) => Deno.mkdir(path)));
-    await Promise.all([cargoHome, work].map((path) => Deno.chmod(path, 0o777)));
     const trustedEnv = { PATH: Deno.env.get("PATH") ?? "/usr/bin:/bin" };
     stage = "bwrap availability check";
     await command(
-      "sudo",
-      ["--non-interactive", "bwrap", "--version"],
+      "bwrap",
+      ["--version"],
       empty,
       { PATH: trustedEnv.PATH },
       context,
@@ -370,10 +372,8 @@ export async function previewCanary(
     sysroot = await output("rustc", ["--print", "sysroot"], empty, context);
     stage = "sandboxed dependency acquisition";
     await command(
-      "sudo",
+      "bwrap",
       [
-        "--non-interactive",
-        "bwrap",
         ...previewSandboxArgs(root, cargoHome, sysroot, work, {
           allowNetwork: true,
           writableCargoHome: true,
@@ -413,10 +413,8 @@ export async function previewCanary(
     ]);
     stage = "sandbox control probes";
     await command(
-      "sudo",
+      "bwrap",
       [
-        "--non-interactive",
-        "bwrap",
         ...previewSandboxArgs(root, cargoHome, sysroot, work),
         "--clearenv",
         "--setenv",
@@ -472,10 +470,8 @@ export async function previewCanary(
     stage = "sandboxed offline build";
     build = "failed";
     await command(
-      "sudo",
+      "bwrap",
       [
-        "--non-interactive",
-        "bwrap",
         ...previewSandboxArgs(root, cargoHome, sysroot, work),
         "--clearenv",
         "--setenv",

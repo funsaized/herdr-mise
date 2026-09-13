@@ -28,6 +28,8 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
     "--die-with-parent",
     "--new-session",
     "--unshare-user",
+    "--uid",
+    "--gid",
     "--unshare-pid",
     "--unshare-net",
     "--cap-drop",
@@ -41,6 +43,11 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
   const capDrop = args.indexOf("--cap-drop");
   if (args[capDrop + 1] !== "ALL")
     throw new Error("sandbox must drop all capabilities");
+  if (
+    args[args.indexOf("--uid") + 1] !== String(Deno.uid()) ||
+    args[args.indexOf("--gid") + 1] !== String(Deno.gid())
+  )
+    throw new Error("sandbox must preserve the invoking user identity");
   const acquisition = previewSandboxArgs(
     "/source",
     cargo,
@@ -63,7 +70,6 @@ Deno.test({
   ignore: Deno.build.os !== "linux",
   async fn() {
     const root = await Deno.makeTempDir({ prefix: "preview-bwrap-test-" });
-    await Deno.chmod(root, 0o711);
     const source = `${root}/source`;
     const cargo = `${root}/cargo`;
     const rust = `${root}/rust`;
@@ -74,15 +80,12 @@ Deno.test({
           Deno.mkdir(path, { recursive: true }),
         ),
       );
-      await Deno.chmod(work, 0o777);
       await Deno.writeTextFile(`${source}/Cargo.toml`, "[workspace]\n");
       await Deno.writeTextFile(`${work}/canary.sh`, previewProbeScript);
       await Deno.writeTextFile(`${root}/credential-sentinel`, "secret");
       await Deno.writeTextFile(`${root}/filesystem-sentinel`, "private");
-      const result = await new Deno.Command("sudo", {
+      const result = await new Deno.Command("bwrap", {
         args: [
-          "--non-interactive",
-          "bwrap",
           ...previewSandboxArgs(source, cargo, rust, work),
           "--clearenv",
           "--setenv",
@@ -111,7 +114,8 @@ Deno.test({
         "private-network-denied",
         "metadata-denied",
       ]) {
-        if (!(await Deno.stat(`${work}/${marker}`)).isFile)
+        const info = await Deno.stat(`${work}/${marker}`);
+        if (!info.isFile || info.uid !== Deno.uid())
           throw new Error(`real bwrap probe did not produce ${marker}`);
       }
     } finally {
@@ -217,7 +221,7 @@ async function runPreviewFixture(
           commands.push([executable, ...args]);
           if (executable === "git") return previewGit(options);
           if (executable === "rustc") return success(`${parent}/rust\n`);
-          if (executable !== "sudo" || args[1] !== "bwrap")
+          if (executable !== "bwrap")
             throw new Error(`${executable} ran outside bwrap`);
           if (args.includes("/work/canary.sh")) {
             // Simulated lifecycle markers are not real sandbox evidence; the Linux-only test above is.
@@ -501,7 +505,7 @@ Deno.test("preview canary consumes the workflow sibling checkout and records fai
             if (executable === "git")
               return await new Deno.Command(executable, options).output();
             if (executable === "rustc") return success(`${sysroot}\n`);
-            if (executable !== "sudo" || (options.args ?? [])[1] !== "bwrap")
+            if (executable !== "bwrap")
               throw new Error(`${executable} ran outside bwrap`);
             return (options.args ?? []).includes("fetch")
               ? {
@@ -525,7 +529,7 @@ Deno.test("preview canary consumes the workflow sibling checkout and records fai
         throw new Error("sandbox failure diagnostics were not recorded");
     }
     const fetch = commands.find((command) => command.includes("fetch"));
-    if (!fetch || fetch[0] !== "sudo" || fetch[2] !== "bwrap")
+    if (!fetch || fetch[0] !== "bwrap")
       throw new Error("dependency acquisition bypassed bwrap");
     try {
       await previewCanary(

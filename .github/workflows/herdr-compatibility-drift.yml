@@ -52,7 +52,10 @@ jobs:
       - run: sh scripts/install-swamp-managed.sh
       - run: swamp extension install
       - name: Install mandatory sandbox
-        run: sudo apt-get update && sudo apt-get install --yes bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          sudo chmod u+s /usr/bin/bwrap
       - run: npm run test:extensions
       - run: swamp workflow validate herdr-release-discovery
       - run: swamp workflow run herdr-release-discovery

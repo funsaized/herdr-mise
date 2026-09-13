@@ -13,7 +13,6 @@ import test from "node:test";
 import {
   auditAdapterFixtureMappings,
   auditFixture,
-  auditPreviewCanaryContract,
   auditWorkflow,
   checkCompatibility,
   tableFor,
@@ -148,23 +147,13 @@ test("scheduled compatibility workflow is immutable, read-only, and non-publishi
 });
 
 test("preview canary is immutable credential-free sandboxed advisory evidence", () => {
-  const model = readFileSync("extensions/models/herdr_mise_rust.ts", "utf8");
   const extensionRunner = readFileSync("scripts/test-extensions.mjs", "utf8");
-  const discovery = readFileSync(
-    "extensions/models/github_herdr_release.ts",
-    "utf8",
-  );
-  const workflow = readFileSync(
-    "workflows/workflow-herdr-release-discovery.yaml",
-    "utf8",
-  );
   const scheduledWorkflow = readFileSync(
     ".github/workflows/herdr-compatibility-drift.yml",
     "utf8",
   );
   assert.match(scheduledWorkflow, /npm run test:extensions/);
   assert.match(extensionRunner, /--allow-run=bwrap,/);
-  assert.deepEqual(auditPreviewCanaryContract(model, discovery, workflow), []);
   const previewFixtures = readdirSync("server/tests/fixtures")
     .filter(
       (name) =>

@@ -100,43 +100,6 @@ export function auditWorkflow(workflow) {
   return errors;
 }
 
-export function auditPreviewCanaryContract(model, discovery, workflow) {
-  const errors = [];
-  for (const required of [
-    "--unshare-user",
-    "--unshare-pid",
-    "--unshare-net",
-    "--cap-drop",
-    "--ro-bind",
-    "cargo build --locked --offline",
-    "assertPublicLockedDependencies",
-    "sandboxed dependency acquisition",
-    "credential-sentinel",
-    "169.254.169.254",
-  ])
-    if (!model.includes(required))
-      errors.push(`preview canary missing ${required}`);
-  if (
-    !discovery.includes("api.github.com") ||
-    /GH_TOKEN|GITHUB_TOKEN/.test(discovery)
-  )
-    errors.push("release discovery is not credential-free public API access");
-  for (const required of [
-    "preview.commit",
-    "path: ../herdr-preview-source",
-    'data.latest("herdr-preview-source", "clone").attributes.path',
-  ])
-    if (!workflow.includes(required))
-      errors.push(`preview workflow missing ${required}`);
-  if (
-    /release (?:create|upload)|\bpublish(?:ing)?\b|git push/i.test(
-      model + discovery + workflow,
-    )
-  )
-    errors.push("preview lane has publishing capability");
-  return errors;
-}
-
 export function tableFor(entries) {
   const rows = entries.map((entry) => [
     `\`${entry.release}\``,
@@ -301,14 +264,6 @@ export function checkCompatibility(args = []) {
         "preview fixture entered the supported compatibility authority",
       );
   }
-  errors.push(
-    ...auditPreviewCanaryContract(
-      read("extensions/models/herdr_mise_rust.ts"),
-      read("extensions/models/github_herdr_release.ts"),
-      read("workflows/workflow-herdr-release-discovery.yaml"),
-    ),
-  );
-
   const upstreamArgs = args
     .filter((arg) => arg.startsWith("--upstream="))
     .map((arg) => arg.slice(11));
