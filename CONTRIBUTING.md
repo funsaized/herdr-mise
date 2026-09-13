@@ -12,6 +12,7 @@ opinions; the docs below will save you time.
   versioned protocol).
 - `docs/operations.md` — how to run, develop, and verify locally.
 - `README.md` — product behavior, deliberate boundaries, and installation.
+- `PLAN.md` — completed historical context, not a current roadmap or contract.
   Code plus passing tests wins when prose and behavior disagree.
 
 ## Setup
