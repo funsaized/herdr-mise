@@ -22,7 +22,7 @@ jobs:
           inputs:
             url: https://github.com/herdrdev/herdr.git
             branch: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview.tag }}
-            path: .swamp/preview/herdr
+            path: ../herdr-preview-source
             depth: 1
         dependsOn:
           - step: discover-releases

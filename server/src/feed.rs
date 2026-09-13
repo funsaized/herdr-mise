@@ -870,6 +870,12 @@ mod tests {
 
     #[tokio::test]
     async fn preview_canary_feed_moves_from_supported_live_to_preview_diagnostic() {
+        const PREVIEW: &[u8] =
+            include_bytes!("../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json");
+        let preview_protocol = serde_json::from_slice::<serde_json::Value>(PREVIEW).unwrap()
+            ["protocol"]
+            .as_u64()
+            .unwrap();
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("preview-canary-feed.sock");
         let listener = UnixListener::bind(&path)
@@ -893,9 +899,7 @@ mod tests {
                     }
                     let response: &'static [u8] =
                         if serve_preview.load(std::sync::atomic::Ordering::SeqCst) {
-                            include_bytes!(
-                                "../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json"
-                            )
+                            PREVIEW
                         } else {
                             include_bytes!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json")
                         };
@@ -925,11 +929,11 @@ mod tests {
                 mode: AppMode::Live,
                 source_status: SourceStatus::UnsupportedProtocol,
                 source_diagnostic: Some(SourceDiagnostic {
-                    observed_protocol: 22,
+                    observed_protocol,
                     ..
                 }),
                 ..
-            }
+            } if observed_protocol == preview_protocol
         ));
         shutdown.cancel();
         server.abort();

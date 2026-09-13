@@ -1079,12 +1079,14 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(stable.agents.len(), 1);
+        let preview =
+            include_bytes!("../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json");
+        let expected_protocol = serde_json::from_slice::<Value>(preview).unwrap()["protocol"]
+            .as_u64()
+            .unwrap();
         assert!(matches!(
-            normalize_fixture(include_bytes!(
-                "../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json"
-            ))
-            .await,
-            Err(AdapterError::Protocol(22))
+            normalize_fixture(preview).await,
+            Err(AdapterError::Protocol(protocol)) if protocol == expected_protocol
         ));
     }
 

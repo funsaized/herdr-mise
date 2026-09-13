@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -109,6 +109,8 @@ export function auditPreviewCanaryContract(model, discovery, workflow) {
     "--cap-drop",
     "--ro-bind",
     "cargo build --locked --offline",
+    "assertPublicLockedDependencies",
+    "sandboxed dependency acquisition",
     "credential-sentinel",
     "169.254.169.254",
   ])
@@ -121,6 +123,7 @@ export function auditPreviewCanaryContract(model, discovery, workflow) {
     errors.push("release discovery is not credential-free public API access");
   for (const required of [
     "preview.commit",
+    "path: ../herdr-preview-source",
     'data.latest("herdr-preview-source", "clone").attributes.path',
   ])
     if (!workflow.includes(required))
@@ -283,18 +286,21 @@ export function checkCompatibility(args = []) {
       errors.push(`${entry.release}: workflow commit drift`);
   }
   errors.push(...auditWorkflow(workflow));
-  const previewFixturePath =
-    "server/tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json";
-  const previewFixture = JSON.parse(read(previewFixturePath));
-  errors.push(
-    ...auditFixture(previewFixture).map(
-      (error) => `${previewFixturePath}: ${error}`,
-    ),
-  );
-  if (manifest.supported.some((entry) => entry.fixture === previewFixturePath))
+  for (const name of readdirSync(resolve(root, "server/tests/fixtures")).filter(
+    (name) =>
+      name.startsWith("snapshot-herdr-preview-") && name.endsWith(".json"),
+  )) {
+    const path = `server/tests/fixtures/${name}`;
     errors.push(
-      "preview fixture entered the supported compatibility authority",
+      ...auditFixture(JSON.parse(read(path))).map(
+        (error) => `${path}: ${error}`,
+      ),
     );
+    if (manifest.supported.some((entry) => entry.fixture === path))
+      errors.push(
+        "preview fixture entered the supported compatibility authority",
+      );
+  }
   errors.push(
     ...auditPreviewCanaryContract(
       read("extensions/models/herdr_mise_rust.ts"),
