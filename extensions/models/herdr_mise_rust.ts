@@ -193,10 +193,6 @@ export function previewSandboxArgs(
     "--die-with-parent",
     "--new-session",
     "--unshare-user",
-    "--uid",
-    String(Deno.uid()),
-    "--gid",
-    String(Deno.gid()),
     "--unshare-pid",
     "--unshare-ipc",
     "--unshare-uts",
@@ -360,6 +356,7 @@ export async function previewCanary(
     const empty = `${scratch}/empty`;
     const work = `${scratch}/work`;
     await Promise.all([cargoHome, empty, work].map((path) => Deno.mkdir(path)));
+    await Promise.all([cargoHome, work].map((path) => Deno.chmod(path, 0o777)));
     const trustedEnv = { PATH: Deno.env.get("PATH") ?? "/usr/bin:/bin" };
     stage = "bwrap availability check";
     await command(
