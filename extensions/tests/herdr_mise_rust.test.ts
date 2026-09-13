@@ -30,6 +30,7 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
     "--unshare-user",
     "--unshare-pid",
     "--unshare-net",
+    "--cap-add",
     "--proc",
     "--ro-bind",
   ]) {
@@ -37,8 +38,23 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
   }
   if (args.includes("/repo") || args.includes(Deno.env.get("HOME") ?? "~"))
     throw new Error("sandbox exposes the repository or host home");
-  if (args.includes("--cap-add"))
-    throw new Error("sandbox must retain bwrap's default empty capability set");
+  const capAdd = args.indexOf("--cap-add");
+  if (args[capAdd + 1] !== "CAP_NET_ADMIN")
+    throw new Error("isolated networking must retain only CAP_NET_ADMIN");
+  const acquisition = previewSandboxArgs(
+    "/source",
+    cargo,
+    "/rust",
+    "/scratch",
+    { allowNetwork: true },
+  );
+  if (
+    acquisition.includes("--unshare-net") ||
+    acquisition.includes("--cap-add")
+  )
+    throw new Error(
+      "dependency acquisition must use the runner network unchanged",
+    );
   const registry = args.indexOf(`${cargo}/registry`);
   if (registry < 1 || args[registry - 1] !== "--ro-bind")
     throw new Error("sandbox dependency cache is not read-only");

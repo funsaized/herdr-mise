@@ -106,7 +106,7 @@ export function auditPreviewCanaryContract(model, discovery, workflow) {
     "--unshare-user",
     "--unshare-pid",
     "--unshare-net",
-    "--cap-drop",
+    "CAP_NET_ADMIN",
     "--ro-bind",
     "cargo build --locked --offline",
     "assertPublicLockedDependencies",
