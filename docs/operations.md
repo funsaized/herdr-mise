@@ -846,6 +846,51 @@ toggle.
 The overlay is excluded from perf budgets when hidden. `npm run
 perf` toggles it from the harness via Playwright.
 
+### Release endurance profile
+
+The Chromium endurance profile is release-scoped and opt-in. It builds and
+boots the embedded release binary, serves the sanitized protocol-20 fixture
+through a temporary Herdr Unix socket, and drives the real WebSocket, browser
+store, DOM controls, and Pixi scene. It writes incremental JSONL samples and a
+machine-readable summary under the ignored `perf/artifacts/` directory. Those
+artifacts contain counts and environment identity only, never fixture payloads,
+agent or workspace labels, or local paths.
+
+Run the short integration validation on an active, unlocked desktop:
+
+```sh
+HERDR_MISE_ENDURANCE_DURATION_MINUTES=8 npm run perf:endurance
+```
+
+The publishable eight-hour baseline uses the default duration:
+
+```sh
+npm run perf:endurance
+```
+
+Only that 480-minute default is labeled all-day evidence. Preserve its summary
+outside the repository, then compare another full run on the same OS, hardware,
+Chromium, Playwright, and graphics environment:
+
+```sh
+HERDR_MISE_ENDURANCE_BASELINE=/absolute/path/to/clean-summary.json npm run perf:endurance
+```
+
+Verify the trend detector with an isolated, equally shortened candidate. This
+command must exit nonzero after writing its artifacts:
+
+```sh
+HERDR_MISE_ENDURANCE_DURATION_MINUTES=8 HERDR_MISE_ENDURANCE_INJECT_LEAK=1 HERDR_MISE_ENDURANCE_BASELINE=/absolute/path/to/clean-summary.json npm run perf:endurance
+```
+
+The matrix gives equal wall-clock time to 30 and 60 agents with one and three
+client pages. It alternates foreground/background phases, churns completed and
+joined sessions, and interrupts and restores the fixture source while pages
+remain open. Locking the screen, host sleep, thermal throttling, or foreground
+interference limits the evidence and must be recorded externally. The profile
+does not measure GPU utilization and cloned fixture agents do not prove Herdr
+daemon scalability.
+
 ### Server resource measurement
 
 `scripts/measure-server.sh` boots the binary with an isolated empty
@@ -855,6 +900,10 @@ CPU budgets. It also writes the raw evidence under
 `perf/artifacts/server-resource.log`. Override the binary with
 `scripts/measure-server.sh path/to/herdr-mise` and the artifact
 directory with `HERDR_MISE_ARTIFACT_DIR=...`.
+
+This remains the short, one-sample release RSS/CPU guard; endurance trends do
+not replace or weaken its budgets. Likewise, `scripts/acceptance-soak.sh`
+remains the public-binary uptime soak rather than a browser performance test.
 
 Measure the release TUI through a real Unix socket and POSIX PTY with:
 
