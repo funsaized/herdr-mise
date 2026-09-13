@@ -21,7 +21,7 @@ const result = spawnSync(
     "--allow-read",
     "--allow-write",
     "--allow-env",
-    "--allow-run=bwrap,git,npm,node",
+    "--allow-run=bwrap,git,npm,node,sudo",
     "extensions/tests",
   ],
   { stdio: "inherit" },

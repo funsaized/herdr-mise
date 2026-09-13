@@ -197,7 +197,8 @@ export function previewSandboxArgs(
     "--unshare-ipc",
     "--unshare-uts",
     ...(!options.allowNetwork ? ["--unshare-net"] : []),
-    ...(!options.allowNetwork ? ["--cap-add", "CAP_NET_ADMIN"] : []),
+    "--cap-drop",
+    "ALL",
     "--proc",
     "/proc",
     "--dev",
@@ -357,8 +358,8 @@ export async function previewCanary(
     const trustedEnv = { PATH: Deno.env.get("PATH") ?? "/usr/bin:/bin" };
     stage = "bwrap availability check";
     await command(
-      "bwrap",
-      ["--version"],
+      "sudo",
+      ["--non-interactive", "bwrap", "--version"],
       empty,
       { PATH: trustedEnv.PATH },
       context,
@@ -367,8 +368,10 @@ export async function previewCanary(
     sysroot = await output("rustc", ["--print", "sysroot"], empty, context);
     stage = "sandboxed dependency acquisition";
     await command(
-      "bwrap",
+      "sudo",
       [
+        "--non-interactive",
+        "bwrap",
         ...previewSandboxArgs(root, cargoHome, sysroot, work, {
           allowNetwork: true,
           writableCargoHome: true,
@@ -408,8 +411,10 @@ export async function previewCanary(
     ]);
     stage = "sandbox control probes";
     await command(
-      "bwrap",
+      "sudo",
       [
+        "--non-interactive",
+        "bwrap",
         ...previewSandboxArgs(root, cargoHome, sysroot, work),
         "--clearenv",
         "--setenv",
@@ -465,8 +470,10 @@ export async function previewCanary(
     stage = "sandboxed offline build";
     build = "failed";
     await command(
-      "bwrap",
+      "sudo",
       [
+        "--non-interactive",
+        "bwrap",
         ...previewSandboxArgs(root, cargoHome, sysroot, work),
         "--clearenv",
         "--setenv",

@@ -30,7 +30,7 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
     "--unshare-user",
     "--unshare-pid",
     "--unshare-net",
-    "--cap-add",
+    "--cap-drop",
     "--proc",
     "--ro-bind",
   ]) {
@@ -38,9 +38,9 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
   }
   if (args.includes("/repo") || args.includes(Deno.env.get("HOME") ?? "~"))
     throw new Error("sandbox exposes the repository or host home");
-  const capAdd = args.indexOf("--cap-add");
-  if (args[capAdd + 1] !== "CAP_NET_ADMIN")
-    throw new Error("isolated networking must retain only CAP_NET_ADMIN");
+  const capDrop = args.indexOf("--cap-drop");
+  if (args[capDrop + 1] !== "ALL")
+    throw new Error("sandbox must drop all capabilities");
   const acquisition = previewSandboxArgs(
     "/source",
     cargo,
@@ -48,10 +48,7 @@ Deno.test("preview canary requires isolated namespaces and read-only inputs", as
     "/scratch",
     { allowNetwork: true },
   );
-  if (
-    acquisition.includes("--unshare-net") ||
-    acquisition.includes("--cap-add")
-  )
+  if (acquisition.includes("--unshare-net"))
     throw new Error(
       "dependency acquisition must use the runner network unchanged",
     );
@@ -80,8 +77,10 @@ Deno.test({
       await Deno.writeTextFile(`${work}/canary.sh`, previewProbeScript);
       await Deno.writeTextFile(`${root}/credential-sentinel`, "secret");
       await Deno.writeTextFile(`${root}/filesystem-sentinel`, "private");
-      const result = await new Deno.Command("bwrap", {
+      const result = await new Deno.Command("sudo", {
         args: [
+          "--non-interactive",
+          "bwrap",
           ...previewSandboxArgs(source, cargo, rust, work),
           "--clearenv",
           "--setenv",
@@ -216,7 +215,7 @@ async function runPreviewFixture(
           commands.push([executable, ...args]);
           if (executable === "git") return previewGit(options);
           if (executable === "rustc") return success(`${parent}/rust\n`);
-          if (executable !== "bwrap")
+          if (executable !== "sudo" || args[1] !== "bwrap")
             throw new Error(`${executable} ran outside bwrap`);
           if (args.includes("/work/canary.sh")) {
             // Simulated lifecycle markers are not real sandbox evidence; the Linux-only test above is.
@@ -500,7 +499,7 @@ Deno.test("preview canary consumes the workflow sibling checkout and records fai
             if (executable === "git")
               return await new Deno.Command(executable, options).output();
             if (executable === "rustc") return success(`${sysroot}\n`);
-            if (executable !== "bwrap")
+            if (executable !== "sudo" || (options.args ?? [])[1] !== "bwrap")
               throw new Error(`${executable} ran outside bwrap`);
             return (options.args ?? []).includes("fetch")
               ? {
@@ -524,7 +523,7 @@ Deno.test("preview canary consumes the workflow sibling checkout and records fai
         throw new Error("sandbox failure diagnostics were not recorded");
     }
     const fetch = commands.find((command) => command.includes("fetch"));
-    if (!fetch || fetch[0] !== "bwrap")
+    if (!fetch || fetch[0] !== "sudo" || fetch[2] !== "bwrap")
       throw new Error("dependency acquisition bypassed bwrap");
     try {
       await previewCanary(
