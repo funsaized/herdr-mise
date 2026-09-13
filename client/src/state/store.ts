@@ -12,6 +12,7 @@ import { loadSettings, saveSettings } from "./settings-storage";
 export type AppMode = FeedMode | "empty" | "disconnected" | "connecting";
 export type ClientDisconnectReason = "incompatibleFeed" | null;
 export const HISTORY_LIMIT = 256;
+export const BOARD_LIMIT = 50;
 export interface Settings {
   sound: boolean;
   atmosphere: boolean;
@@ -22,6 +23,7 @@ export interface Settings {
 }
 export interface BoardEntry {
   id: string;
+  sourceId: string;
   name: string;
   accentIndex: number;
   runtimeMs: number;
@@ -57,6 +59,7 @@ export interface StoreSnapshot {
   lastUpdateAt: number;
 }
 export interface CoarseSlice {
+  board: readonly BoardEntry[];
   count: number;
   visible: number;
   hiddenDone: number;
@@ -169,6 +172,7 @@ export class AgentStore {
         this.dismissedDone.has(agent.id),
       ).length;
     return {
+      board: this.board,
       count: scopedValues.length,
       visible: visibleValues.length,
       hiddenDone,
@@ -437,7 +441,11 @@ export class AgentStore {
         this.dismissedDone.set(id, generation);
         this.emitEvent({ type: "busser", agentId: id });
         this.emitEvent({ type: "clear", agentId: id });
-        if (this.selectedId === id) this.selectedId = null;
+        if (
+          this.selectedId === id &&
+          !this.board.some((entry) => entry.id === id)
+        )
+          this.selectedId = null;
         this.emitChange();
         this.emitCoarse();
       }, delay),
@@ -449,7 +457,10 @@ export class AgentStore {
       existing = existingIndex >= 0 ? this.board[existingIndex] : undefined;
     this.remove(agent.id);
     const entry: BoardEntry = {
-      id: prior && existing ? `${agent.id}:${now}` : (existing?.id ?? agent.id),
+      id: prior
+        ? nextBoardId(this.board, agent.id)
+        : (existing?.id ?? nextBoardId(this.board, agent.id)),
+      sourceId: agent.id,
       name: agent.name,
       accentIndex: agent.accentIndex,
       runtimeMs: agent.session.runtimeMs,
@@ -458,17 +469,31 @@ export class AgentStore {
       endedAt: prior ? now : (existing?.endedAt ?? now),
       finalState: prior?.targetState ?? existing?.finalState ?? "ended",
     };
-    if (existingIndex >= 0 && !prior) this.board[existingIndex] = entry;
-    else this.board.push(entry);
-    if (this.board.length > 50) this.board.splice(0, this.board.length - 50);
+    if (existingIndex >= 0 && !prior)
+      this.board = this.board.map((item, index) =>
+        index === existingIndex ? entry : item,
+      );
+    else this.board = [...this.board, entry];
+    this.trimBoard();
     this.emitEvent({ type: "ended", entry });
+  }
+  private trimBoard() {
+    if (this.board.length <= BOARD_LIMIT) return;
+    const evicted = this.board.slice(0, -BOARD_LIMIT);
+    this.board = this.board.slice(-BOARD_LIMIT);
+    if (
+      this.selectedId &&
+      evicted.some((entry) => entry.id === this.selectedId)
+    )
+      this.selectedId = null;
   }
   private remove(id: string) {
     this.cancelDone(id);
     this.dismissedDone.delete(id);
     this.doneGenerations.delete(id);
     if (this.agents.delete(id)) this.emitEvent({ type: "clear", agentId: id });
-    if (this.selectedId === id) this.selectedId = null;
+    if (this.selectedId === id && !this.board.some((entry) => entry.id === id))
+      this.selectedId = null;
   }
   private blockedElsewhereCount() {
     if (this.selectedWorkspaceId === null) return 0;
@@ -535,12 +560,18 @@ export class AgentStore {
   }
 }
 function lastBoardIndex(board: readonly BoardEntry[], agentId: string) {
-  const prefix = `${agentId}:`;
   for (let index = board.length - 1; index >= 0; index--) {
-    const id = board[index]?.id;
-    if (id === agentId || id?.startsWith(prefix)) return index;
+    if (board[index]?.sourceId === agentId) return index;
   }
   return -1;
+}
+function nextBoardId(board: readonly BoardEntry[], agentId: string) {
+  const used = new Set(board.map((entry) => entry.id));
+  if (!used.has(agentId)) return agentId;
+  for (let n = 1; ; n++) {
+    const id = `${agentId}:${n}`;
+    if (!used.has(id)) return id;
+  }
 }
 function sameWorkspaces(
   a: readonly WorkspaceRecord[],
@@ -557,6 +588,7 @@ function sameWorkspaces(
 }
 function sameCoarse(a: CoarseSlice, b: CoarseSlice) {
   return (
+    a.board === b.board &&
     a.count === b.count &&
     a.visible === b.visible &&
     a.hiddenDone === b.hiddenDone &&

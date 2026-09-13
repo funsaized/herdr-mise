@@ -210,6 +210,32 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  await page.goto("/?preset=ended&agents=50&stats");
+  const freezer = page.getByRole("button", { name: "Freezer" });
+  const freezerBox = (await freezer.boundingBox())!;
+  expect(freezerBox.width).toBeGreaterThanOrEqual(44);
+  expect(freezerBox.height).toBeGreaterThanOrEqual(44);
+  await freezer.click();
+  const ended = page
+    .getByRole("navigation", { name: "Ended chefs" })
+    .getByRole("button");
+  await expect(ended).toHaveCount(50);
+  await ended.first().focus();
+  await expect(ended.first()).toBeFocused();
+  expect(
+    await ended
+      .first()
+      .evaluate((element) => getComputedStyle(element).outlineColor),
+  ).toBe("rgb(44, 39, 33)");
+  await ended.first().press("Enter");
+  await expect(
+    page.locator('aside[aria-label$="session summary" i]'),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(ended.first()).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(freezer).toHaveAttribute("aria-pressed", "false");
+  await expect(freezer).toBeFocused();
 });
 
 test("preview explorer controls remain operable at 320 by 320 CSS pixels", async ({

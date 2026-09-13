@@ -4,6 +4,7 @@ import {
   type AgentState,
   type AgentStateEvent,
 } from "../../protocol/generated/agent-state-event";
+import { BOARD_LIMIT } from "./state/store";
 import type { ThemeChoice } from "./theme/theme";
 
 export type VisualPreset = AgentState | "mixed";
@@ -50,7 +51,7 @@ export function parseVisualConfig(search: string): VisualConfig {
       countValue !== null &&
       Number.isInteger(count) &&
       count >= 0 &&
-      count <= 30
+      count <= BOARD_LIMIT
         ? (count as VisualAgentCount)
         : defaultVisualConfig.agents,
     theme: query.get("theme") === "dinner" ? "dark" : "light",

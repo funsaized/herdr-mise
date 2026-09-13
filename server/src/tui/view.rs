@@ -8,7 +8,8 @@ use ratatui::{
 };
 
 use super::{
-    state::{AgentTable, BOARD_CAP},
+    freezer_keys,
+    state::{AgentTable, BoardEntry, BOARD_CAP},
     theme, Scope,
 };
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceDiagnostic, SourceStatus};
@@ -183,6 +184,45 @@ pub(super) fn inspect_paragraph(agent: &AgentRecord) -> Paragraph<'static> {
 
 pub(super) fn inspect_height(agent: &AgentRecord, width: u16) -> u16 {
     u16::try_from(inspect_paragraph(agent).line_count(width.max(1))).unwrap_or(u16::MAX)
+}
+
+pub(super) fn freezer_inspect_paragraph(
+    entry: &BoardEntry,
+    ordinal: usize,
+    total: usize,
+) -> Paragraph<'static> {
+    let tickets = board_tickets(entry);
+    Paragraph::new(vec![
+        Line::from(format!("Retained session: {ordinal} of {total}")),
+        Line::from(format!(
+            "{} · {}",
+            sanitize_external(&entry.name),
+            state_label(&entry.final_state)
+        )),
+        Line::from(format!(
+            "Mise runtime: {} · Tickets: {tickets}",
+            format_duration(entry.runtime_ms)
+        )),
+    ])
+    .wrap(Wrap { trim: false })
+}
+
+fn board_tickets(entry: &BoardEntry) -> String {
+    if entry.tickets_available.unwrap_or(entry.tickets > 0) {
+        entry.tickets.to_string()
+    } else {
+        "Unavailable".into()
+    }
+}
+
+pub(super) fn freezer_inspect_height(
+    entry: &BoardEntry,
+    ordinal: usize,
+    total: usize,
+    width: u16,
+) -> u16 {
+    u16::try_from(freezer_inspect_paragraph(entry, ordinal, total).line_count(width.max(1)))
+        .unwrap_or(u16::MAX)
 }
 
 fn format_duration(milliseconds: u64) -> String {
@@ -619,6 +659,111 @@ pub(crate) fn draw_scoped(
     frame.render_widget(Paragraph::new(Line::from(status)), status_area);
 }
 
+pub(crate) fn draw_freezer_scoped(
+    frame: &mut Frame<'_>,
+    table: &AgentTable,
+    warning: Option<&str>,
+    now: DateTime<Utc>,
+    selected_id: Option<&str>,
+) {
+    let total = table.board().len();
+    let selected = selected_id.and_then(|id| table.board_entry(id));
+    let inspect_height = selected
+        .map(|(index, entry)| freezer_inspect_height(entry, index + 1, total, frame.area().width))
+        .unwrap_or(0);
+    let (title, source_copy) = status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        table.agents().count(),
+    );
+    let header = Paragraph::new(vec![
+        Line::from(Span::styled(
+            title,
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(source_copy),
+        Line::from(service_line(table, now, None)),
+    ])
+    .wrap(Wrap { trim: true });
+    let header_height =
+        u16::try_from(header.line_count(frame.area().width.max(1))).unwrap_or(u16::MAX);
+    let areas = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(header_height),
+            Constraint::Min(3),
+            Constraint::Length(inspect_height),
+            Constraint::Length(1),
+        ])
+        .split(frame.area());
+    frame.render_widget(header, areas[0]);
+
+    let capacity = usize::from(areas[1].height.saturating_sub(3)).max(1);
+    let selected_newest_index = selected.map(|(index, _)| total - index - 1);
+    let offset = selected_newest_index
+        .map(|index| index.saturating_sub(capacity - 1))
+        .unwrap_or(0);
+    let rows = table
+        .board()
+        .iter()
+        .enumerate()
+        .rev()
+        .skip(offset)
+        .take(capacity)
+        .map(|(index, entry)| {
+            let is_selected = selected_id == Some(entry.id.as_str());
+            Row::new([
+                if is_selected {
+                    format!("> {} of {total}", index + 1)
+                } else {
+                    format!("{} of {total}", index + 1)
+                },
+                sanitize_external(&entry.name),
+                state_label(&entry.final_state).into(),
+                format_duration(entry.runtime_ms),
+                board_tickets(entry),
+            ])
+            .style(if is_selected {
+                Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
+            } else {
+                Style::default()
+            })
+        });
+    let title = if total == 0 {
+        format!("Freezer empty · no ended sessions · retention limit {BOARD_CAP}")
+    } else {
+        format!("Ended sessions · {total} inspectable · latest {BOARD_CAP} retained")
+    };
+    frame.render_widget(
+        Table::new(
+            rows,
+            [
+                Constraint::Length(theme::FREEZER_TABLE_RETAINED_WIDTH),
+                Constraint::Min(theme::FREEZER_TABLE_CHEF_MIN_WIDTH),
+                Constraint::Length(theme::FREEZER_TABLE_FINAL_WIDTH),
+                Constraint::Length(theme::FREEZER_TABLE_MISE_WIDTH),
+                Constraint::Length(theme::FREEZER_TABLE_TICKETS_WIDTH),
+            ],
+        )
+        .header(Row::new(["RETAINED", "CHEF", "FINAL", "MISE", "TICKETS"]))
+        .block(Block::default().borders(Borders::ALL).title(title)),
+        areas[1],
+    );
+    if let Some((index, entry)) = selected {
+        frame.render_widget(freezer_inspect_paragraph(entry, index + 1, total), areas[2]);
+    }
+    let keys = freezer_keys(
+        selected.is_some(),
+        frame.area().width <= theme::FREEZER_COMPACT_FOOTER_MAX_WIDTH,
+    );
+    let status = warning.map_or_else(
+        || keys.clone(),
+        |warning| format!("{} · {keys}", sanitize_external(warning)),
+    );
+    frame.render_widget(Paragraph::new(status), areas[3]);
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -637,7 +782,8 @@ mod tests {
         assert_eq!(agents[1].session.tickets_text(), "0");
     }
     use super::super::{
-        handle_key_with_scope, reconcile_scope, retain_selection, scene, SceneView, HELP_LINES,
+        handle_key_with_scope, reconcile_scope, retain_board_selection, retain_selection, scene,
+        SceneView, HELP_LINES, KEY_KITCHEN,
     };
     use super::*;
     use crate::adapter::Normalizer;
@@ -740,13 +886,10 @@ mod tests {
             false,
         );
         assert!(
-            narrow_freezer.contains("Kitchen status"),
+            narrow_freezer.contains("Freezer empty · no ended sessions"),
             "{narrow_freezer}"
         );
-        assert!(
-            !narrow_freezer.contains("FREEZER EMPTY"),
-            "{narrow_freezer}"
-        );
+        assert!(!narrow_freezer.contains("Agent kind:"), "{narrow_freezer}");
 
         let feed = crate::feed::Feed::fixed(AppMode::Live, normalized.agents).await;
         let mut table = AgentTable::default();
@@ -824,8 +967,8 @@ mod tests {
             SceneView::Freezer,
             false,
         );
-        assert!(freezer.contains("Agent kind: codex"));
-        assert!(freezer.contains("Pane locator: fictional-pane-moved"));
+        assert!(freezer.contains("FREEZER EMPTY"));
+        assert!(!freezer.contains("Agent kind: codex"));
     }
 
     fn record(id: &str, state: AgentState) -> AgentRecord {
@@ -1011,6 +1154,127 @@ mod tests {
         ] {
             assert_eq!(workspace_display_name(workspace), expected);
         }
+    }
+
+    #[tokio::test]
+    async fn freezer_real_fixture_traverses_all_retained_sessions_and_escape_layers() {
+        let raw = serde_json::from_str(include_str!("../../tests/fixtures/snapshot-working.json"))
+            .unwrap();
+        let normalized = Normalizer::default()
+            .normalize_snapshot_value(raw, "2026-08-13T12:00:00Z")
+            .unwrap();
+        let feed = Feed::fixed(AppMode::Live, normalized.agents).await;
+        let mut table = AgentTable::default();
+        table.apply(feed.snapshot().await);
+        let mut lifetime = table.agents().next().unwrap().clone();
+        for ordinal in 1..=BOARD_CAP {
+            lifetime.name = format!("Fixture lifetime {ordinal}");
+            lifetime.state = AgentState::Working;
+            apply_upsert(&mut table, lifetime.clone());
+            lifetime.state = AgentState::Ended;
+            lifetime.session.runtime_ms = ordinal as u64 * 1_000;
+            lifetime.session.tickets = ordinal as u64;
+            lifetime.session.tickets_available = Some(true);
+            apply_upsert(&mut table, lifetime.clone());
+        }
+        assert_eq!(table.board().len(), BOARD_CAP);
+        assert_eq!(
+            table
+                .board()
+                .iter()
+                .map(|entry| &entry.id)
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            BOARD_CAP
+        );
+
+        let newest = table.board().last().unwrap().id.clone();
+        let mut fallback = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        fallback
+            .draw(|frame| {
+                scene::draw_view_scoped(
+                    frame,
+                    &table,
+                    None,
+                    Utc::now(),
+                    0,
+                    super::super::canvas::ColorMode::Xterm256,
+                    false,
+                    Some(&newest),
+                    0,
+                    SceneView::Freezer,
+                    false,
+                    true,
+                    &Scope::default(),
+                )
+            })
+            .unwrap();
+        let fallback = buffer_text(&fallback);
+        assert!(fallback.contains("MISE — LIVE"), "{fallback}");
+        assert!(
+            fallback.contains(&format!("Retained session: {BOARD_CAP} of {BOARD_CAP}")),
+            "{fallback}"
+        );
+
+        for (width, height) in [(80, 24), (110, 40)] {
+            let mut selected = None;
+            let mut view = SceneView::Freezer;
+            let mut help = false;
+            let shutdown = CancellationToken::new();
+            for newest_index in 0..BOARD_CAP {
+                assert!(!handle_key_with_scope(
+                    KeyCode::Tab,
+                    &table,
+                    &mut selected,
+                    &mut view,
+                    &mut help,
+                    &mut Scope::default(),
+                    &shutdown,
+                ));
+                let ordinal = BOARD_CAP - newest_index;
+                let output = render_scene(&table, width, height, selected.as_deref(), view, false);
+                assert!(
+                    output.contains(&format!("Retained session: {ordinal} of {BOARD_CAP}")),
+                    "{width}x{height} selected {selected:?}: {output:?}"
+                );
+                assert!(output.contains(&format!("Fixture lifetime {ordinal}")));
+                let facts = format!(
+                    "Mise runtime: {} · Tickets: {ordinal}",
+                    format_duration(ordinal as u64 * 1_000)
+                );
+                assert!(output.contains(&facts), "missing {facts:?} in {output:?}");
+            }
+            assert!(!handle_key_with_scope(
+                KeyCode::Esc,
+                &table,
+                &mut selected,
+                &mut view,
+                &mut help,
+                &mut Scope::default(),
+                &shutdown,
+            ));
+            assert_eq!(selected, None);
+            assert_eq!(view, SceneView::Freezer);
+            assert!(!handle_key_with_scope(
+                KeyCode::Esc,
+                &table,
+                &mut selected,
+                &mut view,
+                &mut help,
+                &mut Scope::default(),
+                &shutdown,
+            ));
+            assert_eq!(view, SceneView::Kitchen);
+        }
+
+        let oldest = table.board()[0].id.clone();
+        let mut selected = Some(oldest);
+        lifetime.state = AgentState::Working;
+        apply_upsert(&mut table, lifetime.clone());
+        lifetime.state = AgentState::Ended;
+        apply_upsert(&mut table, lifetime);
+        retain_board_selection(&mut selected, &table);
+        assert_eq!(selected, None);
     }
 
     #[test]
@@ -1966,6 +2230,34 @@ mod tests {
                 assert!(
                     rendered.contains(expected),
                     "{width}x{height} missing {expected:?} in {rendered:?}"
+                );
+            }
+
+            let mut freezer = Terminal::new(TestBackend::new(width, height)).unwrap();
+            freezer
+                .draw(|frame| draw_freezer_scoped(frame, &table, None, now, None))
+                .unwrap();
+            let freezer = freezer
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            for expected in [
+                "Mock feed",
+                "observed 23",
+                "supported: 17, 19, 20",
+                "upgrade or downgrade Herdr to a tested release, then retry",
+                "Nothing here is real",
+                KEY_KITCHEN,
+            ] {
+                assert!(
+                    freezer.contains(expected),
+                    "freezer {width}x{height} missing {expected:?} in {freezer:?}"
                 );
             }
         }

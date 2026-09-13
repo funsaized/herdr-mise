@@ -38,7 +38,7 @@ import {
 import { ParticlePool } from "./scene/particles";
 import { TransitionEngine } from "./scene/transition";
 import { BELL_LOG_LIMIT, BellController, SharedBellAudio } from "./sound/bell";
-import { AgentStore, type Scheduler } from "./state/store";
+import { AgentStore, BOARD_LIMIT, type Scheduler } from "./state/store";
 import { AgentWebSocketClient, type SocketLike } from "./state/ws-client";
 import {
   accentIndexForId,
@@ -558,10 +558,10 @@ describe("agent store machines", () => {
   });
   it("keeps ended history FIFO-capped at 50 and releases agents", () => {
     const store = new AgentStore();
-    for (let i = 0; i < 55; i++)
+    for (let i = 0; i < BOARD_LIMIT + 5; i++)
       store.apply(upsert(agent("ended", String.fromCharCode(65 + i))));
     expect(store.snapshot().agents.size).toBe(0);
-    expect(store.snapshot().board).toHaveLength(50);
+    expect(store.snapshot().board).toHaveLength(BOARD_LIMIT);
     expect(store.snapshot().board[0]?.id).toBe("F");
   });
   it.each(["blocked", "working", "done"] as const)(
@@ -594,6 +594,7 @@ describe("agent store machines", () => {
   it("keeps each death of a reused pane on the 86 board", () => {
     const clock = new FakeClock(),
       store = new AgentStore(clock);
+    clock.time = 1_700_000_000_000;
     store.apply(snapshot(agent("working", "p-1")));
     store.apply(upsert(agent("ended", "p-1")));
     clock.advance(1_000);
@@ -601,9 +602,79 @@ describe("agent store machines", () => {
     store.apply(upsert(agent("ended", "p-1")));
     const board = store.snapshot().board;
     expect(board).toHaveLength(2);
-    expect(board[0]?.id).toBe("p-1");
-    expect(board[1]?.id.startsWith("p-1:")).toBe(true);
+    expect(board.map((entry) => entry.id)).toEqual(["p-1", "p-1:1"]);
+    expect(board[1]?.id).not.toBe(`p-1:${clock.time}`);
+    expect(board[1]?.id).not.toBe(`p-1:${board.length}`);
     expect(board.map((entry) => entry.finalState)).toEqual(["working", "idle"]);
+  });
+  it("updates the latest reused lifetime in place on a duplicate ended replay", () => {
+    const clock = new FakeClock(),
+      store = new AgentStore(clock);
+    store.apply(snapshot(agent("working", "p-1")));
+    store.apply(upsert(agent("ended", "p-1")));
+    store.apply(upsert(agent("blocked", "p-1")));
+    store.apply(upsert(agent("ended", "p-1")));
+    const before = store.snapshot().board;
+    clock.advance(5_000);
+    store.apply(
+      snapshot({
+        ...agent("ended", "p-1"),
+        name: "replayed",
+        session: { runtimeMs: 9_000, tickets: 8 },
+      }),
+    );
+    const board = store.snapshot().board;
+    expect(board.map((entry) => entry.id)).toEqual(["p-1", "p-1:1"]);
+    expect(board[0]).toEqual(before[0]);
+    expect(board[1]).toMatchObject({
+      id: "p-1:1",
+      name: "replayed",
+      runtimeMs: 9_000,
+      tickets: 8,
+      finalState: "blocked",
+      endedAt: before[1]?.endedAt,
+    });
+  });
+  it("reuses after the board cap without colliding ids and clears an evicted selection", () => {
+    const store = new AgentStore();
+    for (let i = 0; i < BOARD_LIMIT; i++) {
+      store.apply(upsert(agent("working", "p-1")));
+      store.apply(upsert(agent("ended", "p-1")));
+    }
+    expect(store.snapshot().board.map((entry) => entry.id)).toEqual([
+      "p-1",
+      ...Array.from(
+        { length: BOARD_LIMIT - 1 },
+        (_, index) => `p-1:${index + 1}`,
+      ),
+    ]);
+    store.select("p-1");
+    store.apply(upsert(agent("working", "p-1")));
+    store.apply(upsert(agent("ended", "p-1")));
+    expect(store.coarse().selectedId).toBeNull();
+    store.apply(upsert(agent("working", "p-1")));
+    store.apply(upsert(agent("ended", "p-1")));
+    const ids = store.snapshot().board.map((entry) => entry.id);
+    expect(ids).toHaveLength(BOARD_LIMIT);
+    expect(new Set(ids).size).toBe(BOARD_LIMIT);
+    expect(ids).toEqual([
+      ...Array.from(
+        { length: BOARD_LIMIT - 1 },
+        (_, index) => `p-1:${index + 2}`,
+      ),
+      "p-1",
+    ]);
+  });
+  it("keeps projection ids unique when a source id resembles a lifetime id", () => {
+    const store = new AgentStore();
+    store.apply(snapshot(agent("working", "a")));
+    store.apply(upsert(agent("ended", "a")));
+    store.apply(upsert(agent("working", "a")));
+    store.apply(upsert(agent("ended", "a")));
+    store.apply(upsert(agent("ended", "a:1")));
+    const board = store.snapshot().board;
+    expect(new Set(board.map((entry) => entry.id)).size).toBe(3);
+    expect(board.at(-1)).toMatchObject({ sourceId: "a:1" });
   });
 });
 

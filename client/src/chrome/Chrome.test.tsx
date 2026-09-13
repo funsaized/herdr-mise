@@ -571,6 +571,7 @@ describe("chrome interactions", () => {
         <SessionSummary
           entry={{
             id: "a",
+            sourceId: "a",
             name: "agent",
             accentIndex: 0,
             runtimeMs: 1_000,
