@@ -86,3 +86,13 @@ clean subjects do not contain cached Swamp bundles, and the existing isolated
 factory test must load the new selection methods referenced by the ownership
 hook. The fixtures now let pinned installation restore missing inputs and load
 the complete local method dependency set. The failed run is not acceptance.
+
+The second receipt run (`35527326828`) passed the factory tier and failed two
+browser cases. Retained traces showed an observation-age assertion racing its
+one-second display window and a large TUI scenario exhausting its 60-second
+budget during its final isolation wait. The former now fixes wall time only for
+the age-reset assertions; the latter is split into control and viewport/asset
+scenarios with every assertion retained. The three affected cases pass locally.
+Timeouts and retries are unchanged; discovery now has one additional case (122).
+The delivery model can retrieve bounded diagnostic artifacts from an already
+inspected run, avoiding reliance on truncated or missing console diagnostics.

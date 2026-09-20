@@ -8,6 +8,15 @@ const Pr = z.number().int().positive();
 const Head = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9/_-]+$/);
 type Context = {
   signal?: AbortSignal;
+  modelType?: unknown;
+  modelId?: string;
+  dataRepository?: {
+    getContent(
+      type: unknown,
+      id: string,
+      name: string,
+    ): Promise<Uint8Array | null>;
+  };
   writeResource: (
     spec: string,
     name: string,
@@ -121,6 +130,82 @@ export const extension = {
     },
   },
   methods: [
+    {
+      download_delivery_diagnostics: {
+        description:
+          "Retrieve a bounded retained diagnostic artifact from an already inspected repository run",
+        arguments: z.object({
+          runId: Pr,
+          artifact: z.enum([
+            "managed-browser-failures",
+            "swamp-managed-diagnostics",
+          ]),
+        }),
+        execute: async (
+          args: { runId: number; artifact: string },
+          context: Context,
+        ) => {
+          if (!context.dataRepository || !context.modelType || !context.modelId)
+            throw new Error("Stored run inspection unavailable");
+          const bytes = await context.dataRepository.getContent(
+            context.modelType,
+            context.modelId,
+            `run-${args.runId}`,
+          );
+          if (!bytes)
+            throw new Error("Inspect the run before downloading diagnostics");
+          const inspected = JSON.parse(new TextDecoder().decode(bytes)).result;
+          if (
+            inspected.run.databaseId !== args.runId ||
+            inspected.run.status !== "completed"
+          )
+            throw new Error("Expected a completed inspected run");
+          const matches = inspected.artifacts.artifacts.filter(
+            (artifact: { name: string }) => artifact.name === args.artifact,
+          );
+          if (
+            matches.length !== 1 ||
+            matches[0].expired ||
+            matches[0].size_in_bytes > 100 * 1024 * 1024
+          )
+            throw new Error(
+              "Diagnostic artifact missing, ambiguous, expired or oversized",
+            );
+          const directory = await Deno.makeTempDir({
+            prefix: "nightshift-delivery-diagnostics-",
+          });
+          try {
+            await gh(
+              [
+                "run",
+                "download",
+                String(args.runId),
+                "--repo",
+                repo,
+                "--name",
+                args.artifact,
+                "--dir",
+                directory,
+              ],
+              context.signal,
+            );
+            return await record(
+              context,
+              `diagnostics-${args.runId}-${args.artifact}`,
+              {
+                runId: args.runId,
+                artifact: args.artifact,
+                directory,
+                artifactId: matches[0].id,
+              },
+            );
+          } catch (error) {
+            await Deno.remove(directory, { recursive: true });
+            throw error;
+          }
+        },
+      },
+    },
     {
       require_managed_verification: {
         description:
