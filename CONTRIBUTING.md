@@ -12,8 +12,8 @@ opinions; the docs below will save you time.
   versioned protocol).
 - `docs/operations.md` — how to run, develop, and verify locally.
 - `README.md` — product behavior, deliberate boundaries, and installation.
-- `PLAN.md` — completed historical context, not a current roadmap or contract.
-  Code plus passing tests wins when prose and behavior disagree.
+- [Nightshift factory](docs/nightshift/README.md) — learn, operate, and understand
+  the software factory. Code plus passing tests wins when prose disagrees.
 
 ## Setup
 
@@ -80,7 +80,7 @@ For the tested macOS factory runtime, provision the project-local CLI with
 `npm run with:swamp-local -- npm run test:factory`. Use the same wrapper for
 `npm run orchestrator:serve` and `npm run intake:nightshift`; do not run two servers
 against one checkout. This leaves the global CLI unchanged. See the
-[local runtime instructions](docs/software-factory-implementation-2026-09-20.md#project-scoped-local-runtime-compatibility).
+[local runtime instructions](docs/nightshift/setup.md#install-the-reproducible-runtime).
 
 On sandboxed macOS, if Swamp reports `SecTrustSettingsCopyCertificates`, use
 `DENO_TLS_CA_STORE=mozilla swamp ...` (or run in a terminal with certificate

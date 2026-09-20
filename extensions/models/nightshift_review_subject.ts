@@ -136,7 +136,7 @@ export async function reviewFingerprint(
   const policies = [
     "AGENTS.md",
     "CONTRIBUTING.md",
-    "docs/software-factory-review-calibration-2026-09-20.md",
+    "docs/nightshift/review-calibration.md",
     "agent-constraints/review.md",
     "workflows/workflow-nightshift-review.yaml",
     "extensions/models/nightshift_review.ts",

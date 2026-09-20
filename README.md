@@ -218,6 +218,8 @@ contracts.
 
 - [GitHub issues](https://github.com/funsaized/herdr-mise/issues) — accepted
   work, ownership, and current status.
+- [Nightshift factory](docs/nightshift/README.md) — tutorials, operating guides,
+  reference, and design rationale.
 - [Architecture](docs/architecture.md) — components, data flow, and trust
   boundaries.
 - [Operations](docs/operations.md) — run, develop, diagnose, and troubleshoot.
