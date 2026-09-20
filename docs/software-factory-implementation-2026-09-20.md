@@ -7,16 +7,17 @@ acceptance separately; the full seven-step program is not complete.
 Foundation PR [#243](https://github.com/funsaized/herdr-mise/pull/243) merged as
 `a4fc7edb` after exact-head managed verification passed. The original
 `refactor/nightshift-factory-efficiency` branch retains the separate user-authored
-`68404eeb` lockfile commit, which was excluded from delivery. The next slice uses
-`refactor/nightshift-macos-boundary`.
+`68404eeb` lockfile commit, which was excluded from delivery. The next delivery uses
+`refactor/nightshift-macos-boundary` (PR #244). Remaining acceptance is tracked
+in [issue #245](https://github.com/funsaized/herdr-mise/issues/245).
 
 | Slice               | Implementation                                                                                                                                           | Acceptance / remaining work                                                                                                                                                                                                     |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Baseline            | Journal residence, dispatch counts, observed execution intervals, candidate and managed pointers; reusable fleet report                                  | Live report and retrieval succeeded: 34 items, 872 closed visits, 642 visits with agent timing. [Sanitized baseline](software-factory-baseline-2026-09-20.json). Historical audit workflow counts have a different cohort.      |
 | Test receipts       | npm runner receipts bind command, source before/after, HEAD, toolchain, counts and logs; stored-receipt verification rejects stale source and zero tests | Actual npm/Git subprocess tests pass. Rust receipts and automatic approved-plan selection remain to implement. Existing transcript/reviewer proof remains supported during migration.                                           |
 | Review convergence  | Shared typed contract, stable finding IDs, impact-based severity, empty passes, explicit applicability and prior findings; critical defects block        | Executable schema and severity cases pass. Historical calibration, automated disputed-finding adjudication and comparable-cohort convergence measurement remain. All seven lanes still run.                                     |
-| Managed shipping    | Trusted gate publishes a validated receipt; shipping consumes exact current head/base/control/policy evidence and rechecks PR/status movement            | Negative identity/dispatcher/freshness tests pass. Publisher must first land on main; old runs without receipts are rejected. Live handoff awaits managed delivery.                                                             |
-| Test tiers          | Fast Node tests separated from real Swamp integration; umbrella preserves required coverage                                                              | 124 fast Node tests and 65 extension tests pass; Linux worker canary is skipped on macOS. Visual-suite decomposition and measured cold/warm critical paths remain.                                                              |
+| Managed shipping    | Trusted gate publishes a validated receipt; shipping consumes exact current head/base/control/policy evidence and rechecks PR/status movement            | Negative identity/dispatcher/freshness tests pass. Publisher landed through PR #243; old runs without receipts are rejected. Live handoff awaits a passing post-rollout managed run.                                            |
+| Test tiers          | 122 fast Node cases separated from real Swamp integration and two packaging cases; browser matrix split by purpose; umbrella preserves coverage          | 122 unit and two packaging cases pass; 68 extension tests pass with the pre-existing Linux canary skipped on Mac. Browser discovery preserves all 121 cases. Controlled cold/warm critical-path measurement remains.            |
 | Runtime integration | Actual temporary-server test now loads local review/ownership/correlation extensions and exercises deterministic workflow outputs                        | Local latest Swamp rejects the existing template-cloning operation before this new coverage runs. The repository-pinned managed run passed the full integration test at `b7ebfd10`; do not remove expression provenance checks. |
 | Selective review    | Not enabled                                                                                                                                              | Needs subject/base/policy/skill fingerprints, conservative routing, historical calibration and full-review shadow data. No reuse or throughput claim.                                                                           |
 | Runtime guarantees  | Upstream and deployment dependencies unresolved                                                                                                          | Status/advance parity, atomic intake/crash recovery and macOS worker acceptance remain. Existing upstream handoff is not an installed fix.                                                                                      |
@@ -47,3 +48,18 @@ Resolved inputs: the maintainer selected `nightshift-template`, with one
 rollout. Neither factory selection nor Linux provisioning is a pending question.
 The local template-cloning compatibility problem remains separate from those
 decisions. Analytics uses completed records and does not advance a lifecycle.
+
+## September 20 follow-up validation
+
+PR #244's first managed run (`35523907481`) exposed an existing socket-fixture
+race: a second newline was written after an already complete response, racing
+client closure. The CLI and adapter fixtures now send one complete frame; their
+focused transport tests pass. No assertion, timeout or retry was weakened.
+
+Browser discovery remains 121 cases after separating matrix, interaction and
+production-fixture suites. A fresh-asset run passed 119 cases with one expected
+hosted-only skip and exposed a fixture clock-ordering race. The test now waits
+for the existing state announcement before accelerating the ten-minute dismissal;
+that focused case passes. The initial prepared run used stale local production
+assets and is retained as failed validation, not counted as a product regression.
+A new managed run is required for the combined delivery head.

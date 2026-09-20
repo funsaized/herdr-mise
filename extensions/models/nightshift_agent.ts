@@ -30,6 +30,26 @@ type AgentContext = {
   ) => Promise<unknown>;
 };
 
+export function assertProtectedLauncher(control: string, home: string) {
+  const sharedWritable = [
+    "/private/tmp",
+    "/tmp",
+    "/private/var/folders",
+    "/var/folders",
+    `${home}/.cache`,
+    `${home}/.local/share/opencode`,
+    `${home}/.local/state/opencode`,
+  ];
+  if (
+    sharedWritable.some(
+      (path) => control === path || control.startsWith(`${path}/`),
+    )
+  )
+    throw new Error(
+      "The launcher checkout cannot live in sandbox-writable temporary or provider storage",
+    );
+}
+
 export async function macosProfile(root: string, role: "actor" | "readonly") {
   const path = `${await Deno.realPath(root)}/agent-constraints/nightshift-${role}.sb`;
   if (
@@ -225,6 +245,11 @@ export const extension = {
           if (context.globalArgs.defaultProvider !== "opencode")
             throw new Error(
               "Nightshift macOS policy currently supports the OpenCode route only",
+            );
+          if (role === "actor")
+            assertProtectedLauncher(
+              await Deno.realPath(context.repoDir),
+              Deno.env.get("HOME") ?? "",
             );
           const profile = await macosProfile(context.repoDir, role);
           const evidence = await probeMacosSandbox(context.repoDir);

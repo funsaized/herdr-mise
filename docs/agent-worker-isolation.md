@@ -33,7 +33,8 @@ broker or Mach service. These limits preclude a claim that arbitrary hostile
 code is fully isolated from the maintainer account.
 
 The trusted launcher and its policies must not be editable by an actor. Builders
-use separate subject workspaces. Changing the launcher checkout during a run is
+use separate subject workspaces. The adapter rejects a launcher checkout in
+shared temporary or provider storage writable by the actor profile. Changing the launcher checkout during a run is
 prohibited by the existing checkout exclusions. Managed owner-dispatched review
 still applies to policy changes; an unmerged subject cannot grant itself a new
 profile. No concurrency expansion is authorized by passing these canaries.
@@ -59,15 +60,15 @@ requirement to provision Linux. Installed source imports are resolved at executi
 time from Swamp's restored CLI-agent extension, so clean subject checkouts do not
 need a copy of runtime extension files just to load the test suite.
 
-| Acceptance                                                      | State                                                                              |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Native source, symlink and known-credential checks              | PASS, both roles                                                                   |
-| Backend unavailable fails before launch                         | PASS                                                                               |
-| Real provider startup and parsed result                         | PASS: OpenCode `reviewer`, resolved `xai/grok-4.6`, exit 0 and parsed JSON         |
-| Representative actor edits and tests                            | PASS for fixture edits and Node test; full repository toolchain acceptance pending |
-| Inherited sockets and credential-broker coverage                | Pending                                                                            |
-| Cancellation/timeout and descendant cleanup                     | Pending                                                                            |
-| Complete home isolation / exclusive scratch / restricted egress | Not implemented; explicit local-mode limits                                        |
+| Acceptance                                                      | State                                                                                                                                                                                 |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native source, symlink and known-credential checks              | PASS, both roles                                                                                                                                                                      |
+| Backend unavailable fails before launch                         | PASS                                                                                                                                                                                  |
+| Real provider startup and parsed result                         | PASS: OpenCode `reviewer`, resolved `xai/grok-4.6`, exit 0 and parsed JSON                                                                                                            |
+| Representative actor edits and tests                            | PASS: real OpenCode builder created a Node test in a sibling checkout and reported exit 0; independent file inspection and rerun passed. Full repository toolchain acceptance pending |
+| Inherited sockets and credential-broker coverage                | Pending                                                                                                                                                                               |
+| Cancellation/timeout and descendant cleanup                     | Pending                                                                                                                                                                               |
+| Complete home isolation / exclusive scratch / restricted egress | Not implemented; explicit local-mode limits                                                                                                                                           |
 
 ENG-007 remains open until the outstanding acceptance cases are resolved. Keep
 one planner, two builders or seven review lanes, with major phases mutually

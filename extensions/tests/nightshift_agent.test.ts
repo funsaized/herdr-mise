@@ -1,4 +1,24 @@
-import { macosProfile, probeMacosSandbox } from "../models/nightshift_agent.ts";
+import {
+  assertProtectedLauncher,
+  macosProfile,
+  probeMacosSandbox,
+} from "../models/nightshift_agent.ts";
+
+Deno.test("an actor cannot use a launcher in shared writable sandbox storage", () => {
+  assertProtectedLauncher("/Users/example/projects/control", "/Users/example");
+  for (const path of [
+    "/private/tmp/control",
+    "/Users/example/.cache/control",
+  ]) {
+    let rejected = false;
+    try {
+      assertProtectedLauncher(path, "/Users/example");
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error(`Writable launcher accepted: ${path}`);
+  }
+});
 
 Deno.test({
   name: "macOS role profiles enforce native source and credential canaries",

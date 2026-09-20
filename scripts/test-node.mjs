@@ -2,13 +2,14 @@ import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const [tier, ...args] = process.argv.slice(2);
-if (!["unit", "factory"].includes(tier))
-  throw new Error("Expected unit or factory test tier");
+if (!["unit", "factory", "release"].includes(tier))
+  throw new Error("Expected unit, factory or release test tier");
 const files = readdirSync(new URL(".", import.meta.url))
   .filter(
     (name) =>
       name.endsWith(".test.mjs") &&
-      name.endsWith(".integration.test.mjs") === (tier === "factory"),
+      name.endsWith(".integration.test.mjs") === (tier === "factory") &&
+      name.endsWith(".release.test.mjs") === (tier === "release"),
   )
   .sort()
   .map((name) => `scripts/${name}`);
