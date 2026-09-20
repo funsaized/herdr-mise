@@ -22,7 +22,7 @@ const result = spawnSync(
     "--allow-write",
     "--allow-env",
     "--allow-sys=uid,gid",
-    "--allow-run=bwrap,git,npm,node,/usr/bin/sandbox-exec",
+    "--allow-run=bwrap,git,npm,node,cargo,rustc,/usr/bin/sandbox-exec",
     "extensions/tests",
   ],
   { stdio: "inherit" },

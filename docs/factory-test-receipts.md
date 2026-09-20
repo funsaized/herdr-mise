@@ -39,6 +39,19 @@ project/test-title pairs. Use `npm run test:visual` to prepare production assets
 Stale production assets can make every fixture-backed test fail while visual
 mode tests still pass.
 
-Rust receipts and automatic structured selection from approved plans remain
-separate work. Existing builder-transcript/reviewer-run proof is supported during
-migration; no receipt is synthesized from old test prose.
+`@funsaized/herdr-mise-rust.test_subject` runs one exact named test with
+`target: lib` or `target: integration` plus `targetName`. It fixes the package to
+`herdr-mise-server`, uses `--locked` and `--exact`, and rejects zero, ignored-only,
+failed or source-mutating executions. The stored receipt includes Cargo/rustc
+versions, argv, source digests, counts, invocation and bounded log pointers.
+`verify_test_receipt` uses the same persisted-source check as npm. The Rust path
+accepts uncommitted source so a builder can prove its proposed changes before
+commit; matching HEAD alone is insufficient.
+
+Both runners share bounded streaming, cancellation and output-truncation handling.
+These methods execute candidate tests under the caller's existing execution
+boundary; they do not provision an OS sandbox or establish credential isolation.
+
+Automatic structured selection from approved plans remains separate work.
+Existing builder-transcript/reviewer-run proof is supported during migration;
+no receipt is synthesized from old test prose.

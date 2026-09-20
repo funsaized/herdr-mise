@@ -2,6 +2,11 @@
 import { z } from "npm:zod@4.4.3";
 import { subjectPath, subjectRoot } from "./subject_root.ts";
 import {
+  rustReceiptFiles,
+  rustReceiptMethods,
+  rustReceiptResources,
+} from "./rust_test_receipt.ts";
+import {
   readRegularFile,
   sha256 as sha256Bytes,
 } from "./verification_evidence.ts";
@@ -681,7 +686,9 @@ export const model = {
   type: "@funsaized/herdr-mise-rust",
   version: "2026.09.12.3",
   globalArguments: GlobalArguments,
+  files: rustReceiptFiles,
   resources: {
+    ...rustReceiptResources,
     dependencyUpdate: {
       description: "Precise Cargo dependency update and lockfile identities",
       schema: z.object({
@@ -710,6 +717,7 @@ export const model = {
     },
   },
   methods: {
+    ...rustReceiptMethods,
     updateDependency: {
       description:
         "Update one Cargo dependency to an explicit version in a clean subject",
