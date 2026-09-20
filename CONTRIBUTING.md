@@ -75,6 +75,13 @@ Managed CI uses Node 22 and the Rust version in `rust-toolchain.toml`.
 `.swamp.yaml`; extension tests use Swamp's bundled Deno (or `DENO_EXEC_PATH`).
 `npm run doctor` reports actual versions and rejects direct dependency drift.
 Run both `npm ci` commands after lockfile changes, not just `npm install`.
+For the tested macOS factory runtime, provision the project-local CLI with
+`swamp model method run nightshift-github install_local_swamp`, then run
+`npm run with:swamp-local -- npm run test:factory`. Use the same wrapper for
+`npm run orchestrator:serve` and `npm run intake:nightshift`; do not run two servers
+against one checkout. This leaves the global CLI unchanged. See the
+[local runtime instructions](docs/software-factory-implementation-2026-09-20.md#project-scoped-local-runtime-compatibility).
+
 On sandboxed macOS, if Swamp reports `SecTrustSettingsCopyCertificates`, use
 `DENO_TLS_CA_STORE=mozilla swamp ...` (or run in a terminal with certificate
 access). This selects Mozilla trust roots; it does not disable TLS verification.
