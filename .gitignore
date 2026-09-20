@@ -23,3 +23,6 @@
 # Local extension sources (developer-specific, not shared)
 .swamp-sources.yaml
 # END swamp managed section
+
+# Checksum-pinned project tools; provisioned through Swamp
+/.tools/

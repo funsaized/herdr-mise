@@ -138,3 +138,40 @@ complete macOS worker acceptance, model replay, and controlled cold/warm
 measurements remain unresolved. All seven review lanes and existing concurrency
 limits remain in force; delivery of these controls is not a measured throughput
 or defect-escape improvement.
+
+## Project-scoped local runtime compatibility
+
+PR #247 merged as `cb4a0bca` after managed execution `35529938868` and exact-head
+gate `35530726370` passed at `53619538`; the shipping consumer accepted the receipt.
+
+The CI-pinned Mac binary (`20260904.044433.0`) now passes all three real factory
+integration tests, including the isolated serve/template-cloning contract that
+fails with the newer global CLI. A project-scoped launcher verifies its pinned
+size and SHA-256 before use and propagates its PATH to subprocesses. Provisioning
+uses the existing GitHub integration, bounded streaming, temporary-file cleanup,
+and replacement only after integrity succeeds. Negative tests cover truncated,
+corrupted, oversized, failed and aborted downloads, plus missing, altered and
+symlinked installed binaries. The global Swamp installation remains unchanged.
+
+Provision and use on macOS:
+
+```sh
+swamp model method run nightshift-github install_local_swamp
+npm run swamp:local -- --version
+npm run with:swamp-local -- npm run test:factory
+npm run with:swamp-local -- npm run orchestrator:serve
+npm run with:swamp-local -- npm run intake:nightshift
+```
+
+The existing `SWAMP_SERVE_ADMIN` requirement still applies. Use one server for
+all factory/intake callers; do not start a second server against the same checkout.
+Stop an existing newer server before switching its runtime. Provisioning does not
+stop or replace a running server. `.tools/` is ignored and must be provisioned
+in each trusted control checkout. The launcher fails if the runtime is missing or
+modified; it never silently falls back to the global CLI. The Mac asset hashes
+were read from the exact GitHub release's published SHA-256 metadata.
+
+This establishes a tested compatibility path, not a fix in the newer CLI. The
+upstream status/advance, atomic recovery, full worker acceptance and pilot
+measurement items remain open. Managed Linux verification retains its existing
+pinned bootstrap and protected delivery gate.

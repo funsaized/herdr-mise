@@ -41,7 +41,9 @@
     "validate:managed-verification-evidence": "node scripts/managed-verification-evidence.mjs",
     "orchestrator:serve": "sh scripts/nightshift-serve.sh",
     "intake:nightshift": "node scripts/nightshift-intake.mjs intake/nightshift-features.json",
-    "test:release": "node scripts/test-node.mjs release"
+    "test:release": "node scripts/test-node.mjs release",
+    "swamp:local": "node scripts/with-swamp-local.mjs swamp",
+    "with:swamp-local": "node scripts/with-swamp-local.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
