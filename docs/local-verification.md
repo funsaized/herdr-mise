@@ -4,6 +4,19 @@ Pull-request verification runs through a maintainer-dispatched GitHub workflow.
 Local Swamp runs are optional advisory feedback and cannot satisfy branch
 protection.
 
+Nightshift shipping consumes `swamp-managed-receipt`, emitted by the trusted gate
+only after validating the managed attestation. The factory checks its originating
+gate and producer, current head/base/control identities, policy/workflow digests,
+dispatcher and freshness. A green status alone is insufficient. The shipping
+workflow records that receipt instead of rerunning the full local suite; focused
+development checks and post-merge deployed verification remain required.
+
+Migration: the receipt-producing gate must first be installed on canonical main.
+Older gate runs have no receipt and cannot satisfy the new factory shipping
+method. Dispatch managed verification against current main to obtain one. Missing
+or stale evidence is a request for a fresh managed run, not a reason to rebuild
+unchanged product code or repeatedly retry local browsers.
+
 ## Contributor flow
 
 1. Use narrow checks while developing.

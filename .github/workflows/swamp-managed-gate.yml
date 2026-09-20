@@ -209,6 +209,45 @@ jobs:
             --artifact-dir "$RUNNER_TEMP/attestation" \
             --request "$RUNNER_TEMP/request/resolved.json" \
             --context "$RUNNER_TEMP/gate-context.json"
+      - name: Record validated managed receipt
+        if: steps.identity.outputs.conclusion == 'success' && steps.validate.outcome == 'success'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const root = process.env.RUNNER_TEMP;
+            const request = JSON.parse(fs.readFileSync(`${root}/request/resolved.json`, 'utf8'));
+            const digest = (path) => crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex');
+            const receipt = {
+              schemaVersion: 1,
+              repository: 'funsaized/herdr-mise',
+              prNumber: request.prNumber,
+              headSha: request.head.sha,
+              baseSha: request.base.sha,
+              controlSha: request.controlSha,
+              gateRunId: String(context.runId),
+              gateRunAttempt: String(process.env.GITHUB_RUN_ATTEMPT),
+              producerRunId: request.workflow.runId,
+              producerWorkflowPath: request.workflow.path,
+              actor: request.actor,
+              trustBoundary: request.trustBoundary,
+              verifiedAt: new Date().toISOString(),
+              policySha256: digest(`${root}/control/verification/managed-policy.json`),
+              workflowSha256: digest(`${root}/control/workflows/workflow-verification.yaml`),
+              manifestSha256: digest(`${root}/attestation/manifest.json`),
+            };
+            fs.mkdirSync(`${root}/receipt`);
+            fs.writeFileSync(`${root}/receipt/receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`);
+      - name: Retain validated managed receipt
+        id: receipt
+        if: steps.identity.outputs.conclusion == 'success' && steps.validate.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: swamp-managed-receipt
+          path: ${{ runner.temp }}/receipt/receipt.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Set exact-SHA managed verification status
         if: always() && steps.correlate.outputs.safe == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -216,9 +255,10 @@ jobs:
           MANAGED_CONCLUSION: ${{ steps.identity.outputs.conclusion }}
           SOURCE_SHA: ${{ steps.correlate.outputs.head_sha }}
           VALIDATION_OUTCOME: ${{ steps.validate.outcome }}
+          RECEIPT_OUTCOME: ${{ steps.receipt.outcome }}
         with:
           script: |
-            const success = process.env.MANAGED_CONCLUSION === 'success' && process.env.VALIDATION_OUTCOME === 'success';
+            const success = process.env.MANAGED_CONCLUSION === 'success' && process.env.VALIDATION_OUTCOME === 'success' && process.env.RECEIPT_OUTCOME === 'success';
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,

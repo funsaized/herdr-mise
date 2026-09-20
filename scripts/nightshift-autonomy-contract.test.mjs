@@ -195,11 +195,19 @@ test("Nightshift parks fresh failed review rounds at cycle four", () => {
   );
 });
 
-test("Nightshift ships from an isolated clean worktree", () => {
+test("Nightshift ships only after consuming the trusted managed receipt", () => {
   const ship = readFileSync("workflows/workflow-nightshift-ship.yaml", "utf8");
-  assert.match(ship, /methodName: prepare_workspace/);
-  assert.match(ship, /herdr-mise-ship-/);
-  assert.match(ship, /nightshift\/ship-/);
+  assert.match(ship, /methodName: require_managed_verification/);
+  assert.match(ship, /baseCommit: \$\{{\s*inputs\.baseCommit\s*}}/);
+  assert.match(ship, /name: managed-verification/);
+  assert.match(
+    ship,
+    /step: record-managed-verification, condition: \{ type: succeeded \}/,
+  );
+  assert.doesNotMatch(
+    ship,
+    /methodName: prepare_workspace|workflowIdOrName: verification/,
+  );
   assert.match(
     ship,
     /methodName: require_issue_link[\s\S]*?commit: \$\{{\s*inputs\.commit\s*}}/,
