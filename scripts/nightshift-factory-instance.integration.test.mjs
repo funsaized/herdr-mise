@@ -446,6 +446,24 @@ test(
       assert.equal(report.json.factoryName, "phase0-runtime-main");
 
       await stopServe(serve);
+      // The local hook applies to transitions with an explicit result-evidence gate.
+      const correlatedTemplate = structuredClone(definition);
+      correlatedTemplate.id = "e5ddf284-ed2c-48f2-a304-2163908c3082";
+      correlatedTemplate.name = "phase0-factory-template";
+      correlatedTemplate.globalArguments.stages[0].transitions[0].gates.push({
+        type: "evidence-recorded",
+        config: { name: "workflow-run", requireField: { status: "succeeded" } },
+      });
+      await writeFile(
+        join(
+          repo,
+          "models",
+          "@swamp",
+          "software-factory",
+          "phase0-factory-template.yaml",
+        ),
+        JSON.stringify(correlatedTemplate),
+      );
       for (const file of [
         "software_factory_run_correlation.ts",
         "nightshift_review.ts",
@@ -521,6 +539,43 @@ test(
         withoutEvidence.status,
         0,
         "no self-attested workflow completion",
+      );
+      for (const [name, payload] of [
+        [
+          "record_artifact",
+          { name: "summary", payload: { text: "forged completion" } },
+        ],
+        [
+          "record_evidence",
+          {
+            name: "workflow-run",
+            payload: { status: "succeeded", runId: "missing-workflow-run" },
+          },
+        ],
+      ]) {
+        expectOk(
+          runRemote(
+            repo,
+            serve.server,
+            ["model", "method", "run", "nightshift-run-901", name, "--stdin"],
+            JSON.stringify({ workItem: "901", ...payload }),
+          ),
+        );
+      }
+      const forged = method(
+        repo,
+        serve.server,
+        "nightshift-run-901",
+        "advance",
+        [
+          ["workItem", "901"],
+          ["transition", "finish"],
+        ],
+      );
+      assert.notEqual(forged.status, 0);
+      assert.match(
+        `${forged.stdout}\n${forged.stderr}`,
+        /expected one run record/,
       );
       expectOk(
         runRemote(repo, serve.server, ["workflow", "validate", "phase0-noop"]),
