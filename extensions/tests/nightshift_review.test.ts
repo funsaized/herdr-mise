@@ -101,3 +101,83 @@ Deno.test("missing lanes, duplicate identities and inconsistent verdicts fail cl
   inapplicable[2].findings = [defect];
   reject(inapplicable);
 });
+
+Deno.test("adjudication uses stored disputed findings from distinct cycles without demotion", async () => {
+  const { extension } = await import("../models/nightshift_review.ts");
+  const evaluate = extension.methods[0].evaluate_review.execute;
+  const input = reviews();
+  input[2].verdict = "fail";
+  input[2].findings = [{ ...defect, disposition: "disputed" }];
+  const prior = normalizeReviews(input).findings;
+  let cycle = 2;
+  let previous = prior;
+  let stored: ReturnType<typeof normalizeReviews> | undefined;
+  const context = {
+    modelType: "@swamp/software-factory",
+    modelId: "fixture",
+    dataRepository: {
+      getContent: async (_type: unknown, _id: string, name: string) =>
+        new TextEncoder().encode(
+          JSON.stringify(
+            name.startsWith("state-")
+              ? {
+                  workItem: "245",
+                  stageId: "code-review",
+                  status: "active",
+                  cycles: { "code-review": cycle },
+                }
+              : {
+                  workItem: "245",
+                  stageId: "code-review",
+                  cycle: 1,
+                  payload: { findings: previous },
+                },
+          ),
+        ),
+    },
+    writeResource: async (_spec: string, _name: string, value: unknown) => {
+      stored = value as ReturnType<typeof normalizeReviews>;
+      return {};
+    },
+  };
+  const args = {
+    workItem: "245",
+    runId: "review-2",
+    phase: "code" as const,
+    reviews: input,
+    adjudicateDisputes: true,
+  };
+  await evaluate(args, context);
+  if (
+    stored?.verdict !== "fail" ||
+    !stored.findings.some((f) => f.id === "ADJUDICATION") ||
+    !stored.findings.some(
+      (f) => f.id === "frontend:pager-occlusion" && f.severity === "high",
+    )
+  )
+    throw new Error("Repeated dispute was ignored or its blocker demoted");
+  cycle = 1;
+  await evaluate(args, context);
+  if (stored?.findings.some((f) => f.id === "ADJUDICATION"))
+    throw new Error("Same-cycle retry counted as two rounds");
+  cycle = 2;
+  previous = prior.map((f) => ({
+    ...f,
+    description: f.description.replace(
+      "Disposition: disputed",
+      "Disposition: open",
+    ),
+  }));
+  await evaluate(args, context);
+  if (stored?.findings.some((f) => f.id === "ADJUDICATION"))
+    throw new Error("First dispute triggered adjudication");
+  previous = prior;
+  await evaluate({ ...args, adjudicateDisputes: false }, context);
+  if (stored?.findings.some((f) => f.id === "ADJUDICATION"))
+    throw new Error("Legacy routing changed");
+  input[2].findings[0].disposition = "fixed";
+  input[2].verdict = "pass";
+  await evaluate(args, context);
+  if (stored?.findings.some((f) => f.id === "ADJUDICATION"))
+    throw new Error("Fixed defect still requested adjudication");
+});

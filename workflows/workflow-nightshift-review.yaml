@@ -23,6 +23,9 @@ inputs:
     subject:
       type: object
       additionalProperties: true
+    adjudicateDisputes:
+      type: boolean
+      default: false
     testReceipts:
       type: array
       default: []
@@ -274,6 +277,7 @@ jobs:
             workItem: ${{ inputs.workItem }}
             runId: ${{ run.id }}
             phase: ${{ inputs.phase }}
+            adjudicateDisputes: ${{ inputs.adjudicateDisputes }}
             reviews: >-
               ${{ [data.latest("nightshift-test-coverage", "invocation-nightshift-" + inputs.workItem + "-" + inputs.phase + "-test-coverage-" + run.id).attributes.parsedResponse,
                     data.latest("nightshift-clean-code", "invocation-nightshift-" + inputs.workItem + "-" + inputs.phase + "-clean-code-" + run.id).attributes.parsedResponse,
@@ -329,4 +333,4 @@ jobs:
           - { step: record-review, condition: { type: succeeded } }
     dependsOn:
       - { job: verify-tests, condition: { type: succeeded } }
-version: 9
+version: 10

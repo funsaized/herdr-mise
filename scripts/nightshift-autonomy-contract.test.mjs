@@ -133,6 +133,15 @@ test("Nightshift template preserves legacy gates and adds prior-review context w
       .replace(/^ +previousFindings: .*\n/gmu, "")
       .replace(/^ +structuredTests: true\n/gmu, "")
       .replace(/^ +testReceipts: .*\n/gmu, "")
+      .replace(/^ +adjudicateDisputes: true\n/gmu, "")
+      .replace(
+        /              - name: adjudicate\n[\s\S]*?(?=              - name: rework)/gu,
+        "",
+      )
+      .replace(
+        / && !artifacts\.(?:plan|code)_review\.findings\.exists\(f, f\.id == "ADJUDICATION" && f\.category == "round:adjudication"\)/gu,
+        "",
+      )
       .replace(", outOfScope, testSelection]", ", outOfScope]")
       .replace(
         /                        testSelection:\n[\s\S]*?(?=                        risks:)/u,
@@ -248,4 +257,30 @@ test("Nightshift sends ship-prep feedback through build and code review", () => 
     shipPrep,
     /artifact: release-candidate,[\s\S]+recordedThisCycle: true/,
   );
+});
+
+test("new templates park repeated disputes without offering competing automatic routes", () => {
+  for (const phase of ["plan", "code"]) {
+    const start = template.indexOf(`        - id: ${phase}-review\n`);
+    const stage = template.slice(
+      start,
+      template.indexOf("\n        - id:", start + 1),
+    );
+    assert.match(stage, /adjudicateDisputes: true/u);
+    assert.match(stage, /name: adjudicate\n\s+to: parked/u);
+    const rework = stage.slice(
+      stage.indexOf("              - name: rework\n"),
+      stage.indexOf("              - name: retry\n"),
+    );
+    assert.equal(
+      (
+        rework.match(
+          /!artifacts\.(?:plan|code)_review\.findings\.exists\(f, f\.id == "ADJUDICATION"/gu,
+        ) ?? []
+      ).length,
+      2,
+    );
+    assert.match(stage, /blocking: \[critical, high\]/u);
+  }
+  assert.doesNotMatch(factory, /adjudicateDisputes|name: adjudicate/u);
 });
