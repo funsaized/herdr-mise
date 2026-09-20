@@ -151,11 +151,18 @@ test(
       for (const path of factory.files) {
         assert.ok(!path.startsWith("/") && !path.split("/").includes(".."));
         await mkdir(dirname(join(repo, path)), { recursive: true });
-        await cp(
-          join(process.env.SWAMP_TEST_EXTENSION_REPO ?? root, path),
-          join(repo, path),
-          { recursive: true },
-        );
+        try {
+          await cp(
+            join(process.env.SWAMP_TEST_EXTENSION_REPO ?? root, path),
+            join(repo, path),
+            { recursive: true },
+          );
+        } catch (error) {
+          // A clean managed subject has no installed bundle. The pinned install
+          // below restores missing inputs; an explicit provisioned root must work.
+          if (error.code !== "ENOENT" || process.env.SWAMP_TEST_EXTENSION_REPO)
+            throw error;
+        }
       }
       run(["extension", "install"]);
       for (const file of [

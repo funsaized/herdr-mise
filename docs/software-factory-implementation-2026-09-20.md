@@ -80,3 +80,9 @@ The extension suite passes 72 tests with the existing Linux-only canary ignored
 on Mac; 122 fast Node tests pass. Local factory-cloning compatibility remains an
 upstream blocker distinct from the receipt DAG. This slice still requires its
 own exact-head managed run before merge.
+
+PR #246's first managed run (`35527051796`) found fixture provisioning gaps:
+clean subjects do not contain cached Swamp bundles, and the existing isolated
+factory test must load the new selection methods referenced by the ownership
+hook. The fixtures now let pinned installation restore missing inputs and load
+the complete local method dependency set. The failed run is not acceptance.
