@@ -175,3 +175,40 @@ This establishes a tested compatibility path, not a fix in the newer CLI. The
 upstream status/advance, atomic recovery, full worker acceptance and pilot
 measurement items remain open. Managed Linux verification retains its existing
 pinned bootstrap and protected delivery gate.
+
+## Shared-agent lifecycle release adoption
+
+PR [#248](https://github.com/funsaized/herdr-mise/pull/248) delivered the
+project-local Mac runtime as `23276b45`. Managed execution `35539301325` and
+exact-head gate `35539991822` passed at `10cdeedd`, and the shipping consumer
+accepted the receipt before merge.
+
+The maintainer explicitly approved publishing and adopting
+`@funsaized/cli-agent@2026.09.20.1`. Publication succeeded on the public stable
+channel. The source is preserved at
+[`4dcba178`](https://github.com/funsaized/swamp-cli-agent/commit/4dcba178f4ace2e5a5a9542b35684d67e208bb78),
+based on `release/funsaized-cli-agent`, whose source exactly matched the locally
+installed `2026.09.05.1`. The previously committed Nightshift lock still declared
+`2026.09.03.2`; this adoption reconciles that difference and includes the existing
+Mac provider-credential fix as well as the new lifecycle corrections.
+
+The new executor terminates ordinary POSIX descendants even after the provider
+parent exits, forwards caller cancellation, and stops cancelled retry delays.
+An upstream regression reproduced the leak before the fix. All 220 shared-source
+tests pass (one existing Linux-only skip on Mac); registry formatting, quality
+and content-bound review checks pass. The release dry run retains the expected
+warnings that agent/orb execution uses subprocesses.
+
+The installed source bytes match the reviewed source. Six fresh probes against
+the installed release pass through the real Nightshift Seatbelt policies, with
+zero surviving fixture processes across wall timeout, early parent exit and
+caller cancellation for both roles. [Sanitized installed-release evidence](software-factory-worker-lifecycle-2026-09-20.json)
+records the source identity and limits. Full worker acceptance remains open for
+runtime-to-context cancellation wiring, credential brokers, and the complete
+repository toolchain. Detached process groups are not covered. Concurrency stays
+at one planner, two builders and seven reviewers.
+
+Local adoption validation: all three real factory integration cases pass with the
+project-pinned Mac CLI, alongside 76 extension tests (one existing Linux-only
+skip), 124 fast Node tests, lint and formatting. The dependency change requires
+its own exact-head managed run before merge.

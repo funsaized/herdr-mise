@@ -1,0 +1,69 @@
+{
+  "observedAt": "2026-09-20T22:39:28.872Z",
+  "results": [
+    {
+      "role": "readonly",
+      "scenario": "wall",
+      "passed": true,
+      "survivors": 0,
+      "timedOut": true,
+      "cancelled": false,
+      "durationMs": 7026
+    },
+    {
+      "role": "readonly",
+      "scenario": "early-exit",
+      "passed": true,
+      "survivors": 0,
+      "timedOut": false,
+      "cancelled": false,
+      "durationMs": 2290
+    },
+    {
+      "role": "readonly",
+      "scenario": "cancel",
+      "passed": true,
+      "survivors": 0,
+      "timedOut": false,
+      "cancelled": true,
+      "durationMs": null
+    },
+    {
+      "role": "actor",
+      "scenario": "wall",
+      "passed": true,
+      "survivors": 0,
+      "timedOut": true,
+      "cancelled": false,
+      "durationMs": 7034
+    },
+    {
+      "role": "actor",
+      "scenario": "early-exit",
+      "passed": true,
+      "survivors": 0,
+      "timedOut": false,
+      "cancelled": false,
+      "durationMs": 2292
+    },
+    {
+      "role": "actor",
+      "scenario": "cancel",
+      "passed": true,
+      "survivors": 0,
+      "timedOut": false,
+      "cancelled": true,
+      "durationMs": null
+    }
+  ],
+  "extension": "@funsaized/cli-agent",
+  "version": "2026.09.20.1",
+  "sourceCommit": "4dcba178f4ace2e5a5a9542b35684d67e208bb78",
+  "installedSourceSha256": "aab683ee5382361d90db76f0bc7a8b1506fe24d9a7a8ef35d7986cd3d5fb4255",
+  "scope": "Actual installed runCli executor through Nightshift Seatbelt profiles; fixed disposable Node fixtures, no provider or credential access.",
+  "limits": [
+    "Only descendants remaining in the owned process group",
+    "Runtime-level cancellation requires a supplied method-context abort signal",
+    "No credential-broker or full host-isolation claim"
+  ]
+}
