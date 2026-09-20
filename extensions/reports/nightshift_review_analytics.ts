@@ -352,12 +352,7 @@ export async function loadFactoryInput(
       const data = resources.find(
         (candidate) => candidate.data.name === name,
       )?.data;
-      const content = await readJson(
-        repository,
-        modelType,
-        modelId,
-        name,
-      );
+      const content = await readJson(repository, modelType, modelId, name);
       if (data === undefined || content === null) continue;
       const workItem =
         stringValue(content.workItem) ?? name.slice("state-".length);
