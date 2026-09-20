@@ -56,3 +56,8 @@ execution from a freshly revalidated stored receipt, a matching builder
 invocation, or an independently executed exact test. Missing invocationId alone is not failure when independent proof exists.
 Neither prose nor an old passing run proves the current source. If the test
 selection ran zero tests or does not exercise the change, it is not proof.
+
+[Historical calibration cases](../docs/software-factory-review-calibration-2026-09-20.md)
+illustrate the difference between observed failures, missing boundary proof,
+infrastructure failures, harmless cleanup and duplicated cross-lane findings.
+They are examples for judgment, not permission to automatically demote a defect.

@@ -116,7 +116,7 @@ globalArguments:
                       config: { artifact: plan-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication")'
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false)) && artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
                           message: Repeated blocking disputes require human adjudication.
               - name: rework
                 to: planning
@@ -125,7 +125,7 @@ globalArguments:
                       config: { artifact: plan-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail") && !artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication")'
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail") && !artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Rework is available only for a failed plan review round.
                     - type: max-cycles
                       config: { stage: plan-review, limit: 4 }
@@ -136,7 +136,7 @@ globalArguments:
                       config: { artifact: plan-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail") && !artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication")'
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail") && !artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Parking is available only for a failed plan review round.
                     - type: max-cycles
                       config: { stage: plan-review, limit: 4, invert: true }
@@ -290,7 +290,7 @@ globalArguments:
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication")'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false)) && artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
                           message: Repeated blocking disputes require human adjudication.
               - name: rework
                 to: building
@@ -299,7 +299,7 @@ globalArguments:
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false)) && !artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication")'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false)) && !artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Rework is available only for a failed code review round.
                     - type: max-cycles
                       config: { stage: code-review, limit: 4 }
@@ -310,7 +310,7 @@ globalArguments:
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false)) && !artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication")'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false)) && !artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Parking is available only for a failed code review round.
                     - type: max-cycles
                       config: { stage: code-review, limit: 4, invert: true }

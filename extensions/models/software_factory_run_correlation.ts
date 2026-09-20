@@ -155,6 +155,8 @@ function fail(message: string): CheckResult {
 
 const workItemMethods = [
   "evaluate_review",
+  "capture_review_subject",
+  "verify_review_subject",
   "prepare_test_selection",
   "record_test_results",
   "start",

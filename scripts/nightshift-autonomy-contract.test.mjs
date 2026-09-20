@@ -139,7 +139,7 @@ test("Nightshift template preserves legacy gates and adds prior-review context w
         "",
       )
       .replace(
-        / && !artifacts\.(?:plan|code)_review\.findings\.exists\(f, f\.id == "ADJUDICATION" && f\.category == "round:adjudication"\)/gu,
+        / && !artifacts\.(?:plan|code)_review\.findings\.exists\(f, f\.id == "ADJUDICATION" && f\.category == "round:adjudication" && !f\.\?resolved\.orValue\(false\)\)/gu,
         "",
       )
       .replace(", outOfScope, testSelection]", ", outOfScope]")
