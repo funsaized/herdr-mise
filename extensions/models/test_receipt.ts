@@ -1,11 +1,28 @@
 /** Source-bound execution evidence; test relevance remains an independent review. */
-export type TestReporter = "node-tap" | "vitest-json" | "playwright-json";
+export type TestReporter =
+  | "node-tap"
+  | "vitest-json"
+  | "playwright-json"
+  | "rust-libtest";
 
 export function testCounts(output: string, reporter: TestReporter) {
   let passed: number;
   let failed: number;
   let skipped: number;
-  if (reporter === "node-tap") {
+  if (reporter === "rust-libtest") {
+    const summaries = [
+      ...output.matchAll(
+        /^test result: (ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out; finished in .+$/gm,
+      ),
+    ];
+    if (summaries.length !== 1 || summaries[0][1] !== "ok")
+      throw new Error("Expected one successful Rust libtest summary");
+    passed = Number(summaries[0][2]);
+    failed = Number(summaries[0][3]);
+    skipped = Number(summaries[0][4]);
+    if (Number(summaries[0][5]) !== 0)
+      throw new Error("Benchmarks are not test proof");
+  } else if (reporter === "node-tap") {
     const count = (name: string) => {
       const matches = [
         ...output.matchAll(new RegExp(`^# ${name} (\\d+)\\s*$`, "gm")),

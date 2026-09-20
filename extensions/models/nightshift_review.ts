@@ -38,6 +38,7 @@ const Arguments = z.object({
     .max(128),
   phase: z.enum(["plan", "code"]),
   reviews: z.array(LaneReview).length(7),
+  adjudicateDisputes: z.boolean().default(false),
 });
 
 export function normalizeReviews(reviews: z.infer<typeof LaneReview>[]) {
@@ -108,6 +109,31 @@ export function normalizeReviews(reviews: z.infer<typeof LaneReview>[]) {
   return { schemaVersion: 2, verdict, reviews: parsed, findings };
 }
 
+/** Compare stable, namespaced defects; lane/round observations never adjudicate. */
+export function repeatedDisputes(
+  current: ReturnType<typeof normalizeReviews>["findings"],
+  previous: Array<{
+    id: string;
+    severity: string;
+    description: string;
+    resolved?: boolean;
+  }>,
+) {
+  const disputed = (finding: {
+    severity: string;
+    description: string;
+    resolved?: boolean;
+  }) =>
+    !finding.resolved &&
+    ["high", "critical"].includes(finding.severity) &&
+    finding.description.endsWith("\nDisposition: disputed");
+  const prior = new Set(previous.filter(disputed).map((finding) => finding.id));
+  return current
+    .filter((finding) => disputed(finding) && prior.has(finding.id))
+    .map((finding) => finding.id)
+    .sort();
+}
+
 export const extension = {
   type: "@swamp/software-factory",
   resources: {
@@ -143,6 +169,15 @@ export const extension = {
         execute: async (
           args: z.infer<typeof Arguments>,
           context: {
+            modelType?: unknown;
+            modelId?: string;
+            dataRepository?: {
+              getContent(
+                type: unknown,
+                id: string,
+                name: string,
+              ): Promise<Uint8Array | null>;
+            };
             writeResource: (
               spec: string,
               name: string,
@@ -151,6 +186,76 @@ export const extension = {
           },
         ) => {
           const result = normalizeReviews(args.reviews);
+          if (args.adjudicateDisputes) {
+            if (
+              !context.dataRepository ||
+              !context.modelId ||
+              !context.modelType
+            )
+              throw new Error(
+                "Persisted prior review unavailable for adjudication",
+              );
+            const read = async (name: string) => {
+              const bytes = await context.dataRepository!.getContent(
+                context.modelType,
+                context.modelId!,
+                name,
+              );
+              return bytes ? JSON.parse(new TextDecoder().decode(bytes)) : null;
+            };
+            const stageId = `${args.phase}-review`;
+            const [state, prior] = await Promise.all([
+              read(`state-${args.workItem}`),
+              read(`artifact-${args.workItem}-${stageId}`),
+            ]);
+            if (
+              state?.workItem !== args.workItem ||
+              state.stageId !== stageId ||
+              state.status !== "active"
+            )
+              throw new Error("Adjudication requires the current review stage");
+            const cycle = z
+              .number()
+              .int()
+              .positive()
+              .parse(state.cycles?.[stageId]);
+            if (prior) {
+              const previous = z
+                .object({
+                  workItem: z.literal(args.workItem),
+                  stageId: z.literal(stageId),
+                  cycle: z.number().int().positive(),
+                  payload: z.object({
+                    findings: z.array(
+                      z.object({
+                        id: z.string(),
+                        severity: z.string(),
+                        description: z.string(),
+                        resolved: z.boolean().optional(),
+                      }),
+                    ),
+                  }),
+                })
+                .parse(prior);
+              if (previous.cycle < cycle) {
+                const ids = repeatedDisputes(
+                  result.findings,
+                  previous.payload.findings,
+                );
+                if (ids.length)
+                  result.findings.push({
+                    id: "ADJUDICATION",
+                    severity: "low",
+                    category: "round:adjudication",
+                    description: `Repeated blocking disputes require human adjudication: ${ids.join(", ")}. Blocking findings remain unresolved.`,
+                  });
+              }
+            }
+            if (result.findings.length > 200)
+              throw new Error(
+                "Review exceeds the 200-finding publication limit",
+              );
+          }
           const handle = await context.writeResource(
             "reviewRound",
             `review-${args.workItem}-${args.runId}`,

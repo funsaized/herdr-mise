@@ -22,6 +22,9 @@ inputs:
       items:
         type: object
         additionalProperties: true
+    structuredTests:
+      type: boolean
+      default: false
     currentPlan:
       type: object
       additionalProperties: true
@@ -70,7 +73,14 @@ jobs:
               Address these prior plan-review findings on revision:
               ${{ inputs.reviewFeedback }} Issue context:
               ${{ data.latest("nightshift-issues", "context-issue-" + inputs.workItem).attributes }}
-              Return only JSON with this exact shape:
+              When structuredTests is true, also include testSelection with one
+              to ten objects: runner (node|vitest|playwright|rust), selector
+              (literal test title, or exact Rust test name), and for Rust only
+              target (lib|integration) and targetName (required only for integration).
+              Name the precise changed-behavior test, including a new test you
+              will add. These selections run automatically after the build.
+              structuredTests: ${{ inputs.structuredTests }}.
+              Return only JSON with this base shape:
               {"summary":"string","steps":["string"],"testingStrategy":"string","risks":["string"],"outOfScope":["string"]}
         dependsOn:
           - step: refresh-issue
@@ -83,12 +93,8 @@ jobs:
           inputs:
             workItem: ${{ inputs.workItem }}
             name: plan
-            payload:
-              summary: ${{ data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.summary }}
-              steps: ${{ data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.steps }}
-              testingStrategy: ${{ data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.testingStrategy }}
-              risks: ${{ data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.risks }}
-              outOfScope: ${{ data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.outOfScope }}
+            payload: >-
+              ${{ inputs.structuredTests ? data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse : {"summary": data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.summary, "steps": data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.steps, "testingStrategy": data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.testingStrategy, "risks": data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.risks, "outOfScope": data.latest("nightshift-planner", "invocation-nightshift-" + inputs.workItem + "-plan-" + run.id).attributes.parsedResponse.outOfScope} }}
         dependsOn:
           - step: qualify-and-plan
             condition: { type: succeeded }
@@ -119,4 +125,4 @@ jobs:
           - step: publish-plan
             condition: { type: succeeded }
     dependsOn: []
-version: 6
+version: 7

@@ -474,6 +474,13 @@ test(
       for (const file of [
         "software_factory_run_correlation.ts",
         "nightshift_review.ts",
+        "nightshift_review_subject.ts",
+        "nightshift_test_selection.ts",
+        "rust_test_receipt.ts",
+        "test_receipt.ts",
+        "subject_root.ts",
+        "subject_process.ts",
+        "stored_test_receipt.ts",
       ]) {
         await copyFile(
           join(root, "extensions", "models", file),

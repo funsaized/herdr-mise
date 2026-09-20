@@ -3,6 +3,8 @@ import { isAbsolute, join, relative, resolve } from "jsr:@std/path@1.1.2";
 import { z } from "npm:zod@4.4.3";
 import { sourceDigest, testCounts, type TestReporter } from "./test_receipt.ts";
 import { subjectRoot } from "./subject_root.ts";
+import { runLogged } from "./subject_process.ts";
+import { verifyTestReceipt } from "./stored_test_receipt.ts";
 
 const Sha = z.string().regex(/^[0-9a-f]{40}$/);
 const CommonArguments = z.object({
@@ -115,100 +117,6 @@ async function capture(
     );
   }
   return new TextDecoder().decode(output.stdout).trim();
-}
-
-async function runLogged(
-  args: string[],
-  cwd: string,
-  env: Record<string, string>,
-  timeoutMs: number,
-  log: FileWriter,
-  signal?: AbortSignal,
-  reportOutput?: (text: string) => void,
-): Promise<number> {
-  await log.writeLine(`[command] npm ${args.join(" ")}`);
-  const timeout = AbortSignal.timeout(timeoutMs);
-  const cancellation = new AbortController();
-  const child = new Deno.Command("npm", {
-    args,
-    cwd,
-    env,
-    clearEnv: true,
-    signal: AbortSignal.any([
-      cancellation.signal,
-      timeout,
-      ...(signal ? [signal] : []),
-    ]),
-    stdin: "null",
-    stdout: "piped",
-    stderr: "piped",
-  }).spawn();
-  let written = 0;
-  let truncated = false;
-  let queue = Promise.resolve();
-  let failure: unknown;
-  const write = async (line: string) => {
-    queue = queue
-      .then(() => log.writeLine(line))
-      .catch((error) => {
-        failure ??= error;
-        cancellation.abort();
-      });
-    await queue;
-    if (failure) throw failure;
-  };
-  const pump = async (name: string, stream: ReadableStream<Uint8Array>) => {
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let pending = "";
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (written >= 8 * 1024 * 1024) {
-          truncated = true;
-          continue;
-        }
-        written += value.length;
-        const decoded = decoder.decode(value, { stream: true });
-        if (name === "stdout") reportOutput?.(decoded);
-        pending += decoded;
-        const lines = pending.split("\n");
-        pending = lines.pop() ?? "";
-        for (const line of lines) {
-          await write(`[${name}] ${line}`);
-        }
-      }
-      const tail = decoder.decode();
-      if (name === "stdout") reportOutput?.(tail);
-      pending += tail;
-      if (pending) await write(`[${name}] ${pending}`);
-    } catch (error) {
-      failure ??= error;
-      cancellation.abort();
-      throw error;
-    } finally {
-      reader.releaseLock();
-    }
-  };
-  const results = await Promise.allSettled([
-    pump("stdout", child.stdout),
-    pump("stderr", child.stderr),
-    child.status,
-  ]);
-  await queue;
-  if (failure) throw failure;
-  for (const result of results) {
-    if (result.status === "rejected") throw result.reason;
-  }
-  if (truncated) {
-    await log.writeLine("[error] output exceeded 8 MiB");
-    if (reportOutput)
-      throw new Error("Truncated test output cannot prove test counts");
-  }
-  const status = results[2];
-  if (status.status !== "fulfilled") throw status.reason;
-  return status.value.code;
 }
 
 export function subjectEnvironment(
@@ -421,6 +329,7 @@ async function execute(
     if (operation === "test")
       receipt.sourceDigestBefore = await sourceDigest(root, context.signal);
     const exitCode = await runLogged(
+      "npm",
       commandArgs,
       project,
       env,
@@ -528,6 +437,7 @@ async function execute(
     remember(error);
   }
   let receiptHandle: Handle | undefined;
+  let receiptPointer: Handle | undefined;
   if (operation === "test") {
     try {
       receiptHandle = await context.writeResource(
@@ -544,6 +454,14 @@ async function execute(
           error: errors.length ? errors.join("; ") : null,
         },
       );
+      receiptPointer = await context.writeResource(
+        "testReceiptPointer",
+        "test-result",
+        {
+          receiptName: receiptHandle.name,
+          executionStatus: errors.length ? "failed" : "succeeded",
+        },
+      );
     } catch (error) {
       remember(error);
     }
@@ -554,6 +472,7 @@ async function execute(
       invocation!,
       logHandle!,
       ...(receiptHandle ? [receiptHandle] : []),
+      ...(receiptPointer ? [receiptPointer] : []),
     ],
   };
 }
@@ -561,6 +480,13 @@ async function execute(
 export const extension = {
   type: "@funsaized/npm/project",
   resources: {
+    testReceiptPointer: {
+      description:
+        "Latest produced or verified test receipt for workflow bindings",
+      schema: z.record(z.string(), z.unknown()),
+      lifetime: "30d",
+      garbageCollection: 100,
+    },
     testReceipt: {
       description:
         "Source-bound observed test execution, counts, toolchain and log pointers",
@@ -607,73 +533,7 @@ export const extension = {
         arguments: CommonArguments.extend({
           receiptName: z.string().regex(/^test-receipt-[0-9]+-[a-f0-9]{8}$/),
         }),
-        execute: async (
-          args: z.infer<typeof CommonArguments> & { receiptName: string },
-          context: Context,
-        ) => {
-          if (!context.dataRepository || !context.modelId || !context.modelType)
-            throw new Error("Stored receipt repository unavailable");
-          const bytes = await context.dataRepository.getContent(
-            context.modelType,
-            context.modelId,
-            args.receiptName,
-          );
-          if (!bytes)
-            throw new Error("Stored test receipt not found on this model");
-          const receipt = z
-            .object({
-              schemaVersion: z.literal(1),
-              executionStatus: z.literal("succeeded"),
-              exitCode: z.literal(0),
-              gitHeadBefore: Sha,
-              gitHeadAfter: Sha,
-              sourceDigestBefore: z.string().regex(/^[a-f0-9]{64}$/),
-              sourceDigestAfter: z.string().regex(/^[a-f0-9]{64}$/),
-              counts: z.object({
-                passed: z.number().int().positive(),
-                failed: z.literal(0),
-                selected: z.number().int().positive(),
-              }),
-              logName: z.string().min(1),
-              invocationName: z.string().min(1),
-            })
-            .passthrough()
-            .parse(JSON.parse(new TextDecoder().decode(bytes)));
-          const root = await subjectRoot(context.repoDir, args.subjectRoot);
-          const env = {
-            PATH: Deno.env.get("PATH") ?? "",
-            GIT_CONFIG_GLOBAL: "/dev/null",
-            GIT_CONFIG_NOSYSTEM: "1",
-          };
-          const head = await capture(
-            "git",
-            ["rev-parse", "HEAD"],
-            root,
-            env,
-            context.signal,
-          );
-          const digest = await sourceDigest(root, context.signal);
-          if (
-            head !== args.expectedGitHead ||
-            receipt.gitHeadBefore !== head ||
-            receipt.gitHeadAfter !== head ||
-            receipt.sourceDigestBefore !== digest ||
-            receipt.sourceDigestAfter !== digest ||
-            receipt.counts.selected !== receipt.counts.passed
-          )
-            throw new Error("Stale or inconsistent test receipt");
-          const handle = await context.writeResource(
-            "testReceipt",
-            `verified-${args.receiptName}`,
-            {
-              ...receipt,
-              receiptName: args.receiptName,
-              verifiedAt: new Date().toISOString(),
-              subjectRoot: root,
-            },
-          );
-          return { dataHandles: [handle] };
-        },
+        execute: verifyTestReceipt,
       },
     },
   ],

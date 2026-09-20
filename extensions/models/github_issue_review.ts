@@ -18,6 +18,7 @@ const Plan = z.object({
   summary: z.string().min(1),
   steps: z.array(z.string().min(1)).min(1),
   testingStrategy: z.string().min(1),
+  testSelection: z.array(z.record(z.string(), z.unknown())).optional(),
   risks: z.array(z.string().min(1)),
   outOfScope: z.array(z.string().min(1)),
 });
@@ -116,7 +117,7 @@ ${steps}
 #### Testing
 
 ${args.plan.testingStrategy}
-
+${args.plan.testSelection ? `\nSelected tests:\n\n${args.plan.testSelection.map((selection) => `- ${JSON.stringify(selection)}`).join("\n")}\n` : ""}
 #### Risks
 
 ${list(args.plan.risks)}

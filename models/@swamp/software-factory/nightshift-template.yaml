@@ -2,7 +2,7 @@ type: '@swamp/software-factory'
 typeVersion: 2026.06.24.1
 id: 23616e37-b02b-485e-a273-ee8b5a371dd0
 name: nightshift-template
-version: 1
+version: 3
 tags: {}
 globalArguments:
     stages:
@@ -17,6 +17,7 @@ globalArguments:
                   inputs:
                       factory: "${{ self.name }}"
                       workItem: "${{ self.workItem }}"
+                      structuredTests: true
                       issueNumber: "${{ double(self.workItem) }}"
                       reviewFeedback: '${{ data.latest(self.name, "artifact-plan-review").?payload.?findings.orValue([]) }}'
                       currentPlan: '${{ data.latest(self.name, "artifact-plan").?payload.orValue({}) }}'
@@ -27,7 +28,7 @@ globalArguments:
                 schema:
                     type: object
                     required:
-                        [summary, steps, testingStrategy, risks, outOfScope]
+                        [summary, steps, testingStrategy, risks, outOfScope, testSelection]
                     properties:
                         summary: { type: string, minLength: 1 }
                         steps:
@@ -35,6 +36,19 @@ globalArguments:
                             minItems: 1
                             items: { type: string, minLength: 1 }
                         testingStrategy: { type: string, minLength: 1 }
+                        testSelection:
+                            type: array
+                            minItems: 1
+                            maxItems: 10
+                            items:
+                                type: object
+                                additionalProperties: false
+                                required: [runner, selector]
+                                properties:
+                                    runner: { type: string, enum: [node, vitest, playwright, rust] }
+                                    selector: { type: string, minLength: 1, maxLength: 256 }
+                                    target: { type: string, enum: [lib, integration] }
+                                    targetName: { type: string, pattern: '^[A-Za-z0-9_][A-Za-z0-9_-]*$', maxLength: 64 }
                         risks:
                             type: array
                             items: { type: string, minLength: 1 }
@@ -65,6 +79,7 @@ globalArguments:
                       factory: "${{ self.name }}"
                       workItem: "${{ self.workItem }}"
                       phase: plan
+                      adjudicateDisputes: true
                       artifactName: plan-review
                       previousFindings: '${{ data.latest(self.name, "artifact-plan-review").?payload.?findings.orValue([]) }}'
                       subject: '${{ data.latest(self.name, "artifact-plan").payload }}'
@@ -94,6 +109,15 @@ globalArguments:
                           message: The plan review round must resolve to pass or warn.
                     - type: human-approval
                       config: { id: plan-approval }
+              - name: adjudicate
+                to: parked
+                gates:
+                    - type: artifact-fresh
+                      config: { artifact: plan-review, recordedThisCycle: true }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false)) && artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
+                          message: Repeated blocking disputes require human adjudication.
               - name: rework
                 to: planning
                 gates:
@@ -101,7 +125,7 @@ globalArguments:
                       config: { artifact: plan-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail") && !artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Rework is available only for a failed plan review round.
                     - type: max-cycles
                       config: { stage: plan-review, limit: 4 }
@@ -112,7 +136,7 @@ globalArguments:
                       config: { artifact: plan-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail")'
+                          expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail") && !artifacts.plan_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Parking is available only for a failed plan review round.
                     - type: max-cycles
                       config: { stage: plan-review, limit: 4, invert: true }
@@ -230,6 +254,8 @@ globalArguments:
                       factory: "${{ self.name }}"
                       workItem: "${{ self.workItem }}"
                       phase: code
+                      adjudicateDisputes: true
+                      testReceipts: '${{ data.latest(self.name, "evidence-test-receipts").payload.receipts }}'
                       artifactName: code-review
                       previousFindings: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) }}'
                       subject: '${{ data.latest(self.name, "artifact-change-summary").payload }}'
@@ -257,6 +283,15 @@ globalArguments:
                       config:
                           expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && (f.category in ["round:pass", "round:warn"] || f.?resolved.orValue(false)))'
                           message: The code review round must resolve to pass or warn.
+              - name: adjudicate
+                to: parked
+                gates:
+                    - type: artifact-fresh
+                      config: { artifact: code-review, recordedThisCycle: true }
+                    - type: cel
+                      config:
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false)) && artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
+                          message: Repeated blocking disputes require human adjudication.
               - name: rework
                 to: building
                 gates:
@@ -264,7 +299,7 @@ globalArguments:
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false)) && !artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Rework is available only for a failed code review round.
                     - type: max-cycles
                       config: { stage: code-review, limit: 4 }
@@ -275,7 +310,7 @@ globalArguments:
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: cel
                       config:
-                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false))'
+                          expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && f.category == "round:fail" && !f.?resolved.orValue(false)) && !artifacts.code_review.findings.exists(f, f.id == "ADJUDICATION" && f.category == "round:adjudication" && !f.?resolved.orValue(false))'
                           message: Parking is available only for a failed code review round.
                     - type: max-cycles
                       config: { stage: code-review, limit: 4, invert: true }

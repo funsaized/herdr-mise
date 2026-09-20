@@ -140,6 +140,8 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
   page,
 }) => {
   test.setTimeout(120_000);
+  const observationClock = Date.now();
+  await page.clock.setFixedTime(observationClock);
   const directory = await mkdtemp(join(tmpdir(), "herdr-mise-freezer-")),
     port = await availablePort(),
     appUrl = `http://127.0.0.1:${port}`,
@@ -266,6 +268,7 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
       periods = sequenceDetails.getByRole("list", {
         name: "Mise observation history",
       });
+    await page.clock.setFixedTime(observationClock + 3_000);
     await expect.poll(() => stateAge.textContent()).toMatch(/^[2-9]\d*s$/);
     await expect(periods.getByRole("listitem")).toHaveCount(1);
     snapshot = advanced;
@@ -277,6 +280,11 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
       periods.getByRole("listitem", { name: /Blocked/ }),
     ).toHaveCount(0);
     await expect(stateAge).toHaveText("0s");
+    // Observation reset is exact under a fixed wall clock, independent of CI
+    // scheduling. Resume real time for the subsequent animation assertions.
+    await page.clock.setSystemTime(
+      Math.max(Date.now(), observationClock + 3_000),
+    );
     expect(
       await periods.evaluate((element) => getComputedStyle(element).columnGap),
     ).toBe("2px");

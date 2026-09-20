@@ -451,7 +451,6 @@ test("preview explorer reloads shareable scenes and preserves larger URL rosters
 
 test("TUI recording controls stay accessible, bounded, and isolated", async ({
   page,
-  request,
 }) => {
   const errors = watchErrors(page);
   const sockets: string[] = [],
@@ -568,7 +567,36 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
     .poll(async () => (await figureBox.boundingBox())?.width)
     .toBeLessThanOrEqual(261);
 
+  await page.waitForTimeout(6_500);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(placard(page)).toBeVisible();
+  expect(sockets).toEqual([]);
+  expect(escapedRequests).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("TUI recording respects viewport bounds and serves local assets", async ({
+  page,
+  request,
+}) => {
+  const errors = watchErrors(page);
+  const sockets: string[] = [],
+    escapedRequests: string[] = [];
+  page.on("websocket", (socket) => sockets.push(socket.url()));
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.host !== "127.0.0.1:4174" || url.port === "8686")
+      escapedRequests.push(request.url());
+  });
   await page.setViewportSize({ width: 901, height: 641 });
+  await page.goto("/?preset=working&agents=6");
+  await expect(placard(page)).toBeVisible();
+  const figureBox = page.getByRole("figure", {
+      name: "herdr-mise TUI demo recording",
+    }),
+    figure = page.locator(".visualTuiFigure img"),
+    expand = page.getByRole("button", { name: "Expand recording" }),
+    freezer = page.getByRole("button", { name: "Freezer" });
   await expect(figureBox).toBeVisible();
   const boundaryDefaultBox = await figureBox.boundingBox();
   expect(boundaryDefaultBox).not.toBeNull();
