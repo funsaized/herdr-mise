@@ -1,0 +1,31 @@
+import { macosProfile, probeMacosSandbox } from "../models/nightshift_agent.ts";
+
+Deno.test({
+  name: "macOS role profiles enforce native source and credential canaries",
+  ignore: Deno.build.os !== "darwin",
+  fn: async () => {
+    const evidence = await probeMacosSandbox(Deno.cwd());
+    if (!evidence.passed) throw new Error(JSON.stringify(evidence));
+  },
+});
+
+Deno.test("sandbox policy rejects a symlink supplied as a profile", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${root}/agent-constraints`);
+    await Deno.writeTextFile(`${root}/policy`, "untrusted");
+    await Deno.symlink(
+      `${root}/policy`,
+      `${root}/agent-constraints/nightshift-actor.sb`,
+    );
+    let rejected = false;
+    try {
+      await macosProfile(root, "actor");
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error("Symlink policy accepted");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});

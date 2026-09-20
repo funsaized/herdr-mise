@@ -1,0 +1,47 @@
+; Nightshift macOS process boundary. Provider networking remains allowed.
+; Supplied by the trusted launcher, never selected from the subject checkout.
+(version 1)
+(allow default)
+(import "system.sb")
+(define CWD (param "CWD"))
+(define HOME (param "HOME"))
+(define CREDENTIAL_FILE_1 (param "CREDENTIAL_FILE_1"))
+(define CREDENTIAL_FILE_2 (param "CREDENTIAL_FILE_2"))
+
+; Scope writes globally, including volumes outside HOME.
+(deny file-write*)
+(allow file-write*
+  (literal "/dev/null")
+  (subpath "/private/tmp")
+  (subpath "/tmp")
+  (subpath "/private/var/folders")
+  (subpath "/var/folders")
+  (subpath (string-append HOME "/.cache"))
+  (subpath (string-append HOME "/.local/share/opencode"))
+  (subpath (string-append HOME "/.local/state/opencode")))
+
+; The OS boundary complements the provider tool policy. Arbitrary HOME reads
+; and provider network access are not isolated by this policy.
+(deny file-read* file-write*
+  (subpath (string-append HOME "/.ssh"))
+  (subpath (string-append HOME "/.aws"))
+  (subpath (string-append HOME "/.config/gcloud"))
+  (subpath (string-append HOME "/.config/gh"))
+  (subpath (string-append HOME "/.config/swamp"))
+  (subpath (string-append HOME "/.config/op"))
+  (subpath (string-append HOME "/.gnupg"))
+  (subpath (string-append HOME "/Library/Keychains"))
+  (literal (string-append HOME "/.npmrc"))
+  (literal (string-append HOME "/.docker/config.json"))
+  (literal (string-append HOME "/.claude.json"))
+  (subpath (string-append HOME "/.claude"))
+  (subpath (string-append HOME "/.codex"))
+  (subpath (string-append HOME "/.config/amp"))
+  (subpath (string-append HOME "/.pi"))
+  (literal (string-append HOME "/.local/share/opencode/auth.json")))
+(allow file-read* file-write*
+  (literal CREDENTIAL_FILE_1)
+  (literal CREDENTIAL_FILE_2))
+
+(allow file-write* (subpath CWD))
+(deny file-read* file-write* (subpath (string-append CWD "/.swamp/secrets")))
