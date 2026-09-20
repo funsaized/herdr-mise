@@ -110,3 +110,31 @@ bytes, policy and skill files. Completed lane records supply actual provider,
 model and variant, avoiding assumptions from configured defaults. All seven
 lanes execute; documentation-only recommendations are recorded solely as shadow
 data, including blockers found outside the recommended subset.
+
+## Combined delivery and workspace compatibility
+
+PR [#246](https://github.com/funsaized/herdr-mise/pull/246) merged as `57643980`
+after managed execution [35528587828](https://github.com/funsaized/herdr-mise/actions/runs/35528587828)
+and exact-head gate [35529359812](https://github.com/funsaized/herdr-mise/actions/runs/35529359812)
+passed at `9aebd238`. The shipping consumer accepted that exact receipt before
+merge. This delivers approved selections, Rust receipts, dispute adjudication,
+review identity capture, and conservative shadow routing. Final local checks were
+75 extension tests and 123 fast Node tests; the full pinned managed suite passed.
+
+A post-merge compatibility check found that recording the complete Git workspace
+result sent the new `gitHead` field to the strict four-field workspace artifact
+schema. Follow-up PR [#247](https://github.com/funsaized/herdr-mise/pull/247)
+projects the established fields at that boundary; selected tests continue to read
+actual HEAD from the Git model. A real Swamp regression executes the production
+recording step: it reproduced the unexpected-field rejection before the fix and
+passes afterward, including the downstream approved Rust receipt DAG. No existing
+factory snapshot migration is needed. The follow-up requires its own exact-head
+managed verification before merge.
+
+Issue #245 remains open for acceptance. The September 20 open-issue census found
+no other queued feature items, so a ten-item comparable pilot cannot yet be run.
+Local CLI/template compatibility, upstream status/advance and atomic recovery,
+complete macOS worker acceptance, model replay, and controlled cold/warm
+measurements remain unresolved. All seven review lanes and existing concurrency
+limits remain in force; delivery of these controls is not a measured throughput
+or defect-escape improvement.

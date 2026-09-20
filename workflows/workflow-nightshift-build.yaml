@@ -57,7 +57,11 @@ jobs:
           inputs:
             workItem: ${{ inputs.workItem }}
             name: workspace
-            payload: ${{ data.latest("verification-source-git", "workspace-" + inputs.workItem).attributes }}
+            payload:
+              workItem: ${{ data.latest("verification-source-git", "workspace-" + inputs.workItem).attributes.workItem }}
+              subjectRoot: ${{ data.latest("verification-source-git", "workspace-" + inputs.workItem).attributes.subjectRoot }}
+              branch: ${{ data.latest("verification-source-git", "workspace-" + inputs.workItem).attributes.branch }}
+              baseCommit: ${{ data.latest("verification-source-git", "workspace-" + inputs.workItem).attributes.baseCommit }}
         dependsOn:
           - step: prepare-workspace
             condition: { type: succeeded }

@@ -225,6 +225,21 @@ test(
       // Building is active, as in the production lifecycle; this fixture never ships.
       stages[2] = {
         id: "building",
+        artifacts: [
+          {
+            name: "workspace",
+            schema: {
+              type: "object",
+              required: ["workItem", "subjectRoot", "branch", "baseCommit"],
+              properties: {
+                workItem: { type: "string", minLength: 1 },
+                subjectRoot: { type: "string", pattern: "^/" },
+                branch: { type: "string", minLength: 1 },
+                baseCommit: { type: "string", pattern: "^[0-9a-f]{40}$" },
+              },
+            },
+          },
+        ],
         transitions: [{ name: "done", to: "done", gates: [] }],
       };
       stages.push({ id: "done", terminal: true });
@@ -236,6 +251,66 @@ test(
         "--global-arg",
         `stages=${JSON.stringify(stages)}`,
       ]);
+      // Seed the actual five-field producer shape; execute the production
+      // recording step against the factory's strict four-field artifact schema.
+      await writeFile(
+        join(repo, "extensions/models/workspace_fixture.ts"),
+        `
+import { z } from "npm:zod@4.4.3";
+const Workspace = z.object({ workItem: z.string(), subjectRoot: z.string(),
+  branch: z.string(), baseCommit: z.string(), gitHead: z.string() });
+export const model = {
+  type: "@test/workspace-fixture", version: "2026.09.20.1",
+  globalArguments: z.object({}),
+  resources: { workspace: { description: "Fixture producer output", schema: Workspace,
+    lifetime: "1d", garbageCollection: 2 } },
+  methods: { seed: { description: "Seed workspace fixture", arguments: Workspace,
+    async execute(args, context) {
+      return { dataHandles: [await context.writeResource("workspace", "workspace-" + args.workItem, args)] };
+    } } },
+};
+`,
+      );
+      run([
+        "model",
+        "create",
+        "@test/workspace-fixture",
+        "verification-source-git",
+      ]);
+      const productionBuild = await readFile(
+        join(root, "workflows/workflow-nightshift-build.yaml"),
+        "utf8",
+      );
+      const recordingStep = productionBuild
+        .slice(
+          productionBuild.indexOf("      - name: record-workspace"),
+          productionBuild.indexOf("      - name: implement-plan"),
+        )
+        .replace(/        dependsOn:[\s\S]*$/u, "        dependsOn: []\n");
+      const workspaceWorkflow = run([
+        "workflow",
+        "create",
+        "workspace-record-fixture",
+      ]);
+      const workspaceId = (
+        await readFile(workspaceWorkflow.path, "utf8")
+      ).match(/^id: .+$/mu)[0];
+      await writeFile(
+        workspaceWorkflow.path,
+        `${workspaceId}
+name: workspace-record-fixture
+inputs:
+  type: object
+  properties:
+    factory: { type: string }
+    workItem: { type: string }
+  required: [factory, workItem]
+jobs:
+  - name: record
+    steps:
+${recordingStep}version: 1
+`,
+      );
       await mkdir(join(repo, "src"));
       await writeFile(
         join(repo, "Cargo.toml"),
@@ -286,6 +361,37 @@ test(
       // Explicit fixture approval, confined to this disposable test repository.
       method("approve", { gateId: "plan-approval", actor: "test-fixture" });
       method("advance", { transition: "build" });
+      const workspace = {
+        workItem: "901",
+        subjectRoot: repo,
+        branch: "fixture",
+        baseCommit: "a".repeat(40),
+      };
+      run(
+        [
+          "model",
+          "method",
+          "run",
+          "verification-source-git",
+          "seed",
+          "--stdin",
+        ],
+        { ...workspace, gitHead: expectedGitHead },
+      );
+      run(["workflow", "validate", "workspace-record-fixture"]);
+      assert.equal(
+        run(["workflow", "run", "workspace-record-fixture", "--stdin"], args)
+          .status,
+        "succeeded",
+      );
+      const recordedWorkspace = run([
+        "data",
+        "query",
+        'modelName == "selection-fixture" && name == "artifact-901-workspace"',
+        "--select",
+        "attributes.payload",
+      ]);
+      assert.deepEqual(recordedWorkspace.results[0], workspace);
       run(["workflow", "validate", "nightshift-run-tests"]);
       const result = run(
         ["workflow", "run", "nightshift-run-tests", "--stdin"],
