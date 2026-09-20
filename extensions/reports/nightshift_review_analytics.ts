@@ -103,7 +103,7 @@ interface DataRepositoryLike {
   findAllForModel(type: unknown, modelId: string): Promise<DataLike[]>;
   findAllForType(
     type: unknown,
-  ): Promise<Array<{ data: DataLike; modelId: string }>>;
+  ): Promise<Array<{ data: DataLike; modelId: string; modelType?: unknown }>>;
   findByName(
     type: unknown,
     modelId: string,
@@ -295,7 +295,7 @@ function resolveFactoryModelId(
 }
 
 export async function loadFactoryInput(
-  context: ReportContext,
+  context: Pick<ReportContext, "dataRepository" | "modelType">,
 ): Promise<AnalyticsInput> {
   const repository = context.dataRepository;
   const allFactoryResources = await repository.findAllForType(
@@ -329,6 +329,7 @@ export async function loadFactoryInput(
   const deliveryEvidence: DeliveryEvidence[] = [];
 
   for (const [modelId, resources] of Object.entries(resourcesByModel)) {
+    const modelType = resources[0]?.modelType ?? context.modelType;
     const modelName = resources[0]?.data.tags.modelName;
     if (modelName !== undefined) factoryModelIdsByName.set(modelName, modelId);
     const names = resources.map((resource) => resource.data.name);
@@ -353,7 +354,7 @@ export async function loadFactoryInput(
       )?.data;
       const content = await readJson(
         repository,
-        context.modelType,
+        modelType,
         modelId,
         name,
       );
@@ -382,7 +383,7 @@ export async function loadFactoryInput(
     for (const name of reviewNames) {
       for (const record of await readVersions(
         repository,
-        context.modelType,
+        modelType,
         modelId,
         name,
       )) {
@@ -408,7 +409,7 @@ export async function loadFactoryInput(
     for (const name of evidenceNames) {
       for (const record of await readVersions(
         repository,
-        context.modelType,
+        modelType,
         modelId,
         name,
       )) {
@@ -462,7 +463,7 @@ export async function loadFactoryInput(
       if (!factoryWorkItems.has(`${modelId}:${workItem}`)) continue;
       for (const record of await readVersions(
         repository,
-        context.modelType,
+        modelType,
         modelId,
         name,
       )) {
@@ -498,7 +499,7 @@ export async function loadFactoryInput(
       CLI_AGENT_TYPES.map(async (type) =>
         (await repository.findAllForType(type)).map((resource) => ({
           ...resource,
-          type,
+          type: resource.modelType ?? type,
         })),
       ),
     )

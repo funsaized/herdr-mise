@@ -1,0 +1,28 @@
+id: 9dcb82da-6b6c-437f-9ab8-8f1d4b0f849e
+name: nightshift-analytics
+description: Generate retained fleet analytics without changing historical factory definitions.
+inputs:
+  properties:
+    factory:
+      type: string
+      pattern: '^(the-nightshift|nightshift-run-[1-9][0-9]*)$'
+    workItem:
+      type: string
+      pattern: '^[1-9][0-9]*$'
+  required: [factory, workItem]
+reports:
+  require:
+    - '@funsaized/nightshift-fleet-analytics'
+jobs:
+  - name: analyze
+    steps:
+      - name: summarize-existing-item
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.factory }}
+          methodName: summary
+          inputs:
+            workItem: ${{ inputs.workItem }}
+        dependsOn: []
+    dependsOn: []
+version: 1
