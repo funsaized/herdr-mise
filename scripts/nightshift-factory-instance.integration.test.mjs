@@ -447,9 +447,16 @@ test(
 
       await stopServe(serve);
       // The local hook applies to transitions with an explicit result-evidence gate.
-      const correlatedTemplate = structuredClone(definition);
-      correlatedTemplate.id = "e5ddf284-ed2c-48f2-a304-2163908c3082";
-      correlatedTemplate.name = "phase0-factory-template";
+      const correlatedTemplate = {
+        type: definition.type,
+        typeVersion: definition.typeVersion,
+        id: "e5ddf284-ed2c-48f2-a304-2163908c3082",
+        name: "phase0-factory-template",
+        version: 1,
+        tags: {},
+        globalArguments: structuredClone(definition.globalArguments),
+        methods: {},
+      };
       correlatedTemplate.globalArguments.stages[0].transitions[0].gates.push({
         type: "evidence-recorded",
         config: { name: "workflow-run", requireField: { status: "succeeded" } },
