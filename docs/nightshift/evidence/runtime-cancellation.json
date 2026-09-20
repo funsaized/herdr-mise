@@ -1,0 +1,32 @@
+{
+  "observedOn": "2026-09-20",
+  "platform": "macOS",
+  "runtime": "20260904.044433.0-sha.ab26e35b",
+  "cliAgent": "2026.09.20.1",
+  "method": "Disposable Swamp model invokes installed runCli with context.signal and native actor Seatbelt policy; dummy Node parent creates ordinary child. Verify target before local model cancel; inspect method report, server health, and owned PIDs; clean fixture PIDs in finally.",
+  "results": [
+    {
+      "route": "local direct method",
+      "contextSignalPresent": true,
+      "callerExitCode": 1,
+      "durationMs": 5084,
+      "survivingFixtureChildren": 0
+    },
+    {
+      "route": "local cancel of shared serve method",
+      "contextSignalPresent": true,
+      "reproductions": 2,
+      "serverExitSignal": "SIGKILL",
+      "serverHealthyAfter": false,
+      "callerExitCode": 1,
+      "confirmedDurationMs": 6787,
+      "survivingFixtureChildren": 1,
+      "methodReport": "No fresh cancelled-method report; latest report was the earlier successful inspect method."
+    }
+  ],
+  "cleanup": "All owned fixture PIDs cleaned; temporary repositories removed; no production process stopped.",
+  "limits": [
+    "Not a test of every cancellation route.",
+    "Executor acceptance with a supplied signal does not establish shared-server cancellation safety."
+  ]
+}

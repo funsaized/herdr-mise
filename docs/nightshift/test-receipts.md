@@ -32,13 +32,11 @@ the client suite, preserving managed verification coverage. The unit tier no
 longer runs those dependency-fetching packaging cases.
 
 Browser acceptance is split into visual matrix, interaction, and production
-fixture suites, with shared helpers. Cross-browser critical accessibility stays
-in its existing suite. Discovery before and after the split is identical: 121
-project/test-title pairs. A subsequent TUI scenario split retains all assertions
-and adds one separately scheduled case (122 total). Use `npm run test:visual` to prepare production assets;
-`test:visual:prepared` assumes the managed build step has already refreshed them.
-Stale production assets can make every fixture-backed test fail while visual
-mode tests still pass.
+fixture suites, with shared helpers. Cross-browser critical accessibility has
+its own suite. Use `npm run test:visual` to prepare production assets;
+`test:visual:prepared` assumes the managed build step already refreshed them.
+Stale production assets can make fixture-backed tests fail while visual-mode
+tests still pass.
 
 `@funsaized/herdr-mise-rust.test_subject` runs one exact named test with
 `target: lib` or `target: integration` plus `targetName`. It fixes the package to

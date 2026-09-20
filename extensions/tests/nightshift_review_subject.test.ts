@@ -36,7 +36,7 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
     const controls = [
       "AGENTS.md",
       "CONTRIBUTING.md",
-      "docs/software-factory-review-calibration-2026-09-20.md",
+      "docs/nightshift/review-calibration.md",
       "agent-constraints/review.md",
       "workflows/workflow-nightshift-review.yaml",
       "extensions/models/nightshift_review.ts",

@@ -67,14 +67,14 @@ need a copy of runtime extension files just to load the test suite.
 | Real provider startup and parsed result                              | PASS: OpenCode `reviewer`, resolved `xai/grok-4.6`, exit 0 and parsed JSON                                                                                                            |
 | Representative actor edits and tests                                 | PASS: real OpenCode builder created a Node test in a sibling checkout and reported exit 0; independent file inspection and rerun passed. Full repository toolchain acceptance pending |
 | Inherited sockets and credential-broker coverage                     | Pending                                                                                                                                                                               |
-| Native executor cancellation/timeout and ordinary descendant cleanup | PASS: six installed-release probes across both roles; runtime-to-context cancellation wiring remains to be verified                                                                   |
+| Native executor cancellation/timeout and ordinary descendant cleanup | PASS: six installed-release probes across both roles; shared-server cancellation is blocked; see [known limits](limits.md#shared-server-cancellation)                                 |
 | Complete home isolation / exclusive scratch / restricted egress      | Not implemented; explicit local-mode limits                                                                                                                                           |
 
 The approved `@funsaized/cli-agent@2026.09.20.1` release closes the observed
 ordinary-child leak after early provider exit and propagates optional caller
 cancellation through execution and retry backoff. All six native probes against
 the installed release passed with zero surviving fixture processes:
-[recorded observations](software-factory-worker-lifecycle-2026-09-20.json).
+[recorded observations](evidence/worker-lifecycle.json).
 The shared source suite passes 220 tests with one existing Linux-only skip.
 This covers the actual executor with supplied abort signals; it does not prove
 that every Swamp runtime/cancellation route supplies that signal. Children that
@@ -83,3 +83,7 @@ create another process group/session remain outside this cleanup guarantee.
 ENG-007 remains open until the outstanding acceptance cases are resolved. Keep
 one planner, two builders or seven review lanes, with major phases mutually
 exclusive in a checkout. Metadata-only intake may overlap using the same server.
+
+Direct local runtime cancellation passes, but local cancellation of a server-owned
+run kills the shared server and can leave a child alive. See the
+[confirmed runtime limitation](limits.md#shared-server-cancellation).
