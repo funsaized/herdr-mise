@@ -17,6 +17,7 @@ globalArguments:
     - test
     - test:unit
     - test:factory
+    - test:release
     - test:extensions
     - bundle:prepared
     - test:visual:prepared

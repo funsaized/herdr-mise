@@ -21,4 +21,12 @@ test("automated agent definitions request a fail-closed OS sandbox", () => {
   assert.match(builder, /sandboxMode: auto/);
   assert.match(builder, /sandboxRequired: true/);
   assert.doesNotMatch(builder, /sandboxMode: off|sandboxRequired: false/);
+  for (const phase of ["plan", "build", "review"]) {
+    const workflow = readFileSync(
+      `workflows/workflow-nightshift-${phase}.yaml`,
+      "utf8",
+    );
+    assert.match(workflow, /methodName: invoke_nightshift/);
+    assert.doesNotMatch(workflow, /methodName: invokeAndParse/);
+  }
 });

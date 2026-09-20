@@ -79,11 +79,10 @@ fn diagnostic_uses_real_socket_transport_and_redacts_its_path() {
             serde_json::from_str::<serde_json::Value>(&request).unwrap()["method"],
             "session.snapshot"
         );
-        stream
-            .get_mut()
-            .write_all(include_bytes!("fixtures/snapshot-working.json"))
-            .unwrap();
-        stream.get_mut().write_all(b"\n").unwrap();
+        let response = include_bytes!("fixtures/snapshot-working.json");
+        assert!(response.ends_with(b"\n"));
+        // The client can close as soon as this complete frame arrives.
+        stream.get_mut().write_all(response).unwrap();
     });
 
     let output = stdout(

@@ -39,7 +39,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-test-coverage
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
@@ -80,7 +80,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-clean-code
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
@@ -107,7 +107,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-frontend
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
@@ -134,7 +134,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-ddd
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
@@ -161,7 +161,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-security
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
@@ -188,7 +188,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-accessibility
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}
@@ -215,7 +215,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-observability
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: reviewer
             cwd: ${{ inputs.subjectRoot }}

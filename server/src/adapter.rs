@@ -1030,12 +1030,9 @@ mod tests {
                 serde_json::from_str::<Value>(&request).unwrap()["method"],
                 "session.snapshot"
             );
-            stream
-                .get_mut()
-                .write_all(include_bytes!("../tests/fixtures/snapshot-working.json"))
-                .await
-                .unwrap();
-            stream.get_mut().write_all(b"\n").await.unwrap();
+            let response = include_bytes!("../tests/fixtures/snapshot-working.json");
+            assert!(response.ends_with(b"\n"));
+            stream.get_mut().write_all(response).await.unwrap();
         });
         let response = fetch_snapshot(&path, Duration::from_secs(1)).await.unwrap();
         assert_eq!(response["result"]["snapshot"]["protocol"], 17);

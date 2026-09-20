@@ -46,7 +46,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-planner
-          methodName: invokeAndParse
+          methodName: invoke_nightshift
           inputs:
             opencodeAgent: plan
             invocationId: ${{ "nightshift-" + inputs.workItem + "-plan-" + run.id }}

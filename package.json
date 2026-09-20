@@ -18,7 +18,7 @@
     "measure:tui": "python3 scripts/measure-tui.py",
     "typecheck": "npm --prefix client run typecheck",
     "lint": "oxlint --deny-warnings .",
-    "test": "npm run test:unit && npm run test:factory && npm --prefix client run test",
+    "test": "npm run test:unit && npm run test:factory && npm run test:release && npm --prefix client run test",
     "test:unit": "node scripts/test-node.mjs unit",
     "test:factory": "node scripts/test-node.mjs factory",
     "test:extensions": "node scripts/test-extensions.mjs",
@@ -40,7 +40,8 @@
     "verify:browser:install": "playwright install --with-deps chromium firefox webkit",
     "validate:managed-verification-evidence": "node scripts/managed-verification-evidence.mjs",
     "orchestrator:serve": "sh scripts/nightshift-serve.sh",
-    "intake:nightshift": "node scripts/nightshift-intake.mjs intake/nightshift-features.json"
+    "intake:nightshift": "node scripts/nightshift-intake.mjs intake/nightshift-features.json",
+    "test:release": "node scripts/test-node.mjs release"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
