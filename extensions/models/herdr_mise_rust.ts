@@ -682,6 +682,19 @@ export const model = {
   version: "2026.09.12.3",
   globalArguments: GlobalArguments,
   resources: {
+    dependencyUpdate: {
+      description: "Precise Cargo dependency update and lockfile identities",
+      schema: z.object({
+        crate: z.string(),
+        version: z.string(),
+        gitHead: z.string(),
+        lockfileBefore: z.string(),
+        lockfileAfter: z.string(),
+        completedAt: z.iso.datetime(),
+      }),
+      lifetime: "30d",
+      garbageCollection: 20,
+    },
     result: {
       description: "Structured Rust verification result",
       schema: Result,
@@ -697,6 +710,77 @@ export const model = {
     },
   },
   methods: {
+    updateDependency: {
+      description:
+        "Update one Cargo dependency to an explicit version in a clean subject",
+      arguments: VerifyArguments.extend({
+        crate: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+        version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/),
+      }),
+      execute: async (
+        args: z.infer<typeof VerifyArguments> & {
+          crate: string;
+          version: string;
+        },
+        context: Context,
+      ) => {
+        const root = await subjectRoot(context.repoDir, args.subjectRoot);
+        const gitHead = await output(
+          "git",
+          ["rev-parse", "HEAD"],
+          root,
+          context,
+        );
+        if (
+          gitHead !== args.expectedGitHead ||
+          (await output("git", ["status", "--porcelain"], root, context))
+        )
+          throw new Error(
+            "Dependency update requires the exact clean subject HEAD",
+          );
+        const lockfileBefore = await sha256(`${root}/Cargo.lock`);
+        await command(
+          "cargo",
+          ["update", "--package", args.crate, "--precise", args.version],
+          root,
+          environment(),
+          context,
+        );
+        const changed = await output(
+          "git",
+          ["diff", "--name-only"],
+          root,
+          context,
+        );
+        if (
+          (changed !== "" && changed !== "Cargo.lock") ||
+          (await output("git", ["rev-parse", "HEAD"], root, context)) !==
+            gitHead ||
+          (await output(
+            "git",
+            ["ls-files", "--others", "--exclude-standard"],
+            root,
+            context,
+          ))
+        )
+          throw new Error(
+            "Dependency update changed files beyond Cargo.lock; inspect the subject",
+          );
+        const handle = await context.writeResource(
+          "dependencyUpdate",
+          `dependency-update-${args.crate}`,
+          {
+            crate: args.crate,
+            version: args.version,
+            gitHead,
+            lockfileBefore,
+            lockfileAfter: await sha256(`${root}/Cargo.lock`),
+            completedAt: new Date().toISOString(),
+          },
+        );
+        return { dataHandles: [handle] };
+      },
+    },
     fallbackAssets: {
       description:
         "Test the Rust workspace after removing generated client assets",

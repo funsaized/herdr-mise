@@ -66,6 +66,7 @@ globalArguments:
                       workItem: "${{ self.workItem }}"
                       phase: plan
                       artifactName: plan-review
+                      previousFindings: '${{ data.latest(self.name, "artifact-plan-review").?payload.?findings.orValue([]) }}'
                       subject: '${{ data.latest(self.name, "artifact-plan").payload }}'
                       subjectRoot: .
               resultEvidence: plan-review-run
@@ -86,7 +87,7 @@ globalArguments:
                     - type: artifact-fresh
                       config: { artifact: plan-review, recordedThisCycle: true }
                     - type: findings-clear
-                      config: { artifact: plan-review, blocking: [high] }
+                      config: { artifact: plan-review, blocking: [critical, high] }
                     - type: cel
                       config:
                           expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
@@ -230,6 +231,7 @@ globalArguments:
                       workItem: "${{ self.workItem }}"
                       phase: code
                       artifactName: code-review
+                      previousFindings: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) }}'
                       subject: '${{ data.latest(self.name, "artifact-change-summary").payload }}'
                       subjectRoot: '${{ data.latest(self.name, "artifact-workspace").payload.subjectRoot }}'
               resultEvidence: code-review-run
@@ -250,7 +252,7 @@ globalArguments:
                     - type: artifact-fresh
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: findings-clear
-                      config: { artifact: code-review, blocking: [high] }
+                      config: { artifact: code-review, blocking: [critical, high] }
                     - type: cel
                       config:
                           expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && (f.category in ["round:pass", "round:warn"] || f.?resolved.orValue(false)))'

@@ -154,6 +154,7 @@ function fail(message: string): CheckResult {
 }
 
 const workItemMethods = [
+  "evaluate_review",
   "start",
   "status",
   "record_dispatch",

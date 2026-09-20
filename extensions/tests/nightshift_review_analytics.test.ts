@@ -72,7 +72,11 @@ function makeRepository(
     async findAllForType(type) {
       return records
         .filter((record) => record.type === String(type))
-        .map((record) => ({ data: dataLike(record), modelId: record.modelId }));
+        .map((record) => ({
+          data: dataLike(record),
+          modelId: record.modelId,
+          modelType: { toString: () => record.type },
+        }));
     },
     async findByName(_type, modelId, name, version) {
       const list = lookup(String(_type), modelId, name).filter(
@@ -82,6 +86,10 @@ function makeRepository(
       return record ? dataLike(record) : null;
     },
     async listVersions(_type, modelId, name) {
+      if (typeof _type === "string")
+        throw new Error(
+          "History API requires the discovered model-type identity",
+        );
       return lookup(String(_type), modelId, name)
         .map((record) => record.version)
         .sort((a, b) => a - b);

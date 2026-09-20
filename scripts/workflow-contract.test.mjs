@@ -772,6 +772,8 @@ test("shared verification is subject-bounded and never publishes evidence", () =
     "rust-toolchain.toml",
     "acceptance/**",
     "docs/acceptance-evidence.schema.json",
+    ".agents/skills/**",
+    "agent-constraints/**",
   ]);
   assert.match(
     workflows["swamp-managed-verification.yml"],

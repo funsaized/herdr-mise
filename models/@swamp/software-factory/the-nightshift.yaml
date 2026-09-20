@@ -86,7 +86,7 @@ globalArguments:
                     - type: artifact-fresh
                       config: { artifact: plan-review, recordedThisCycle: true }
                     - type: findings-clear
-                      config: { artifact: plan-review, blocking: [high] }
+                      config: { artifact: plan-review, blocking: [critical, high] }
                     - type: cel
                       config:
                           expr: 'artifacts.plan_review.findings.exists(f, f.id == "ROUND" && f.category in ["round:pass", "round:warn"])'
@@ -250,7 +250,7 @@ globalArguments:
                     - type: artifact-fresh
                       config: { artifact: code-review, recordedThisCycle: true }
                     - type: findings-clear
-                      config: { artifact: code-review, blocking: [high] }
+                      config: { artifact: code-review, blocking: [critical, high] }
                     - type: cel
                       config:
                           expr: 'artifacts.code_review.findings.exists(f, f.id == "ROUND" && (f.category in ["round:pass", "round:warn"] || f.?resolved.orValue(false)))'

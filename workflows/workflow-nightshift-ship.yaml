@@ -1,6 +1,6 @@
 id: c0e70086-74e9-4b5b-b0d8-0c03eb68ef3d
 name: nightshift-ship
-description: Verify an exact commit for human merge review.
+description: Consume trusted managed verification for the exact current candidate.
 tags:
   factory: nightshift
   stage: ship
@@ -42,45 +42,29 @@ jobs:
             prUrl: ${{ inputs.prUrl }}
             commit: ${{ inputs.commit }}
         dependsOn: []
-      - name: prepare-ship-workspace
+      - name: require-managed-verification
         task:
           type: model_method
-          modelIdOrName: verification-source-git
-          methodName: prepare_workspace
+          modelIdOrName: nightshift-github
+          methodName: require_managed_verification
           inputs:
-            workItem: ${{ "ship-" + inputs.workItem }}
-            directoryName: ${{ "herdr-mise-ship-" + inputs.workItem }}
-            repositoryUrl: https://github.com/funsaized/herdr-mise.git
-            workspaceRoot: ..
-            baseRef: ${{ inputs.commit }}
-            branch: ${{ "nightshift/ship-" + inputs.workItem + "-" + inputs.commit }}
-        dependsOn:
-          - { step: require-issue-link, condition: { type: succeeded } }
-      - name: verify-candidate
-        task:
-          type: workflow
-          workflowIdOrName: verification
-          inputs:
+            workItem: ${{ inputs.workItem }}
+            prUrl: ${{ inputs.prUrl }}
             commit: ${{ inputs.commit }}
             baseCommit: ${{ inputs.baseCommit }}
-            subjectRoot: ${{ data.latest("verification-source-git", "workspace-ship-" + inputs.workItem).attributes.subjectRoot }}
         dependsOn:
-          - { step: prepare-ship-workspace, condition: { type: succeeded } }
-      - name: cleanup-ship-workspace
+          - { step: require-issue-link, condition: { type: succeeded } }
+      - name: record-managed-verification
         task:
           type: model_method
-          modelIdOrName: verification-source-git
-          methodName: cleanup_workspace
+          modelIdOrName: ${{ inputs.factory }}
+          methodName: record_evidence
           inputs:
-            workItem: ${{ "ship-" + inputs.workItem }}
-            subjectRoot: ${{ data.latest("verification-source-git", "workspace-ship-" + inputs.workItem).attributes.subjectRoot }}
+            workItem: ${{ inputs.workItem }}
+            name: managed-verification
+            payload: ${{ data.latest("nightshift-github", "managed-" + inputs.workItem + "-" + inputs.commit).attributes.result }}
         dependsOn:
-          - step: verify-candidate
-            condition:
-              type: or
-              conditions:
-                - { type: completed }
-                - { type: skipped }
+          - { step: require-managed-verification, condition: { type: succeeded } }
       - name: record-shipping-run
         task:
           type: model_method
@@ -94,8 +78,8 @@ jobs:
               runId: ${{ run.id }}
               outputs:
                 failureKind: none
+                gateRunId: ${{ data.latest("nightshift-github", "managed-" + inputs.workItem + "-" + inputs.commit).attributes.result.gateRunId }}
         dependsOn:
-          - { step: verify-candidate, condition: { type: succeeded } }
-          - { step: cleanup-ship-workspace, condition: { type: succeeded } }
+          - { step: record-managed-verification, condition: { type: succeeded } }
     dependsOn: []
-version: 7
+version: 8

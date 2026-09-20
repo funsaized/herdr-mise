@@ -1,5 +1,11 @@
 /** Deterministic review, token, and provider-reported cost analytics for Nightshift. */
 
+import {
+  deliveryMetrics,
+  type DeliveryEvidence,
+  type JournalEvent,
+} from "./nightshift_delivery_metrics.ts";
+
 const FACTORY_TYPE = "@swamp/software-factory";
 const CLI_AGENT_TYPES = ["@mgreten/cli-agent", "@funsaized/cli-agent"];
 const RUNTIME_FACTORY_NAME = /^nightshift-run-[1-9][0-9]*$/;
@@ -74,6 +80,8 @@ export interface Invocation {
 }
 
 export interface AnalyticsInput {
+  journalEvents?: JournalEvent[];
+  deliveryEvidence?: DeliveryEvidence[];
   factoryItems: FactoryItem[];
   reviewRounds: ReviewRound[];
   invocations: Invocation[];
@@ -95,7 +103,7 @@ interface DataRepositoryLike {
   findAllForModel(type: unknown, modelId: string): Promise<DataLike[]>;
   findAllForType(
     type: unknown,
-  ): Promise<Array<{ data: DataLike; modelId: string }>>;
+  ): Promise<Array<{ data: DataLike; modelId: string; modelType?: unknown }>>;
   findByName(
     type: unknown,
     modelId: string,
@@ -287,7 +295,7 @@ function resolveFactoryModelId(
 }
 
 export async function loadFactoryInput(
-  context: ReportContext,
+  context: Pick<ReportContext, "dataRepository" | "modelType">,
 ): Promise<AnalyticsInput> {
   const repository = context.dataRepository;
   const allFactoryResources = await repository.findAllForType(
@@ -317,8 +325,11 @@ export async function loadFactoryInput(
   const evidenceSources: SourcePointer[] = [];
   let unmeteredInteractiveWorkCount = 0;
   const journalSources: SourcePointer[] = [];
+  const journalEvents: JournalEvent[] = [];
+  const deliveryEvidence: DeliveryEvidence[] = [];
 
   for (const [modelId, resources] of Object.entries(resourcesByModel)) {
+    const modelType = resources[0]?.modelType ?? context.modelType;
     const modelName = resources[0]?.data.tags.modelName;
     if (modelName !== undefined) factoryModelIdsByName.set(modelName, modelId);
     const names = resources.map((resource) => resource.data.name);
@@ -327,7 +338,11 @@ export async function loadFactoryInput(
       .filter((name) => /-(plan|code)-review$/.test(name))
       .sort();
     const evidenceNames = names
-      .filter((name) => name.startsWith("evidence-"))
+      .filter(
+        (name) =>
+          name.startsWith("evidence-") ||
+          /^artifact-[1-9][0-9]*-release-candidate$/.test(name),
+      )
       .sort();
     const journalNames = names
       .filter((name) => name.startsWith("journal-"))
@@ -337,12 +352,7 @@ export async function loadFactoryInput(
       const data = resources.find(
         (candidate) => candidate.data.name === name,
       )?.data;
-      const content = await readJson(
-        repository,
-        context.modelType,
-        modelId,
-        name,
-      );
+      const content = await readJson(repository, modelType, modelId, name);
       if (data === undefined || content === null) continue;
       const workItem =
         stringValue(content.workItem) ?? name.slice("state-".length);
@@ -368,7 +378,7 @@ export async function loadFactoryInput(
     for (const name of reviewNames) {
       for (const record of await readVersions(
         repository,
-        context.modelType,
+        modelType,
         modelId,
         name,
       )) {
@@ -394,13 +404,29 @@ export async function loadFactoryInput(
     for (const name of evidenceNames) {
       for (const record of await readVersions(
         repository,
-        context.modelType,
+        modelType,
         modelId,
         name,
       )) {
         const payload = isRecord(record.content.payload)
           ? record.content.payload
           : null;
+        const evidenceWorkItem = stringValue(record.content.workItem);
+        if (
+          payload &&
+          evidenceWorkItem &&
+          factoryWorkItems.has(`${modelId}:${evidenceWorkItem}`)
+        ) {
+          deliveryEvidence.push({
+            workItem: evidenceWorkItem,
+            name: stringValue(record.content.name) ?? name,
+            stageId: stringValue(record.content.stageId) ?? "unknown",
+            cycle: numberValue(record.content.cycle) ?? 0,
+            recordedAt: stringValue(record.content.recordedAt),
+            payload,
+            source: pointer("factory", modelId, record.data),
+          });
+        }
         const outputs = isRecord(payload?.outputs) ? payload.outputs : null;
         const runId = stringValue(payload?.runId);
         const failureKind = stringValue(outputs?.failureKind);
@@ -432,10 +458,17 @@ export async function loadFactoryInput(
       if (!factoryWorkItems.has(`${modelId}:${workItem}`)) continue;
       for (const record of await readVersions(
         repository,
-        context.modelType,
+        modelType,
         modelId,
         name,
       )) {
+        journalEvents.push({
+          workItem,
+          event: stringValue(record.content.event) ?? "unknown",
+          stageId: stringValue(record.content.stageId) ?? "unknown",
+          at: stringValue(record.content.at) ?? "",
+          source: pointer("factory", modelId, record.data),
+        });
         if (
           record.content.event === "dispatched" &&
           ["plan-feedback", "ship-prep"].includes(
@@ -461,7 +494,7 @@ export async function loadFactoryInput(
       CLI_AGENT_TYPES.map(async (type) =>
         (await repository.findAllForType(type)).map((resource) => ({
           ...resource,
-          type,
+          type: resource.modelType ?? type,
         })),
       ),
     )
@@ -550,6 +583,8 @@ export async function loadFactoryInput(
   );
 
   return {
+    journalEvents,
+    deliveryEvidence,
     factoryItems: factoryItems.sort((a, b) =>
       a.workItem.localeCompare(b.workItem, undefined, { numeric: true }),
     ),
@@ -576,6 +611,12 @@ export function scopeInput(
       .filter((value): value is string => value !== undefined),
   );
   return {
+    journalEvents: input.journalEvents?.filter(
+      (event) => event.workItem === workItem,
+    ),
+    deliveryEvidence: input.deliveryEvidence?.filter(
+      (record) => record.workItem === workItem,
+    ),
     factoryItems: input.factoryItems.filter(
       (item) => item.workItem === workItem,
     ),
@@ -1468,7 +1509,13 @@ export function analyzeNightshift(input: AnalyticsInput) {
     review.findingsAfterPreviouslyCleanLane,
   );
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    delivery: deliveryMetrics(
+      [...workItems],
+      input.journalEvents ?? [],
+      input.deliveryEvidence ?? [],
+      joinedInput.invocations,
+    ),
     deterministic: true,
     reviewPolicy: {
       decision: "retain-current-lanes",
@@ -1578,6 +1625,8 @@ export function renderMarkdown(
     "Static analysis of factory review history joined to CLI-agent invocations by work item and workflow run ID.",
     "",
     "## Coverage",
+    "",
+    `Delivery journal coverage: ${analytics.delivery.coverage.withJournal}/${analytics.delivery.coverage.workItems} items; ${analytics.delivery.coverage.closedVisits} closed visits; ${analytics.delivery.coverage.openVisits} open visits. Human wait is unavailable; residual stage time is not labeled human wait.`,
     "",
     "| Factory items | Review rounds | Invocations | Token-covered | Nonzero cost | Zero cost | Unmetered interactive | Driver usage |",
     "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",

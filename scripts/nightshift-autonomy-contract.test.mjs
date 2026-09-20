@@ -114,7 +114,7 @@ test("Nightshift repair is explicit and analytics stays off status paths", () =>
   );
 });
 
-test("Nightshift template is the legacy lifecycle snapshot without runtime reports", () => {
+test("Nightshift template preserves legacy gates and adds prior-review context without runtime reports", () => {
   const legacyLifecycle = factory.slice(
     factory.indexOf("globalArguments:\n"),
     factory.indexOf("reports:\n"),
@@ -123,7 +123,15 @@ test("Nightshift template is the legacy lifecycle snapshot without runtime repor
     template.indexOf("globalArguments:\n"),
     template.indexOf("methods: {}\n"),
   );
-  assert.equal(templateLifecycle, legacyLifecycle);
+  const priorContext =
+    templateLifecycle.match(/^ +previousFindings: .*$/gmu) ?? [];
+  assert.equal(priorContext.length, 2);
+  assert.ok(priorContext[0].includes('"artifact-plan-review"'));
+  assert.ok(priorContext[1].includes('"artifact-code-review"'));
+  assert.equal(
+    templateLifecycle.replace(/^ +previousFindings: .*\n/gmu, ""),
+    legacyLifecycle,
+  );
   assert.doesNotMatch(template, /^reports:/mu);
 });
 
@@ -187,11 +195,19 @@ test("Nightshift parks fresh failed review rounds at cycle four", () => {
   );
 });
 
-test("Nightshift ships from an isolated clean worktree", () => {
+test("Nightshift ships only after consuming the trusted managed receipt", () => {
   const ship = readFileSync("workflows/workflow-nightshift-ship.yaml", "utf8");
-  assert.match(ship, /methodName: prepare_workspace/);
-  assert.match(ship, /herdr-mise-ship-/);
-  assert.match(ship, /nightshift\/ship-/);
+  assert.match(ship, /methodName: require_managed_verification/);
+  assert.match(ship, /baseCommit: \$\{{\s*inputs\.baseCommit\s*}}/);
+  assert.match(ship, /name: managed-verification/);
+  assert.match(
+    ship,
+    /step: record-managed-verification, condition: \{ type: succeeded \}/,
+  );
+  assert.doesNotMatch(
+    ship,
+    /methodName: prepare_workspace|workflowIdOrName: verification/,
+  );
   assert.match(
     ship,
     /methodName: require_issue_link[\s\S]*?commit: \$\{{\s*inputs\.commit\s*}}/,

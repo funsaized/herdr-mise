@@ -446,7 +446,164 @@ test(
       assert.equal(report.json.factoryName, "phase0-runtime-main");
 
       await stopServe(serve);
+      // The local hook applies to transitions with an explicit result-evidence gate.
+      const correlatedTemplate = {
+        type: definition.type,
+        typeVersion: definition.typeVersion,
+        id: "e5ddf284-ed2c-48f2-a304-2163908c3082",
+        name: "phase0-factory-template",
+        version: 1,
+        tags: {},
+        globalArguments: structuredClone(definition.globalArguments),
+        methods: {},
+      };
+      correlatedTemplate.globalArguments.stages[0].transitions[0].gates.push({
+        type: "evidence-recorded",
+        config: { name: "workflow-run", requireField: { status: "succeeded" } },
+      });
+      await writeFile(
+        join(
+          repo,
+          "models",
+          "@swamp",
+          "software-factory",
+          "phase0-factory-template.yaml",
+        ),
+        JSON.stringify(correlatedTemplate),
+      );
+      for (const file of [
+        "software_factory_run_correlation.ts",
+        "nightshift_review.ts",
+      ]) {
+        await copyFile(
+          join(root, "extensions", "models", file),
+          join(repo, "extensions", "models", file),
+        );
+      }
+      await copyFile(
+        join(fixtures, "factory-instance-noop.yaml"),
+        join(repo, "workflows", "workflow-phase0-noop.yaml"),
+      );
       serve = await startServe(repo);
+      // Exercise local policy hooks through the actual engine and persisted run outputs.
+      expectOk(create(repo, serve.server, "nightshift-run-901", "901"));
+      const lanes = [
+        "test-coverage",
+        "clean-code",
+        "frontend",
+        "ddd",
+        "security",
+        "accessibility",
+        "observability",
+      ];
+      const reviewInput = {
+        workItem: "901",
+        runId: "fixture-review",
+        phase: "code",
+        reviews: lanes.map((lane) => ({
+          lane,
+          verdict: "pass",
+          summary: "Fixture independent result",
+          findings: [],
+        })),
+      };
+      const review = (input) =>
+        runRemote(
+          repo,
+          serve.server,
+          [
+            "model",
+            "method",
+            "run",
+            "nightshift-run-901",
+            "evaluate_review",
+            "--stdin",
+          ],
+          JSON.stringify(input),
+        );
+      assert.notEqual(
+        review({ ...reviewInput, workItem: "902" }).status,
+        0,
+        "review method must enforce factory ownership",
+      );
+      expectOk(review(reviewInput));
+      expectOk(
+        method(repo, serve.server, "nightshift-run-901", "record_dispatch", [
+          ["workItem", "901"],
+        ]),
+      );
+      const withoutEvidence = method(
+        repo,
+        serve.server,
+        "nightshift-run-901",
+        "advance",
+        [
+          ["workItem", "901"],
+          ["transition", "finish"],
+        ],
+      );
+      assert.notEqual(
+        withoutEvidence.status,
+        0,
+        "no self-attested workflow completion",
+      );
+      for (const [name, payload] of [
+        [
+          "record_artifact",
+          { name: "summary", payload: { text: "forged completion" } },
+        ],
+        [
+          "record_evidence",
+          {
+            name: "workflow-run",
+            payload: { status: "succeeded", runId: "missing-workflow-run" },
+          },
+        ],
+      ]) {
+        expectOk(
+          runRemote(
+            repo,
+            serve.server,
+            ["model", "method", "run", "nightshift-run-901", name, "--stdin"],
+            JSON.stringify({ workItem: "901", ...payload }),
+          ),
+        );
+      }
+      const forged = method(
+        repo,
+        serve.server,
+        "nightshift-run-901",
+        "advance",
+        [
+          ["workItem", "901"],
+          ["transition", "finish"],
+        ],
+      );
+      assert.notEqual(forged.status, 0);
+      assert.match(
+        `${forged.stdout}\n${forged.stderr}`,
+        /expected one run record/,
+      );
+      expectOk(
+        runRemote(repo, serve.server, ["workflow", "validate", "phase0-noop"]),
+      );
+      expectOk(
+        runRemote(repo, serve.server, [
+          "workflow",
+          "run",
+          "phase0-noop",
+          "--input",
+          "factory=nightshift-run-901",
+          "--input",
+          "workItem=901",
+        ]),
+      );
+      expectOk(
+        method(repo, serve.server, "nightshift-run-901", "advance", [
+          ["workItem", "901"],
+          ["transition", "finish"],
+        ]),
+      );
       const persisted = expectOk(
         runRemote(repo, serve.server, ["model", "get", "phase0-runtime-main"]),
       );

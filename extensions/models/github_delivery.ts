@@ -1,5 +1,6 @@
 /** Owner-operated delivery through the existing authenticated GitHub integration. */
 import { z } from "npm:zod@4.4.3";
+import { validateManagedReceipt } from "./managed_receipt.ts";
 
 const repo = "funsaized/herdr-mise";
 const Sha = z.string().regex(/^[0-9a-f]{40}$/);
@@ -120,6 +121,186 @@ export const extension = {
     },
   },
   methods: [
+    {
+      require_managed_verification: {
+        description:
+          "Verify the trusted gate receipt for the exact current candidate without rerunning local verification",
+        arguments: z.object({
+          workItem: z.string().regex(/^[1-9][0-9]*$/),
+          prUrl: z
+            .string()
+            .regex(
+              /^https:\/\/github\.com\/funsaized\/herdr-mise\/pull\/[1-9][0-9]*$/,
+            ),
+          commit: Sha,
+          baseCommit: Sha,
+        }),
+        execute: async (
+          args: {
+            workItem: string;
+            prUrl: string;
+            commit: string;
+            baseCommit: string;
+          },
+          context: Context,
+        ) => {
+          const api = async (path: string) =>
+            JSON.parse(
+              await gh(["api", `repos/${repo}/${path}`], context.signal),
+            );
+          const prNumber = Number(args.prUrl.split("/").at(-1));
+          const checkCurrent = async () => {
+            const pr = await api(`pulls/${prNumber}`);
+            const main = await api("branches/main");
+            if (
+              pr.state !== "open" ||
+              pr.draft ||
+              pr.head.sha !== args.commit ||
+              pr.head.repo?.full_name !== repo ||
+              pr.base.repo?.full_name !== repo ||
+              pr.base.ref !== "main" ||
+              pr.base.sha !== args.baseCommit ||
+              main.commit.sha !== args.baseCommit
+            )
+              throw new Error(
+                "Managed candidate is not the exact current PR head and main base",
+              );
+          };
+          await checkCurrent();
+          const statuses = await api(
+            `commits/${args.commit}/statuses?per_page=100`,
+          );
+          const status = statuses.find(
+            (entry: { context: string }) =>
+              entry.context === "Swamp managed verification",
+          );
+          const match =
+            typeof status?.target_url === "string"
+              ? status.target_url.match(
+                  /^https:\/\/github\.com\/funsaized\/herdr-mise\/actions\/runs\/([1-9][0-9]*)$/,
+                )
+              : null;
+          if (status?.state !== "success" || !match)
+            throw new Error(
+              "Current candidate needs a successful trusted managed gate",
+            );
+          const gateRunId = match[1];
+          const gate = await api(`actions/runs/${gateRunId}`);
+          const workflow = await api(`actions/workflows/${gate.workflow_id}`);
+          const artifacts = (
+            await api(`actions/runs/${gateRunId}/artifacts?per_page=100`)
+          ).artifacts.filter(
+            (artifact: { name: string }) =>
+              artifact.name === "swamp-managed-receipt",
+          );
+          if (
+            artifacts.length !== 1 ||
+            artifacts[0].expired ||
+            artifacts[0].size_in_bytes > 262144
+          )
+            throw new Error(
+              "Managed receipt artifact missing, ambiguous, expired or oversized",
+            );
+          // Reject untrusted workflows before downloading their output.
+          if (
+            workflow.path !== ".github/workflows/swamp-managed-gate.yml" ||
+            gate.event !== "workflow_run" ||
+            gate.head_sha !== args.baseCommit ||
+            gate.conclusion !== "success"
+          )
+            throw new Error(
+              "Status target is not the trusted current-main gate",
+            );
+          const temp = await Deno.makeTempDir({
+            prefix: "nightshift-managed-receipt-",
+          });
+          try {
+            await gh(
+              [
+                "run",
+                "download",
+                gateRunId,
+                "--repo",
+                repo,
+                "--name",
+                "swamp-managed-receipt",
+                "--dir",
+                temp,
+              ],
+              context.signal,
+            );
+            const path = `${temp}/receipt.json`;
+            const info = await Deno.lstat(path);
+            if (!info.isFile || info.isSymlink || info.size > 131072)
+              throw new Error("Managed receipt is not a bounded regular file");
+            const raw = JSON.parse(await Deno.readTextFile(path));
+            if (!/^[1-9][0-9]*$/.test(String(raw.producerRunId)))
+              throw new Error("Invalid producer run identity");
+            const producer = await api(`actions/runs/${raw.producerRunId}`);
+            const contents = async (path: string) => {
+              const data = await api(`contents/${path}?ref=${args.baseCommit}`);
+              if (data.encoding !== "base64")
+                throw new Error("Expected bounded GitHub content");
+              return Uint8Array.from(
+                atob(data.content.replace(/\s/g, "")),
+                (character) => character.charCodeAt(0),
+              );
+            };
+            const digest = async (bytes: Uint8Array) =>
+              [
+                ...new Uint8Array(
+                  await crypto.subtle.digest("SHA-256", bytes as BufferSource),
+                ),
+              ]
+                .map((byte) => byte.toString(16).padStart(2, "0"))
+                .join("");
+            const policyBytes = await contents(
+              "verification/managed-policy.json",
+            );
+            const policy = JSON.parse(new TextDecoder().decode(policyBytes));
+            const receipt = validateManagedReceipt(
+              raw,
+              {
+                prNumber,
+                headSha: args.commit,
+                baseSha: args.baseCommit,
+                gateRunId,
+                maxAgeHours: policy.maxAgeHours,
+                policySha256: await digest(policyBytes),
+                workflowSha256: await digest(
+                  await contents("workflows/workflow-verification.yaml"),
+                ),
+              },
+              gate,
+              workflow,
+              producer,
+            );
+            await checkCurrent();
+            const currentStatuses = await api(
+              `commits/${args.commit}/statuses?per_page=100`,
+            );
+            const currentStatus = currentStatuses.find(
+              (entry: { context: string }) =>
+                entry.context === "Swamp managed verification",
+            );
+            if (
+              currentStatus?.id !== status.id ||
+              currentStatus?.state !== "success"
+            )
+              throw new Error(
+                "Managed status changed during receipt validation",
+              );
+            return record(
+              context,
+              `managed-${args.workItem}-${args.commit}`,
+              receipt,
+            );
+          } finally {
+            await Deno.remove(temp, { recursive: true });
+          }
+        },
+      },
+    },
     {
       inspect_delivery_run: {
         description:
@@ -259,7 +440,7 @@ export const extension = {
     {
       open_delivery_pr: {
         description:
-          "Open or reuse a same-repository backlog PR using existing gh authentication",
+          "Open or update a same-repository backlog PR using existing gh authentication",
         arguments: z.object({
           head: Head,
           title: z.string().min(1).max(256),
@@ -288,6 +469,22 @@ export const extension = {
               context.signal,
             ),
           );
+          if (existing.length) {
+            await gh(
+              [
+                "pr",
+                "edit",
+                String(existing[0].number),
+                "--repo",
+                repo,
+                "--title",
+                args.title,
+                "--body",
+                args.body,
+              ],
+              context.signal,
+            );
+          }
           const result = existing.length
             ? existing[0]
             : {
