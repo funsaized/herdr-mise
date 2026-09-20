@@ -74,6 +74,17 @@ Deno.test("fixed defects retain their history without remaining blockers", () =>
     throw new Error("Resolution lost or stale blocker retained");
 });
 
+Deno.test("prior published identities remain stable and aliases cannot duplicate a defect", () => {
+  const input = reviews();
+  input[2].verdict = "fail";
+  input[2].findings = [{ ...defect, id: "frontend:pager-occlusion" }];
+  const result = normalizeReviews(input);
+  if (result.findings[2].id !== "frontend:pager-occlusion")
+    throw new Error("Published identity changed during re-review");
+  input[2].findings.push(defect);
+  reject(input);
+});
+
 Deno.test("missing lanes, duplicate identities and inconsistent verdicts fail closed", () => {
   const duplicate = reviews();
   duplicate[0] = duplicate[1];

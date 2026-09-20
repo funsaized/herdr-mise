@@ -70,7 +70,9 @@ export function normalizeReviews(reviews: z.infer<typeof LaneReview>[]) {
       );
     }
     for (const finding of review.findings) {
-      const id = `${review.lane}:${finding.id}`;
+      const id = finding.id.startsWith(`${review.lane}:`)
+        ? finding.id
+        : `${review.lane}:${finding.id}`;
       if (ids.has(id)) throw new Error(`Duplicate finding identity: ${id}`);
       ids.add(id);
       if (finding.disposition === "fixed") continue;
@@ -101,6 +103,8 @@ export function normalizeReviews(reviews: z.infer<typeof LaneReview>[]) {
     category: `round:${verdict}`,
     description: `Review round: ${verdict}.`,
   });
+  if (findings.length > 200)
+    throw new Error("Review exceeds the 200-finding publication limit");
   return { schemaVersion: 2, verdict, reviews: parsed, findings };
 }
 
