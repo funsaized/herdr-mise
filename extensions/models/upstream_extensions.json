@@ -105,8 +105,8 @@
     "serverUrl": "https://swamp-club.com"
   },
   "@funsaized/cli-agent": {
-    "version": "2026.09.03.2",
-    "pulledAt": "2026-09-03T14:35:25.721Z",
+    "version": "2026.09.20.1",
+    "pulledAt": "2026-09-20T22:38:27.263Z",
     "files": [
       ".swamp/bundles/06407ef9/cli_agent.js",
       ".swamp/pulled-extensions/@funsaized/cli-agent/files/LICENSE.txt",
@@ -117,8 +117,8 @@
       ".swamp/pulled-extensions/@funsaized/cli-agent/models/cli_agent.ts",
       ".swamp/pulled-extensions/@funsaized/cli-agent/models/cli_agent_orb.ts"
     ],
-    "checksum": "f78eff9f820fdc547cc27f8ea6cf07cbcf7c15c7ce2ddd44f68bda976866a442",
-    "filesChecksum": "d4a2ce5f9d75f38b1a908e7b7cb083131b1ff0245bf2bce525884ac2771adb24",
+    "checksum": "2aa3c8ab88f38e41b83349b5cb69ed2d6d67de4cceb9aa941734c67ba47a5dd8",
+    "filesChecksum": "151c9f979ffe96cf692b0f280d3e81607bba3ace0102ce6c0595887789332024",
     "serverUrl": "https://swamp-club.com"
   }
 }
