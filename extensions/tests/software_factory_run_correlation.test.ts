@@ -95,6 +95,7 @@ function context(
 }
 
 const workItemMethods = [
+  "evaluate_review",
   "start",
   "status",
   "record_dispatch",

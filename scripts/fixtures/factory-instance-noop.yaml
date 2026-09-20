@@ -1,0 +1,35 @@
+id: 38f0b644-df8e-4ead-8bb8-8052e7d39238
+name: phase0-noop
+inputs:
+  properties:
+    factory: { type: string }
+    workItem: { type: string }
+  required: [factory, workItem]
+jobs:
+  - name: record
+    steps:
+      - name: artifact
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.factory }}
+          methodName: record_artifact
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: summary
+            payload: { text: deterministic fixture output }
+        dependsOn: []
+      - name: evidence
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.factory }}
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: workflow-run
+            payload:
+              status: succeeded
+              runId: ${{ run.id }}
+        dependsOn:
+          - { step: artifact, condition: { type: succeeded } }
+    dependsOn: []
+version: 1
