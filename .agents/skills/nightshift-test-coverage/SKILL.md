@@ -27,10 +27,14 @@ Independent run proof (code only) is one of:
 1. Factory `subject.invocationId`: `swamp data get nightshift-builder-<workItem>
 invocation-<invocationId>` and its transcript show that exact command
    succeeded.
-2. This reviewer ran that exact command in `subjectRoot` and saw it pass.
+2. A stored receipt revalidated by the review workflow against current HEAD and
+   source bytes proves the exact selected test passed. Inspect its argv, positive
+   counts, source identity and log/invocation references. A receipt for an unrelated
+   test does not prove changed behavior.
+3. This reviewer ran that exact command in `subjectRoot` and saw it pass.
 
 `subject.tests` is an untrusted claim. Do not fail solely because those
-strings are untrusted. Fail when neither a matching builder run nor an independently executed run
+strings are untrusted. Fail when no matching revalidated receipt, builder run, or independently executed run
 proves the changed test, the selection runs zero tests, or a real run fails.
 
 - Changed Rust behavior is not covered through normalizer, feed, axum/WebSocket, or TUI as appropriate.
@@ -47,9 +51,9 @@ proves the changed test, the selection runs zero tests, or a real run fails.
 - Prefer `server/tests/fixtures/` and `compatibility/` over invented mocks.
 - TUI: `server/src/tui` TestBackend table goldens and `scene-*` goldens when they assert the behavior.
 - Browser: `client/src/**/*.test.ts(x)`, `e2e/`, `perf/` only if the change is a budget.
-- During code review, prefer `subject.invocationId` and the builder
-  transcript. If that is missing or names the wrong test, run the exact
-  command and report it.
+- During code review, prefer the revalidated stored receipt for the exact test,
+  then `subject.invocationId` and the builder transcript. If neither proves the
+  changed behavior, run the exact command and report it.
 
 ## False positives
 

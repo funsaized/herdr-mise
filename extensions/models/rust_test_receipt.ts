@@ -166,11 +166,26 @@ export async function executeRustTest(
     receipt,
   );
   const handle = await context.writeResource("testReceipt", name, receipt);
+  const pointer = await context.writeResource(
+    "testReceiptPointer",
+    "test-result",
+    {
+      receiptName: name,
+      executionStatus: receipt.executionStatus,
+    },
+  );
   if (failure) throw failure;
-  return { dataHandles: [invocation, handle, logHandle!] };
+  return { dataHandles: [invocation, handle, logHandle!, pointer] };
 }
 
 export const rustReceiptResources = {
+  testReceiptPointer: {
+    description:
+      "Latest produced or verified test receipt for workflow bindings",
+    schema: z.record(z.string(), z.unknown()),
+    lifetime: "30d",
+    garbageCollection: 100,
+  },
   testReceipt: {
     description: "Source-bound exact Rust test receipt or receipt verification",
     schema: z.record(z.string(), z.unknown()),

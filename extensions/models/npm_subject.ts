@@ -437,6 +437,7 @@ async function execute(
     remember(error);
   }
   let receiptHandle: Handle | undefined;
+  let receiptPointer: Handle | undefined;
   if (operation === "test") {
     try {
       receiptHandle = await context.writeResource(
@@ -453,6 +454,14 @@ async function execute(
           error: errors.length ? errors.join("; ") : null,
         },
       );
+      receiptPointer = await context.writeResource(
+        "testReceiptPointer",
+        "test-result",
+        {
+          receiptName: receiptHandle.name,
+          executionStatus: errors.length ? "failed" : "succeeded",
+        },
+      );
     } catch (error) {
       remember(error);
     }
@@ -463,6 +472,7 @@ async function execute(
       invocation!,
       logHandle!,
       ...(receiptHandle ? [receiptHandle] : []),
+      ...(receiptPointer ? [receiptPointer] : []),
     ],
   };
 }
@@ -470,6 +480,13 @@ async function execute(
 export const extension = {
   type: "@funsaized/npm/project",
   resources: {
+    testReceiptPointer: {
+      description:
+        "Latest produced or verified test receipt for workflow bindings",
+      schema: z.record(z.string(), z.unknown()),
+      lifetime: "30d",
+      garbageCollection: 100,
+    },
     testReceipt: {
       description:
         "Source-bound observed test execution, counts, toolchain and log pointers",

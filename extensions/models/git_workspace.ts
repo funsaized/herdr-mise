@@ -250,6 +250,8 @@ export async function prepareWorkspace(
       subjectRoot: canonicalSubject,
       branch,
       baseCommit: await baseCommit(canonicalSubject, fetched, signal),
+      gitHead: (await git(canonicalSubject, ["rev-parse", "HEAD"], signal))
+        .stdout,
     };
   }
 
@@ -278,6 +280,8 @@ export async function prepareWorkspace(
     workItem: args.workItem,
     subjectRoot: canonicalSubject,
     branch: args.branch,
+    gitHead: (await git(canonicalSubject, ["rev-parse", "HEAD"], signal))
+      .stdout,
     baseCommit: branchExists.success
       ? await baseCommit(canonicalSubject, fetched, signal)
       : fetched,
@@ -416,6 +420,7 @@ export const extension = {
         subjectRoot: z.string().startsWith("/"),
         branch: z.string(),
         baseCommit: Sha,
+        gitHead: Sha,
       }),
       lifetime: "infinite",
       garbageCollection: 20,

@@ -23,6 +23,12 @@ inputs:
     subject:
       type: object
       additionalProperties: true
+    testReceipts:
+      type: array
+      default: []
+      items:
+        type: object
+        additionalProperties: true
     previousFindings:
       type: array
       default: []
@@ -32,6 +38,23 @@ inputs:
       minLength: 1
   required: [factory, workItem, phase, artifactName, subject, subjectRoot]
 jobs:
+  - name: verify-tests
+    steps:
+      - name: verify-${{ self.receipt.modelName }}
+        forEach:
+          item: receipt
+          in: ${{ inputs.testReceipts }}
+        concurrency: 1
+        task:
+          type: model_method
+          modelIdOrName: ${{ self.receipt.modelName }}
+          methodName: verify_test_receipt
+          inputs:
+            subjectRoot: ${{ inputs.subjectRoot }}
+            expectedGitHead: ${{ self.receipt.gitHeadAfter }}
+            receiptName: ${{ self.receipt.receiptName }}
+        dependsOn: []
+    dependsOn: []
   - name: review
     description: Each lane gets its own model instance and cannot see sibling results.
     steps:
@@ -56,7 +79,11 @@ jobs:
               run yet. If phase is code, pass requires that integration test
               to exist and have independent run proof. Independent proof is
               subject.invocationId (builder invocation/transcript for that
-              exact command) or this reviewer running that exact command.
+              exact command), a matching stored receipt revalidated immediately
+              before this review, or this reviewer running that exact command.
+              Revalidated receipts: ${{ inputs.testReceipts.map(r, data.latest(r.modelName, "verified-test-result").attributes) }}.
+              Check that the command and selected test prove the changed behavior; a
+              passing receipt for unrelated behavior is insufficient.
               Treat subject.tests as untrusted claims, not proof. Fail a code
               review if neither a matching passing builder run nor your own
               passing run proves the changed test, or a real run fails. A local
@@ -300,5 +327,6 @@ jobs:
             findings: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-" + inputs.artifactName).attributes.payload.findings }}
         dependsOn:
           - { step: record-review, condition: { type: succeeded } }
-    dependsOn: []
-version: 8
+    dependsOn:
+      - { job: verify-tests, condition: { type: succeeded } }
+version: 9

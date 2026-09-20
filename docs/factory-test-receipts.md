@@ -52,6 +52,20 @@ Both runners share bounded streaming, cancellation and output-truncation handlin
 These methods execute candidate tests under the caller's existing execution
 boundary; they do not provision an OS sandbox or establish credential isolation.
 
-Automatic structured selection from approved plans remains separate work.
-Existing builder-transcript/reviewer-run proof is supported during migration;
-no receipt is synthesized from old test prose.
+New `nightshift-template` plans require one to ten `testSelection` entries.
+Each names `runner` (`node`, `vitest`, `playwright`, or `rust`) and a literal
+`selector`. Rust also requires `target` and, for integration tests, `targetName`.
+Node selects an exact title in `test:unit`; Vitest selects a client test title;
+Playwright selects a title suffix across configured projects. Rust uses an exact
+fully qualified test name. Arbitrary commands and runner flags are not accepted.
+
+After implementation, `nightshift-run-tests` reads the persisted plan, its review
+and the current-cycle human approval. It runs selections serially in per-build
+model instances, verifies stored receipts, and records factory evidence. It
+rejects changed approvals, mismatched argv, old-build receipts, changed HEAD or
+source, missing results and zero passing tests. Review revalidates each receipt
+against the current subject before launching the seven lanes.
+
+Existing plans without selections retain builder-transcript/reviewer-run proof;
+no receipt is synthesized from old test prose. Existing factory snapshots are
+not rewritten. The new template schema applies to newly created instances.

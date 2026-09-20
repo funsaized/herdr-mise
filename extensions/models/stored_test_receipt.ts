@@ -104,5 +104,15 @@ export async function verifyTestReceipt(
       subjectRoot: root,
     },
   );
-  return { dataHandles: [handle] };
+  const pointer = await context.writeResource(
+    "testReceiptPointer",
+    "verified-test-result",
+    {
+      ...receipt,
+      receiptName: args.receiptName,
+      verifiedAt: new Date().toISOString(),
+      subjectRoot: root,
+    },
+  );
+  return { dataHandles: [handle, pointer] };
 }

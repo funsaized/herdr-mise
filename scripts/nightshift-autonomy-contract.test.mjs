@@ -129,7 +129,15 @@ test("Nightshift template preserves legacy gates and adds prior-review context w
   assert.ok(priorContext[0].includes('"artifact-plan-review"'));
   assert.ok(priorContext[1].includes('"artifact-code-review"'));
   assert.equal(
-    templateLifecycle.replace(/^ +previousFindings: .*\n/gmu, ""),
+    templateLifecycle
+      .replace(/^ +previousFindings: .*\n/gmu, "")
+      .replace(/^ +structuredTests: true\n/gmu, "")
+      .replace(/^ +testReceipts: .*\n/gmu, "")
+      .replace(", outOfScope, testSelection]", ", outOfScope]")
+      .replace(
+        /                        testSelection:\n[\s\S]*?(?=                        risks:)/u,
+        "",
+      ),
     legacyLifecycle,
   );
   assert.doesNotMatch(template, /^reports:/mu);

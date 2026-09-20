@@ -113,6 +113,29 @@ jobs:
         dependsOn:
           - step: record-workspace
             condition: { type: succeeded }
+      - name: selected-tests
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-run-tests
+          inputs:
+            factory: ${{ inputs.factory }}
+            workItem: ${{ inputs.workItem }}
+            subjectRoot: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-workspace").attributes.payload.subjectRoot }}
+            expectedGitHead: ${{ data.latest("verification-source-git", "workspace-" + inputs.workItem).attributes.gitHead }}
+            runId: ${{ run.id }}
+        dependsOn:
+          - { step: implement-plan, condition: { type: succeeded } }
+      - name: record-test-evidence
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.factory }}
+          methodName: record_evidence
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            name: test-receipts
+            payload: ${{ data.latest(inputs.factory, "test-evidence").attributes }}
+        dependsOn:
+          - { step: selected-tests, condition: { type: succeeded } }
       - name: record-change-summary
         task:
           type: model_method
@@ -129,7 +152,7 @@ jobs:
               baseCommit: ${{ data.latest(inputs.factory, "artifact-" + inputs.workItem + "-workspace").attributes.payload.baseCommit }}
               invocationId: ${{ "nightshift-" + inputs.workItem + "-build-" + run.id }}
         dependsOn:
-          - step: implement-plan
+          - step: record-test-evidence
             condition: { type: succeeded }
       - name: record-build-run
         task:
@@ -145,4 +168,4 @@ jobs:
         dependsOn:
           - { step: record-change-summary, condition: { type: succeeded } }
     dependsOn: []
-version: 7
+version: 8

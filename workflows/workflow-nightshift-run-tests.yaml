@@ -1,0 +1,57 @@
+id: 198950f3-b9e2-4403-85a3-5ace38224bb8
+name: nightshift-run-tests
+description: Execute approved-plan selections serially and collect persisted proof.
+inputs:
+  properties:
+    factory: { type: string }
+    workItem: { type: string }
+    subjectRoot: { type: string }
+    expectedGitHead: { type: string }
+    runId: { type: string }
+  required: [factory, workItem, subjectRoot, expectedGitHead, runId]
+jobs:
+  - name: prepare
+    steps:
+      - name: select
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.factory }}
+          methodName: prepare_test_selection
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+            expectedGitHead: ${{ inputs.expectedGitHead }}
+            runId: ${{ inputs.runId }}
+        dependsOn: []
+    dependsOn: []
+  - name: tests
+    steps:
+      - name: test-${{ self.entry.id }}
+        forEach:
+          item: entry
+          in: ${{ data.latest(inputs.factory, "test-plan").attributes.entries }}
+        concurrency: 1
+        task:
+          type: workflow
+          workflowIdOrName: nightshift-test-receipt
+          inputs:
+            entry: ${{ self.entry }}
+        dependsOn: []
+    dependsOn:
+      - { job: prepare, condition: { type: succeeded } }
+  - name: record
+    steps:
+      - name: collect
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.factory }}
+          methodName: record_test_results
+          inputs:
+            workItem: ${{ inputs.workItem }}
+            subjectRoot: ${{ inputs.subjectRoot }}
+            expectedGitHead: ${{ inputs.expectedGitHead }}
+            runId: ${{ inputs.runId }}
+        dependsOn: []
+    dependsOn:
+      - { job: tests, condition: { type: succeeded } }
+version: 1

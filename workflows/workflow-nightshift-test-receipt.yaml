@@ -1,0 +1,34 @@
+id: 113433c5-a7e6-4ebd-9a86-bc3489f5314c
+name: nightshift-test-receipt
+description: Execute one selected test and verify its stored source-bound receipt.
+inputs:
+  properties:
+    entry:
+      type: object
+      additionalProperties: true
+  required: [entry]
+jobs:
+  - name: receipt
+    steps:
+      - name: execute
+        task:
+          type: model_method
+          modelType: ${{ inputs.entry.modelType }}
+          modelName: ${{ inputs.entry.modelName }}
+          methodName: test_subject
+          globalArgs: ${{ inputs.entry.globalArgs }}
+          inputs: ${{ inputs.entry.inputs }}
+        dependsOn: []
+      - name: verify
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.entry.modelName }}
+          methodName: verify_test_receipt
+          inputs:
+            subjectRoot: ${{ inputs.entry.inputs.subjectRoot }}
+            expectedGitHead: ${{ inputs.entry.inputs.expectedGitHead }}
+            receiptName: ${{ data.latest(inputs.entry.modelName, "test-result").attributes.receiptName }}
+        dependsOn:
+          - { step: execute, condition: { type: succeeded } }
+    dependsOn: []
+version: 1

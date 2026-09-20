@@ -25,6 +25,7 @@
     "extensions/models/git_ancestry.ts",
     "extensions/models/herdr_mise_rust.ts",
     "extensions/models/nightshift_agent.ts",
+    "extensions/models/nightshift_test_selection.ts",
     "extensions/models/npm_subject.ts",
     "extensions/models/rust_test_receipt.ts",
     "extensions/models/stored_test_receipt.ts",
