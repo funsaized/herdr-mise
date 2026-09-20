@@ -22,9 +22,10 @@ type Context = {
   modelId: string;
   signal?: AbortSignal;
   definitionRepository: {
-    findByNameGlobal(
-      name: string,
-    ): Promise<{ type: unknown; definition: { id: string } } | null>;
+    findByNameGlobal(name: string): Promise<{
+      type: { normalized: string };
+      definition: { id: string };
+    } | null>;
   };
   dataRepository: {
     getContent(
@@ -230,7 +231,8 @@ export const extension = {
             const model = await context.definitionRepository.findByNameGlobal(
               `nightshift-${lane}`,
             );
-            if (!model) throw new Error(`Missing review model: ${lane}`);
+            if (!model || model.type.normalized !== "@funsaized/cli-agent")
+              throw new Error(`Missing or replaced review model: ${lane}`);
             const invocationId = `nightshift-${args.workItem}-${args.phase}-${lane}-${args.runId}`;
             const record = await context.dataRepository.getContent(
               model.type,
@@ -243,6 +245,8 @@ export const extension = {
               .object({
                 invocationId: z.literal(invocationId),
                 success: z.literal(true),
+                exitCode: z.literal(0),
+                timedOut: z.literal(false),
                 provider: z.string().min(1),
                 model: z.string().min(1),
                 variant: z.string().nullable().optional(),

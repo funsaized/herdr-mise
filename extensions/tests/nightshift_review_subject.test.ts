@@ -109,7 +109,7 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
       modelId: "factory",
       definitionRepository: {
         findByNameGlobal: async (name: string) => ({
-          type: "@funsaized/cli-agent",
+          type: { normalized: "@funsaized/cli-agent" },
           definition: { id: name },
         }),
       },
@@ -121,6 +121,8 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
               : {
                   invocationId: name.slice("invocation-".length),
                   success: true,
+                  exitCode: 0,
+                  timedOut: false,
                   provider: "opencode",
                   model: "actual-provider/actual-model",
                   variant: "actual-variant",
