@@ -440,7 +440,7 @@ export const extension = {
     {
       open_delivery_pr: {
         description:
-          "Open or reuse a same-repository backlog PR using existing gh authentication",
+          "Open or update a same-repository backlog PR using existing gh authentication",
         arguments: z.object({
           head: Head,
           title: z.string().min(1).max(256),
@@ -469,6 +469,22 @@ export const extension = {
               context.signal,
             ),
           );
+          if (existing.length) {
+            await gh(
+              [
+                "pr",
+                "edit",
+                String(existing[0].number),
+                "--repo",
+                repo,
+                "--title",
+                args.title,
+                "--body",
+                args.body,
+              ],
+              context.signal,
+            );
+          }
           const result = existing.length
             ? existing[0]
             : {
