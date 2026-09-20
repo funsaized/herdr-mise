@@ -1,0 +1,27 @@
+# Factory refactoring implementation ledger
+
+Authorization: the maintainer approved implementing the September 20 audit,
+iterating to completion, committing, pushing, and updating protection configuration
+as needed. Required controls remain enforced during migration.
+
+Branch: `refactor/nightshift-factory-efficiency`. An existing `package-lock.json`
+edit is unrelated and excluded from implementation commits.
+
+| Slice                            | Status                      | Evidence / remaining work                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Baseline                         | In progress                 | Existing report now loads journal events, candidate identities, and delivery evidence. Closed stage residence, redispatch count, time to first dispatch, and union of observed agent execution intervals are reported with coverage. Human wait remains unavailable without gate-ready events. Fifteen focused Deno tests passed, including a retained item-144 journal fixture. Live report registration and workflow-level baseline remain to verify. |
+| Deterministic receipts/preflight | Pending                     | Bind test runs to source contents, selected test counts, toolchain and durable logs.                                                                                                                                                                                                                                                                                                                                                                    |
+| Review convergence               | Pending                     | Shared contract, calibrated severity, stable findings, adjudication.                                                                                                                                                                                                                                                                                                                                                                                    |
+| Managed shipping / test tiers    | Pending                     | Consume authoritative managed evidence; keep exact identities and approvals.                                                                                                                                                                                                                                                                                                                                                                            |
+| Selective review                 | Pending                     | Conservative invalidation and shadow evaluation before enabling reuse.                                                                                                                                                                                                                                                                                                                                                                                  |
+| Runtime guarantees               | Pending external decisions  | Upstream changes/publication and provisioned Linux worker environment are not yet available.                                                                                                                                                                                                                                                                                                                                                            |
+| Parallel execution               | Depends on runtime evidence | Do not expand concurrency before isolation and resource ownership are demonstrated.                                                                                                                                                                                                                                                                                                                                                                     |
+
+Open input: explicit factory selection for new runs, and the provisioned Linux
+worker environment (or approval to leave deployment pending after the harness).
+Other authorized implementation work continues while these are unresolved.
+
+Timing semantics: elapsed stage residence includes all waiting and execution.
+Overlapping agent invocation durations are counted once within a visit. The
+remainder is unattributed, not classified as human or queue wait. Missing clocks,
+open stages, and missing invocations produce unavailable values rather than zero.
