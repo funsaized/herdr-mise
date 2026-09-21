@@ -171,4 +171,34 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn golden_fixture_schema_rejects_invalid_version_and_missing_agents() {
+        let schema_value: Value = serde_json::from_str(
+            &fs::read_to_string(protocol_dir().join("schema/agent-state-event.v1.schema.json"))
+                .expect("read schema"),
+        )
+        .expect("parse schema");
+        let schema = jsonschema::validator_for(&schema_value).expect("compile schema");
+        let fixture: Value = serde_json::from_str(
+            &fs::read_to_string(protocol_dir().join("fixtures/snapshot.v1.json"))
+                .expect("read fixture"),
+        )
+        .expect("parse fixture");
+        assert!(
+            schema.is_valid(&fixture),
+            "golden fixture must match schema"
+        );
+
+        let mut invalid_version = fixture.clone();
+        invalid_version["version"] = Value::String("1".to_owned());
+        assert!(!schema.is_valid(&invalid_version));
+
+        let mut missing_agents = fixture.clone();
+        missing_agents
+            .as_object_mut()
+            .expect("snapshot fixture is an object")
+            .remove("agents");
+        assert!(!schema.is_valid(&missing_agents));
+    }
 }
