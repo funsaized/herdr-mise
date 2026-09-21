@@ -36,3 +36,37 @@ repository returned HTTP 403, `Permission ... denied to funsaized`. Maintainers
 must review/merge and publish upstream changes before this repository can pin
 them. Installed generated source and checksums were not edited; no upstream
 completion or atomicity guarantee is claimed.
+
+## Current delivery and recovery blockers
+
+Rechecked on 2026-09-21 against `swamp-club/swamp-extensions`
+`536b04dafbba38df651c7fbb8f1694666f2a01ad`: the dispatch patch applies;
+the baseline suite passes 164 tests and the patched suite passes 165. Both
+`swamp-club/swamp-extensions` and `swamp-club/swamp` reject this account's
+push dry runs with HTTP 403. No upstream release or local installed source was
+changed. Maintainer review/publication is required for adoption.
+
+The additional [crash reproduction](software-factory-crash-reproduction.patch)
+applies after the dispatch patch. Its two assertions intentionally fail on the
+current factory: failure while writing the `started` journal leaves visible state,
+and failure while writing the `advanced` journal leaves the new stage visible.
+Run only those cases with:
+
+```sh
+deno test --allow-read --allow-write --allow-env --filter 'atomicity:' \
+  extensions/models/software_factory_test.ts
+```
+
+These are fault-injection reproductions, not a recovery fix. A correct solution
+needs an atomic commit or a durable operation journal with idempotent recovery
+across state, history, and approval writes. Merely reversing write order or
+retrying `start` moves the partial-write problem; it does not solve it.
+
+Current runtime `bcaa9695b7f27f51964a9f41587fdf112b261c89` still updates an
+existing definition's global arguments before method execution in
+`src/libswamp/models/direct_execution.ts`. The repository's real isolated
+factory integration reproduces overwrite before duplicate-start rejection.
+An opt-in create-if-absent mode must reuse the original definition, including
+under concurrent creation, while preserving the default update and explicit
+repair behavior. Until platform fixes are published and adopted, intake remains
+single-writer and ambiguous interrupted writes need operator inspection.

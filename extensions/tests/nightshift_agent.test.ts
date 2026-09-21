@@ -1,6 +1,7 @@
 import {
   assertProtectedLauncher,
   macosProfile,
+  macosLauncher,
   probeMacosSandbox,
 } from "../models/nightshift_agent.ts";
 
@@ -45,6 +46,27 @@ Deno.test("sandbox policy rejects a symlink supplied as a profile", async () => 
       rejected = true;
     }
     if (!rejected) throw new Error("Symlink policy accepted");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("provider launcher rejects a symlink into actor-writable storage", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${root}/scripts`);
+    await Deno.writeTextFile(`${root}/untrusted.py`, "print('untrusted')");
+    await Deno.symlink(
+      `${root}/untrusted.py`,
+      `${root}/scripts/nightshift-opencode.py`,
+    );
+    let rejected = false;
+    try {
+      await macosLauncher(root);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error("Symlink launcher accepted");
   } finally {
     await Deno.remove(root, { recursive: true });
   }

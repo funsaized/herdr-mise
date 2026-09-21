@@ -61,6 +61,16 @@ export async function macosProfile(root: string, role: "actor" | "readonly") {
   return path;
 }
 
+export async function macosLauncher(root: string) {
+  const launcher = `${await Deno.realPath(root)}/scripts/nightshift-opencode.py`;
+  if (
+    (await Deno.lstat(launcher)).isSymlink ||
+    (await Deno.realPath(launcher)) !== launcher
+  )
+    throw new Error("OpenCode launcher must not be a symlink");
+  return launcher;
+}
+
 /** Dummy fixtures only: no provider invocation or real credential access. */
 export async function probeMacosSandbox(repoDir: string) {
   if (Deno.build.os !== "darwin")
@@ -246,11 +256,15 @@ export const extension = {
             throw new Error(
               "Nightshift macOS policy currently supports the OpenCode route only",
             );
-          if (role === "actor")
-            assertProtectedLauncher(
-              await Deno.realPath(context.repoDir),
-              Deno.env.get("HOME") ?? "",
+          assertProtectedLauncher(
+            await Deno.realPath(context.repoDir),
+            Deno.env.get("HOME") ?? "",
+          );
+          if (context.globalArgs.opencodePath !== "opencode")
+            throw new Error(
+              "Nightshift macOS requires opencode on the trusted PATH",
             );
+          const launcher = await macosLauncher(context.repoDir);
           const profile = await macosProfile(context.repoDir, role);
           const evidence = await probeMacosSandbox(context.repoDir);
           await context.writeResource("macosSandboxProbe", "macos-sandbox", {
@@ -271,7 +285,11 @@ export const extension = {
             },
             {
               ...context,
-              globalArgs: { ...context.globalArgs, sandboxProfile: profile },
+              globalArgs: {
+                ...context.globalArgs,
+                sandboxProfile: profile,
+                opencodePath: launcher,
+              },
             },
           );
         },

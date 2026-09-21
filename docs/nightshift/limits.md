@@ -28,12 +28,17 @@ Do not use local cancellation against a production shared-server run on this
 runtime. Stop selecting new work and let active work finish when possible.
 Recovery of a hung shared server needs operator inspection of the server and its
 owned descendants; no fully tested safe shared-server cancellation path is
-claimed. Platform cancellation/restart acceptance remains blocked.
+claimed. Platform cancellation/restart acceptance remains blocked. The maintainer
+explicitly parked the upstream fix on 2026-09-21. Reopen when an upstream candidate
+can prove worker-only cancellation, no surviving owned children, healthy shared
+service and accurate diagnostics.
 
 ## Worker and runtime guarantees
 
-- [Mac filesystem and executor checks](worker-isolation.md) pass; complete
-  repository-toolchain, inherited-socket, and credential-broker acceptance remains.
+- [Mac filesystem, executor and scoped capability checks](worker-isolation.md) pass,
+  including the repository toolchain, inherited descriptors, known-path Unix
+  credential sockets, and a dummy-keychain read. Arbitrary brokers and complete
+  host isolation remain outside this local-mode guarantee.
 - Ordinary POSIX descendants in the owned process group are cleaned. Descendants
   creating another group/session remain outside that guarantee.
 - Complete home isolation, exclusive scratch, and provider-only network egress
@@ -54,8 +59,9 @@ wait, true provider spend, or a defect-escape rate.
 
 Before changing models, skipping review lanes, reusing review output, or raising
 concurrency, complete independent replay of historical/seeded defects, controlled
-cold/warm verification measurements, and at least ten comparable completed pilot
-items. Track delivered throughput, tokens, useful-feedback time, rework,
+cold/warm verification measurements, and observations from at least ten comparable completed pilot
+items. Collect the pilot during normal new feature delivery; it is not a queue
+of artificial tasks and does not prevent starting new work. Track delivered throughput, tokens, useful-feedback time, rework,
 infrastructure retries, human interventions, contention, seeded-defect detection,
 and escaped severity together. Ten items are an operational checkpoint, not
 statistical proof. Stop or revert if a material blocker would be missed or source

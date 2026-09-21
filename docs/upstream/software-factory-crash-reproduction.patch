@@ -1,0 +1,38 @@
+--- a/software-factory/extensions/models/software_factory_test.ts
++++ b/software-factory/extensions/models/software_factory_test.ts
+@@ -1833,3 +1833,35 @@
+     fresh.context,
+   );
+ });
++
++Deno.test("atomicity: interrupted start must not expose a run without its journal", async () => {
++  const h = buildHarness();
++  const write = h.context.writeResource;
++  const context = {
++    ...h.context,
++    writeResource: async (...args: Parameters<typeof write>) => {
++      if (args[0] === "journal") throw new Error("injected journal write failure");
++      return await write(...args);
++    },
++  };
++  await assertRejects(() => model.methods.start.execute({workItem: WI}, context), Error, "injected journal");
++  assertEquals(h.store.has("state-TEST-1"), false, "failed start published state before its journal");
++});
++
++Deno.test("atomicity: interrupted advance must retain the previous state", async () => {
++  const h = buildHarness();
++  await model.methods.start.execute({workItem: WI}, h.context);
++  await model.methods.record_dispatch.execute({workItem: WI}, h.context);
++  await model.methods.record_artifact.execute({workItem: WI, name: "plan", payload: {summary: "fixture"}}, h.context);
++  const before = structuredClone(latest(h, "state-TEST-1"));
++  const write = h.context.writeResource;
++  const context = {
++    ...h.context,
++    writeResource: async (...args: Parameters<typeof write>) => {
++      if (args[0] === "journal") throw new Error("injected journal write failure");
++      return await write(...args);
++    },
++  };
++  await assertRejects(() => model.methods.advance.execute({workItem: WI, transition: "submit"}, context), Error, "injected journal");
++  assertEquals(latest(h, "state-TEST-1"), before, "failed advance exposed a new stage without its journal");
++});

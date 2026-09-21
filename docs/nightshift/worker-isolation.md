@@ -60,15 +60,15 @@ requirement to provision Linux. Installed source imports are resolved at executi
 time from Swamp's restored CLI-agent extension, so clean subject checkouts do not
 need a copy of runtime extension files just to load the test suite.
 
-| Acceptance                                                           | State                                                                                                                                                                                 |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native source, symlink and known-credential checks                   | PASS, both roles                                                                                                                                                                      |
-| Backend unavailable fails before launch                              | PASS                                                                                                                                                                                  |
-| Real provider startup and parsed result                              | PASS: OpenCode `reviewer`, resolved `xai/grok-4.6`, exit 0 and parsed JSON                                                                                                            |
-| Representative actor edits and tests                                 | PASS: real OpenCode builder created a Node test in a sibling checkout and reported exit 0; independent file inspection and rerun passed. Full repository toolchain acceptance pending |
-| Inherited sockets and credential-broker coverage                     | Pending                                                                                                                                                                               |
-| Native executor cancellation/timeout and ordinary descendant cleanup | PASS: six installed-release probes across both roles; shared-server cancellation is blocked; see [known limits](limits.md#shared-server-cancellation)                                 |
-| Complete home isolation / exclusive scratch / restricted egress      | Not implemented; explicit local-mode limits                                                                                                                                           |
+| Acceptance                                                           | State                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native source, symlink and known-credential checks                   | PASS, both roles                                                                                                                                                                                                                                                     |
+| Backend unavailable fails before launch                              | PASS                                                                                                                                                                                                                                                                 |
+| Real provider startup and parsed result                              | PASS: OpenCode `reviewer`, resolved `xai/grok-4.6`, exit 0 and parsed JSON                                                                                                                                                                                           |
+| Representative actor edits and tests                                 | PASS: real OpenCode builder created a Node test in a sibling checkout and reported exit 0; independent file inspection and rerun passed. Repository npm installs, TypeScript/build, 124 Node, 221 client and 147 Rust library tests now pass under the actor profile |
+| Inherited sockets and credential-broker coverage                     | PASS for extra descriptor closure, advertised SSH/GPG endpoint removal, known-path Unix agent denial, and an explicit dummy-keychain read; arbitrary broker isolation is not claimed                                                                                 |
+| Native executor cancellation/timeout and ordinary descendant cleanup | PASS: six installed-release probes across both roles; shared-server cancellation is blocked; see [known limits](limits.md#shared-server-cancellation)                                                                                                                |
+| Complete home isolation / exclusive scratch / restricted egress      | Not implemented; explicit local-mode limits                                                                                                                                                                                                                          |
 
 The approved `@funsaized/cli-agent@2026.09.20.1` release closes the observed
 ordinary-child leak after early provider exit and propagates optional caller
@@ -87,3 +87,33 @@ exclusive in a checkout. Metadata-only intake may overlap using the same server.
 Direct local runtime cancellation passes, but local cancellation of a server-owned
 run kills the shared server and can leave a child alive. See the
 [confirmed runtime limitation](limits.md#shared-server-cancellation).
+
+## Socket acceptance and local-mode limits
+
+Native probes found that the generic executor inherited an explicitly supplied
+Unix socket, and file-read denial alone permitted a new connection to a dummy
+credential-agent socket. The Mac `invoke_nightshift` route now uses a trusted
+[OpenCode launcher](../../scripts/nightshift-opencode.py) that closes descriptors
+above stderr before exec and removes `SSH_AUTH_SOCK`, `SSH_AGENT_PID`, and
+`GPG_AGENT_INFO`. It requires `opencode` on the trusted PATH and rejects a
+symlinked launcher. `/usr/bin/python3` is required on the Mac host.
+
+Both role profiles deny outbound Unix connections under known SSH, GPG,
+1Password and macOS launchd-agent paths. Provider IP traffic and ordinary
+application/test sockets remain allowed. A blanket Unix-socket restriction was
+rejected because it prevented legitimate Herdr adapter tests from completing.
+
+The [repeatable acceptance probes](../../scripts/worker-acceptance/README.md)
+pass against the final policy. A real OpenCode reviewer (`xai/grok-4.6`) also
+returned parsed JSON through the new launcher. [Sanitized observations](evidence/worker-capabilities.json)
+bind the tested subject and policy/launcher bytes. The generic shared CLI-agent
+executor has not gained descriptor closure; this guarantee belongs to the
+Nightshift Mac route.
+
+The keychain check uses an explicitly named disposable keychain, with an
+unsandboxed positive control. It does not certify every Mach service or credential
+broker. Custom broker sockets outside the known denied paths remain reachable,
+and other inherited provider environment credentials remain available to tools.
+Ordinary HOME reads, shared scratch/provider state and unrestricted provider
+networking remain intentional local-mode limits. No concurrency increase follows
+from these results.

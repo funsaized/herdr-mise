@@ -45,3 +45,12 @@
 
 (deny file-write* (subpath CWD))
 (deny file-read* file-write* (subpath (string-append CWD "/.swamp/secrets")))
+
+; File denial alone does not deny connections to credential-agent sockets.
+; Keep application/test sockets available outside these known credential paths.
+(deny network-outbound
+  (subpath (string-append HOME "/.ssh"))
+  (subpath (string-append HOME "/.gnupg"))
+  (subpath (string-append HOME "/.1password"))
+  (subpath (string-append HOME "/Library/Group Containers/2BUA8C4S2C.com.1password"))
+  (regex #"^(/private)?/tmp/com[.]apple[.]launchd[.][^/]+/Listeners$"))

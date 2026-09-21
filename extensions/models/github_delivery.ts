@@ -131,6 +131,63 @@ export const extension = {
   },
   methods: [
     {
+      update_delivery_issue: {
+        description:
+          "Update an existing repository issue body after checking its recorded revision",
+        arguments: z.object({
+          issueNumber: Pr,
+          expectedUpdatedAt: z.iso.datetime(),
+          body: z.string().min(1).max(65000),
+        }),
+        execute: async (
+          args: {
+            issueNumber: number;
+            expectedUpdatedAt: string;
+            body: string;
+          },
+          context: Context,
+        ) => {
+          const read = async () =>
+            JSON.parse(
+              await gh(
+                [
+                  "issue",
+                  "view",
+                  String(args.issueNumber),
+                  "--repo",
+                  repo,
+                  "--json",
+                  "number,url,state,body,updatedAt",
+                ],
+                context.signal,
+              ),
+            );
+          const before = await read();
+          if (
+            before.state !== "OPEN" ||
+            before.updatedAt !== args.expectedUpdatedAt
+          )
+            throw new Error("Issue changed or closed; refresh before editing");
+          await gh(
+            [
+              "issue",
+              "edit",
+              String(args.issueNumber),
+              "--repo",
+              repo,
+              "--body",
+              args.body,
+            ],
+            context.signal,
+          );
+          const after = await read();
+          if (after.body !== args.body)
+            throw new Error("Issue update readback differs");
+          return await record(context, "update-issue", { before, after });
+        },
+      },
+    },
+    {
       download_delivery_diagnostics: {
         description:
           "Retrieve a bounded retained diagnostic artifact from an already inspected repository run",
