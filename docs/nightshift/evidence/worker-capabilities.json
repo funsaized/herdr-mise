@@ -1,0 +1,163 @@
+{
+  "observedOn": "2026-09-21",
+  "subjectCommit": "31a81511fdfa7b1f464a3880f9eee48d6d408455",
+  "platform": "macOS",
+  "cliAgent": "2026.09.20.1",
+  "sha256": {
+    "agent-constraints/nightshift-actor.sb": "e8c9e105e1694b871bf4990aeb221ba71d5fa77f0dbe04b8679f2d466bfb0c8c",
+    "agent-constraints/nightshift-readonly.sb": "1fb628654ba5a6aead34e1d5a7957c0b42521514d19c1431d0c1d57e2348ed69",
+    "scripts/nightshift-opencode.py": "2f4c681651967ed252f597efd9afe944be570062a2c5a1f3d97d7c00c94350d9"
+  },
+  "toolchain": {
+    "observedAt": "2026-09-21T07:39:46.614Z",
+    "results": [
+      {
+        "argv": ["npm", "ci"],
+        "code": 0,
+        "timedOut": false,
+        "durationMs": 1013
+      },
+      {
+        "argv": ["npm", "ci", "--prefix", "client"],
+        "code": 0,
+        "timedOut": false,
+        "durationMs": 3031
+      },
+      {
+        "argv": ["npm", "run", "typecheck"],
+        "code": 0,
+        "timedOut": false,
+        "durationMs": 2014
+      },
+      {
+        "argv": ["npm", "run", "build"],
+        "code": 0,
+        "timedOut": false,
+        "durationMs": 5026
+      },
+      {
+        "argv": ["npm", "run", "test:unit"],
+        "code": 0,
+        "timedOut": false,
+        "durationMs": 3035
+      },
+      {
+        "argv": ["npm", "--prefix", "client", "run", "test", "--", "--run"],
+        "code": 0,
+        "timedOut": false,
+        "durationMs": 2028
+      },
+      {
+        "argv": [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "herdr-mise-server",
+          "--lib"
+        ],
+        "code": 0,
+        "timedOut": false,
+        "durationMs": 13055
+      }
+    ]
+  },
+  "testCounts": {
+    "node": 124,
+    "client": 221,
+    "rustLibrary": 147
+  },
+  "inheritedSocket": {
+    "observedAt": "2026-09-21T07:41:52.484Z",
+    "results": [
+      {
+        "role": "readonly",
+        "check": "extra-inherited-socket",
+        "code": 0,
+        "observed": "closed",
+        "passed": true
+      },
+      {
+        "role": "actor",
+        "check": "extra-inherited-socket",
+        "code": 0,
+        "observed": "closed",
+        "passed": true
+      }
+    ]
+  },
+  "unixBroker": {
+    "observedAt": "2026-09-21T07:39:17.289Z",
+    "results": [
+      {
+        "role": "readonly",
+        "check": "unix-credential-broker",
+        "code": 1,
+        "reachable": false
+      },
+      {
+        "role": "actor",
+        "check": "unix-credential-broker",
+        "code": 1,
+        "reachable": false
+      }
+    ]
+  },
+  "keychain": {
+    "observedAt": "2026-09-21T07:44:12.967Z",
+    "results": [
+      {
+        "role": "host",
+        "check": "dummy-keychain-readable",
+        "passed": true
+      },
+      {
+        "role": "readonly",
+        "check": "direct-keychain-file",
+        "code": 1,
+        "timedOut": false,
+        "readDummy": false
+      },
+      {
+        "role": "readonly",
+        "check": "keychain-broker",
+        "code": 44,
+        "timedOut": false,
+        "readDummy": false
+      },
+      {
+        "role": "actor",
+        "check": "direct-keychain-file",
+        "code": 1,
+        "timedOut": false,
+        "readDummy": false
+      },
+      {
+        "role": "actor",
+        "check": "keychain-broker",
+        "code": 44,
+        "timedOut": false,
+        "readDummy": false
+      }
+    ]
+  },
+  "provider": [
+    {
+      "invocationId": "worker-acceptance-20260921-final",
+      "provider": "opencode",
+      "model": "xai/grok-4.6",
+      "agent": "reviewer",
+      "variant": "xhigh",
+      "exitCode": 0,
+      "success": true,
+      "parsedResponse": {
+        "ok": true
+      }
+    }
+  ],
+  "limits": [
+    "Known broker paths and explicit dummy-keychain access only; custom socket endpoints and arbitrary Mach services are not certified.",
+    "Generic shared executor still inherits supplied descriptors; closure is enforced by the Nightshift Mac OpenCode launcher.",
+    "Provider secrets in other environment variables, ordinary HOME reads, shared scratch and provider networking remain local-mode limits."
+  ]
+}
