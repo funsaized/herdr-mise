@@ -1,0 +1,30 @@
+{
+  "version": "0.9.0",
+  "protocol": 22,
+  "focused_workspace_id": "fictional-workspace-22",
+  "workspaces": [
+    { "workspace_id": "fictional-workspace-22", "label": "Example Pastry" }
+  ],
+  "tabs": [],
+  "panes": [],
+  "layouts": [],
+  "agents": [
+    {
+      "terminal_id": "fictional-terminal-current",
+      "display_agent": "example-reviewer",
+      "agent_status": "blocked",
+      "workspace_id": "fictional-workspace-22",
+      "tab_id": "fictional-tab-22",
+      "pane_id": "fictional-pane-22",
+      "focused": false,
+      "revision": 1,
+      "state_change_seq": 7,
+      "agent_session": {
+        "source": "example",
+        "agent": "example",
+        "kind": "id",
+        "value": "fictional-session-current"
+      }
+    }
+  ]
+}

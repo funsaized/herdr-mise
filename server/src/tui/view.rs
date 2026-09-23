@@ -313,7 +313,7 @@ pub(crate) fn status_lines(
     };
     let condition = format!("{}{}", source_status_text(source_status), detail);
     let status = if mode == AppMode::Demo {
-        format!("Mock feed — {condition}. Nothing here is real.")
+        format!("Mock feed — Nothing here is real. {condition}")
     } else {
         condition
     };
@@ -1397,6 +1397,48 @@ mod tests {
         assert_eq!(selected, None);
     }
 
+    #[tokio::test]
+    async fn protocol_21_and_22_fixtures_flow_through_feed_to_tui() {
+        let mut normalizer = Normalizer::default();
+        let protocol21 = normalizer
+            .normalize_snapshot_value(
+                serde_json::from_str(include_str!(
+                    "../../tests/fixtures/snapshot-herdr-0.8.2-p21.json"
+                ))
+                .unwrap(),
+                "2026-09-01T19:45:00Z",
+            )
+            .unwrap();
+        let feed = Feed::fixed(AppMode::Live, protocol21.agents).await;
+        let mut table = AgentTable::default();
+        table.apply(feed.snapshot().await);
+        assert!(
+            render_scene(&table, 80, 24, None, SceneView::Kitchen, false).contains("example-baker")
+        );
+
+        let protocol22 = normalizer
+            .normalize_snapshot_value(
+                serde_json::from_str(include_str!(
+                    "../../tests/fixtures/snapshot-herdr-0.9.0-p22.json"
+                ))
+                .unwrap(),
+                "2026-09-06T00:00:00Z",
+            )
+            .unwrap();
+        feed.apply_normalized_for_test(protocol22).await;
+        table.apply(feed.snapshot().await);
+        let agent = table.agents().next().unwrap();
+        assert_eq!(agent.id, "fictional-terminal-current");
+        assert_eq!(agent.pane_id.as_deref(), Some("fictional-pane-22"));
+        assert_eq!(
+            agent.workspace_id.as_deref(),
+            Some("fictional-workspace-22")
+        );
+        let rendered = render_scene(&table, 80, 24, None, SceneView::Kitchen, false);
+        assert!(rendered.contains("example-reviewer"), "{rendered}");
+        assert!(!rendered.contains("example-baker"), "{rendered}");
+    }
+
     #[test]
     fn real_herdr_snapshot_drives_keyboard_inspection_lifecycle() {
         let raw = serde_json::from_str(include_str!(
@@ -1954,12 +1996,12 @@ mod tests {
             status_lines(AppMode::Demo, &SourceStatus::Timeout, None, 2),
             (
                 "MISE — DEMO SERVICE".into(),
-                "Mock feed — Herdr did not respond in time. Nothing here is real.".into()
+                "Mock feed — Nothing here is real. Herdr did not respond in time".into()
             )
         );
         let diagnostic = SourceDiagnostic {
             observed_protocol: 23,
-            supported_protocols: vec![17, 19, 20],
+            supported_protocols: vec![17, 19, 20, 21, 22],
             next_action: "upgrade Herdr, then retry".into(),
         };
         assert_eq!(
@@ -1971,12 +2013,12 @@ mod tests {
             ),
             (
                 "MISE — DEMO SERVICE".into(),
-                "Mock feed — Herdr protocol is unsupported — observed 23; supported: 17, 19, 20; upgrade Herdr, then retry. Nothing here is real.".into()
+                "Mock feed — Nothing here is real. Herdr protocol is unsupported — observed 23; supported: 17, 19, 20, 21, 22; upgrade Herdr, then retry".into()
             )
         );
         let incompatible = SourceDiagnostic {
             observed_protocol: 20,
-            supported_protocols: vec![17, 19, 20],
+            supported_protocols: vec![17, 19, 20, 21, 22],
             next_action: "ensure terminal identities are unique, then retry".into(),
         };
         assert_eq!(
@@ -2344,16 +2386,17 @@ mod tests {
                 .backend()
                 .buffer()
                 .content
-                .iter()
-                .map(|cell| cell.symbol())
-                .collect::<String>();
+                .chunks(usize::from(width))
+                .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+                .collect::<Vec<_>>()
+                .join(" ");
             let rendered = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
             for expected in [
                 "MISE — DEMO SERVICE",
                 "Mock feed",
                 "unsupported",
                 "observed 23",
-                "supported: 17, 19, 20",
+                "supported: 17, 19, 20, 21, 22",
                 "upgrade or downgrade Herdr to a tested release, then retry",
                 "Nothing here is real",
                 "q / Esc quit",
@@ -2381,7 +2424,7 @@ mod tests {
             for expected in [
                 "Mock feed",
                 "observed 23",
-                "supported: 17, 19, 20",
+                "supported: 17, 19, 20, 21, 22",
                 "upgrade or downgrade Herdr to a tested release, then retry",
                 "Nothing here is real",
                 KEY_ESC_KITCHEN,

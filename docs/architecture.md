@@ -22,7 +22,7 @@ TypeScript client under `client/src/`, and the shared protocol under
                 +------------+-------------+
                              |
                              |  Unix socket (newline-delimited JSON)
-                             |  Herdr protocol 17, 19, or 20
+                             |  Herdr protocol 17, 19, 20, 21, or 22
                              v
                 +--------------------------+
                 |  Herdr ecosystem         |
@@ -45,11 +45,22 @@ renderers read from the same `Feed` broadcast (`server/src/main.rs`,
 
 The normalizer keys records by Herdr `terminal_id`. That identity remains stable
 when a terminal moves; `paneId` and workspace are authoritative mutable locators.
-The pinned protocol 17, 19, and 20 sources all carry the terminal identifier in
+The pinned protocol 17, 19, 20, 21, and 22 sources all carry the terminal identifier in
 `AgentInfo` from the terminal attached to the pane, and their move paths transfer
 that attached terminal rather than creating a lifecycle. A disappearance still
 ends the observed identity once, while a different terminal identity starts with
 fresh timestamps and accent. Mise never reads `agent_session` as identity.
+
+The fictional, sanitized protocol 21 and 22 fixtures are shaped against
+`SessionSnapshot` and `AgentInfo` at immutable Herdr commits
+`98307c509e9688575d006b47d26d0db561cda0a4` (development protocol 21,
+Cargo version 0.8.2) and `b99002ac99b09e00b4ca692436cb15a6b0d676f1`
+(released protocol 22, version 0.9.0). Their consumed snapshot fields, agent
+statuses, terminal identity, and sequence semantics match the pinned protocol
+20 baseline `9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c`; the protocol bumps
+affect other wire methods, not Mise's `session.snapshot` projection. The bare
+fixture snapshots are wrapped in the upstream response envelope by socket tests;
+the older preview-named protocol 22 fixture remains advisory, not a release pin.
 
 ```
                 +--------------------------+
@@ -60,7 +71,7 @@ fresh timestamps and accent. Mise never reads `agent_session` as identity.
                             |
                             |  Unix socket
                             |  (newline-delimited JSON,
-                            |   Herdr protocol 17, 19, or 20)
+                            |   Herdr protocol 17, 19, 20, 21, or 22)
                             v
                   +---------+----------+
                   |  adapter::         |

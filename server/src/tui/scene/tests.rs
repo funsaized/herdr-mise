@@ -288,7 +288,7 @@ fn golden_cases() -> Vec<(&'static str, AgentTable, u16, u16)> {
                 SourceStatus::UnsupportedProtocol,
                 Some(SourceDiagnostic {
                     observed_protocol: 23,
-                    supported_protocols: vec![17, 19, 20],
+                    supported_protocols: vec![17, 19, 20, 21, 22],
                     next_action: "upgrade Herdr, then retry".into(),
                 }),
                 vec![],
@@ -418,15 +418,23 @@ fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
         ))
         .unwrap(),
     );
-    let output = text(&render_freezer(&unsupported, 80, 24))
+    let unsupported_buffer = render_freezer(&unsupported, 80, 24);
+    let output = unsupported_buffer
+        .content
+        .chunks(80)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
     for expected in [
         "MISE — DEMO SERVICE",
         "Mock feed",
-        "observed 23",
+        "observed",
+        "23; supported: 17, 19, 20, 21, 22",
         "upgrade or downgrade Herdr",
+        "release, then retry",
         "Nothing here",
         "FREEZER EMPTY · NO ENDED SESSIONS · LIMIT 64",
     ] {
@@ -1171,7 +1179,7 @@ fn ended_moves_to_board_and_truthful_status_survives() {
         source_status: SourceStatus::UnsupportedProtocol,
         source_diagnostic: Some(SourceDiagnostic {
             observed_protocol: 23,
-            supported_protocols: vec![17, 19, 20],
+            supported_protocols: vec![17, 19, 20, 21, 22],
             next_action: "upgrade Herdr, then retry".into(),
         }),
         agents: vec![],

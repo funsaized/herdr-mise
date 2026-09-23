@@ -1,7 +1,7 @@
 AREA 110x24
 TEXT 00 "MISE — DEMO SERVICE                                                                                           "
 STYLE 00 000..019 fg=Reset bg=Reset mod=BOLD skip=false
-TEXT 01 "Mock feed — Herdr socket unavailable. Nothing here is real. · Workspace: All                                  "
+TEXT 01 "Mock feed — Nothing here is real. Herdr socket unavailable · Workspace: All                                   "
 TEXT 02 "OBSERVED W 1 · B 0 · P 0 · U 0 · SHOWN 1/1 · HIDDEN 0 · OLDEST BLOCKED None                                   "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 04 "┌Kitchen status · 1-1/1 · 0 blocked──────────────────────────────────────────────────────────────────────────┐"
