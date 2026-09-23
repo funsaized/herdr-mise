@@ -385,7 +385,7 @@ mod tests {
             table.source_diagnostic(),
             Some(&SourceDiagnostic {
                 observed_protocol: 23,
-                supported_protocols: vec![17, 19, 20],
+                supported_protocols: vec![17, 19, 20, 21, 22],
                 next_action: "upgrade or downgrade Herdr to a tested release, then retry".into(),
             })
         );

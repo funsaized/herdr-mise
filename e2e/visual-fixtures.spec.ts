@@ -18,6 +18,57 @@ import {
   assertResponsiveScene,
 } from "./visual-helpers";
 
+test("protocol 21 and 22 fixtures reach browser through the live Feed", async ({
+  page,
+}) => {
+  const readSnapshot = async (name: string) =>
+      JSON.parse(
+        await readFile(
+          join(process.cwd(), "server/tests/fixtures", name),
+          "utf8",
+        ),
+      ),
+    protocol21 = await readSnapshot("snapshot-herdr-0.8.2-p21.json"),
+    protocol22 = await readSnapshot("snapshot-herdr-0.9.0-p22.json"),
+    fixture = await startFixtureApp({
+      prefix: "herdr-mise-protocol-21-22-",
+      snapshot: protocol21,
+    });
+  try {
+    await page.goto(fixture.appUrl);
+    await expect(
+      page.getByRole("button", { name: /example-baker, Working/ }),
+    ).toBeAttached();
+    await expect(
+      page.getByRole("combobox", { name: "Workspace" }),
+    ).toContainText("Example Galley");
+    await page
+      .getByRole("button", { name: /example-baker, Working/ })
+      .evaluate((element) => (element as HTMLButtonElement).click());
+    await expect(
+      page.getByRole("complementary", { name: "example-baker details" }),
+    ).toContainText("fictional-pane-21");
+    fixture.setSnapshot(protocol22);
+    await expect(
+      page.getByRole("button", { name: /example-reviewer, Blocked/ }),
+    ).toBeAttached({ timeout: 10_000 });
+    await expect(
+      page.getByRole("button", { name: /example-baker, Working/ }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("combobox", { name: "Workspace" }),
+    ).toContainText("Example Pastry");
+    await page
+      .getByRole("button", { name: /example-reviewer, Blocked/ })
+      .evaluate((element) => (element as HTMLButtonElement).click());
+    await expect(
+      page.getByRole("complementary", { name: "example-reviewer details" }),
+    ).toContainText("fictional-pane-22");
+  } finally {
+    await fixture.close();
+  }
+});
+
 test("workspace scope follows stable identity without hiding blocked attention", async ({
   page,
 }) => {

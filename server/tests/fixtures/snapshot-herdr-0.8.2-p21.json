@@ -1,0 +1,30 @@
+{
+  "version": "0.8.2",
+  "protocol": 21,
+  "focused_workspace_id": "fictional-workspace-21",
+  "workspaces": [
+    { "workspace_id": "fictional-workspace-21", "label": "Example Galley" }
+  ],
+  "tabs": [],
+  "panes": [],
+  "layouts": [],
+  "agents": [
+    {
+      "terminal_id": "fictional-terminal-current",
+      "display_agent": "example-baker",
+      "agent_status": "working",
+      "workspace_id": "fictional-workspace-21",
+      "tab_id": "fictional-tab-21",
+      "pane_id": "fictional-pane-21",
+      "focused": false,
+      "revision": 1,
+      "state_change_seq": 4,
+      "agent_session": {
+        "source": "example",
+        "agent": "example",
+        "kind": "id",
+        "value": "fictional-session-current"
+      }
+    }
+  ]
+}

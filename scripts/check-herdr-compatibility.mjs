@@ -102,7 +102,7 @@ export function auditWorkflow(workflow) {
 
 export function tableFor(entries) {
   const rows = entries.map((entry) => [
-    `\`${entry.release}\``,
+    `\`${entry.release}${entry.channel ? ` (${entry.channel})` : ""}\``,
     `\`${entry.protocol}\``,
   ]);
   const widths = ["Herdr release", "Snapshot protocol"].map((header, index) =>
@@ -194,14 +194,10 @@ export function checkCompatibility(args = []) {
     errors.push("invalid required agent fields");
     return errors;
   }
-  const releases = new Set();
   const protocols = new Set();
   for (const entry of manifest.supported) {
-    if (releases.has(entry.release))
-      errors.push(`duplicate release ${entry.release}`);
     if (protocols.has(entry.protocol))
       errors.push(`duplicate protocol ${entry.protocol}`);
-    releases.add(entry.release);
     protocols.add(entry.protocol);
     if (!/^[0-9a-f]{40}$/.test(entry.upstreamCommit))
       errors.push(`${entry.release}: invalid immutable commit`);
@@ -269,15 +265,17 @@ export function checkCompatibility(args = []) {
     .map((arg) => arg.slice(11));
   for (const entry of manifest.supported) {
     const match = upstreamArgs.find((value) =>
-      value.startsWith(`${entry.release}=`),
+      value.startsWith(`${entry.protocol}=`),
     );
     if (upstreamArgs.length && !match)
-      errors.push(`${entry.release}: upstream checkout argument missing`);
+      errors.push(
+        `${entry.release} protocol ${entry.protocol}: upstream checkout argument missing`,
+      );
     if (match)
       checkUpstream(
         entry,
         requiredAgentFields,
-        match.slice(entry.release.length + 1),
+        match.slice(String(entry.protocol).length + 1),
         errors,
       );
   }
