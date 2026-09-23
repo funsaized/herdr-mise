@@ -857,7 +857,7 @@ agent records, and Herdr payloads. A sanitized bug-report sample is:
 ```text
 herdr-mise 0.2.0
 version=0.2.0
-supported_protocols=17,19,20
+supported_protocols=17,19,20,21,22
 source_status=unavailableSocket
 http_address=http://127.0.0.1:8686
 ```
@@ -1007,11 +1007,13 @@ tested matrix is:
 
 <!-- herdr-compatibility:start -->
 
-| Herdr release | Snapshot protocol |
-| ------------- | ----------------- |
-| `0.7.5`       | `17`              |
-| `0.8.0`       | `19`              |
-| `0.8.2`       | `20`              |
+| Herdr release                | Snapshot protocol |
+| ---------------------------- | ----------------- |
+| `0.7.5`                      | `17`              |
+| `0.8.0`                      | `19`              |
+| `0.8.2`                      | `20`              |
+| `0.8.2 (development commit)` | `21`              |
+| `0.9.0`                      | `22`              |
 
 <!-- herdr-compatibility:end -->
 

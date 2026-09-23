@@ -1278,6 +1278,7 @@ fn draw_freezer(
     let source_width = area.width.saturating_sub(4);
     let source = format!("{source} · {}", view::scope_summary(table, scope));
     let (source_first, source_overflow) = split_line(&source, usize::from(source_width));
+    let (source_second, source_remaining) = split_line(&source_overflow, usize::from(source_width));
     render_line(
         frame,
         area,
@@ -1297,16 +1298,29 @@ fn draw_freezer(
             3,
             source_width,
             Line::styled(
-                source_overflow,
+                source_second,
                 Style::default().fg(mapped(theme::DIM, color_mode)),
             ),
         );
+        if !source_remaining.is_empty() {
+            render_line(
+                frame,
+                area,
+                2,
+                4,
+                source_width,
+                Line::styled(
+                    source_remaining.clone(),
+                    Style::default().fg(mapped(theme::DIM, color_mode)),
+                ),
+            );
+        }
     }
     render_line(
         frame,
         area,
         2,
-        4,
+        if !source_remaining.is_empty() { 5 } else { 4 },
         source_width,
         Line::styled(
             view::service_line(table, now, None),

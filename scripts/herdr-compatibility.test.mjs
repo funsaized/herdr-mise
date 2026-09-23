@@ -41,16 +41,18 @@ test("compatibility manifest is the complete supported release authority", () =>
     "workspace_id",
   ]);
   assert.deepEqual(
-    manifest.supported.map(({ release, protocol }) => ({ release, protocol })),
+    manifest.supported.map(({ release, channel, protocol }) => ({
+      release,
+      ...(channel ? { channel } : {}),
+      protocol,
+    })),
     [
       { release: "0.7.5", protocol: 17 },
       { release: "0.8.0", protocol: 19 },
       { release: "0.8.2", protocol: 20 },
+      { release: "0.8.2", channel: "development commit", protocol: 21 },
+      { release: "0.9.0", protocol: 22 },
     ],
-  );
-  assert.equal(
-    new Set(manifest.supported.map((entry) => entry.release)).size,
-    manifest.supported.length,
   );
   assert.equal(
     new Set(manifest.supported.map((entry) => entry.protocol)).size,
@@ -87,6 +89,12 @@ test("compatibility table uses canonical formatter widths", () => {
   assert.equal(
     tableFor([{ release: "0.8.2", protocol: 20 }]),
     "| Herdr release | Snapshot protocol |\n| ------------- | ----------------- |\n| `0.8.2`       | `20`              |",
+  );
+  assert.match(
+    tableFor([
+      { release: "0.8.2", channel: "development commit", protocol: 21 },
+    ]),
+    /`0\.8\.2 \(development commit\)`/,
   );
 });
 
@@ -222,10 +230,12 @@ test("upstream checker verifies snapshot and stable agent identity schemas", () 
     { release: "0.7.5", protocol: 17 },
     { release: "0.8.0", protocol: 19 },
     { release: "0.8.2", protocol: 20 },
+    { release: "0.8.2", protocol: 21 },
+    { release: "0.9.0", protocol: 22 },
   ];
   try {
     const args = entries.map((entry) => {
-      const directory = join(temp, entry.release);
+      const directory = join(temp, String(entry.protocol));
       mkdirSync(join(directory, "src/protocol"), { recursive: true });
       mkdirSync(join(directory, "src/api/schema"), { recursive: true });
       writeFileSync(
@@ -258,7 +268,7 @@ pub struct SessionSnapshot {
     pub workspace_id: String,
 }\n`,
       );
-      return `--upstream=${entry.release}=${directory}`;
+      return `--upstream=${entry.protocol}=${directory}`;
     });
     assert.deepEqual(checkCompatibility(args), []);
   } finally {

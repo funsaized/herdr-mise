@@ -101,11 +101,13 @@ versions on those protocols may work but are not part of the release matrix.
 
 <!-- herdr-compatibility:start -->
 
-| Herdr release | Snapshot protocol |
-| ------------- | ----------------- |
-| `0.7.5`       | `17`              |
-| `0.8.0`       | `19`              |
-| `0.8.2`       | `20`              |
+| Herdr release                | Snapshot protocol |
+| ---------------------------- | ----------------- |
+| `0.7.5`                      | `17`              |
+| `0.8.0`                      | `19`              |
+| `0.8.2`                      | `20`              |
+| `0.8.2 (development commit)` | `21`              |
+| `0.9.0`                      | `22`              |
 
 <!-- herdr-compatibility:end -->
 

@@ -859,7 +859,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(diagnostic.observed_protocol, 23);
-                assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20]);
+                assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20, 21, 22]);
                 assert!(diagnostic.next_action.contains("retry"));
             }
             event => panic!("missing unsupported diagnostic: {event:?}"),
@@ -869,25 +869,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn preview_canary_feed_moves_from_supported_live_to_preview_diagnostic() {
-        const PREVIEW: &[u8] =
-            include_bytes!("../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json");
-        let preview_protocol = serde_json::from_slice::<serde_json::Value>(PREVIEW).unwrap()
-            ["protocol"]
-            .as_u64()
-            .unwrap();
+    async fn protocol_21_and_22_snapshots_recover_after_unsupported_protocol() {
+        const UNSUPPORTED: &[u8] = br#"{"version":"future","protocol":99,"changed_shape":true}"#;
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("preview-canary-feed.sock");
         let listener = UnixListener::bind(&path)
             .unwrap_or_else(|error| panic!("required socket integration unavailable: {error}"));
-        let serve_preview = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let server_preview = Arc::clone(&serve_preview);
+        let response_index = Arc::new(std::sync::atomic::AtomicU8::new(0));
+        let server_index = Arc::clone(&response_index);
         let server = tokio::spawn(async move {
             loop {
                 let Ok((stream, _)) = listener.accept().await else {
                     break;
                 };
-                let serve_preview = Arc::clone(&server_preview);
+                let response_index = Arc::clone(&server_index);
                 tokio::spawn(async move {
                     let mut stream = BufReader::new(stream);
                     let mut request = String::new();
@@ -898,10 +893,10 @@ mod tests {
                         std::future::pending::<()>().await;
                     }
                     let response: &'static [u8] =
-                        if serve_preview.load(std::sync::atomic::Ordering::SeqCst) {
-                            PREVIEW
-                        } else {
-                            include_bytes!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json")
+                        match response_index.load(std::sync::atomic::Ordering::SeqCst) {
+                            0 => UNSUPPORTED,
+                            1 => include_bytes!("../tests/fixtures/snapshot-herdr-0.8.2-p21.json"),
+                            _ => include_bytes!("../tests/fixtures/snapshot-herdr-0.9.0-p22.json"),
                         };
                     let value: serde_json::Value = serde_json::from_slice(response).unwrap();
                     stream
@@ -915,25 +910,46 @@ mod tests {
         });
         let shutdown = CancellationToken::new();
         let feed = Feed::start(path, Duration::from_millis(50), shutdown.clone()).await;
-        wait_for_source_status(&feed, SourceStatus::Connected).await;
-        assert!(matches!(
-            feed.snapshot().await,
-            AgentStateEvent::Snapshot { mode: AppMode::Live, source_status: SourceStatus::Connected, agents, .. }
-                if agents.len() == 1 && agents[0].id == "fictional-terminal-20"
-        ));
-        serve_preview.store(true, std::sync::atomic::Ordering::SeqCst);
         wait_for_source_status(&feed, SourceStatus::UnsupportedProtocol).await;
         assert!(matches!(
             feed.snapshot().await,
             AgentStateEvent::Snapshot {
-                mode: AppMode::Live,
-                source_status: SourceStatus::UnsupportedProtocol,
                 source_diagnostic: Some(SourceDiagnostic {
-                    observed_protocol,
+                    observed_protocol: 99,
                     ..
                 }),
                 ..
-            } if observed_protocol == preview_protocol
+            }
+        ));
+        response_index.store(1, std::sync::atomic::Ordering::SeqCst);
+        loop {
+            if matches!(feed.snapshot().await, AgentStateEvent::Snapshot { source_status: SourceStatus::Connected, ref agents, .. } if agents.first().is_some_and(|agent| agent.id == "fictional-terminal-current" && agent.state == AgentState::Working))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        response_index.store(2, std::sync::atomic::Ordering::SeqCst);
+        loop {
+            if matches!(feed.snapshot().await, AgentStateEvent::Snapshot { source_status: SourceStatus::Connected, ref agents, .. } if agents.first().is_some_and(|agent| agent.id == "fictional-terminal-current" && agent.state == AgentState::Blocked))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot {
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                source_diagnostic: None,
+                agents,
+                ..
+            } if agents.first().is_some_and(|agent|
+                agent.id == "fictional-terminal-current"
+                    && agent.pane_id.as_deref() == Some("fictional-pane-22")
+                    && agent.workspace_id.as_deref() == Some("fictional-workspace-22")
+            )
         ));
         shutdown.cancel();
         server.abort();
