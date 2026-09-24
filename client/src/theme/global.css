@@ -1188,10 +1188,15 @@ summary:focus-visible {
 .rendererFallback {
   position: relative;
   z-index: 10;
+  pointer-events: none;
   margin: 4rem 1rem;
   padding: 1rem;
   color: var(--text);
   background: var(--panel);
   max-height: 70vh;
   overflow: auto;
+}
+.rendererFallback p,
+.rendererFallback button {
+  pointer-events: auto;
 }

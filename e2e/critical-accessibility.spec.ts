@@ -425,12 +425,30 @@ test.describe("fixture panel replacement", () => {
 
   test("fixture canvas selection replaces settings with focused agent details", async ({
     page,
+    browserName,
   }) => {
     await page.goto(`${app.appUrl}/?stats`);
     const station = page.getByRole("button", {
       name: /^example-cook, Working/,
     });
     await expect(station).toBeAttached();
+    if (browserName === "firefox") {
+      const fallback = page.getByRole("region", { name: "Agent status list" });
+      await expect
+        .poll(
+          async () =>
+            Boolean(
+              (await sceneMetrics(page))?.stationCells[
+                fixture.agents[0]!.terminal_id
+              ],
+            ) || (await fallback.isVisible()),
+        )
+        .toBe(true);
+      test.skip(
+        await fallback.isVisible(),
+        "Firefox has no WebGL in this environment; canvas selection requires graphics",
+      );
+    }
     await expect
       .poll(
         async () =>
@@ -642,5 +660,46 @@ test.describe("fixture panel replacement", () => {
       )
       .toBe(longLocator);
     await expect(page.locator(".copyStatus")).toContainText("Locator copied");
+  });
+
+  test("fixture fallback leaves the pane locator copy control clickable", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (
+        ...args: Parameters<typeof original>
+      ) {
+        if (String(args[0]).includes("webgl")) return null;
+        return Reflect.apply(original, this, args);
+      } as typeof original;
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            (
+              window as typeof window & { copiedLocator?: string }
+            ).copiedLocator = text;
+          },
+        },
+      });
+    });
+    await page.goto(app.appUrl);
+    const fallback = page.getByRole("region", { name: "Agent status list" });
+    await expect(fallback.getByRole("alert")).toBeVisible();
+    await fallback.getByRole("button").first().click();
+    for (const width of [320, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.getByRole("button", { name: "Copy locator" }).click();
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              (window as typeof window & { copiedLocator?: string })
+                .copiedLocator,
+          ),
+        )
+        .toBe(fixture.agents[0]!.pane_id);
+    }
   });
 });
