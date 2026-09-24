@@ -70,3 +70,26 @@ An opt-in create-if-absent mode must reuse the original definition, including
 under concurrent creation, while preserving the default update and explicit
 repair behavior. Until platform fixes are published and adopted, intake remains
 single-writer and ambiguous interrupted writes need operator inspection.
+
+## Owner-maintained fallback (authorized 2026-09-24)
+
+The maintainer authorized forking or maintaining our own copies to resolve these
+blockers. A GitHub mirror fork of the extensions now exists at
+[`funsaized/swamp-extensions`](https://github.com/funsaized/swamp-extensions);
+it is **not** a published or installed fix. The repository identifies a
+Forgejo origin; a GitHub mirror fork alone cannot deliver an upstream release.
+Do not edit generated `.swamp/pulled-extensions` files or
+replace pinned checksums with an unreviewed build.
+
+If upstream cannot publish a fix, maintain a versioned extension from the fork:
+apply and test the dispatch patch against the current upstream head, implement
+the missing status/local-check parity and state/journal/approval recovery with
+fault injection, publish under an owner-controlled registry identity, then pin
+that identity and its checksums in `extensions/models/upstream_extensions.json`.
+The runtime is a **separate** fork/release decision: first prove opt-in
+create-if-absent and safe shared-server cancellation on a disposable server
+with unrelated work and owned descendants. Only then update both
+`verification/swamp-local-runtime.json` and `.swamp.yaml` to a verified release,
+and rerun isolated factory tests plus maintainer-dispatched managed verification.
+Keep the single-writer and no-local-cancel restrictions until those exact
+artifacts are installed and acceptance passes. A fork is not evidence of a fix.

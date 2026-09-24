@@ -592,6 +592,21 @@ test("nightshift-ship requires the candidate PR to close the work item", () => {
   );
 });
 
+test("release discovery skips preview steps only when there is no preview", () => {
+  const discovery = readFileSync(
+    "workflows/workflow-herdr-release-discovery.yaml",
+    "utf8",
+  );
+  assert.equal(
+    (
+      discovery.match(
+        /guard: \$\{\{ data\.latest\("herdr-upstream", "herdr-release-discovery"\)\.attributes\.preview == null \}\}/gu,
+      ) ?? []
+    ).length,
+    2,
+  );
+});
+
 test("assigned Nightshift issues move Todo to in-progress outside the factory", () => {
   const board = workflows["nightshift-board.yml"] ?? "";
   assert.match(board, /^  issues:\n    types: \[assigned\]$/m);

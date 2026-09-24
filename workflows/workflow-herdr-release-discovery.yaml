@@ -28,7 +28,7 @@ jobs:
           - step: discover-releases
             condition:
               type: succeeded
-        guard: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview != null }}
+        guard: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview == null }}
         weight: 0
         allowFailure: true
       - name: preview-canary
@@ -44,7 +44,7 @@ jobs:
           - step: clone-preview
             condition:
               type: succeeded
-        guard: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview != null }}
+        guard: ${{ data.latest("herdr-upstream", "herdr-release-discovery").attributes.preview == null }}
         weight: 0
         allowFailure: true
     dependsOn: []
