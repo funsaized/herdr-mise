@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -23,6 +33,191 @@ const stableAcceptance = readFileSync("docs/stable-acceptance.md", "utf8");
 const stableAcceptanceTemplate = JSON.parse(
   readFileSync("docs/stable-acceptance.template.json", "utf8"),
 );
+
+const publishBlocks = [
+  ...workflow.matchAll(
+    /^      - name: Create or validate matching release class\n(?:(?!      - |  verify-public-release:)[\s\S])*?        run: \|\n((?:          .*\n)+)/gm,
+  ),
+];
+assert.equal(publishBlocks.length, 1, "exactly one literal publish run block");
+const publishShell = publishBlocks[0][1].replace(/^          /gm, "");
+const targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+];
+
+// Only the GitHub transport is substituted; release-policy, shell tools, and artifact bytes are real.
+const ghTransport = `#!/usr/bin/env node
+const fs = require('node:fs');
+const statePath = process.env.GH_TEST_STATE;
+const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+const args = process.argv.slice(2);
+const fail = (message) => { console.error(message); process.exit(1); };
+const save = () => fs.writeFileSync(statePath, JSON.stringify(state));
+if (args[0] === 'release') {
+  if (args[1] === 'view') {
+    if (!state.release) fail('release not found');
+    process.stdout.write(JSON.stringify(state.release));
+  } else if (args[1] === 'create') {
+    if (state.release || !args.includes('--draft') || !args.includes('--verify-tag')) fail('invalid create');
+    const tag = args[2];
+    state.release = { databaseId: state.createdIdentity ?? 12345, tagName: tag, name: tag,
+      isPrerelease: args.includes('--prerelease'),
+      body: args.includes('--notes-file') ? fs.readFileSync(args[args.indexOf('--notes-file') + 1], 'utf8') : '' };
+    state.events.push('create');
+  } else if (args[1] === 'edit') {
+    if (!state.release || !args.includes('--draft=false') || state.assets.length !== 6) fail('invalid publication');
+    state.published = true;
+    state.events.push('publish');
+  } else fail('unsupported release command');
+} else if (args[0] === 'api') {
+  const endpoint = args.find(arg => arg.startsWith('repos/') || arg.startsWith('https://'));
+  const base = 'repos/' + process.env.GITHUB_REPOSITORY + '/releases/';
+  if (!endpoint || endpoint.includes('/tags/')) fail('draft-invisible tag asset lookup');
+  if (endpoint === base + state.release?.databaseId + '/assets') {
+    if (!args.includes('--paginate') || !args.includes('--jq') ||
+        args[args.indexOf('--jq') + 1] !== '.[] | [.id, .name] | @tsv') fail('list must paginate identities');
+    state.events.push('list');
+    // Emit a second page too: the real gh --paginate applies --jq to each page.
+    for (const page of [state.assets.slice(0, 2), state.assets.slice(2)]) {
+      for (const asset of page) process.stdout.write(asset.id + '\\t' + asset.name + '\\n');
+    }
+  } else if (endpoint?.startsWith(base + 'assets/')) {
+    if (!args.includes('Accept: application/octet-stream')) fail('missing binary Accept');
+    const asset = state.assets.find(a => String(a.id) === endpoint.slice((base + 'assets/').length));
+    if (!asset) fail('unknown asset id');
+    state.events.push('compare:' + asset.name);
+    save();
+    process.stdout.write(Buffer.from(asset.bytes, 'base64'));
+    process.exit(0);
+  } else if (endpoint?.startsWith('https://uploads.github.com/' + base + state.release?.databaseId + '/assets?name=')) {
+    if (!args.includes('--method') || args[args.indexOf('--method') + 1] !== 'POST' ||
+        !args.includes('Content-Type: application/octet-stream') || !args.includes('--input')) fail('invalid binary upload');
+    if (state.failUpload) fail('upload failed');
+    const name = endpoint.split('?name=')[1];
+    if (state.assets.some(a => a.name === name)) fail('overwrite forbidden');
+    const bytes = fs.readFileSync(args[args.indexOf('--input') + 1]).toString('base64');
+    state.assets.push({ id: 1000 + state.assets.length, name, bytes });
+    state.events.push('upload:' + name);
+  } else fail('unsupported endpoint: ' + endpoint);
+} else fail('unsupported gh invocation');
+save();
+`;
+
+function publishFixture(options = {}) {
+  for (const cmd of ["bash", "jq", "perl", "sort", "comm", "cmp"]) {
+    const check = spawnSync("bash", [
+      "-c",
+      cmd === "bash"
+        ? 'test "${BASH_VERSINFO[0]}" -ge 4'
+        : 'command -v "$1" >/dev/null',
+      "bash",
+      cmd,
+    ]);
+    assert.equal(
+      check.status,
+      0,
+      `${cmd} is required for the release shell regression`,
+    );
+  }
+  const temp = mkdtempSync(join(tmpdir(), "herdr-mise-publish-"));
+  const tag = options.prerelease ? "v0.2.0-rc.1" : "v0.2.0";
+  const root = join(temp, "checkout");
+  const bin = join(temp, "bin");
+  mkdirSync(join(root, "scripts"), { recursive: true });
+  mkdirSync(join(root, "server"));
+  mkdirSync(join(root, "dist"));
+  mkdirSync(join(root, "docs/releases"), { recursive: true });
+  mkdirSync(bin);
+  copyFileSync(
+    "scripts/release-policy.mjs",
+    join(root, "scripts/release-policy.mjs"),
+  );
+  copyFileSync(
+    "docs/releases/v0.2.0.md",
+    join(root, "docs/releases/v0.2.0.md"),
+  );
+  writeFileSync(
+    join(root, "server/Cargo.toml"),
+    `[package]\nversion = "${tag.slice(1)}"\n`,
+  );
+  const assets = {};
+  for (const target of targets) {
+    const name = `herdr-mise-${tag}-${target}.tar.gz`;
+    const bytes = Buffer.from(`archive bytes for ${name}\n`);
+    assets[name] = bytes;
+    assets[`${name}.sha256`] = Buffer.from(
+      `${createHash("sha256").update(bytes).digest("hex")}  ${name}\n`,
+    );
+  }
+  for (const [name, bytes] of Object.entries(assets))
+    writeFileSync(join(root, "dist", name), bytes);
+  const statePath = join(temp, "state.json");
+  const release = options.existing
+    ? {
+        databaseId: options.identity ?? 12345,
+        tagName: tag,
+        name: tag,
+        isPrerelease: !!options.prerelease,
+        body: options.body ?? "",
+        ...options.metadata,
+      }
+    : null;
+  const state = {
+    release,
+    published: false,
+    failUpload: !!options.failUpload,
+    createdIdentity: options.createdIdentity,
+    events: [],
+    assets: (options.existingAssets ?? []).map((name, index) => ({
+      id: 1000 + index,
+      name,
+      bytes: (
+        options.assetBytes?.[name] ??
+        assets[name] ??
+        Buffer.from("unexpected")
+      ).toString("base64"),
+    })),
+  };
+  writeFileSync(statePath, JSON.stringify(state));
+  const gh = join(bin, "gh");
+  writeFileSync(gh, ghTransport);
+  chmodSync(gh, 0o755);
+  const env = {
+    ...process.env,
+    PATH: `${bin}:${process.env.PATH}`,
+    GH_TEST_STATE: statePath,
+    GITHUB_REF_NAME: tag,
+    GITHUB_REPOSITORY: "funsaized/herdr-mise",
+    RELEASE_CLASS: options.prerelease ? "prerelease" : "stable",
+    RUNNER_TEMP: temp,
+  };
+  for (const key of Object.keys(env))
+    if (
+      /^(GH_|GITHUB_.*(?:TOKEN|KEY|SECRET|PASSWORD)$|GITHUB_API_URL$)/.test(
+        key,
+      ) &&
+      key !== "GH_TEST_STATE"
+    )
+      delete env[key];
+  return {
+    root,
+    temp,
+    assets,
+    run() {
+      const result = spawnSync(
+        "bash",
+        ["--noprofile", "--norc", "-eo", "pipefail", "-c", publishShell],
+        { cwd: root, env, encoding: "utf8" },
+      );
+      return { ...result, state: JSON.parse(readFileSync(statePath, "utf8")) };
+    },
+    cleanup() {
+      rmSync(temp, { recursive: true, force: true });
+    },
+  };
+}
 
 test("stable release contract handles the public upgrade truthfully", () => {
   assert.match(releasing, /must not be reused for another stable release/);
@@ -408,7 +603,7 @@ test("standalone CLI verification uses notarization and code-signature evidence"
 test("existing expected asset subsets are rerunnable but unexpected assets fail closed", () => {
   assert.match(
     workflow,
-    /--json body,isPrerelease,name,tagName >release\.json/,
+    /--json body,databaseId,isPrerelease,name,tagName >release\.json/,
   );
   assert.match(workflow, /\.name == \$tag/);
   assert.doesNotMatch(workflow, /--json [^\n]*title/);
@@ -419,9 +614,202 @@ test("existing expected asset subsets are rerunnable but unexpected assets fail 
   assert.match(workflow, /test ! -s unexpected-assets\.txt/);
   assert.doesNotMatch(workflow, /--clobber/);
   assert.match(workflow, /cmp "dist\/\$asset" "\$existing\/\$asset"/);
+  assert.match(workflow, /gh api --paginate "\$assets_api"/);
+  assert.match(workflow, /releases\/assets\/\$asset_id/);
+  assert.match(
+    workflow,
+    /https:\/\/uploads\.github\.com\/repos\/\$GITHUB_REPOSITORY\/releases\/\$release_id\/assets/,
+  );
+  assert.doesNotMatch(publishShell, /releases\/tags\//);
   assert.match(workflow, /gh release create .* --draft /);
   assert.match(workflow, /gh release edit .* --draft=false/);
   assert.match(workflow, /diff -u expected-assets\.txt published-assets\.txt/);
+});
+
+test("new draft publication uses release identity and publishes exactly six assets", () => {
+  for (const prerelease of [false, true]) {
+    const fixture = publishFixture({ prerelease });
+    try {
+      const { status, stderr, state } = fixture.run();
+      assert.equal(status, 0, stderr);
+      assert.equal(state.release.databaseId, 12345);
+      assert.equal(state.release.isPrerelease, prerelease);
+      assert.equal(state.published, true);
+      assert.deepEqual(
+        state.assets.map((a) => a.name).sort(),
+        Object.keys(fixture.assets).sort(),
+      );
+      for (const asset of state.assets) {
+        assert.deepEqual(
+          Buffer.from(asset.bytes, "base64"),
+          fixture.assets[asset.name],
+        );
+      }
+      assert.equal(state.events.at(-1), "publish");
+      if (!prerelease) {
+        assert.ok(
+          state.release.body.startsWith(
+            readFileSync("docs/releases/v0.2.0.md", "utf8").trimEnd() +
+              "\n\n## Checksums\n\n",
+          ),
+        );
+        for (const target of targets) {
+          const name = `herdr-mise-v0.2.0-${target}.tar.gz`;
+          assert.ok(
+            state.release.body.includes(
+              fixture.assets[`${name}.sha256`].toString(),
+            ),
+          );
+        }
+      }
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
+test("release retries compare every existing byte before uploading missing assets", () => {
+  const initial = publishFixture();
+  let body;
+  try {
+    const result = initial.run();
+    assert.equal(result.status, 0, result.stderr);
+    body = result.state.release.body;
+  } finally {
+    initial.cleanup();
+  }
+  const names = targets.flatMap((target) => {
+    const archive = `herdr-mise-v0.2.0-${target}.tar.gz`;
+    return [archive, `${archive}.sha256`];
+  });
+  for (const count of [2, 6]) {
+    const fixture = publishFixture({
+      existing: true,
+      body,
+      existingAssets: names.slice(0, count),
+    });
+    try {
+      const { status, stderr, state } = fixture.run();
+      assert.equal(status, 0, stderr);
+      assert.equal(state.published, true);
+      assert.equal(
+        state.events.filter((event) => event.startsWith("compare:")).length,
+        count,
+      );
+      assert.equal(
+        state.events.filter((event) => event.startsWith("upload:")).length,
+        6 - count,
+      );
+      const firstUpload = state.events.findIndex((event) =>
+        event.startsWith("upload:"),
+      );
+      if (firstUpload !== -1)
+        assert.equal(
+          state.events
+            .slice(0, firstUpload)
+            .filter((event) => event.startsWith("compare:")).length,
+          count,
+        );
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
+test("release publication rejects unexpected assets and differing existing bytes before upload", () => {
+  const initial = publishFixture();
+  let body;
+  try {
+    const result = initial.run();
+    assert.equal(result.status, 0, result.stderr);
+    body = result.state.release.body;
+  } finally {
+    initial.cleanup();
+  }
+  const names = targets.flatMap((target) => {
+    const archive = `herdr-mise-v0.2.0-${target}.tar.gz`;
+    return [archive, `${archive}.sha256`];
+  });
+  for (const options of [
+    { existingAssets: [names[0], names[1], "unexpected-on-page-two"] },
+    {
+      existingAssets: [names[0], names[1]],
+      assetBytes: { [names[1]]: Buffer.from("different") },
+    },
+  ]) {
+    const fixture = publishFixture({ existing: true, body, ...options });
+    try {
+      const { status, state } = fixture.run();
+      assert.notEqual(status, 0);
+      assert.equal(state.published, false);
+      assert.ok(!state.events.some((event) => event.startsWith("upload:")));
+      if (options.existingAssets.length === 3)
+        assert.ok(!state.events.some((event) => event.startsWith("compare:")));
+      else
+        assert.equal(
+          state.events.filter((event) => event.startsWith("compare:")).length,
+          2,
+        );
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
+test("stable draft publication preserves checked-in release notes and metadata checks", () => {
+  const fixture = publishFixture();
+  let body;
+  try {
+    const result = fixture.run();
+    assert.equal(result.status, 0, result.stderr);
+    body = result.state.release.body;
+  } finally {
+    fixture.cleanup();
+  }
+  for (const options of [
+    { body: body.replace("## Purpose", "## Other") },
+    { body, metadata: { name: "wrong title" } },
+    { body, metadata: { isPrerelease: true } },
+    { body, metadata: { tagName: "v0.2.1" } },
+  ]) {
+    const retry = publishFixture({ existing: true, ...options });
+    try {
+      const { status, state } = retry.run();
+      assert.notEqual(status, 0);
+      assert.equal(state.published, false);
+      assert.deepEqual(state.events, []);
+    } finally {
+      retry.cleanup();
+    }
+  }
+});
+
+test("release publication remains draft when identity resolution or asset upload fails", () => {
+  const initial = publishFixture();
+  let body;
+  try {
+    const result = initial.run();
+    assert.equal(result.status, 0, result.stderr);
+    body = result.state.release.body;
+  } finally {
+    initial.cleanup();
+  }
+  for (const options of [
+    { existing: true, body, metadata: { databaseId: null } },
+    { existing: true, body, metadata: { databaseId: "12345" } },
+    { createdIdentity: "invalid" },
+    { failUpload: true },
+  ]) {
+    const fixture = publishFixture(options);
+    try {
+      const { status, state } = fixture.run();
+      assert.notEqual(status, 0);
+      assert.equal(state.published, false);
+      if (options.existing) assert.deepEqual(state.events, []);
+    } finally {
+      fixture.cleanup();
+    }
+  }
 });
 
 test("public verification survives the intentionally skipped prerelease stable gate", () => {
