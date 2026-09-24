@@ -358,3 +358,32 @@ Deno.test("correlation diagnoses unreadable target summaries and duplicate exact
   if (duplicate.pass || !duplicate.errors?.[0].includes("found 2"))
     throw new Error("duplicate run accepted");
 });
+
+Deno.test("correlation accepts the latest result of a resumed workflow run", async () => {
+  const base = context("run-67", ["run-67"]);
+  const result = await checkCorrelatedWorkflowRun({
+    ...base,
+    queryData: async (predicate: string) => {
+      if (predicate.includes('name == "artifact-67-plan"')) return [{}];
+      return [
+        {
+          content: {
+            status: "failed",
+            workflowName: "nightshift-plan",
+            workflowRunId: "run-67",
+          },
+          createdAt: "2026-08-30T00:01:00Z",
+        },
+        {
+          content: {
+            status: "succeeded",
+            workflowName: "nightshift-plan",
+            workflowRunId: "run-67",
+          },
+          createdAt: "2026-08-30T00:02:00Z",
+        },
+      ];
+    },
+  });
+  if (!result.pass) throw new Error(result.errors?.join("\n"));
+});

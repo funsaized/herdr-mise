@@ -1,4 +1,21 @@
-import { subjectEnvironment } from "../models/npm_subject.ts";
+import { subjectEnvironment, takeVitestReport } from "../models/npm_subject.ts";
+
+Deno.test("vitest JSON report is captured and removed before source digest", async () => {
+  const project = await Deno.makeTempDir();
+  const report = `${project}/.vitest/json/output.json`;
+  await Deno.mkdir(`${project}/.vitest/json`, { recursive: true });
+  await Deno.writeTextFile(report, '{"numPassedTests":1}');
+  const output = await takeVitestReport(project, "banner");
+  if (!output.includes('{"numPassedTests":1}'))
+    throw new Error("vitest report was not captured");
+  try {
+    await Deno.stat(`${project}/.vitest`);
+    throw new Error("vitest report directory survived");
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+  await Deno.remove(project, { recursive: true });
+});
 
 Deno.test("isolated npm subjects retain the original default Deno location", () => {
   const env = subjectEnvironment(
@@ -35,6 +52,26 @@ Deno.test("managed and configured Deno locations survive npm isolation", () => {
     "/tmp/isolated"
   ) {
     throw new Error("configured environment escaped HOME isolation");
+  }
+});
+
+Deno.test("configured and managed Playwright browsers survive npm isolation", () => {
+  const inherited = {
+    HOME: "/operator",
+    PLAYWRIGHT_BROWSERS_PATH: "/managed/browsers",
+  };
+  if (
+    subjectEnvironment("/tmp/isolated", inherited, {})
+      .PLAYWRIGHT_BROWSERS_PATH !== "/managed/browsers"
+  ) {
+    throw new Error("managed Playwright browser path was lost");
+  }
+  if (
+    subjectEnvironment("/tmp/isolated", inherited, {
+      PLAYWRIGHT_BROWSERS_PATH: "/configured/browsers",
+    }).PLAYWRIGHT_BROWSERS_PATH !== "/configured/browsers"
+  ) {
+    throw new Error("configured Playwright browser path was lost");
   }
 });
 
