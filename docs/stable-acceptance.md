@@ -154,6 +154,14 @@ twelve-hour minimum elapsed run of the verified public install
 publishable only when the recorded `minimum_hours` elapsed while the process
 stayed running.
 
+The `public-artifact` gate and its soak are required on macOS only, against the
+`aarch64-apple-darwin` archive for the host that runs the release. Every other
+published target is covered by the tag-triggered release workflow, which builds,
+signs, packages, checksums, and smoke-verifies each target on its own runner, and
+by the `accepted_rc` checksum binding in this document. A soak or install run on
+a non-macOS host is welcome supplemental evidence but is not required and must
+not be reported as a release requirement.
+
 ## Exact manual matrix
 
 Every row begins `NOT_RUN`. The tester replaces the sentinel timestamp only after

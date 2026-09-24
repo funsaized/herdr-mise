@@ -192,3 +192,42 @@ test("soak rejects a relative state directory inside the repository", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /outside the source tree/);
 });
+
+test("soak start records the exec'd command and keeps reporting RUNNING", () => {
+  // Regression: recording `ps` output before exec captured the pre-exec
+  // `nohup <binary>` argv, so every later liveness check failed.
+  const root = mkdtempSync(join(tmpdir(), "herdr-mise-soak-"));
+  const install = join(root, "install", "herdr-mise", "1.0.0");
+  mkdirSync(join(install, "bin"), { recursive: true });
+  const binary = join(install, "bin", "herdr-mise");
+  // A background job inherits SIGINT as ignored, so the double must install its
+  // own handler the way the real Rust binary does.
+  writeFileSync(
+    binary,
+    '#!/usr/bin/env node\nprocess.on("SIGINT", () => process.exit(0));\nsetInterval(() => {}, 1000);\n',
+  );
+  chmodSync(binary, 0o755);
+  writeFileSync(join(install, "artifact-sha256"), "0".repeat(64));
+  writeFileSync(
+    join(install, "public-source-url"),
+    "https://github.com/funsaized/herdr-mise/releases/download/v1.0.0/herdr-mise-v1.0.0-aarch64-apple-darwin.tar.gz\n",
+  );
+  const state = join(root, "soak");
+  const soak = (...args) =>
+    spawnSync("sh", ["scripts/acceptance-soak.sh", ...args], {
+      encoding: "utf8",
+    });
+  const started = soak("start", state, binary, "12");
+  try {
+    assert.equal(started.status, 0, started.stderr);
+    assert.match(readFileSync(join(state, "command"), "utf8"), /herdr-mise$/m);
+    for (const action of ["status", "status"]) {
+      const status = soak(action, state);
+      assert.equal(status.status, 0, status.stderr);
+      assert.match(status.stdout, /soak=RUNNING/);
+    }
+  } finally {
+    const stopped = soak("stop", state);
+    assert.equal(stopped.status, 0, stopped.stderr);
+  }
+});
