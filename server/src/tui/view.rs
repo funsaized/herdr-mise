@@ -367,7 +367,7 @@ struct FallbackLayout {
     window: TableWindow,
 }
 
-fn fallback_layout(
+fn table_window(
     area: Rect,
     table: &AgentTable,
     agents: &[&AgentRecord],
@@ -469,13 +469,13 @@ pub(crate) fn render_stats_table(
     let window = stats_table_window(area, agents, selected_id, requested_offset);
     let inner_width = area.width.saturating_sub(2);
     let (kind_width, mut pane_width, mut workspace_width, state_width, elapsed_width) =
-        if inner_width >= 90 {
+        if inner_width >= theme::KITCHEN_TABLE_WIDE_COLUMNS_MIN_WIDTH {
             (11, 11, 16, 21, 9)
-        } else if inner_width >= 70 {
+        } else if inner_width >= theme::KITCHEN_TABLE_MEDIUM_COLUMNS_MIN_WIDTH {
             (7, 7, 9, 21, 9)
-        } else if inner_width >= 54 {
+        } else if inner_width >= theme::KITCHEN_TABLE_NARROW_COLUMNS_MIN_WIDTH {
             (7, 7, 9, 11, 7)
-        } else if inner_width >= 50 {
+        } else if inner_width >= theme::KITCHEN_TABLE_COMPACT_COLUMNS_MIN_WIDTH {
             (5, 6, 7, 9, 7)
         } else {
             (4, 5, 5, 7, 5)
@@ -483,7 +483,7 @@ pub(crate) fn render_stats_table(
     let show_elapsed = inner_width >= theme::KITCHEN_TABLE_ELAPSED_MIN_WIDTH;
     let mut show_tickets = inner_width >= theme::KITCHEN_TABLE_TICKETS_MIN_WIDTH;
     let mut show_runtime = inner_width >= theme::KITCHEN_TABLE_RUNTIME_MIN_WIDTH;
-    if inner_width >= 140 {
+    if inner_width >= theme::KITCHEN_TABLE_FULL_LOCATORS_MIN_WIDTH {
         // Give the roster's actual locators room before spending spare width on names.
         // The budget depends on the viewport and roster, never the selected row.
         let required_pane = agents
@@ -558,11 +558,13 @@ pub(crate) fn render_stats_table(
                     pane_width.into(),
                 )),
                 Cell::from(compact_text(
-                    &available(Some(if inner_width >= 140 {
-                        &agent.workspace
-                    } else {
-                        workspace_display_name(&agent.workspace)
-                    })),
+                    &available(Some(
+                        if inner_width >= theme::KITCHEN_TABLE_FULL_LOCATORS_MIN_WIDTH {
+                            &agent.workspace
+                        } else {
+                            workspace_display_name(&agent.workspace)
+                        },
+                    )),
                     workspace_width.into(),
                 )),
                 Cell::from(take_width(
@@ -632,7 +634,8 @@ pub(crate) fn render_stats_table(
     (window, hits)
 }
 
-pub(crate) fn table_window(
+#[cfg(test)]
+fn test_table_window(
     area: Rect,
     table: &AgentTable,
     now: DateTime<Utc>,
@@ -654,7 +657,7 @@ pub(crate) fn table_window(
     ])
     .wrap(Wrap { trim: true });
     let header_content_height = u16::try_from(header.line_count(area.width)).unwrap_or(u16::MAX);
-    fallback_layout(
+    table_window(
         area,
         table,
         &agents,
@@ -698,7 +701,7 @@ pub(crate) fn draw_scoped_with_hits(
     if !compact {
         header = header.block(Block::default().borders(Borders::BOTTOM));
     }
-    let layout = fallback_layout(
+    let layout = table_window(
         frame.area(),
         table,
         &agents,
@@ -1644,7 +1647,7 @@ mod tests {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal
                 .draw(|frame| {
-                    *offset = table_window(
+                    *offset = test_table_window(
                         frame.area(),
                         &table,
                         now,
@@ -2790,7 +2793,9 @@ mod tests {
             agents: vec![first, second],
             workspaces: None,
         });
-        for width in [52, 60] {
+        for width in [
+            51, 52, 55, 56, 60, 71, 72, 91, 92, 97, 98, 109, 110, 141, 142,
+        ] {
             let (buffer, hits) = render_with_hits(&two_blocked, width, 18, None);
             let rows = hits.iter().filter(|hit| hit.table_row).collect::<Vec<_>>();
             assert_eq!(rows.len(), 2);

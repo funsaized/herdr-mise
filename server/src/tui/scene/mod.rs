@@ -508,6 +508,7 @@ fn draw_help(
     );
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_view_scoped_with_hits(
     frame: &mut Frame<'_>,
@@ -648,6 +649,7 @@ pub(crate) fn draw_view_scoped_with_help_scroll(
     hits
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_view_scoped(
     frame: &mut Frame<'_>,
@@ -700,7 +702,7 @@ fn draw_kitchen(
         compute_layout(area.width, area.height.saturating_mul(2), agents.len())
     else {
         if area == frame.area() {
-            let _ = view::draw_scoped(
+            view::draw_scoped(
                 frame,
                 table,
                 warning,
