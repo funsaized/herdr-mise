@@ -696,7 +696,7 @@ mod tests {
         let mut table = AgentTable::default();
         table.apply(feed.snapshot().await);
         let mut selected = Some("fictional-terminal-20".into());
-        feed.apply_live_coalesced(moved.agents, moved.ended_ids, vec![])
+        feed.apply_live_coalesced(moved.agents.clone(), moved.ended_ids.clone(), vec![])
             .await;
         let event = changes.try_recv().expect("move must bypass coalescing");
         assert!(matches!(
@@ -714,7 +714,82 @@ mod tests {
         assert!(table.board().is_empty());
         let kitchen =
             crate::tui::scene::tests::render_selected(&table, 80, 24, 0, selected.as_deref());
-        assert!(crate::tui::scene::tests::text(&kitchen).contains("Workspace: Example Pantry"));
+        let kitchen_text = crate::tui::scene::tests::text(&kitchen);
+        assert!(kitchen_text.contains("WORKSPACE"));
+        assert!(kitchen_text.contains("Exam…ntry"), "{kitchen_text}");
+        let wide_kitchen =
+            crate::tui::scene::tests::render_selected(&table, 120, 42, 0, selected.as_deref());
+        assert!(crate::tui::scene::tests::text(&wide_kitchen).contains("Example Pantry"));
+        // The coalesced move is a delta; the subsequent catalog snapshot makes
+        // the destination scope available without changing terminal identity.
+        feed.apply_normalized_for_test(moved).await;
+        table.apply(changes.try_recv().expect("workspace catalog snapshot"));
+        let render_scope = |width, height, scope: &Scope| {
+            let mut terminal =
+                ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+            let mut hits = Vec::new();
+            terminal
+                .draw(|frame| {
+                    hits = crate::tui::scene::draw_view_scoped_with_hits(
+                        frame,
+                        &table,
+                        None,
+                        chrono::DateTime::parse_from_rfc3339("2026-08-13T12:00:01Z")
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
+                        0,
+                        crate::tui::canvas::ColorMode::Xterm256,
+                        true,
+                        selected.as_deref(),
+                        0,
+                        crate::tui::SceneView::Kitchen,
+                        false,
+                        false,
+                        scope,
+                    )
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let rows = hits
+                .iter()
+                .filter(|hit| hit.table_row)
+                .map(|hit| {
+                    (0..width)
+                        .map(|x| buffer[(x, hit.area.y)].symbol())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>();
+            (crate::tui::scene::tests::text(buffer), rows)
+        };
+        let destination = Scope {
+            id: Some("fictional-pantry".into()),
+            label: Some("Example Pantry".into()),
+        };
+        for (width, height, workspace) in [(80, 24, "Exam…ntry"), (120, 42, "Example Pantry")] {
+            let (_, all_rows) = render_scope(width, height, &Scope::default());
+            let (_, scoped_rows) = render_scope(width, height, &destination);
+            assert_eq!(all_rows.len(), 1);
+            assert_eq!(scoped_rows.len(), 1);
+            assert!(
+                all_rows[0].contains(workspace),
+                "{width}x{height}: {all_rows:?}"
+            );
+            assert!(
+                scoped_rows[0].contains(workspace),
+                "{width}x{height}: {scoped_rows:?}"
+            );
+        }
+        assert!(render_scope(120, 42, &destination)
+            .0
+            .contains("Workspace: Example Pantry"));
+        let source = Scope {
+            id: Some("fictional-kitchen".into()),
+            label: Some("Example Kitchen".into()),
+        };
+        let (source_text, source_rows) = render_scope(120, 42, &source);
+        assert!(source_rows.is_empty());
+        assert!(!source_text.contains("example-cook"), "{source_text}");
+        assert!(!source_text.contains("Example Pantry"), "{source_text}");
         let freezer = crate::tui::scene::tests::render_freezer(&table, 80, 24);
         assert!(crate::tui::scene::tests::text(&freezer).contains("FREEZER EMPTY"));
         assert!(changes.try_recv().is_err());

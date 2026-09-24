@@ -2510,6 +2510,84 @@ mod tests {
         table
     }
 
+    #[test]
+    fn statistics_table_preserves_workspace_identity_across_scopes() {
+        let mut table = normalized_table("snapshot-workspace-scope.json");
+        let render = |table: &AgentTable, scope: &Scope, width, height| {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            let mut hits = Vec::new();
+            terminal
+                .draw(|frame| {
+                    hits = scene::draw_view_scoped_with_hits(
+                        frame,
+                        table,
+                        None,
+                        DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
+                            .unwrap()
+                            .with_timezone(&Utc),
+                        0,
+                        super::super::canvas::ColorMode::Xterm256,
+                        true,
+                        None,
+                        0,
+                        SceneView::Kitchen,
+                        false,
+                        false,
+                        scope,
+                    );
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let rows = hits
+                .iter()
+                .filter(|hit| hit.table_row)
+                .map(|hit| {
+                    (0..width)
+                        .map(|x| buffer[(x, hit.area.y)].symbol())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>();
+            (buffer_text(&terminal), rows)
+        };
+        let all = Scope::default();
+        let one = Scope {
+            id: Some("scope-workspace-one".into()),
+            label: Some("duplicate".into()),
+        };
+        let empty = Scope {
+            id: Some("scope-workspace-empty".into()),
+            label: Some("Empty".into()),
+        };
+        for (width, height) in [(79, 23), (120, 42)] {
+            let (_, rows) = render(&table, &all, width, height);
+            assert_eq!(rows.len(), 2);
+            assert!(rows.iter().all(|row| row.contains("duplicate")), "{rows:?}");
+            let (header, rows) = render(&table, &one, width, height);
+            assert!(header.contains("1 blocked elsewhere"), "{header}");
+            assert_eq!(rows.len(), 1);
+            assert!(rows[0].contains("duplicate"), "{:?}", rows);
+            let (header, rows) = render(&table, &empty, width, height);
+            assert!(header.contains("(empty)"), "{header}");
+            assert!(header.contains("1 blocked elsewhere"), "{header}");
+            assert!(rows.is_empty());
+        }
+        let agents = table.agents().cloned().collect();
+        table.apply(AgentStateEvent::Snapshot {
+            version: 2,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents,
+            workspaces: Some(vec![]),
+        });
+        let (header, rows) = render(&table, &empty, 120, 42);
+        assert!(
+            header.contains("Workspace: Empty (unavailable) · 1 blocked elsewhere"),
+            "{header}"
+        );
+        assert!(rows.is_empty());
+    }
+
     fn render_with_hits(
         table: &AgentTable,
         width: u16,
