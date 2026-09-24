@@ -242,14 +242,31 @@ export function DetailCard({
         <Fact label="Agent kind" mono>
           {inspectionText(agent.agentKind)}
         </Fact>
-        <Fact label="Pane locator" mono>
-          <span className="locatorValue">{agent.paneId ?? "Unavailable"}</span>
-          {agent.paneId && (
-            <button className="copyLocator" onClick={() => void copyLocator()}>
-              Copy locator
-            </button>
-          )}
-        </Fact>
+        <div className="fact locatorFact">
+          <span>Pane locator</span>
+          <b className="mono">
+            <span
+              className="locatorValue"
+              tabIndex={agent.paneId ? 0 : undefined}
+              aria-label={
+                agent.paneId
+                  ? `Pane locator value: ${agent.paneId}`
+                  : "Pane locator value"
+              }
+            >
+              {agent.paneId ?? "Unavailable"}
+            </span>
+            {agent.paneId && (
+              <button
+                className="copyLocator"
+                aria-label="Copy locator"
+                onClick={() => void copyLocator()}
+              >
+                Copy
+              </button>
+            )}
+          </b>
+        </div>
         <Fact label="Observation age">
           {observation.paused
             ? "Paused during gap"

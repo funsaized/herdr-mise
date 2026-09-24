@@ -10,7 +10,13 @@ export default defineConfig({
       ? [
           {
             name: "firefox",
-            use: { browserName: "firefox" as const },
+            use: {
+              browserName: "firefox" as const,
+              firefoxUserPrefs: {
+                "webgl.force-enabled": true,
+                "webgl.disabled": false,
+              },
+            },
             testMatch: "**/critical-accessibility.spec.ts",
           },
           ...(process.env.HERDR_MISE_SKIP_WEBKIT === "1"

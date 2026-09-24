@@ -58,7 +58,7 @@ const cssTokens = {
   "--shadowPlacard": tokens.chrome.shadowPlacard,
   "--shadowKnob": tokens.chrome.shadow,
   "--shadowSmall": tokens.chrome.shadow,
-  "--focus": tokens.semantic.flameHighDark,
+  "--focus": tokens.chrome.text,
   "--ticketDone": tokens.scene.ticketDone,
   "--flame": tokens.semantic.flame,
   "--done": tokens.semantic.done,
@@ -110,6 +110,7 @@ export function App() {
     socketRef = useRef<AgentWebSocketClient | null>(null);
   const semanticRestoreRef = useRef<HTMLButtonElement | null>(null),
     settingsRestorePendingRef = useRef(false),
+    previousSelectedIdRef = useRef(clientStore.coarse().selectedId),
     selectedLocationRef = useRef<Pick<
       SemanticAgent,
       "id" | "name" | "paneId" | "workspace"
@@ -133,7 +134,17 @@ export function App() {
     [announcement, setAnnouncement] = useState(""),
     [hintVisible, setHintVisible] = useState(() => hintPersistence.isVisible());
   const [rendererFailed, setRendererFailed] = useState(false);
-  useEffect(() => clientStore.subscribeCoarse(setCoarse), []);
+  useEffect(
+    () =>
+      clientStore.subscribeCoarse((next) => {
+        if (next.selectedId !== null) {
+          settingsRestorePendingRef.current = false;
+          setSettingsOpen(false);
+        }
+        setCoarse(next);
+      }),
+    [],
+  );
   useEffect(
     () =>
       clientStore.subscribe(() => {
@@ -401,16 +412,27 @@ export function App() {
     view,
   ]);
   useEffect(() => {
-    if (coarse.selectedId === null && semanticRestoreRef.current) {
-      (semanticRestoreRef.current.isConnected
-        ? semanticRestoreRef.current
-        : document.querySelector<HTMLButtonElement>(
-            ".settingsTrigger.freezerTrigger",
+    if (
+      coarse.selectedId === null &&
+      previousSelectedIdRef.current !== null &&
+      !settingsRestorePendingRef.current
+    ) {
+      const target = semanticRestoreRef.current;
+      if (target?.isConnected && target.dataset.agentId)
+        focusSemantic(target.dataset.agentId);
+      else if (target?.isConnected && !target.dataset.agentId) target.focus();
+      else
+        document
+          .querySelector<HTMLButtonElement>(
+            target
+              ? ".settingsTrigger.freezerTrigger"
+              : ".settingsTrigger:not(.freezerTrigger)",
           )
-      )?.focus();
+          ?.focus();
       semanticRestoreRef.current = null;
     }
-  }, [coarse.selectedId]);
+    previousSelectedIdRef.current = coarse.selectedId;
+  }, [coarse.selectedId, focusSemantic]);
   useEffect(() => {
     if (!settingsOpen && settingsRestorePendingRef.current) {
       document
@@ -438,7 +460,11 @@ export function App() {
     setHintVisible(false);
   };
   const openSettings = () => {
+    semanticRestoreRef.current = null;
     settingsRestorePendingRef.current = true;
+    clientStore.select(null);
+    setFocusedId(null);
+    sceneRef.current?.focus(null);
     setSettingsOpen(true);
   };
   const toggleFreezer = () => {
@@ -494,7 +520,9 @@ export function App() {
             ? (semanticStationButton(hit.id) ?? null)
             : null;
           if (hit) {
-            focusSemantic(hit.id);
+            event.preventDefault();
+            setFocusedId(hit.id);
+            sceneRef.current?.focus(hit.id);
           }
         }}
         onPointerMove={pointerMove}
