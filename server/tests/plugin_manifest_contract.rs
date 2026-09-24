@@ -111,3 +111,24 @@ fn plugin_manifest_matches_the_cargo_binary_pane_and_action_contract() {
     assert!(script.contains("--direction right"));
     assert!(script.contains("--focus"));
 }
+
+#[test]
+fn current_release_notes_describe_authoritative_version() {
+    let root = repository_root();
+    let version = read_toml(root.join("server/Cargo.toml"))["package"]["version"]
+        .as_str()
+        .expect("server/Cargo.toml package version is required")
+        .to_owned();
+    let path = root.join(format!("docs/releases/v{version}.md"));
+    let notes = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    assert!(notes
+        .lines()
+        .any(|line| line == format!("# Herdr Mise v{version}")));
+    for heading in ["Purpose", "Install", "Herdr compatibility", "Limitations"] {
+        assert!(
+            notes.lines().any(|line| line == format!("## {heading}")),
+            "missing {heading}"
+        );
+    }
+}

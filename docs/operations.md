@@ -119,9 +119,11 @@ continues to write `client/dist/`, which remains the only rust-embed input.
 
 ### Run the release archive
 
-The current public distribution is the GitHub release `v0.2.0`. Matching `v*`
-tags are classified as prerelease or stable under the fail-closed process in
-[Release operations](releasing.md). Each asset pair is:
+The current public distribution is the GitHub release `v0.2.0`.
+`v0.3.0-rc.1` is a prepared candidate, not a published download; the installer
+in this checkout targets that future tag and cannot install it until publication.
+Matching `v*` tags are classified as prerelease or stable under the fail-closed
+process in [Release operations](releasing.md). Each asset pair is:
 
 ```text
 herdr-mise-v<VERSION>-<TARGET>.tar.gz
@@ -855,8 +857,8 @@ The stable fields are `version`, `supported_protocols`, `source_status`, and
 agent records, and Herdr payloads. A sanitized bug-report sample is:
 
 ```text
-herdr-mise 0.2.0
-version=0.2.0
+herdr-mise 0.3.0-rc.1
+version=0.3.0-rc.1
 supported_protocols=17,19,20,21,22
 source_status=unavailableSocket
 http_address=http://127.0.0.1:8686
