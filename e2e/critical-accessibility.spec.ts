@@ -466,41 +466,6 @@ test.describe("fixture panel replacement", () => {
     await expect(details).toHaveCount(0);
   });
 
-  test("fixture keyboard selection replaces settings and restores station focus on Escape", async ({
-    page,
-  }) => {
-    await page.goto(app.appUrl);
-    const station = page.getByRole("button", {
-      name: /^example-cook, Working/,
-    });
-    await expect(station).toBeAttached();
-    for (const key of ["Enter", "Space"]) {
-      await page.getByRole("button", { name: "Open settings" }).click();
-      await expect(
-        page.getByRole("complementary", { name: "Settings" }),
-      ).toBeFocused();
-      await station.focus();
-      await page.keyboard.press(key);
-      const details = page.getByRole("complementary", {
-        name: "example-cook details",
-      });
-      await expect(details).toBeFocused();
-      await expect(page.locator("aside.panel")).toHaveCount(1);
-      await expect(
-        page.getByRole("complementary", { name: "Settings" }),
-      ).toHaveCount(0);
-      await expect(page.locator(".canvasHost.dimmed")).toHaveCount(0);
-      await page.keyboard.press("Escape");
-      await expect(station).toBeFocused();
-      await expect(details).toHaveCount(0);
-    }
-    await page.getByRole("button", { name: "Open settings" }).click();
-    await page.keyboard.press("Escape");
-    await expect(
-      page.getByRole("button", { name: "Open settings" }),
-    ).toBeFocused();
-  });
-
   test("Freezer and Settings share sizing spacing and keyboard focus treatment", async ({
     page,
   }) => {

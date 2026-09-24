@@ -208,31 +208,10 @@ test("fixture-backed agent controls match and locator stays inline", async ({
       copy = page.getByRole("button", { name: "Copy locator" });
     await expect(value).toHaveText(snapshot.agents[0].pane_id);
     await expect(copy).toHaveText("Copy");
-    const freezer = page.getByRole("button", { name: "Freezer" }),
-      settings = page.getByRole("button", { name: "Open settings" });
     for (const colorScheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme });
       for (const width of [320, 390, 720, 1280, 1440]) {
         await page.setViewportSize({ width, height: 900 });
-        const freezerBox = (await freezer.boundingBox())!,
-          settingsBox = (await settings.boundingBox())!;
-        expect(freezerBox.height).toBe(settingsBox.height);
-        expect(freezerBox.height).toBeGreaterThanOrEqual(44);
-        expect(
-          freezerBox.x + freezerBox.width <= settingsBox.x ||
-            settingsBox.x + settingsBox.width <= freezerBox.x ||
-            freezerBox.y + freezerBox.height <= settingsBox.y ||
-            settingsBox.y + settingsBox.height <= freezerBox.y,
-        ).toBe(true);
-        await freezer.focus();
-        const focusStyle = await freezer.evaluate(
-          (el) => getComputedStyle(el).outlineStyle,
-        );
-        expect(focusStyle).not.toBe("none");
-        await settings.focus();
-        expect(
-          await settings.evaluate((el) => getComputedStyle(el).outlineStyle),
-        ).toBe(focusStyle);
         const layout = await page.locator(".locatorFact").evaluate((row) => {
           const label = row.firstElementChild!.getBoundingClientRect(),
             text = row.querySelector(".locatorValue")!,
@@ -278,6 +257,28 @@ test("fixture-backed agent controls match and locator stays inline", async ({
     // The browser's own Tab order and arrow scrolling must reach the offscreen suffix.
     await page.keyboard.press("Shift+Tab");
     await expect(value).toBeFocused();
+    const focusContrast = await value.evaluate((el) => {
+      const outline = getComputedStyle(el);
+      const panel = getComputedStyle(el.closest("aside.panel")!);
+      const luminance = (color: string) => {
+        const [r, g, b] = color
+          .match(/\d+/g)!
+          .slice(0, 3)
+          .map((channel) => {
+            const value = Number(channel) / 255;
+            return value <= 0.04045
+              ? value / 12.92
+              : ((value + 0.055) / 1.055) ** 2.4;
+          });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const a = luminance(outline.outlineColor);
+      const b = luminance(panel.backgroundColor);
+      return outline.outlineStyle === "solid"
+        ? (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+        : 0;
+    });
+    expect(focusContrast).toBeGreaterThanOrEqual(3);
     await expect
       .poll(() => value.evaluate((el) => el.scrollWidth > el.clientWidth))
       .toBe(true);

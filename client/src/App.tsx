@@ -58,7 +58,7 @@ const cssTokens = {
   "--shadowPlacard": tokens.chrome.shadowPlacard,
   "--shadowKnob": tokens.chrome.shadow,
   "--shadowSmall": tokens.chrome.shadow,
-  "--focus": tokens.semantic.flameHighDark,
+  "--focus": tokens.chrome.text,
   "--ticketDone": tokens.scene.ticketDone,
   "--flame": tokens.semantic.flame,
   "--done": tokens.semantic.done,
