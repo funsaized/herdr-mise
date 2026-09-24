@@ -256,14 +256,14 @@ test("stable release contract handles the public upgrade truthfully", () => {
   assert.match(stableAcceptance, /current\/bin\/herdr-mise" --version/);
   assert.match(
     stableAcceptance,
-    /VoiceOver speech\/focus listening remains outside[\s\S]*not recorded as `PASS`/,
+    /Manual screen-reader speech listening is not a release gate[\s\S]*not recorded\s+as `PASS`/,
   );
   assert.equal(
     stableAcceptanceTemplate.gates.some(
       ({ gate_id }) => gate_id === "voiceover-speech-focus",
     ),
     false,
-    "deferred VoiceOver listening must not become a required PASS row",
+    "screen-reader speech listening must not become a required PASS row",
   );
 
   const upgrade = stableAcceptanceTemplate.gates.find(

@@ -148,7 +148,11 @@ The checked-in artifacts remain ignored because they are host-specific.
 External copies must not contain fixture payloads, agent or workspace names,
 or local paths. `scripts/measure-server.sh` remains the short one-sample release
 resource guard, and `scripts/acceptance-soak.sh` remains the public-artifact
-uptime evidence; neither is replaced by this profile.
+uptime evidence; neither is replaced by this profile. That soak defaults to a
+twelve-hour minimum elapsed run of the verified public install
+(`acceptance-soak.sh start STATE_DIR BINARY [MIN_HOURS]`), and evidence is
+publishable only when the recorded `minimum_hours` elapsed while the process
+stayed running.
 
 ## Exact manual matrix
 
@@ -157,14 +161,16 @@ performing the action against the exact accepted RC artifact referenced by that
 row and records a sanitized external evidence reference. The row's
 `executed_against` block must copy the top-level accepted RC identity and artifact.
 
-VoiceOver speech/focus listening remains outside the v0.2.0 release gate. It is
-not recorded as `PASS`; the checklist remains in `docs/operations.md` for
-post-release completion.
+Manual screen-reader speech listening is not a release gate and is not recorded
+as `PASS`. The release requires the automated accessibility audit plus the
+keyboard, focus, and announcement checklist in `docs/operations.md`; those rows
+verify the same semantics through the accessibility tree without a listening
+session.
 
 | Gate                              | Exact action and PASS condition                                                                                                                                                                                                                                                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | TUI responsive terminal           | Launch the installed accepted public RC with `--tui`; exercise `111×48 → 56×48 → 111×48`, then quit with `q`. PASS only if tiled, compact, and restored tiled layouts render without stale cells, the UI remains responsive, and terminal state is restored cleanly without disturbing another Herdr service. |
-| Keyboard                          | With VoiceOver off, use Tab/Shift-Tab through visible controls, arrow keys through all stations, Enter/Space to open details, and Escape to close details/settings. PASS only if focus is always visible, order is logical, every station is reachable, and focus returns to its trigger.                     |
+| Keyboard                          | Use Tab/Shift-Tab through visible controls, arrow keys through all stations, Enter/Space to open details, and Escape to close details/settings. PASS only if focus is always visible, order is logical, every station is reachable, and focus returns to its trigger.                     |
 | Runtime reduced motion            | Start with Reduce Motion off while a blocked scene is active; enable it in System Settings without reloading, then disable it. PASS only if continuous/particle/sweep motion stops promptly, state indicators remain legible, and motion resumes without stale or duplicate state.                            |
 | Blocked recognition at two meters | At a measured distance of at least two meters on the supported display, compare a blocked station with working and idle stations in both light and dinner themes. PASS only if the blocked station and blocked count are correctly identified without relying on animation or sound.                          |
 | Upgrade                           | Run the exact public v0.1.0-to-RC upgrade procedure above. PASS only if `current` transitions to the accepted RC, its exact checksum and path match, the prior public v0.1.0 version remains available for rollback, `INSTALL_ROOT/herdr-mise/current.next` is absent, and launch succeeds from `current`.    |

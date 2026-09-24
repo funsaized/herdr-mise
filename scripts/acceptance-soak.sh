@@ -28,7 +28,7 @@ running() {
 case "$action" in
   start)
     binary=${3:?start requires installed BINARY}
-    minimum_hours=${4:-72}
+    minimum_hours=${4:-12}
     case "$minimum_hours" in *[!0-9]*|'') echo "MIN_HOURS must be an integer" >&2; exit 1 ;; esac
     binary_dir=$(cd "$(dirname "$binary")" && pwd -P)
     binary="$binary_dir/$(basename "$binary")"
