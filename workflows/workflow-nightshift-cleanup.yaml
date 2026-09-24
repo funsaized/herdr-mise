@@ -25,7 +25,7 @@ jobs:
     description: Clean one registered worktree and persist the bounded result.
     steps:
       - name: cleanup-workspace
-        guard: ${{ inputs.subjectRoot != "" }}
+        guard: ${{ inputs.subjectRoot == "" }}
         task:
           type: model_method
           modelIdOrName: verification-source-git
@@ -35,7 +35,7 @@ jobs:
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn: []
       - name: record-cleanup-run
-        guard: ${{ inputs.subjectRoot != "" }}
+        guard: ${{ inputs.subjectRoot == "" }}
         task:
           type: model_method
           modelIdOrName: ${{ inputs.factory }}
@@ -51,7 +51,7 @@ jobs:
         dependsOn:
           - { step: cleanup-workspace, condition: { type: succeeded } }
       - name: record-empty-cleanup-run
-        guard: ${{ inputs.subjectRoot == "" }}
+        guard: ${{ inputs.subjectRoot != "" }}
         task:
           type: model_method
           modelIdOrName: ${{ inputs.factory }}
