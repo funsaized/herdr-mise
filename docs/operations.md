@@ -367,11 +367,12 @@ The original "Vite dev server proxies `/ws` to the Rust server"
 wording is **not accurate** for this repository and has been
 removed.
 
-## Reduced motion and VoiceOver acceptance
+## Reduced motion and manual acceptance
 
-Manual VoiceOver listening was explicitly deferred from the v0.1.0 release
-gate by the owner on 2026-08-27. The checklist remains `NOT RUN` until someone
-actually performs it; this section does not claim a pass.
+Manual screen-reader speech listening is not a release gate and is not
+claimed as one. The automated accessibility audit plus the keyboard, focus, and
+announcement checklist below are the requirement, and they verify the same
+semantics through the accessibility tree.
 
 ### Behavior contract
 
@@ -446,117 +447,80 @@ Copy this block for each candidate. The placeholders are intentionally blank;
 do not replace them with private paths, channel IDs, email addresses, or local
 deployment identifiers.
 
-| Field                         | Record                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| Date                          | `<YYYY-MM-DD>`                                                            |
-| Commit / candidate identifier | `<commit-or-candidate>`                                                   |
-| macOS                         | `<macOS version>`                                                         |
-| Browser                       | `<browser and version>`                                                   |
-| VoiceOver settings            | `<verbosity, speech rate, punctuation, hints, navigation/rotor settings>` |
-| Tester                        | `<tester name or initials>`                                               |
-| Overall result                | `NOT RUN`                                                                 |
-| Artifact / evidence notes     | `<observed speech transcript, screenshot, recording, or none>`            |
+| Field                         | Record                                           |
+| ----------------------------- | ------------------------------------------------ |
+| Date                          | `<YYYY-MM-DD>`                                   |
+| Commit / candidate identifier | `<commit-or-candidate>`                          |
+| macOS                         | `<macOS version>`                                |
+| Browser                       | `<browser and version>`                          |
+| Tester                        | `<tester name or initials>`                      |
+| Overall result                | `NOT RUN`                                        |
+| Artifact / evidence notes     | `<observed behavior notes, screenshot, or none>` |
 
-### VoiceOver and keyboard checklist
+### Keyboard, focus, and announcement checklist
 
 Every row below intentionally starts at `NOT RUN`. Allowed row values are
 `PASS`, `FAIL`, and `NOT RUN`. After a human run, replace that value with
-exactly `PASS` or `FAIL` and record the observed VoiceOver speech or other
+exactly `PASS` or `FAIL` and record the observed behavior or other
 evidence. Do not infer a manual pass from an automated test or from the
 implementation handoff.
 
 #### Roles, names, and status surfaces
 
-| ID    | Action and expected result                                                                                                                                                                                                                                                                                                      | Status    | Observed VoiceOver speech / evidence |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------ |
-| VO-01 | Open Settings with the `Open settings` button. VoiceOver exposes a complementary panel named `Settings`, its `Settings` heading, and a `Close settings` button.                                                                                                                                                                 | `NOT RUN` |                                      |
-| VO-02 | In Settings, verify a `Service bell` switch exposes its on/off state; `Light`, `Dinner`, and `System` are buttons exposing pressed state; and selects are named `Done timeout`, `Faster bell after`, and `Screen-edge glow after`.                                                                                              | `NOT RUN` |                                      |
-| VO-03 | Navigate the `Agent stations` navigation. Each station control is a button with a name shaped like `<agent>, <state>, open details`; verify the state words are human-readable (`Idle — prepping`, `Working — on the fire`, `Blocked — at the pass`, `Done — plated`, or `Ended — 86'd`).                                       | `NOT RUN` |                                      |
-| VO-04 | Activate an agent station control. VoiceOver exposes a complementary panel named `<agent> details`, the agent heading, its state label, a `Close panel` button, and the `Agent kind`, `Workspace`, `Pane locator`, `Observation age`, `Mise time`, `Upstream session age`, `Tickets this session`, and `Observed in Mise` text. | `NOT RUN` |                                      |
-| VO-05 | Open an 86 board row. VoiceOver exposes a complementary panel named `<agent> session summary`, the `86'D — SESSION ENDED` label, a `Close panel` button, and `Mise time`, `Tickets served`, `Ended at`, and `Final state` text.                                                                                                 | `NOT RUN` |                                      |
-| VO-06 | When the corresponding condition is present, verify status/alert semantics: `DEMO SERVICE` and `Waiting for agents — start one in herdr` are `status` surfaces; `GAS LEAK — SERVICE SUSPENDED` is an `alert`.                                                                                                                   | `NOT RUN` |                                      |
-| VO-07 | Verify the live region is named `Agent state announcements`, is polite, and is atomic. It should expose only the current announcement, not a stale concatenation of prior announcements.                                                                                                                                        | `NOT RUN` |                                      |
+| ID     | Action and expected result                                                                                                                                                                                                                                                                                                                   | Status    | Observed evidence |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ----------------- |
+| SEM-01 | Open Settings with the `Open settings` button. The accessibility tree exposes a complementary panel named `Settings`, its `Settings` heading, and a `Close settings` button.                                                                                                                                                                 | `NOT RUN` |                   |
+| SEM-02 | In Settings, verify a `Service bell` switch exposes its on/off state; `Light`, `Dinner`, and `System` are buttons exposing pressed state; and selects are named `Done timeout`, `Faster bell after`, and `Screen-edge glow after`.                                                                                                           | `NOT RUN` |                   |
+| SEM-03 | Navigate the `Agent stations` navigation. Each station control is a button with a name shaped like `<agent>, <state>, open details`; verify the state words are human-readable (`Idle — prepping`, `Working — on the fire`, `Blocked — at the pass`, `Done — plated`, or `Ended — 86'd`).                                                    | `NOT RUN` |                   |
+| SEM-04 | Activate an agent station control. The accessibility tree exposes a complementary panel named `<agent> details`, the agent heading, its state label, a `Close panel` button, and the `Agent kind`, `Workspace`, `Pane locator`, `Observation age`, `Mise time`, `Upstream session age`, `Tickets this session`, and `Observed in Mise` text. | `NOT RUN` |                   |
+| SEM-05 | Open an 86 board row. The accessibility tree exposes a complementary panel named `<agent> session summary`, the `86'D — SESSION ENDED` label, a `Close panel` button, and `Mise time`, `Tickets served`, `Ended at`, and `Final state` text.                                                                                                 | `NOT RUN` |                   |
+| SEM-06 | When the corresponding condition is present, verify status/alert semantics: `DEMO SERVICE` and `Waiting for agents — start one in herdr` are `status` surfaces; `GAS LEAK — SERVICE SUSPENDED` is an `alert`.                                                                                                                                | `NOT RUN` |                   |
+| SEM-07 | Verify the live region is named `Agent state announcements`, is polite, and is atomic. It should expose only the current announcement, not a stale concatenation of prior announcements.                                                                                                                                                     | `NOT RUN` |                   |
 
 #### Focus, Escape, and restoration
 
-| ID       | Action and expected result                                                                                                                                                                 | Status    | Observed VoiceOver speech / evidence |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------ |
-| FOCUS-01 | Activate `Open settings`. Initial focus lands on the `Settings` panel container, not an arbitrary background element.                                                                      | `NOT RUN` |                                      |
-| FOCUS-02 | Activate an `Agent stations` button for a live cook. Initial focus lands on the `<agent> details` panel container.                                                                         | `NOT RUN` |                                      |
-| FOCUS-03 | Open an ended-session summary. Initial focus lands on the `<agent> session summary` panel container.                                                                                       | `NOT RUN` |                                      |
-| FOCUS-04 | With Settings focused, press `Escape`. Settings closes and the page returns to the settings trigger. Repeat with focus on an interactive Settings control to verify Escape remains global. | `NOT RUN` |                                      |
-| FOCUS-05 | With an agent detail panel focused, press `Escape`; then repeat with an ended-session summary. The panel closes without changing the Herdr feed.                                           | `NOT RUN` |                                      |
-| FOCUS-06 | Open Settings from `Open settings`, close with its close button and with `Escape`, and verify focus returns to the originating `Open settings` trigger each time.                          | `NOT RUN` |                                      |
-| FOCUS-07 | Open details by activating the originating semantic station control, close with the panel close button and with `Escape`, and verify focus returns to that same semantic station control.  | `NOT RUN` |                                      |
+| ID       | Action and expected result                                                                                                                                                                 | Status    | Observed evidence |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ----------------- |
+| FOCUS-01 | Activate `Open settings`. Initial focus lands on the `Settings` panel container, not an arbitrary background element.                                                                      | `NOT RUN` |                   |
+| FOCUS-02 | Activate an `Agent stations` button for a live cook. Initial focus lands on the `<agent> details` panel container.                                                                         | `NOT RUN` |                   |
+| FOCUS-03 | Open an ended-session summary. Initial focus lands on the `<agent> session summary` panel container.                                                                                       | `NOT RUN` |                   |
+| FOCUS-04 | With Settings focused, press `Escape`. Settings closes and the page returns to the settings trigger. Repeat with focus on an interactive Settings control to verify Escape remains global. | `NOT RUN` |                   |
+| FOCUS-05 | With an agent detail panel focused, press `Escape`; then repeat with an ended-session summary. The panel closes without changing the Herdr feed.                                           | `NOT RUN` |                   |
+| FOCUS-06 | Open Settings from `Open settings`, close with its close button and with `Escape`, and verify focus returns to the originating `Open settings` trigger each time.                          | `NOT RUN` |                   |
+| FOCUS-07 | Open details by activating the originating semantic station control, close with the panel close button and with `Escape`, and verify focus returns to that same semantic station control.  | `NOT RUN` |                   |
 
 #### Keyboard operation and announcements
 
-| ID     | Action and expected result                                                                                                                                                                                                                                                                                                            | Status    | Observed VoiceOver speech / evidence |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------ |
-| KEY-01 | From the document body, use `ArrowRight`/`ArrowDown` to cycle stations forward and `ArrowLeft`/`ArrowUp` to cycle backward. Use `Tab` from the body as the documented forward cycle. Verify the visible focus ring and station identity change together.                                                                              | `NOT RUN` |                                      |
-| KEY-02 | With a station focused, press `Enter` to open details. Verify the station mirror buttons remain `tabindex="-1"` (AX/semantic controls, not ordinary Tab stops) and can still be activated through VoiceOver or the documented keyboard path.                                                                                          | `NOT RUN` |                                      |
-| KEY-03 | In Settings and detail/summary panels, use `Tab` and `Shift+Tab` to reach every button, switch, and select. Operate buttons/switches with native keyboard activation, change each select with keyboard input, and use `Escape` to close.                                                                                              | `NOT RUN` |                                      |
-| KEY-04 | Open `?preset=ended&agents=50`, enter the Freezer, and Tab through the newest-first `Ended chefs` list at 320x640 and 1280x720. Verify all 50 retained sessions have visible focus and distinct labels, the list scrolls without horizontal overflow, and the live region distinguishes decorative spirits from inspectable sessions. | `NOT RUN` |                                      |
-| KEY-05 | Open a Freezer session summary, press `Escape`, and verify focus returns to that exact ended-session button while the Freezer stays open. Press `Escape` again and verify the kitchen returns.                                                                                                                                        | `NOT RUN` |                                      |
-| ANN-01 | Cause a real transition into blocked (the initial `blocked` snapshot has no prior state announcement). Expect exactly one concise live-region update with `<agent> blocked, just now`; for other state transitions record the emitted `<agent> <state>` wording.                                                                      | `NOT RUN` |                                      |
-| ANN-02 | Leave the page open through heartbeats, progress-only updates, and repeated observation of the same state. Expect no duplicate announcement and no stale announcement after the next real state transition. Record any VoiceOver repetition rather than treating it as a pass.                                                        | `NOT RUN` |                                      |
-| ANN-03 | Open `?preset=mixed&agents=6&theme=light`. After five seconds, expect one bounded announcement identifying two blocked agents and directing listeners to `Agent stations`; verify both named station buttons remain discoverable.                                                                                                     | `PASS`    | Human tester reported “looks good.”  |
+| ID     | Action and expected result                                                                                                                                                                                                                                                                                                            | Status    | Observed evidence                   |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ----------------------------------- |
+| KEY-01 | From the document body, use `ArrowRight`/`ArrowDown` to cycle stations forward and `ArrowLeft`/`ArrowUp` to cycle backward. Use `Tab` from the body as the documented forward cycle. Verify the visible focus ring and station identity change together.                                                                              | `NOT RUN` |                                     |
+| KEY-02 | With a station focused, press `Enter` to open details. Verify the station mirror buttons remain `tabindex="-1"` (AX/semantic controls, not ordinary Tab stops) and can still be activated through the documented keyboard path or assistive-technology activation.                                                                    | `NOT RUN` |                                     |
+| KEY-03 | In Settings and detail/summary panels, use `Tab` and `Shift+Tab` to reach every button, switch, and select. Operate buttons/switches with native keyboard activation, change each select with keyboard input, and use `Escape` to close.                                                                                              | `NOT RUN` |                                     |
+| KEY-04 | Open `?preset=ended&agents=50`, enter the Freezer, and Tab through the newest-first `Ended chefs` list at 320x640 and 1280x720. Verify all 50 retained sessions have visible focus and distinct labels, the list scrolls without horizontal overflow, and the live region distinguishes decorative spirits from inspectable sessions. | `NOT RUN` |                                     |
+| KEY-05 | Open a Freezer session summary, press `Escape`, and verify focus returns to that exact ended-session button while the Freezer stays open. Press `Escape` again and verify the kitchen returns.                                                                                                                                        | `NOT RUN` |                                     |
+| ANN-01 | Cause a real transition into blocked (the initial `blocked` snapshot has no prior state announcement). Expect exactly one concise live-region update with `<agent> blocked, just now`; for other state transitions record the emitted `<agent> <state>` wording.                                                                      | `NOT RUN` |                                     |
+| ANN-02 | Leave the page open through heartbeats, progress-only updates, and repeated observation of the same state. Expect no duplicate announcement and no stale announcement after the next real state transition. Record any repeated announcement rather than treating it as a pass.                                                       | `NOT RUN` |                                     |
+| ANN-03 | Open `?preset=mixed&agents=6&theme=light`. After five seconds, expect one bounded announcement identifying two blocked agents and directing listeners to `Agent stations`; verify both named station buttons remain discoverable.                                                                                                     | `PASS`    | Human tester reported “looks good.” |
 
 #### Reduced-motion startup and runtime changes
 
-| ID    | Action and expected result                                                                                                                                                                                                                                                                                         | Status    | Observed VoiceOver speech / evidence |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------ |
-| RM-01 | Set the macOS Reduce Motion preference before opening/reloading the light-theme page. Verify startup is static: no idle pose/mark animation, steam particles, cook bob, flame flicker, travel/transition, busser sweep, or blocked pulse/vignette pulse.                                                           | `NOT RUN` |                                      |
-| RM-02 | Repeat RM-01 with the dinner theme. Verify the same motion policy and confirm the blocked signal remains recognizable.                                                                                                                                                                                             | `NOT RUN` |                                      |
-| RM-03 | Without reloading the page, change Reduce Motion from reduce to normal. Verify `prefers-reduced-motion` changes in place and adjacent normal-motion channels resume; do not interpret resuming decoration as a state change.                                                                                       | `NOT RUN` |                                      |
-| RM-04 | Without reloading, change the preference from normal to reduce. Verify active particles, transitions, busser graphics, and pulses stop/clear immediately and remain static.                                                                                                                                        | `NOT RUN` |                                      |
-| RM-05 | While reduced motion is active, let the feed change states. Verify lifecycle labels, the blocked elapsed timer text, keyboard focus/selection, and the live announcement region continue to update.                                                                                                                | `NOT RUN` |                                      |
-| RM-06 | In light theme, inspect a blocked cook at the pass. Verify fixed cook-at-pass geometry, high-contrast outline, home/pass tickets, timer chip, `AT THE PASS` text, solid bell arcs, and fixed-opacity vignette at its escalation stage. Confirm the state is conveyed by text and shape, not color or motion alone. | `NOT RUN` |                                      |
-| RM-07 | Repeat RM-06 in dinner theme. If the vignette stage is not reached during the session, record that sub-check as `NOT RUN` and include the configured threshold/wait in the evidence notes.                                                                                                                         | `NOT RUN` |                                      |
+| ID    | Action and expected result                                                                                                                                                                                                                                                                                         | Status    | Observed evidence |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ----------------- |
+| RM-01 | Set the macOS Reduce Motion preference before opening/reloading the light-theme page. Verify startup is static: no idle pose/mark animation, steam particles, cook bob, flame flicker, travel/transition, busser sweep, or blocked pulse/vignette pulse.                                                           | `NOT RUN` |                   |
+| RM-02 | Repeat RM-01 with the dinner theme. Verify the same motion policy and confirm the blocked signal remains recognizable.                                                                                                                                                                                             | `NOT RUN` |                   |
+| RM-03 | Without reloading the page, change Reduce Motion from reduce to normal. Verify `prefers-reduced-motion` changes in place and adjacent normal-motion channels resume; do not interpret resuming decoration as a state change.                                                                                       | `NOT RUN` |                   |
+| RM-04 | Without reloading, change the preference from normal to reduce. Verify active particles, transitions, busser graphics, and pulses stop/clear immediately and remain static.                                                                                                                                        | `NOT RUN` |                   |
+| RM-05 | While reduced motion is active, let the feed change states. Verify lifecycle labels, the blocked elapsed timer text, keyboard focus/selection, and the live announcement region continue to update.                                                                                                                | `NOT RUN` |                   |
+| RM-06 | In light theme, inspect a blocked cook at the pass. Verify fixed cook-at-pass geometry, high-contrast outline, home/pass tickets, timer chip, `AT THE PASS` text, solid bell arcs, and fixed-opacity vignette at its escalation stage. Confirm the state is conveyed by text and shape, not color or motion alone. | `NOT RUN` |                   |
+| RM-07 | Repeat RM-06 in dinner theme. If the vignette stage is not reached during the session, record that sub-check as `NOT RUN` and include the configured threshold/wait in the evidence notes.                                                                                                                         | `NOT RUN` |                   |
 
 ### Manual result boundary
 
 Record the overall result only after all applicable rows have an explicit
 status and evidence note. This document intentionally records no human
-VoiceOver result: the initial overall value is `NOT RUN`, and automated checks
-such as `npm test`, `npm run audit:accessibility`, and `npm run test:visual` do
-not substitute for listening to VoiceOver speech.
-
-### HM-015 scoped VoiceOver result — 2026-09-11
-
-This record is scoped to the simultaneous-transition scenario and does not
-complete the broader deferred VoiceOver release-gate pass.
-
-| Field                         | Record                                                                                                                                                                       |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Date                          | `2026-09-11`                                                                                                                                                                 |
-| Commit / candidate identifier | `nightshift/187` / PR #214; exact release commit recorded by the software factory                                                                                            |
-| macOS                         | Session performed; version unavailable                                                                                                                                       |
-| Browser                       | Session performed; browser and version unavailable                                                                                                                           |
-| VoiceOver settings            | Session performed; settings unavailable                                                                                                                                      |
-| Tester                        | Human tester                                                                                                                                                                 |
-| Overall result                | `PASS` — human-attested override                                                                                                                                             |
-| Artifact / evidence notes     | Tester reported “looks good” and explicitly marked the override passed; detailed environment and speech records are unavailable. Automated checks remain non-human evidence. |
-
-Human listening steps:
-
-1. Start `npm run dev:visual`, enable VoiceOver, and open
-   `http://localhost:8686/?preset=mixed&agents=6&theme=light`.
-2. After five seconds, record the exact speech for the blocked burst and use
-   `Agent stations` to find Codex and Hermes.
-3. Leave focus on either blocked station for at least five seconds. Record any
-   unsolicited speech while its visible elapsed timer changes.
-4. Open and close Settings with both its close button and `Escape`; then open
-   and close agent details the same ways. Record where focus returns each time.
-
-Exact observed speech: unavailable. The human tester performed the session,
-reported that it looked good, and explicitly marked the scoped override passed.
-
-Remaining failures: none reported for ANN-03 burst speech, blocked-timer
-silence, station discovery, Settings focus restoration, or agent-detail focus
-restoration. Environment details and an exact speech transcript were not
-available, so this remains a human-attested override rather than a reproducible
-listening record.
+screen-reader result: the initial overall value is `NOT RUN`, and automated
+checks such as `npm test`, `npm run audit:accessibility`, and
+`npm run test:visual` do not substitute for a human run of these rows.
 
 ## Socket override
 

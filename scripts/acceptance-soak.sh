@@ -28,7 +28,7 @@ running() {
 case "$action" in
   start)
     binary=${3:?start requires installed BINARY}
-    minimum_hours=${4:-72}
+    minimum_hours=${4:-12}
     case "$minimum_hours" in *[!0-9]*|'') echo "MIN_HOURS must be an integer" >&2; exit 1 ;; esac
     binary_dir=$(cd "$(dirname "$binary")" && pwd -P)
     binary="$binary_dir/$(basename "$binary")"
@@ -46,8 +46,10 @@ case "$action" in
     nohup "$binary" >"$state_dir/logs/herdr-mise.log" 2>&1 &
     soak_pid=$!
     printf '%s\n' "$soak_pid" >"$pid_file"
-    ps -p "$soak_pid" -o command= | sed -n '1p' >"$command_file"
+    # Record the command only after exec, so the expected value is the binary
+    # itself rather than the pre-exec `nohup <binary>` argv.
     sleep 1
+    ps -p "$soak_pid" -o command= | sed -n '1p' >"$command_file"
     running || { echo "soak process failed to stay running" >&2; exit 1; }
     echo "soak=RUNNING pid=$soak_pid started_at=$(sed -n '1p' "$started_file")"
     ;;
