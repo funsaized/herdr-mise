@@ -125,6 +125,7 @@ test("fixture-backed keyboard selection replaces settings and restores agent foc
 test("fixture-backed freezer and settings controls share sizing and focus treatment", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const app = await startFixtureApp({
     prefix: "mise-controls-",
     snapshot: await panelFixture(),

@@ -242,7 +242,7 @@ jobs:
             fi
           done
           printf '%s\n' "${files[@]##*/}" | sort >expected-assets.txt
-          if gh release view "$GITHUB_REF_NAME" --json body,isPrerelease,name,tagName >release.json 2>/dev/null; then
+          if gh release view "$GITHUB_REF_NAME" --json body,databaseId,isPrerelease,name,tagName >release.json 2>/dev/null; then
             jq -e --arg tag "$GITHUB_REF_NAME" --argjson expected "$expected_prerelease" \
               '.isPrerelease == $expected and .tagName == $tag and .name == $tag' release.json
             if test "$RELEASE_CLASS" = stable; then
@@ -252,28 +252,31 @@ jobs:
                 "$notes_file" >expected-notes.md
               diff -u expected-notes.md existing-notes.md
             fi
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets[].name' | sort >existing-assets.txt
-            comm -23 existing-assets.txt expected-assets.txt >unexpected-assets.txt
-            test ! -s unexpected-assets.txt
           else
             gh release create "$GITHUB_REF_NAME" --draft --verify-tag "${create_flags[@]}" --title "$GITHUB_REF_NAME"
+            gh release view "$GITHUB_REF_NAME" --json body,databaseId,isPrerelease,name,tagName >release.json
           fi
+          release_id=$(jq -er '.databaseId | select(type == "number" and . > 0 and . == floor) | tostring' release.json)
+          assets_api="repos/$GITHUB_REPOSITORY/releases/$release_id/assets"
+          gh api --paginate "$assets_api" --jq '.[] | [.id, .name] | @tsv' >existing-assets.tsv
+          cut -f2 existing-assets.tsv | sort >existing-assets.txt
+          comm -23 existing-assets.txt expected-assets.txt >unexpected-assets.txt
+          test ! -s unexpected-assets.txt
           # Validate every existing byte before uploading anything. A rebuilt,
           # timestamp-signed binary must never replace an accepted RC artifact.
           existing="$RUNNER_TEMP/existing-release"
           mkdir -p "$existing"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets[].name' >existing-assets.txt
-          while IFS= read -r asset; do
-            test -n "$asset" || continue
-            gh release download "$GITHUB_REF_NAME" --pattern "$asset" --dir "$existing"
+          while IFS=$'\t' read -r asset_id asset; do
+            gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" >"$existing/$asset"
             cmp "dist/$asset" "$existing/$asset"
-          done <existing-assets.txt
+          done <existing-assets.tsv
           for file in "${files[@]}"; do
             if ! test -f "$existing/${file##*/}"; then
-              gh release upload "$GITHUB_REF_NAME" "$file"
+              gh api --method POST -H 'Content-Type: application/octet-stream' --input "$file" \
+                "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=${file##*/}"
             fi
           done
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --jq '.assets[].name' | sort >published-assets.txt
+          gh api --paginate "$assets_api" --jq '.[] | [.id, .name] | @tsv' | cut -f2 | sort >published-assets.txt
           diff -u expected-assets.txt published-assets.txt
           gh release edit "$GITHUB_REF_NAME" --draft=false
 
