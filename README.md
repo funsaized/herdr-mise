@@ -208,7 +208,6 @@ The browser service continues alongside the TUI when its loopback port is free
 - Release archives and the installer support macOS arm64, macOS x86_64, and
   Linux x86_64 glibc. There is no background service or auto-update.
 - Browser settings are local site data. Reduced motion is honored. The
-  [scoped HM-015 VoiceOver result](docs/operations.md#hm-015-scoped-voiceover-result--2026-09-11)
   is recorded separately; the broader manual listening pass remains
   post-release work.
 
