@@ -22,7 +22,7 @@ from labels or upstream focus. Legacy snapshots may omit both additions.
 - Live Herdr snapshots currently do not supply ticket counts. Demo counts are
   explicitly available within the already labeled demo service.
 - `id` is Herdr's stable `terminal_id`; `paneId` and `workspace` are mutable
-  locators. Herdr protocols 17, 19, and 20 expose terminal identity and preserve
+  locators. Herdr protocols 17, 19, 20, 21, and 22 expose terminal identity and preserve
   it when moving the attached terminal, so Mise uses no pane-ID fallback.
 - `agentKind` is the trimmed, non-empty upstream `agent` value. It is never
   inferred from names, sessions, worktree metadata, or model-like fields.

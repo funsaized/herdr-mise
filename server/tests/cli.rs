@@ -98,7 +98,7 @@ fn diagnostic_uses_real_socket_transport_and_redacts_its_path() {
     assert_eq!(
         output,
         format!(
-            "version={}\nsupported_protocols=17,19,20\nsource_status=connected\nhttp_address=http://127.0.0.1:9123\n",
+            "version={}\nsupported_protocols=17,19,20,21,22\nsource_status=connected\nhttp_address=http://127.0.0.1:9123\n",
             env!("CARGO_PKG_VERSION")
         )
     );

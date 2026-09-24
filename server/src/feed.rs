@@ -696,7 +696,7 @@ mod tests {
         let mut table = AgentTable::default();
         table.apply(feed.snapshot().await);
         let mut selected = Some("fictional-terminal-20".into());
-        feed.apply_live_coalesced(moved.agents, moved.ended_ids, vec![])
+        feed.apply_live_coalesced(moved.agents.clone(), moved.ended_ids.clone(), vec![])
             .await;
         let event = changes.try_recv().expect("move must bypass coalescing");
         assert!(matches!(
@@ -714,7 +714,82 @@ mod tests {
         assert!(table.board().is_empty());
         let kitchen =
             crate::tui::scene::tests::render_selected(&table, 80, 24, 0, selected.as_deref());
-        assert!(crate::tui::scene::tests::text(&kitchen).contains("Workspace: Example Pantry"));
+        let kitchen_text = crate::tui::scene::tests::text(&kitchen);
+        assert!(kitchen_text.contains("WORKSPACE"));
+        assert!(kitchen_text.contains("Exam…ntry"), "{kitchen_text}");
+        let wide_kitchen =
+            crate::tui::scene::tests::render_selected(&table, 120, 42, 0, selected.as_deref());
+        assert!(crate::tui::scene::tests::text(&wide_kitchen).contains("Example Pantry"));
+        // The coalesced move is a delta; the subsequent catalog snapshot makes
+        // the destination scope available without changing terminal identity.
+        feed.apply_normalized_for_test(moved).await;
+        table.apply(changes.try_recv().expect("workspace catalog snapshot"));
+        let render_scope = |width, height, scope: &Scope| {
+            let mut terminal =
+                ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+            let mut hits = Vec::new();
+            terminal
+                .draw(|frame| {
+                    hits = crate::tui::scene::draw_view_scoped_with_hits(
+                        frame,
+                        &table,
+                        None,
+                        chrono::DateTime::parse_from_rfc3339("2026-08-13T12:00:01Z")
+                            .unwrap()
+                            .with_timezone(&chrono::Utc),
+                        0,
+                        crate::tui::canvas::ColorMode::Xterm256,
+                        true,
+                        selected.as_deref(),
+                        0,
+                        crate::tui::SceneView::Kitchen,
+                        false,
+                        false,
+                        scope,
+                    )
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let rows = hits
+                .iter()
+                .filter(|hit| hit.table_row)
+                .map(|hit| {
+                    (0..width)
+                        .map(|x| buffer[(x, hit.area.y)].symbol())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>();
+            (crate::tui::scene::tests::text(buffer), rows)
+        };
+        let destination = Scope {
+            id: Some("fictional-pantry".into()),
+            label: Some("Example Pantry".into()),
+        };
+        for (width, height, workspace) in [(80, 24, "Exam…ntry"), (120, 42, "Example Pantry")] {
+            let (_, all_rows) = render_scope(width, height, &Scope::default());
+            let (_, scoped_rows) = render_scope(width, height, &destination);
+            assert_eq!(all_rows.len(), 1);
+            assert_eq!(scoped_rows.len(), 1);
+            assert!(
+                all_rows[0].contains(workspace),
+                "{width}x{height}: {all_rows:?}"
+            );
+            assert!(
+                scoped_rows[0].contains(workspace),
+                "{width}x{height}: {scoped_rows:?}"
+            );
+        }
+        assert!(render_scope(120, 42, &destination)
+            .0
+            .contains("Workspace: Example Pantry"));
+        let source = Scope {
+            id: Some("fictional-kitchen".into()),
+            label: Some("Example Kitchen".into()),
+        };
+        let (source_text, source_rows) = render_scope(120, 42, &source);
+        assert!(source_rows.is_empty());
+        assert!(!source_text.contains("example-cook"), "{source_text}");
+        assert!(!source_text.contains("Example Pantry"), "{source_text}");
         let freezer = crate::tui::scene::tests::render_freezer(&table, 80, 24);
         assert!(crate::tui::scene::tests::text(&freezer).contains("FREEZER EMPTY"));
         assert!(changes.try_recv().is_err());
@@ -859,7 +934,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(diagnostic.observed_protocol, 23);
-                assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20]);
+                assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20, 21, 22]);
                 assert!(diagnostic.next_action.contains("retry"));
             }
             event => panic!("missing unsupported diagnostic: {event:?}"),
@@ -869,25 +944,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn preview_canary_feed_moves_from_supported_live_to_preview_diagnostic() {
-        const PREVIEW: &[u8] =
-            include_bytes!("../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json");
-        let preview_protocol = serde_json::from_slice::<serde_json::Value>(PREVIEW).unwrap()
-            ["protocol"]
-            .as_u64()
-            .unwrap();
+    async fn protocol_21_and_22_snapshots_recover_after_unsupported_protocol() {
+        const UNSUPPORTED: &[u8] = br#"{"version":"future","protocol":99,"changed_shape":true}"#;
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("preview-canary-feed.sock");
         let listener = UnixListener::bind(&path)
             .unwrap_or_else(|error| panic!("required socket integration unavailable: {error}"));
-        let serve_preview = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let server_preview = Arc::clone(&serve_preview);
+        let response_index = Arc::new(std::sync::atomic::AtomicU8::new(0));
+        let server_index = Arc::clone(&response_index);
         let server = tokio::spawn(async move {
             loop {
                 let Ok((stream, _)) = listener.accept().await else {
                     break;
                 };
-                let serve_preview = Arc::clone(&server_preview);
+                let response_index = Arc::clone(&server_index);
                 tokio::spawn(async move {
                     let mut stream = BufReader::new(stream);
                     let mut request = String::new();
@@ -898,10 +968,10 @@ mod tests {
                         std::future::pending::<()>().await;
                     }
                     let response: &'static [u8] =
-                        if serve_preview.load(std::sync::atomic::Ordering::SeqCst) {
-                            PREVIEW
-                        } else {
-                            include_bytes!("../tests/fixtures/snapshot-herdr-0.8.2-p20.json")
+                        match response_index.load(std::sync::atomic::Ordering::SeqCst) {
+                            0 => UNSUPPORTED,
+                            1 => include_bytes!("../tests/fixtures/snapshot-herdr-0.8.2-p21.json"),
+                            _ => include_bytes!("../tests/fixtures/snapshot-herdr-0.9.0-p22.json"),
                         };
                     let value: serde_json::Value = serde_json::from_slice(response).unwrap();
                     stream
@@ -915,25 +985,46 @@ mod tests {
         });
         let shutdown = CancellationToken::new();
         let feed = Feed::start(path, Duration::from_millis(50), shutdown.clone()).await;
-        wait_for_source_status(&feed, SourceStatus::Connected).await;
-        assert!(matches!(
-            feed.snapshot().await,
-            AgentStateEvent::Snapshot { mode: AppMode::Live, source_status: SourceStatus::Connected, agents, .. }
-                if agents.len() == 1 && agents[0].id == "fictional-terminal-20"
-        ));
-        serve_preview.store(true, std::sync::atomic::Ordering::SeqCst);
         wait_for_source_status(&feed, SourceStatus::UnsupportedProtocol).await;
         assert!(matches!(
             feed.snapshot().await,
             AgentStateEvent::Snapshot {
-                mode: AppMode::Live,
-                source_status: SourceStatus::UnsupportedProtocol,
                 source_diagnostic: Some(SourceDiagnostic {
-                    observed_protocol,
+                    observed_protocol: 99,
                     ..
                 }),
                 ..
-            } if observed_protocol == preview_protocol
+            }
+        ));
+        response_index.store(1, std::sync::atomic::Ordering::SeqCst);
+        loop {
+            if matches!(feed.snapshot().await, AgentStateEvent::Snapshot { source_status: SourceStatus::Connected, ref agents, .. } if agents.first().is_some_and(|agent| agent.id == "fictional-terminal-current" && agent.state == AgentState::Working))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        response_index.store(2, std::sync::atomic::Ordering::SeqCst);
+        loop {
+            if matches!(feed.snapshot().await, AgentStateEvent::Snapshot { source_status: SourceStatus::Connected, ref agents, .. } if agents.first().is_some_and(|agent| agent.id == "fictional-terminal-current" && agent.state == AgentState::Blocked))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(matches!(
+            feed.snapshot().await,
+            AgentStateEvent::Snapshot {
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                source_diagnostic: None,
+                agents,
+                ..
+            } if agents.first().is_some_and(|agent|
+                agent.id == "fictional-terminal-current"
+                    && agent.pane_id.as_deref() == Some("fictional-pane-22")
+                    && agent.workspace_id.as_deref() == Some("fictional-workspace-22")
+            )
         ));
         shutdown.cancel();
         server.abort();

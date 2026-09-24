@@ -178,10 +178,12 @@ impl Normalizer {
             .cloned()
             .or_else(|| value.get("snapshot").cloned())
             .unwrap_or(value);
-        let raw: RawSnapshot = serde_json::from_value(snapshot_value)?;
-        if !supported_protocols().contains(&raw.protocol) {
-            return Err(AdapterError::Protocol(raw.protocol));
+        if let Some(protocol) = snapshot_value.get("protocol").and_then(Value::as_u64) {
+            if !supported_protocols().contains(&protocol) {
+                return Err(AdapterError::Protocol(protocol));
+            }
         }
+        let raw: RawSnapshot = serde_json::from_value(snapshot_value)?;
         // Every manifest-supported protocol exposes the snapshot fields consumed below.
         // The product version is intentionally descriptive so patch releases keep working.
         let _server_version = &raw.version;
@@ -841,10 +843,10 @@ mod tests {
 
     #[test]
     fn unsupported_diagnostic_is_actionable_and_malformed_remains_distinct() {
-        let unsupported = AdapterError::Protocol(23);
+        let unsupported = AdapterError::Protocol(99);
         let diagnostic = unsupported.source_diagnostic().expect("diagnostic");
-        assert_eq!(diagnostic.observed_protocol, 23);
-        assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20]);
+        assert_eq!(diagnostic.observed_protocol, 99);
+        assert_eq!(diagnostic.supported_protocols, vec![17, 19, 20, 21, 22]);
         assert!(diagnostic
             .next_action
             .contains("upgrade or downgrade Herdr"));
@@ -857,6 +859,17 @@ mod tests {
             SourceStatus::IncompatibleResponse
         );
         assert_eq!(malformed.source_diagnostic(), None);
+
+        let future = json!({"version":"future","protocol":99,"changed_shape":true});
+        assert!(matches!(
+            Normalizer::default().normalize_snapshot_value(future, "now"),
+            Err(AdapterError::Protocol(99))
+        ));
+        let malformed_supported = json!({"version":"0.9.0","protocol":22});
+        assert!(matches!(
+            Normalizer::default().normalize_snapshot_value(malformed_supported, "now"),
+            Err(AdapterError::Json(_))
+        ));
     }
 
     #[test]
@@ -871,7 +884,7 @@ mod tests {
 
     #[test]
     fn compatibility_manifest_drives_runtime_protocols_and_fixture_mapping() {
-        assert_eq!(supported_protocols(), vec![17, 19, 20]);
+        assert_eq!(supported_protocols(), vec![17, 19, 20, 21, 22]);
 
         let cases = [
             (
@@ -895,6 +908,20 @@ mod tests {
                 AgentState::Working,
                 "Example Kitchen",
             ),
+            (
+                include_str!("../tests/fixtures/snapshot-herdr-0.8.2-p21.json"),
+                "fictional-terminal-current",
+                "fictional-pane-21",
+                AgentState::Working,
+                "Example Galley",
+            ),
+            (
+                include_str!("../tests/fixtures/snapshot-herdr-0.9.0-p22.json"),
+                "fictional-terminal-current",
+                "fictional-pane-22",
+                AgentState::Blocked,
+                "Example Pastry",
+            ),
         ];
         for (fixture, id, pane_id, state, workspace) in cases {
             let mut normalizer = Normalizer::default();
@@ -906,6 +933,8 @@ mod tests {
             assert_eq!(normalized.agents[0].pane_id.as_deref(), Some(pane_id));
             assert_eq!(normalized.agents[0].state, state);
             assert_eq!(normalized.agents[0].workspace, workspace);
+            assert_eq!(normalized.agents[0].session.tickets_available, Some(false));
+            assert_eq!(normalized.agents[0].session.tickets, 0);
         }
     }
 
@@ -1040,7 +1069,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn preview_canary_adapter_accepts_stable_and_diagnoses_preview_over_unix_socket() {
+    async fn supported_protocols_and_preview_canary_flow_over_unix_socket() {
         async fn normalize_fixture(
             bytes: &'static [u8],
         ) -> Result<NormalizedSnapshot, AdapterError> {
@@ -1076,15 +1105,14 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(stable.agents.len(), 1);
-        let preview =
-            include_bytes!("../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json");
-        let expected_protocol = serde_json::from_slice::<Value>(preview).unwrap()["protocol"]
-            .as_u64()
-            .unwrap();
-        assert!(matches!(
-            normalize_fixture(preview).await,
-            Err(AdapterError::Protocol(protocol)) if protocol == expected_protocol
-        ));
+        for fixture in [
+            include_bytes!("../tests/fixtures/snapshot-herdr-0.8.2-p21.json").as_slice(),
+            include_bytes!("../tests/fixtures/snapshot-herdr-0.9.0-p22.json").as_slice(),
+            include_bytes!("../tests/fixtures/snapshot-herdr-preview-2026-09-06-p22.json")
+                .as_slice(),
+        ] {
+            assert_eq!(normalize_fixture(fixture).await.unwrap().agents.len(), 1);
+        }
     }
 
     #[tokio::test]

@@ -157,7 +157,7 @@ describe("chrome interactions", () => {
         sourceStatus="unsupportedProtocol"
         sourceDiagnostic={{
           observedProtocol: 23,
-          supportedProtocols: [17, 19, 20],
+          supportedProtocols: [17, 19, 20, 21, 22],
           nextAction:
             "upgrade or downgrade Herdr to a tested release, then retry",
         }}
@@ -166,7 +166,7 @@ describe("chrome interactions", () => {
     );
     const unsupported = screen.getByRole("status").textContent ?? "";
     expect(unsupported).toContain("observed 23");
-    expect(unsupported).toContain("supported: 17, 19, 20");
+    expect(unsupported).toContain("supported: 17, 19, 20, 21, 22");
     expect(unsupported).toContain("upgrade or downgrade Herdr");
     rerender(
       <ModeTreatment
@@ -186,7 +186,7 @@ describe("chrome interactions", () => {
         sourceStatus="incompatibleResponse"
         sourceDiagnostic={{
           observedProtocol: 20,
-          supportedProtocols: [17, 19, 20],
+          supportedProtocols: [17, 19, 20, 21, 22],
           nextAction: "ensure terminal identities are unique, then retry",
         }}
         lastUpdateSeconds={0}
@@ -201,7 +201,7 @@ describe("chrome interactions", () => {
         sourceStatus="incompatibleResponse"
         sourceDiagnostic={{
           observedProtocol: 20,
-          supportedProtocols: [17, 19, 20],
+          supportedProtocols: [17, 19, 20, 21, 22],
           nextAction: "ensure terminal identities are unique, then retry",
         }}
         lastUpdateSeconds={1}

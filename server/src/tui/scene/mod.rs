@@ -11,13 +11,15 @@ use ratatui::{
     Frame,
 };
 
-use self::layout::{compute_freezer_layout, compute_layout, LayoutDecision, PixelRect};
+use self::layout::{
+    compute_freezer_layout, compute_kitchen_composition, compute_layout, LayoutDecision, PixelRect,
+};
 use super::{
     canvas::{rgb_to_xterm256, ColorMode, PixelCanvas},
     freezer_keys,
     state::{AgentTable, BoardEntry, BOARD_CAP},
-    theme, view, SceneView, HELP_LINES, KEY_ALL, KEY_ESC_CLOSE, KEY_FREEZER, KEY_HELP, KEY_INSPECT,
-    KEY_QUIT, KEY_QUIT_ESC, KEY_SCOPE,
+    theme, view, HitRegion, SceneView, HELP_LINES, KEY_ALL, KEY_ESC_CLOSE, KEY_FREEZER, KEY_HELP,
+    KEY_QUIT, KEY_QUIT_ESC, KEY_SCOPE, KEY_SELECT,
 };
 use crate::protocol::{AgentRecord, AgentState, AppMode, SourceStatus};
 
@@ -450,38 +452,204 @@ fn footer_connection(table: &AgentTable, warning: Option<&str>, width: u16) -> S
     )
 }
 
-fn draw_help(frame: &mut Frame<'_>, color_mode: ColorMode) {
+fn draw_help(
+    frame: &mut Frame<'_>,
+    color_mode: ColorMode,
+    selected: Option<&AgentRecord>,
+    scroll: u16,
+) {
     let area = frame.area();
-    let width = HELP_LINES
+    let mut lines = Vec::new();
+    if let Some(agent) = selected {
+        lines.push(Line::from("↑/↓ scroll details · Esc close"));
+        lines.push(Line::from(format!(
+            "Pane locator: {}",
+            agent
+                .pane_id
+                .as_deref()
+                .map(view::sanitize_external)
+                .unwrap_or_else(|| "Unavailable".into())
+        )));
+        lines.push(Line::from(format!(
+            "Workspace: {}",
+            view::sanitize_external(&agent.workspace)
+        )));
+    }
+    lines.extend(HELP_LINES.map(Line::from));
+    let width = lines
         .iter()
-        .map(|line| line.chars().count() as u16)
+        .map(|line| line.width() as u16)
         .max()
         .unwrap_or_default()
         .saturating_add(4)
         .min(area.width);
     let line_width = width.saturating_sub(2).max(1);
-    let paragraph = Paragraph::new(HELP_LINES.map(Line::from).to_vec())
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default().borders(Borders::ALL).style(
-                Style::default()
-                    .fg(mapped(theme::TEXT, color_mode))
-                    .bg(mapped(theme::PANEL2, color_mode)),
-            ),
-        );
-    let height = u16::try_from(paragraph.line_count(line_width))
-        .unwrap_or(u16::MAX)
-        .saturating_add(2)
-        .min(area.height);
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+        Block::default().borders(Borders::ALL).style(
+            Style::default()
+                .fg(mapped(theme::TEXT, color_mode))
+                .bg(mapped(theme::PANEL2, color_mode)),
+        ),
+    );
+    let content_height = u16::try_from(paragraph.line_count(line_width)).unwrap_or(u16::MAX);
+    let height = content_height.saturating_add(2).min(area.height);
     let overlay = Rect::new(
         area.x + area.width.saturating_sub(width) / 2,
         area.y + area.height.saturating_sub(height) / 2,
         width,
         height,
     );
-    frame.render_widget(paragraph, overlay);
+    frame.render_widget(
+        paragraph.scroll((
+            scroll.min(content_height.saturating_sub(height.saturating_sub(2))),
+            0,
+        )),
+        overlay,
+    );
 }
 
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_view_scoped_with_hits(
+    frame: &mut Frame<'_>,
+    table: &AgentTable,
+    warning: Option<&str>,
+    now: DateTime<Utc>,
+    tick: u64,
+    color_mode: ColorMode,
+    scene_supported: bool,
+    selected_id: Option<&str>,
+    table_offset: usize,
+    scene_view: SceneView,
+    help_open: bool,
+    reduced_motion: bool,
+    scope: &super::Scope,
+) -> Vec<HitRegion> {
+    draw_view_scoped_with_help_scroll(
+        frame,
+        table,
+        warning,
+        now,
+        tick,
+        color_mode,
+        scene_supported,
+        selected_id,
+        table_offset,
+        scene_view,
+        help_open,
+        0,
+        reduced_motion,
+        scope,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_view_scoped_with_help_scroll(
+    frame: &mut Frame<'_>,
+    table: &AgentTable,
+    warning: Option<&str>,
+    now: DateTime<Utc>,
+    tick: u64,
+    color_mode: ColorMode,
+    scene_supported: bool,
+    selected_id: Option<&str>,
+    table_offset: usize,
+    scene_view: SceneView,
+    help_open: bool,
+    help_scroll: u16,
+    reduced_motion: bool,
+    scope: &super::Scope,
+) -> Vec<HitRegion> {
+    let area = frame.area();
+    let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
+    let selected = selected_id.and_then(|id| agents.iter().copied().find(|agent| agent.id == id));
+    let composition = (scene_view == SceneView::Kitchen && scene_supported)
+        .then(|| compute_kitchen_composition(area.width, area.height, agents.len()))
+        .flatten();
+    if !scene_supported || (scene_view == SceneView::Kitchen && composition.is_none()) {
+        let mut hits = match scene_view {
+            SceneView::Kitchen => view::draw_scoped_with_hits(
+                frame,
+                table,
+                warning,
+                now,
+                motion_tick(tick, reduced_motion),
+                selected_id,
+                table_offset,
+                scope,
+            ),
+            SceneView::Freezer => {
+                view::draw_freezer_scoped(frame, table, warning, now, selected_id);
+                Vec::new()
+            }
+        };
+        if help_open {
+            draw_help(frame, color_mode, selected, help_scroll);
+            hits.clear();
+        }
+        return hits;
+    }
+    let mut hits = match scene_view {
+        SceneView::Freezer => {
+            draw_freezer(
+                frame,
+                area,
+                table,
+                warning,
+                now,
+                tick,
+                color_mode,
+                selected_id,
+                table_offset,
+                reduced_motion,
+                scope,
+            );
+            Vec::new()
+        }
+        SceneView::Kitchen => {
+            let Some(composition) = composition else {
+                return Vec::new();
+            };
+            let scene_area = Rect::new(area.x, area.y, area.width, composition.scene_height);
+            let table_area = Rect::new(
+                area.x,
+                area.y + composition.scene_height,
+                area.width,
+                composition.table_height,
+            );
+            let mut hits = draw_kitchen(
+                frame,
+                scene_area,
+                table,
+                warning,
+                now,
+                tick,
+                color_mode,
+                selected_id,
+                table_offset,
+                reduced_motion,
+                scope,
+            );
+            let (_, table_hits) = view::render_stats_table(
+                frame,
+                table_area,
+                &agents,
+                selected_id,
+                table_offset,
+                now,
+            );
+            hits.extend(table_hits);
+            hits
+        }
+    };
+    if help_open {
+        draw_help(frame, color_mode, selected, help_scroll);
+        hits.clear();
+    }
+    hits
+}
+
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_view_scoped(
     frame: &mut Frame<'_>,
@@ -498,83 +666,21 @@ pub(crate) fn draw_view_scoped(
     reduced_motion: bool,
     scope: &super::Scope,
 ) {
-    let area = frame.area();
-    let inspection_too_tall = scene_view == SceneView::Kitchen
-        && selected_id
-            .and_then(|id| {
-                table
-                    .scoped_agents(scope.id.as_deref())
-                    .find(|agent| agent.id == id)
-            })
-            .is_some_and(|agent| {
-                let available_height = match compute_layout(
-                    area.width,
-                    area.height.saturating_mul(2),
-                    table.scoped_agents(scope.id.as_deref()).count(),
-                ) {
-                    LayoutDecision::Scene(layout) => layout
-                        .stations
-                        .iter()
-                        .map(|station| cell_rect(*station).y)
-                        .min()
-                        .unwrap_or(area.height)
-                        .saturating_sub(cell_rect(layout.pass).bottom()),
-                    LayoutDecision::Fallback => area.height,
-                };
-                view::inspect_height(agent, area.width.saturating_sub(4)) > available_height
-            });
-    if !scene_supported || inspection_too_tall {
-        match scene_view {
-            SceneView::Kitchen => view::draw_scoped(
-                frame,
-                table,
-                warning,
-                now,
-                motion_tick(tick, reduced_motion),
-                selected_id,
-                table_offset,
-                scope,
-            ),
-            SceneView::Freezer => {
-                view::draw_freezer_scoped(frame, table, warning, now, selected_id)
-            }
-        }
-        if help_open {
-            draw_help(frame, color_mode);
-        }
-        return;
-    }
-    match scene_view {
-        SceneView::Freezer => draw_freezer(
-            frame,
-            area,
-            table,
-            warning,
-            now,
-            tick,
-            color_mode,
-            selected_id,
-            table_offset,
-            reduced_motion,
-            scope,
-        ),
-        SceneView::Kitchen => draw_kitchen(
-            frame,
-            area,
-            table,
-            warning,
-            now,
-            tick,
-            color_mode,
-            selected_id,
-            table_offset,
-            reduced_motion,
-            scope,
-        ),
-    }
-    if help_open {
-        draw_help(frame, color_mode);
-    }
+    let _ = draw_view_scoped_with_hits(
+        frame,
+        table,
+        warning,
+        now,
+        tick,
+        color_mode,
+        scene_supported,
+        selected_id,
+        table_offset,
+        scene_view,
+        help_open,
+        reduced_motion,
+        scope,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -590,7 +696,7 @@ fn draw_kitchen(
     table_offset: usize,
     reduced_motion: bool,
     scope: &super::Scope,
-) {
+) -> Vec<HitRegion> {
     let agents = table.scoped_agents(scope.id.as_deref()).collect::<Vec<_>>();
     let LayoutDecision::Scene(layout) =
         compute_layout(area.width, area.height.saturating_mul(2), agents.len())
@@ -607,7 +713,7 @@ fn draw_kitchen(
                 scope,
             );
         }
-        return;
+        return Vec::new();
     };
 
     let mut canvas = PixelCanvas::new(
@@ -880,8 +986,14 @@ fn draw_kitchen(
         );
     }
 
+    let mut hits = Vec::with_capacity(agents.len());
     for (station, agent) in layout.stations.iter().copied().zip(agents.iter().copied()) {
         let station_area = cell_rect(station);
+        hits.push(HitRegion {
+            area: pane_rect(area, station_area),
+            agent_id: agent.id.clone(),
+            table_row: false,
+        });
         let blocked = agent.state == AgentState::Blocked;
         let selected = selected_id == Some(agent.id.as_str());
         frame.render_widget(
@@ -1006,30 +1118,10 @@ fn draw_kitchen(
         );
     }
 
-    if let Some(agent) = selected_id.and_then(|id| agents.iter().find(|agent| agent.id == id)) {
-        let width = area
-            .width
-            .saturating_sub(theme::KITCHEN_GUTTER.saturating_mul(2));
-        let height = view::inspect_height(agent, width);
-        let inspection_y = cell_rect(layout.pass).bottom();
-        frame.render_widget(
-            view::inspect_paragraph(agent).style(
-                Style::default()
-                    .fg(mapped(theme::TEXT, color_mode))
-                    .bg(mapped(theme::PANEL2, color_mode))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Rect::new(
-                area.x + theme::KITCHEN_GUTTER,
-                area.y + inspection_y,
-                width,
-                height,
-            ),
-        );
-    }
-
     let keys = if selected_id.is_some() {
-        format!("{KEY_INSPECT} · {KEY_SCOPE} · {KEY_ALL} · {KEY_FREEZER} · {KEY_ESC_CLOSE} · {KEY_QUIT}")
+        format!(
+            "{KEY_SELECT} · {KEY_SCOPE} · {KEY_ALL} · {KEY_FREEZER} · {KEY_ESC_CLOSE} · {KEY_QUIT}"
+        )
     } else {
         format!("{KEY_SCOPE} · {KEY_ALL} · {KEY_FREEZER} · {KEY_QUIT_ESC} · {KEY_HELP}")
     };
@@ -1055,6 +1147,7 @@ fn draw_kitchen(
         keys.chars().count() as u16,
         Line::styled(keys, Style::default().fg(mapped(theme::DIM, color_mode))),
     );
+    hits
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1278,6 +1371,7 @@ fn draw_freezer(
     let source_width = area.width.saturating_sub(4);
     let source = format!("{source} · {}", view::scope_summary(table, scope));
     let (source_first, source_overflow) = split_line(&source, usize::from(source_width));
+    let (source_second, source_remaining) = split_line(&source_overflow, usize::from(source_width));
     render_line(
         frame,
         area,
@@ -1297,16 +1391,29 @@ fn draw_freezer(
             3,
             source_width,
             Line::styled(
-                source_overflow,
+                source_second,
                 Style::default().fg(mapped(theme::DIM, color_mode)),
             ),
         );
+        if !source_remaining.is_empty() {
+            render_line(
+                frame,
+                area,
+                2,
+                4,
+                source_width,
+                Line::styled(
+                    source_remaining.clone(),
+                    Style::default().fg(mapped(theme::DIM, color_mode)),
+                ),
+            );
+        }
     }
     render_line(
         frame,
         area,
         2,
-        4,
+        if !source_remaining.is_empty() { 5 } else { 4 },
         source_width,
         Line::styled(
             view::service_line(table, now, None),

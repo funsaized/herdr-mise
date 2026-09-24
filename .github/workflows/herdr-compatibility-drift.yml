@@ -37,10 +37,24 @@ jobs:
           ref: 9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c
           path: upstream/herdr-082
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: herdrdev/herdr
+          ref: 98307c509e9688575d006b47d26d0db561cda0a4
+          path: upstream/herdr-p21
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: herdrdev/herdr
+          ref: b99002ac99b09e00b4ca692436cb15a6b0d676f1
+          path: upstream/herdr-090
+          persist-credentials: false
       - run:
-          npm run check:herdr-compatibility -- --upstream=0.7.5=upstream/herdr-075
-          --upstream=0.8.0=upstream/herdr-080
-          --upstream=0.8.2=upstream/herdr-082
+          npm run check:herdr-compatibility -- --upstream=17=upstream/herdr-075
+          --upstream=19=upstream/herdr-080
+          --upstream=20=upstream/herdr-082
+          --upstream=21=upstream/herdr-p21
+          --upstream=22=upstream/herdr-090
   discovery:
     name: Read-only upstream candidate discovery
     runs-on: ubuntu-24.04
