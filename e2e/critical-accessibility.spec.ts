@@ -4,6 +4,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { startFixtureApp, type FixtureApp } from "./fixture-app";
+import { sceneMetrics } from "./visual-helpers";
 
 async function availablePort() {
   const server = createServer();
@@ -396,4 +398,284 @@ test("workspace scope reveals blocked agents by keyboard at 320 CSS pixels", asy
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test.describe("fixture panel replacement", () => {
+  let app: FixtureApp;
+  let fixture: {
+    agents: Array<{
+      terminal_id: string;
+      pane_id: string;
+      display_agent: string;
+    }>;
+  };
+  test.beforeEach(async () => {
+    fixture = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+        ),
+        "utf8",
+      ),
+    );
+    app = await startFixtureApp({ prefix: "mise-panels-", snapshot: fixture });
+  });
+  test.afterEach(async () => app.close());
+
+  test("fixture canvas selection replaces settings with focused agent details", async ({
+    page,
+  }) => {
+    await page.goto(`${app.appUrl}/?stats`);
+    const station = page.getByRole("button", {
+      name: /^example-cook, Working/,
+    });
+    await expect(station).toBeAttached();
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.stationCells[
+            fixture.agents[0]!.terminal_id
+          ],
+      )
+      .toBeTruthy();
+    const box = (await sceneMetrics(page))!.stationCells[
+      fixture.agents[0]!.terminal_id
+    ]!;
+    const selectOnCanvas = async () => {
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    };
+    await selectOnCanvas();
+    const details = page.getByRole("complementary", {
+      name: "example-cook details",
+    });
+    await expect(details).toBeFocused();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(
+      page.getByRole("complementary", { name: "Settings" }),
+    ).toBeFocused();
+    await selectOnCanvas();
+    await expect(details).toBeFocused();
+    await expect(page.locator("aside.panel")).toHaveCount(1);
+    await expect(
+      page.getByRole("complementary", { name: "Settings" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".canvasHost.dimmed")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(station).toBeFocused();
+    await expect(details).toHaveCount(0);
+  });
+
+  test("fixture keyboard selection replaces settings and restores station focus on Escape", async ({
+    page,
+  }) => {
+    await page.goto(app.appUrl);
+    const station = page.getByRole("button", {
+      name: /^example-cook, Working/,
+    });
+    await expect(station).toBeAttached();
+    for (const key of ["Enter", "Space"]) {
+      await page.getByRole("button", { name: "Open settings" }).click();
+      await expect(
+        page.getByRole("complementary", { name: "Settings" }),
+      ).toBeFocused();
+      await station.focus();
+      await page.keyboard.press(key);
+      const details = page.getByRole("complementary", {
+        name: "example-cook details",
+      });
+      await expect(details).toBeFocused();
+      await expect(page.locator("aside.panel")).toHaveCount(1);
+      await expect(
+        page.getByRole("complementary", { name: "Settings" }),
+      ).toHaveCount(0);
+      await expect(page.locator(".canvasHost.dimmed")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(station).toBeFocused();
+      await expect(details).toHaveCount(0);
+    }
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByRole("button", { name: "Open settings" }),
+    ).toBeFocused();
+  });
+
+  test("Freezer and Settings share sizing spacing and keyboard focus treatment", async ({
+    page,
+  }) => {
+    await page.goto(app.appUrl);
+    for (const size of [
+      { width: 1440, height: 900 },
+      { width: 1280, height: 720 },
+      { width: 720, height: 720 },
+      { width: 390, height: 844 },
+      { width: 320, height: 640 },
+    ]) {
+      await page.setViewportSize(size);
+      const freezer = page.getByRole("button", { name: "Freezer" });
+      const settings = page.getByRole("button", { name: "Open settings" });
+      const station = page.getByRole("button", {
+        name: /^example-cook, Working/,
+      });
+      const a = (await freezer.boundingBox())!,
+        b = (await settings.boundingBox())!;
+      expect(a.width).toBeGreaterThanOrEqual(44);
+      expect(a.height).toBeGreaterThanOrEqual(44);
+      expect(a.height).toBe(b.height);
+      expect(
+        Math.abs(a.y - b.y) < 1 ||
+          a.y + a.height <= b.y ||
+          b.y + b.height <= a.y,
+      ).toBe(true);
+      expect(
+        a.x + a.width <= b.x ||
+          b.x + b.width <= a.x ||
+          a.y + a.height <= b.y ||
+          b.y + b.height <= a.y,
+      ).toBe(true);
+      const styles = async (button: typeof freezer, key: string) => {
+        await station.focus();
+        await page.keyboard.press(key);
+        await expect(button).toBeFocused();
+        return button.evaluate((element) => {
+          const css = getComputedStyle(element);
+          return [
+            css.outlineStyle,
+            css.outlineColor,
+            css.padding,
+            css.borderWidth,
+            css.fontSize,
+          ];
+        });
+      };
+      const freezerStyles = await styles(freezer, "Shift+Tab");
+      expect(freezerStyles[0]).not.toBe("none");
+      expect(await styles(settings, "Tab")).toEqual(freezerStyles);
+      await expect(freezer).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  test("fixture pane locator stays inline with an accessible copy control at supported widths", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            (
+              window as typeof window & { copiedLocator?: string }
+            ).copiedLocator = text;
+          },
+        },
+      });
+    });
+    await page.goto(app.appUrl);
+    const station = page.getByRole("button", {
+      name: /^example-cook, Working/,
+    });
+    await expect(station).toBeAttached();
+    await station.focus();
+    await page.keyboard.press("Enter");
+    const value = page.locator(".locatorValue"),
+      copy = page.getByRole("button", { name: "Copy locator" });
+    await expect(value).toHaveText(fixture.agents[0]!.pane_id);
+    await expect(copy).toHaveText("Copy");
+    for (const size of [
+      { width: 1440, height: 900 },
+      { width: 1280, height: 720 },
+      { width: 720, height: 720 },
+      { width: 390, height: 844 },
+      { width: 320, height: 640 },
+    ]) {
+      await page.setViewportSize(size);
+      const layout = async () =>
+        page.locator(".locatorFact").evaluate((row) => {
+          const label = row.firstElementChild!,
+            text = row.querySelector(".locatorValue")!,
+            button = row.querySelector("button")!;
+          const a = label.getBoundingClientRect(),
+            b = text.getBoundingClientRect(),
+            c = button.getBoundingClientRect();
+          return {
+            label: a.toJSON(),
+            text: b.toJSON(),
+            button: c.toJSON(),
+            scrollWidth: text.scrollWidth,
+            clientWidth: text.clientWidth,
+            scrollHeight: text.scrollHeight,
+            clientHeight: text.clientHeight,
+            documentWidth: document.documentElement.scrollWidth,
+          };
+        });
+      const ordinary = await layout();
+      expect(ordinary.button.width).toBeGreaterThanOrEqual(44);
+      expect(ordinary.button.height).toBeGreaterThanOrEqual(44);
+      expect(ordinary.label.right).toBeLessThanOrEqual(ordinary.text.left);
+      expect(ordinary.text.right).toBeLessThanOrEqual(ordinary.button.left);
+      expect(ordinary.text.top).toBeLessThanOrEqual(ordinary.button.bottom);
+      expect(ordinary.scrollHeight).toBe(ordinary.clientHeight);
+      expect(ordinary.documentWidth).toBeLessThanOrEqual(size.width);
+      await copy.focus();
+      await page.keyboard.press("Enter");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              (window as typeof window & { copiedLocator?: string })
+                .copiedLocator,
+          ),
+        )
+        .toBe(fixture.agents[0]!.pane_id);
+    }
+    // Long-locator variation: extend the fixture's exact pane ID without changing identity.
+    const longLocator = `${fixture.agents[0]!.pane_id}-${"extended".repeat(30)}`;
+    app.setSnapshot({
+      ...fixture,
+      agents: [{ ...fixture.agents[0], pane_id: longLocator }],
+    });
+    await expect(value).toHaveText(longLocator);
+    for (const size of [
+      { width: 320, height: 640 },
+      { width: 390, height: 844 },
+      { width: 720, height: 720 },
+      { width: 1280, height: 720 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(size);
+      const long = await value.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+        const text = element.getBoundingClientRect(),
+          button = element.nextElementSibling!.getBoundingClientRect();
+        return {
+          end: element.scrollLeft + element.clientWidth,
+          full: element.scrollWidth,
+          height: element.clientHeight,
+          scrollHeight: element.scrollHeight,
+          textRight: text.right,
+          buttonLeft: button.left,
+          buttonWidth: button.width,
+          documentWidth: document.documentElement.scrollWidth,
+        };
+      });
+      expect(long.full).toBeGreaterThan(long.height + 44);
+      expect(long.end).toBeGreaterThanOrEqual(long.full - 1);
+      expect(long.scrollHeight).toBe(long.height);
+      expect(long.textRight).toBeLessThanOrEqual(long.buttonLeft);
+      expect(long.buttonWidth).toBeGreaterThanOrEqual(44);
+      expect(long.documentWidth).toBeLessThanOrEqual(size.width);
+    }
+    await copy.click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as typeof window & { copiedLocator?: string })
+              .copiedLocator,
+        ),
+      )
+      .toBe(longLocator);
+    await expect(page.locator(".copyStatus")).toContainText("Locator copied");
+  });
 });

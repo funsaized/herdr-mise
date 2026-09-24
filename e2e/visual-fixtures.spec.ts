@@ -18,6 +18,416 @@ import {
   assertResponsiveScene,
 } from "./visual-helpers";
 
+async function panelFixture() {
+  return JSON.parse(
+    await readFile(
+      join(
+        process.cwd(),
+        "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+      ),
+      "utf8",
+    ),
+  );
+}
+
+test("fixture-backed canvas selection replaces settings with agent details in one click", async ({
+  page,
+}) => {
+  const snapshot = await panelFixture();
+  snapshot.agents.push({
+    ...snapshot.agents[0],
+    terminal_id: "fictional-terminal-21",
+    pane_id: "fictional-pane-21",
+    display_agent: "example-sous",
+  });
+  const app = await startFixtureApp({
+    prefix: "mise-canvas-settings-",
+    snapshot,
+  });
+  try {
+    await page.goto(`${app.appUrl}/?stats`);
+    const settings = page.getByRole("complementary", { name: "Settings" });
+    for (const [id, name] of [
+      ["fictional-terminal-20", "example-cook"],
+      ["fictional-terminal-21", "example-sous"],
+    ]) {
+      await expect
+        .poll(async () => (await sceneMetrics(page))?.stationCells[id])
+        .toBeTruthy();
+      const box = (await sceneMetrics(page))!.stationCells[id]!;
+      const click = () =>
+        page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      if (name === "example-cook") {
+        await click();
+        await expect(
+          page.getByRole("complementary", { name: `${name} details` }),
+        ).toBeFocused();
+      }
+      await page.getByRole("button", { name: "Open settings" }).click();
+      await expect(settings).toBeFocused();
+      await click();
+      await expect(
+        page.getByRole("complementary", { name: `${name} details` }),
+      ).toBeFocused();
+      await expect(settings).toHaveCount(0);
+      await expect(page.locator("aside.panel")).toHaveCount(1);
+      await expect(page.locator(".canvasHost.dimmed")).toHaveCount(0);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed keyboard selection replaces settings and restores agent focus on Escape", async ({
+  page,
+}) => {
+  const app = await startFixtureApp({
+    prefix: "mise-keyboard-settings-",
+    snapshot: await panelFixture(),
+  });
+  try {
+    await page.goto(app.appUrl);
+    const station = page.getByRole("button", {
+      name: /^example-cook, Working/,
+    });
+    await expect(station).toBeAttached();
+    for (const key of ["Enter", "Space"]) {
+      await page.getByRole("button", { name: "Open settings" }).click();
+      await expect(
+        page.getByRole("complementary", { name: "Settings" }),
+      ).toBeFocused();
+      await page.keyboard.press("ArrowRight");
+      await expect(station).toBeFocused();
+      await page.keyboard.press(key);
+      const details = page.getByRole("complementary", {
+        name: "example-cook details",
+      });
+      await expect(details).toBeFocused();
+      await expect(
+        page.getByRole("complementary", { name: "Settings" }),
+      ).toHaveCount(0);
+      await expect(page.locator("aside.panel")).toHaveCount(1);
+      await expect(page.locator(".canvasHost.dimmed")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(station).toBeFocused();
+      await expect(details).toHaveCount(0);
+    }
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByRole("button", { name: "Open settings" }),
+    ).toBeFocused();
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed freezer and settings controls share sizing and focus treatment", async ({
+  page,
+}) => {
+  const app = await startFixtureApp({
+    prefix: "mise-controls-",
+    snapshot: await panelFixture(),
+  });
+  try {
+    await page.goto(app.appUrl);
+    const station = page.getByRole("button", {
+      name: /^example-cook, Working/,
+    });
+    await expect(station).toBeAttached();
+    const freezer = page.getByRole("button", { name: "Freezer" });
+    const settings = page.getByRole("button", { name: "Open settings" });
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      for (const width of [320, 390, 720, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        const a = (await freezer.boundingBox())!,
+          b = (await settings.boundingBox())!;
+        expect(a.width).toBeGreaterThanOrEqual(44);
+        expect(b.width).toBeGreaterThanOrEqual(44);
+        expect(a.height).toBeGreaterThanOrEqual(44);
+        expect(a.height).toBe(b.height);
+        expect(
+          a.x + a.width <= b.x ||
+            b.x + b.width <= a.x ||
+            a.y + a.height <= b.y ||
+            b.y + b.height <= a.y,
+        ).toBe(true);
+        const style = (button: typeof freezer) =>
+          button.evaluate((el) => {
+            const css = getComputedStyle(el);
+            return [
+              css.padding,
+              css.fontFamily,
+              css.fontSize,
+              css.borderWidth,
+              css.borderColor,
+              css.outlineStyle,
+            ];
+          });
+        await station.focus();
+        await page.keyboard.press("Shift+Tab");
+        await expect(freezer).toBeFocused();
+        const freezerStyle = await style(freezer);
+        expect(freezerStyle[5]).not.toBe("none");
+        await page.keyboard.press("Tab");
+        await expect(settings).toBeFocused();
+        expect(await style(settings)).toEqual(freezerStyle);
+        await expect(freezer).toHaveAttribute("aria-pressed", "false");
+      }
+    }
+    await freezer.click();
+    await expect(freezer).toHaveAttribute("aria-pressed", "true");
+    await freezer.click();
+    await expect(freezer).toHaveAttribute("aria-pressed", "false");
+    await settings.click();
+    await expect(
+      page.getByRole("complementary", { name: "Settings" }),
+    ).toBeFocused();
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed agent controls match and locator stays inline", async ({
+  page,
+  context,
+}) => {
+  const snapshot = await panelFixture();
+  const app = await startFixtureApp({ prefix: "mise-locator-", snapshot });
+  try {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.goto(app.appUrl);
+    const station = page.getByRole("button", {
+      name: /^example-cook, Working/,
+    });
+    await expect(station).toBeAttached();
+    await station.focus();
+    await page.keyboard.press("Enter");
+    const value = page.getByLabel(/^Pane locator value:/),
+      copy = page.getByRole("button", { name: "Copy locator" });
+    await expect(value).toHaveText(snapshot.agents[0].pane_id);
+    await expect(copy).toHaveText("Copy");
+    const freezer = page.getByRole("button", { name: "Freezer" }),
+      settings = page.getByRole("button", { name: "Open settings" });
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      for (const width of [320, 390, 720, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        const freezerBox = (await freezer.boundingBox())!,
+          settingsBox = (await settings.boundingBox())!;
+        expect(freezerBox.height).toBe(settingsBox.height);
+        expect(freezerBox.height).toBeGreaterThanOrEqual(44);
+        expect(
+          freezerBox.x + freezerBox.width <= settingsBox.x ||
+            settingsBox.x + settingsBox.width <= freezerBox.x ||
+            freezerBox.y + freezerBox.height <= settingsBox.y ||
+            settingsBox.y + settingsBox.height <= freezerBox.y,
+        ).toBe(true);
+        await freezer.focus();
+        const focusStyle = await freezer.evaluate(
+          (el) => getComputedStyle(el).outlineStyle,
+        );
+        expect(focusStyle).not.toBe("none");
+        await settings.focus();
+        expect(
+          await settings.evaluate((el) => getComputedStyle(el).outlineStyle),
+        ).toBe(focusStyle);
+        const layout = await page.locator(".locatorFact").evaluate((row) => {
+          const label = row.firstElementChild!.getBoundingClientRect(),
+            text = row.querySelector(".locatorValue")!,
+            button = row.querySelector("button")!.getBoundingClientRect();
+          const box = text.getBoundingClientRect();
+          return {
+            labelRight: label.right,
+            left: box.left,
+            right: box.right,
+            buttonLeft: button.left,
+            buttonWidth: button.width,
+            buttonHeight: button.height,
+            height: text.clientHeight,
+            scrollHeight: text.scrollHeight,
+            whiteSpace: getComputedStyle(text).whiteSpace,
+            documentWidth: document.documentElement.scrollWidth,
+          };
+        });
+        expect(layout.labelRight).toBeLessThanOrEqual(layout.left);
+        expect(layout.right).toBeLessThanOrEqual(layout.buttonLeft);
+        expect(layout.buttonWidth).toBeGreaterThanOrEqual(44);
+        expect(layout.buttonHeight).toBeGreaterThanOrEqual(44);
+        expect(layout.height).toBe(layout.scrollHeight);
+        expect(layout.whiteSpace).toBe("pre");
+        expect(layout.documentWidth).toBeLessThanOrEqual(width);
+        await copy.focus();
+        await page.keyboard.press("Enter");
+        await expect
+          .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+          .toBe(snapshot.agents[0].pane_id);
+        await expect(page.locator(".copyStatus")).toContainText(
+          "Locator copied",
+        );
+      }
+    }
+    const longLocator = `${snapshot.agents[0].pane_id}-${"extended".repeat(40)}`;
+    app.setSnapshot({
+      ...snapshot,
+      agents: [{ ...snapshot.agents[0], pane_id: longLocator }],
+    });
+    await expect(value).toHaveText(longLocator);
+    await page.setViewportSize({ width: 320, height: 640 });
+    // The browser's own Tab order and arrow scrolling must reach the offscreen suffix.
+    await page.keyboard.press("Shift+Tab");
+    await expect(value).toBeFocused();
+    await expect
+      .poll(() => value.evaluate((el) => el.scrollWidth > el.clientWidth))
+      .toBe(true);
+    const initial = await value.evaluate((el) => el.scrollLeft);
+    for (let i = 0; i < 100; i++) await page.keyboard.press("ArrowRight");
+    await expect
+      .poll(() =>
+        value.evaluate(
+          (el) => el.scrollLeft + el.clientWidth >= el.scrollWidth - 1,
+        ),
+      )
+      .toBe(true);
+    expect(await value.evaluate((el) => el.scrollLeft)).toBeGreaterThan(
+      initial,
+    );
+    expect(
+      await value.evaluate((el) => {
+        const text = el.firstChild!;
+        const range = document.createRange();
+        range.setStart(text, text.textContent!.length - 4);
+        range.setEnd(text, text.textContent!.length);
+        return (
+          range.getBoundingClientRect().right <=
+          el.getBoundingClientRect().right + 1
+        );
+      }),
+    ).toBe(true);
+    await expect(value).toBeFocused();
+    await expect(value).toHaveText(longLocator);
+    await page.keyboard.press("Tab");
+    await expect(copy).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(longLocator);
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed pointer details restore visible focus after Escape and close", async ({
+  page,
+}) => {
+  const snapshot = await panelFixture();
+  const app = await startFixtureApp({
+    prefix: "mise-pointer-focus-",
+    snapshot,
+  });
+  try {
+    await page.goto(`${app.appUrl}/?stats`);
+    const id = snapshot.agents[0].terminal_id;
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.stationCells[id])
+      .toBeTruthy();
+    const station = (await sceneMetrics(page))!.stationCells[id]!;
+    const settings = page.getByRole("button", { name: "Open settings" });
+    const details = page.getByRole("complementary", {
+      name: "example-cook details",
+    });
+    const clickStation = () =>
+      page.mouse.click(
+        station.x + station.width / 2,
+        station.y + station.height / 2,
+      );
+    for (const dismiss of ["Escape", "Close panel"]) {
+      await settings.click();
+      await expect(
+        page.getByRole("complementary", { name: "Settings" }),
+      ).toBeFocused();
+      await clickStation();
+      await expect(details).toBeFocused();
+      await expect(page.locator("aside.panel")).toHaveCount(1);
+      await expect(
+        page.getByRole("complementary", { name: "Settings" }),
+      ).toHaveCount(0);
+      if (dismiss === "Escape") await page.keyboard.press("Escape");
+      else await page.getByRole("button", { name: dismiss }).click();
+      await expect(details).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: /^example-cook, Working/ }),
+      ).toBeFocused();
+      await expect
+        .poll(async () => (await sceneMetrics(page))?.activeFocusBounds[id])
+        .toBeTruthy();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed settings clears stale station corners and preserves new keyboard focus cues", async ({
+  page,
+}) => {
+  const snapshot = await panelFixture();
+  const app = await startFixtureApp({
+    prefix: "mise-station-focus-",
+    snapshot,
+  });
+  try {
+    await page.goto(`${app.appUrl}/?stats`);
+    const id = snapshot.agents[0].terminal_id;
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.stationCells[id])
+      .toBeTruthy();
+    const box = (await sceneMetrics(page))!.stationCells[id]!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(
+      page.getByRole("complementary", { name: "example-cook details" }),
+    ).toBeFocused();
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.activeFocusBounds[id])
+      .toBeTruthy();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(
+      page.getByRole("complementary", { name: "Settings" }),
+    ).toBeFocused();
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.activeFocusBounds[id])
+      .toBeUndefined();
+    expect(
+      (await sceneMetrics(page))?.activeFocusCornerSizes[id],
+    ).toBeUndefined();
+    await page.keyboard.press("Escape");
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.activeFocusBounds[id])
+      .toBeUndefined();
+    expect(
+      (await sceneMetrics(page))?.activeFocusCornerSizes[id],
+    ).toBeUndefined();
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await page.keyboard.press("ArrowRight");
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.activeFocusBounds[id])
+      .toBeTruthy();
+    expect(
+      (await sceneMetrics(page))?.activeFocusCornerSizes[id],
+    ).toBeGreaterThan(0);
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("complementary", { name: "example-cook details" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByRole("button", { name: /^example-cook, Working/ }),
+    ).toBeFocused();
+  } finally {
+    await app.close();
+  }
+});
+
 test("workspace scope follows stable identity without hiding blocked attention", async ({
   page,
 }) => {
@@ -341,7 +751,9 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
     expect(atmosphereOff?.stateIndicators).toEqual(
       workingTruth?.stateIndicators,
     );
-    expect(atmosphereOff?.board).toEqual(workingTruth?.board);
+    expect(atmosphereOff?.board?.rows).toEqual(workingTruth?.board?.rows);
+    expect(atmosphereOff?.board?.headers).toEqual(workingTruth?.board?.headers);
+    expect(atmosphereOff?.board?.strokedIds).toEqual([]);
     await page.getByRole("switch", { name: "Atmosphere" }).click();
     await page.keyboard.press("Escape");
     await expect
@@ -448,12 +860,20 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
     await expect(settingsPanel).toBeFocused();
     await expect(primaryPanels).toHaveCount(1);
     await expect(details).toHaveCount(0);
+    await expect
+      .poll(
+        async () =>
+          (await sceneMetrics(page))?.activeFocusBounds[
+            "fictional-terminal-19"
+          ],
+      )
+      .toBeUndefined();
     const settingsBox = await settingsPanel.boundingBox();
     expect(settingsBox).not.toBeNull();
     expectInside(settingsBox!, { x: 0, y: 0, width: 390, height: 844 });
     expect(boxesIntersect(selected, settingsBox!)).toBe(false);
     await page.setViewportSize({ width: 320, height: 640 });
-    const narrowSelected = (await sceneMetrics(page))!.activeFocusBounds[
+    const narrowSelected = (await sceneMetrics(page))!.stationCells[
         "fictional-terminal-19"
       ]!,
       narrowSettingsBox = await settingsPanel.boundingBox();
@@ -467,8 +887,11 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
     ).toBe(true);
     await page.keyboard.press("Escape");
     await expect(settings).toBeFocused();
-    await expect(details).toBeVisible();
-    await expect(primaryPanels).toHaveCount(1);
+    await expect(details).toHaveCount(0);
+    await expect(primaryPanels).toHaveCount(0);
+    await blockedStation.focus();
+    await page.keyboard.press("Enter");
+    await expect(details).toBeFocused();
     const narrowDetailBox = await details.boundingBox();
     expect(narrowDetailBox).not.toBeNull();
     expect(boxesIntersect(narrowSelected, narrowDetailBox!)).toBe(false);

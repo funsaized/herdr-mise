@@ -12,10 +12,13 @@ import type { AgentRecord } from "../../protocol/generated/agent-state-event";
 import beforeMove from "../../server/tests/fixtures/snapshot-herdr-0.8.2-p20.json";
 import afterMove from "../../server/tests/fixtures/snapshot-herdr-0.8.2-p20-moved.json";
 const sceneFocus = vi.hoisted(() => vi.fn());
+const sceneFailure = vi.hoisted(() => ({ enabled: false }));
 vi.mock("./scene/kitchen-scene", () => ({
   KitchenScene: class {
     init() {
-      return Promise.resolve();
+      return sceneFailure.enabled
+        ? Promise.reject(new Error("renderer"))
+        : Promise.resolve();
     }
     destroy() {}
     setView() {}
@@ -63,6 +66,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   FakeWebSocket.instances = [];
   sceneFocus.mockClear();
+  sceneFailure.enabled = false;
   clientStore.select(null);
   clientStore.apply({
     version: 1,
@@ -87,6 +91,158 @@ afterEach(() => {
   });
   clientStore.setSettings({ doneTimeoutMs: 600_000 });
   vi.useRealTimers();
+});
+
+const panelAgent = (id: string, name: string): AgentRecord => ({
+  id,
+  name,
+  state: "working",
+  progress: null,
+  stateEnteredAt: "2026-08-13T12:00:00Z",
+  accentIndex: 0,
+  model: "codex",
+  workspace: "/work",
+  session: { runtimeMs: 1_000, tickets: 1 },
+});
+
+it("initial selection while settings is open replaces it with focused details", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [panelAgent("a", "Alpha")],
+  });
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  act(() => clientStore.select("a"));
+  expect(screen.queryByLabelText("Settings")).toBeNull();
+  expect(document.querySelectorAll("aside.panel")).toHaveLength(1);
+  expect(document.activeElement).toBe(screen.getByLabelText("Alpha details"));
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Open settings" }),
+  );
+});
+
+it("settings selection replaces settings with agent details in one action", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [panelAgent("a", "Alpha"), panelAgent("b", "Beta")],
+  });
+  render(<App />);
+  const alpha = screen.getByRole("button", { name: /Alpha, Working/ });
+  fireEvent.click(alpha);
+  expect(document.activeElement).toBe(screen.getByLabelText("Alpha details"));
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  expect(clientStore.coarse().selectedId).toBeNull();
+  expect(document.activeElement).toBe(screen.getByLabelText("Settings"));
+  fireEvent.click(alpha);
+  expect(screen.queryByLabelText("Settings")).toBeNull();
+  expect(document.querySelectorAll("aside.panel")).toHaveLength(1);
+  expect(document.activeElement).toBe(screen.getByLabelText("Alpha details"));
+  expect(document.querySelector(".canvasHost.dimmed")).toBeNull();
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.queryByLabelText("Alpha details")).toBeNull();
+  expect(document.activeElement).toBe(alpha);
+  expect(screen.getByRole("button", { name: "Open settings" })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  const beta = screen.getByRole("button", { name: /Beta, Working/ });
+  fireEvent.click(beta);
+  expect(document.activeElement).toBe(screen.getByLabelText("Beta details"));
+  fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
+  expect(document.activeElement).toBe(beta);
+});
+
+it("locator keyboard scrolling does not navigate stations and Escape still closes details", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [{ ...panelAgent("a", "Alpha"), paneId: "pane-long-locator" }],
+  });
+  render(<App />);
+  const station = screen.getByRole("button", { name: /Alpha, Working/ });
+  fireEvent.click(station);
+  const locator = screen.getByLabelText(/^Pane locator value:/);
+  locator.focus();
+  sceneFocus.mockClear();
+  fireEvent.keyDown(locator, { key: "ArrowRight" });
+  expect(document.activeElement).toBe(locator);
+  expect(sceneFocus).not.toHaveBeenCalled();
+  fireEvent.keyDown(locator, { key: "Escape" });
+  expect(screen.queryByLabelText("Alpha details")).toBeNull();
+  expect(document.activeElement).toBe(station);
+});
+
+it("opening settings clears selection and scene focus without restoring the old station", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [panelAgent("a", "Alpha")],
+  });
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: /Alpha, Working/ }));
+  expect(sceneFocus).toHaveBeenLastCalledWith("a");
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  expect(clientStore.coarse().selectedId).toBeNull();
+  expect(sceneFocus).toHaveBeenLastCalledWith(null);
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.queryByLabelText("Alpha details")).toBeNull();
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Open settings" }),
+  );
+});
+
+it("closing settings without selecting an agent restores its trigger", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  render(<App />);
+  const trigger = screen.getByRole("button", { name: "Open settings" });
+  fireEvent.click(trigger);
+  expect(document.activeElement).toBe(screen.getByLabelText("Settings"));
+  fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Open settings" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Open settings" }),
+  );
+});
+
+it("replaces settings from the renderer fallback selection", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  sceneFailure.enabled = true;
+  clientStore.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [panelAgent("a", "Alpha")],
+  });
+  render(<App />);
+  const fallback = await screen.findByRole("region", {
+    name: "Agent status list",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  const button = within(fallback).getByRole("button");
+  fireEvent.click(button);
+  expect(screen.queryByLabelText("Settings")).toBeNull();
+  expect(document.activeElement).toBe(screen.getByLabelText("Alpha details"));
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(document.activeElement).toBe(button);
 });
 
 it("requests pane identity and keeps selected details across a fixture move", () => {

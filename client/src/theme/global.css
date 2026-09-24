@@ -236,13 +236,30 @@ summary:focus-visible {
 .locatorValue {
   display: block;
   user-select: text;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: pre;
+  text-align: left;
+}
+.locatorValue:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.locatorFact > span {
+  flex: none;
+}
+.locatorFact b {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: none;
+  flex: 1;
+  gap: 4px;
 }
 .copyLocator {
   min-width: 44px;
   min-height: 44px;
-  margin-top: 4px;
+  flex: none;
 }
 .copyStatus {
   min-height: 1em;
@@ -446,6 +463,8 @@ summary:focus-visible {
   z-index: 8;
   right: 14px;
   bottom: 12px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 5px 11px;
   border: 1px solid var(--borderSoft);
   border-radius: var(--radiusSmall);
@@ -454,9 +473,12 @@ summary:focus-visible {
   cursor: pointer;
   font-size: var(--fontSecondarySize);
 }
+.settingsTrigger:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
 .freezerTrigger {
-  right: 92px;
-  min-height: 44px;
+  right: 100px;
 }
 .freezerTrigger[aria-pressed="true"] {
   color: var(--buttonText);
@@ -1081,7 +1103,7 @@ summary:focus-visible {
   }
   .freezerTrigger {
     right: 14px;
-    bottom: 48px;
+    bottom: 64px;
   }
   .freezerInspector {
     right: 8px;
