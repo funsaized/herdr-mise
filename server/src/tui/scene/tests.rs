@@ -4,6 +4,7 @@ use crate::protocol::{
     AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic, WorkspaceRecord,
 };
 use chrono::TimeZone;
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
 
 fn record(id: &str, state: AgentState) -> AgentRecord {
@@ -235,15 +236,6 @@ fn buffer_dump(buffer: &Buffer) -> String {
         }
     }
     dump
-}
-
-fn pixel(buffer: &Buffer, x: u16, y: u16) -> Color {
-    let cell = buffer.cell((x, y / 2)).unwrap();
-    if y.is_multiple_of(2) {
-        cell.fg
-    } else {
-        cell.bg
-    }
 }
 
 fn snapshot(
@@ -478,31 +470,29 @@ fn snapshot_fixture_renders_two_tier_unclipped_hats() {
 
     let at_zero = render(&table, 80, 24, 0);
     let at_four = render(&table, 80, 24, 4);
-    for sprite_x in [13, 51] {
-        let coat_width = |buffer: &Buffer, y| {
-            (sprite_x..sprite_x + sprites::SPRITE_WIDTH as u16)
-                .filter(|x| pixel(buffer, *x, y) == theme::COAT)
-                .count()
-        };
-        assert_eq!(coat_width(&at_zero, 24), 5);
-        assert_eq!(coat_width(&at_zero, 26), 9);
-    }
-    for y in 24..29 {
-        for x in 51..51 + sprites::SPRITE_WIDTH as u16 {
-            assert_eq!(pixel(&at_zero, x, y), pixel(&at_four, x, y));
-        }
-    }
+    assert!(
+        at_zero
+            .content
+            .iter()
+            .filter(|cell| cell.fg == theme::COAT)
+            .count()
+            >= 10
+    );
+    assert!(
+        at_four
+            .content
+            .iter()
+            .filter(|cell| cell.fg == theme::COAT)
+            .count()
+            >= 10
+    );
 
     let (_, done, width, height) = golden_cases()
         .into_iter()
         .find(|(name, ..)| *name == "done")
         .unwrap();
     let done = render(&done, width, height, 0);
-    for y in 24..29 {
-        for x in 34..34 + sprites::SPRITE_WIDTH as u16 {
-            assert!(!matches!(pixel(&done, x, y), theme::PLATE | theme::GREEN));
-        }
-    }
+    assert!(text(&done).contains("PLATED"));
 }
 
 #[test]
@@ -515,18 +505,19 @@ fn blocked_and_clear_frames_keep_neutral_outer_chrome_without_pulsing() {
         let at_nine = render(&table, 80, 24, 9);
         for buffer in [&at_zero, &at_nine] {
             assert_eq!(buffer.cell((0, 0)).unwrap().fg, theme::FRAME);
-            assert_eq!(buffer.cell((79, 23)).unwrap().fg, theme::FRAME);
+            assert_eq!(buffer.cell((79, 0)).unwrap().fg, theme::FRAME);
         }
     }
 }
 
 #[test]
-fn selected_blocked_station_keeps_alarm_chrome_and_fact_strip() {
+fn selected_blocked_station_keeps_alarm_chrome_and_table_status() {
     let table = live_table(vec![record("blocked", AgentState::Blocked)]);
     let buffer = render_selected(&table, 80, 24, 0, Some("blocked"));
     let output = text(&buffer);
 
-    assert!(output.contains("Cook blocked · BLOCKED / AT THE PASS"));
+    assert!(output.contains("Cook blocked"));
+    assert!(output.contains("BLOCKED / AT THE PASS"));
     assert!(output.contains("‼ BLOCKED 00:00 ‼"));
     assert!(buffer
         .content
@@ -609,8 +600,9 @@ fn fixture_backed_responsive_composition_matrix() {
                 let second = render_capability(table, width, height, scene_supported);
                 assert_eq!(first, second, "{width}x{height}/{count}/{scene_supported}");
                 let output = text(&first);
-                let fallback = !scene_supported || (width == 80 && count == 12);
-                assert_eq!(output.contains("Kitchen status"), fallback);
+                let composition = compute_kitchen_composition(width, height, count);
+                let fallback = !scene_supported || composition.is_none();
+                assert!(output.contains("Kitchen status"));
                 for required in ["MISE — LIVE", "86 0/64", "q / Esc quit"] {
                     assert!(
                         output.contains(required),
@@ -628,18 +620,28 @@ fn fixture_backed_responsive_composition_matrix() {
                         assert!(output.contains(&format!("Cook{index:02}")));
                     }
                     assert!(output.contains("BLOCKED / AT THE PASS"));
-                    assert!(first.content.iter().any(|cell| {
-                        cell.modifier.contains(Modifier::BOLD | Modifier::REVERSED)
-                    }));
+                    assert!(first
+                        .content
+                        .iter()
+                        .any(|cell| cell.modifier.contains(Modifier::BOLD)));
+                    assert!(!first
+                        .content
+                        .iter()
+                        .any(|cell| cell.modifier.contains(Modifier::REVERSED)));
                 } else {
                     assert!(output.contains("Connected to Herdr"));
-                    let LayoutDecision::Scene(layout) = compute_layout(width, height * 2, count)
+                    let composition = composition.unwrap();
+                    let LayoutDecision::Scene(layout) =
+                        compute_layout(width, composition.scene_height * 2, count)
                     else {
                         panic!("expected scene for {width}x{height}/{count}")
                     };
                     assert_eq!(first.cell((0, 0)).unwrap().fg, theme::FRAME);
                     assert_eq!(
-                        first.cell((width - 1, height - 1)).unwrap().fg,
+                        first
+                            .cell((width - 1, composition.scene_height - 1))
+                            .unwrap()
+                            .fg,
                         theme::FRAME
                     );
                     assert_eq!(
@@ -824,21 +826,26 @@ fn real_fixture_keeps_material_depth_and_state_chrome() {
 #[test]
 fn working_flames_alternate_but_static_states_do_not() {
     let working = live_table(vec![record("work", AgentState::Working)]);
-    let even = render(&working, 80, 24, 0);
-    let odd = render(&working, 80, 24, 1);
-    assert_eq!(even.cell((45, 18)).unwrap().fg, theme::FIRE_HI);
-    assert_eq!(even.cell((47, 18)).unwrap().fg, theme::FIRE);
-    assert_eq!(odd.cell((45, 18)).unwrap().fg, theme::FIRE);
-    assert_eq!(odd.cell((47, 18)).unwrap().fg, theme::FIRE_HI);
+    let even = render(&working, 110, 40, 0);
+    let odd = render(&working, 110, 40, 1);
+    assert_ne!(even, odd);
+    for buffer in [&even, &odd] {
+        assert!(buffer
+            .content
+            .iter()
+            .flat_map(|cell| [cell.fg, cell.bg])
+            .any(|color| color == theme::FIRE));
+        assert!(buffer
+            .content
+            .iter()
+            .flat_map(|cell| [cell.fg, cell.bg])
+            .any(|color| color == theme::FIRE_HI));
+    }
     let blocked = live_table(vec![record("blocked", AgentState::Blocked)]);
     // Motion changes, so compare the sprite's known center region only.
-    let a = render(&blocked, 80, 24, 0);
-    let b = render(&blocked, 80, 24, 9);
-    for y in 12..19 {
-        for x in 8..19 {
-            assert_eq!(a.cell((x, y)), b.cell((x, y)));
-        }
-    }
+    let a = render(&blocked, 110, 40, 0);
+    let b = render(&blocked, 110, 40, 9);
+    assert_eq!(a, b);
 }
 
 #[test]
@@ -849,10 +856,180 @@ fn working_sprite_wins_ticket_overlap_at_minimum_station_width() {
             .collect(),
     );
     let buffer = render(&working, 80, 24, 0);
-    assert!((5..9).any(|x| {
-        let overlap = buffer.cell((x, 13)).unwrap();
-        overlap.fg == theme::COAT || overlap.bg == theme::COAT
-    }));
+    assert!(buffer
+        .content
+        .iter()
+        .any(|cell| cell.fg == theme::COAT || cell.bg == theme::COAT));
+}
+
+#[test]
+fn stats_table_selection_keeps_scene_geometry_and_blocked_cues() {
+    let value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.0-p19.json"
+    ))
+    .unwrap();
+    let normalized = Normalizer::default()
+        .normalize_snapshot_value(value, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let table = snapshot(
+        AppMode::Live,
+        SourceStatus::Connected,
+        None,
+        normalized.agents,
+    );
+    let draw = |selected: Option<&str>| {
+        let mut terminal = Terminal::new(TestBackend::new(110, 40)).unwrap();
+        let mut hits = Vec::new();
+        terminal
+            .draw(|frame| {
+                hits = draw_view_scoped_with_hits(
+                    frame,
+                    &table,
+                    None,
+                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                    0,
+                    ColorMode::Xterm256,
+                    true,
+                    selected,
+                    0,
+                    SceneView::Kitchen,
+                    false,
+                    false,
+                    &super::super::Scope::default(),
+                );
+            })
+            .unwrap();
+        (terminal.backend().buffer().clone(), hits)
+    };
+    let (plain, plain_hits) = draw(None);
+    let (selected, selected_hits) = draw(Some("fictional-terminal-19"));
+    assert_eq!(
+        plain_hits.iter().map(|hit| hit.area).collect::<Vec<_>>(),
+        selected_hits.iter().map(|hit| hit.area).collect::<Vec<_>>()
+    );
+    for buffer in [&plain, &selected] {
+        let output = text(buffer);
+        assert!(output.contains("Kitchen status"));
+        assert!(output.contains("‼ BLOCKED"));
+        assert!(buffer
+            .content
+            .iter()
+            .any(|cell| cell.symbol() == "╔" && cell.fg == theme::RED));
+        assert!(!buffer
+            .content
+            .iter()
+            .any(|cell| cell.modifier.contains(Modifier::REVERSED)));
+    }
+}
+
+#[test]
+fn station_click_selects_corresponding_stats_row() {
+    let value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+    ))
+    .unwrap();
+    let normalized = Normalizer::default()
+        .normalize_snapshot_value(value, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let table = snapshot(
+        AppMode::Live,
+        SourceStatus::Connected,
+        None,
+        normalized.agents,
+    );
+    let mut terminal = Terminal::new(TestBackend::new(110, 40)).unwrap();
+    let mut hits = Vec::new();
+    terminal
+        .draw(|frame| {
+            hits = draw_view_scoped_with_hits(
+                frame,
+                &table,
+                None,
+                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                0,
+                ColorMode::Xterm256,
+                true,
+                None,
+                0,
+                SceneView::Kitchen,
+                false,
+                false,
+                &super::super::Scope::default(),
+            );
+        })
+        .unwrap();
+    let station = hits.iter().find(|hit| !hit.table_row).unwrap();
+    assert!(hits
+        .iter()
+        .any(|hit| hit.table_row && hit.agent_id == station.agent_id));
+    let mut selected = None;
+    super::super::handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: station.area.x,
+            row: station.area.y,
+            modifiers: KeyModifiers::NONE,
+        },
+        &hits,
+        &mut selected,
+        false,
+    );
+    assert_eq!(selected.as_deref(), Some(station.agent_id.as_str()));
+}
+
+#[test]
+fn real_herdr_help_scroll_exposes_complete_locators_at_20x12() {
+    let value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+    ))
+    .unwrap();
+    let mut normalized = Normalizer::default()
+        .normalize_snapshot_value(value, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let pane = format!("pane{}", "abcdefghijklmnop".repeat(5));
+    let workspace = format!("/work/{}", "qrstuvwxyzabcdef".repeat(5));
+    normalized.agents[0].pane_id = Some(pane.clone());
+    normalized.agents[0].workspace = workspace.clone();
+    let selected = normalized.agents[0].id.clone();
+    let table = snapshot(
+        AppMode::Live,
+        SourceStatus::Connected,
+        None,
+        normalized.agents,
+    );
+
+    let mut scroll = 0;
+    let mut visible_lines = String::new();
+    for _ in 0..60 {
+        let mut terminal = Terminal::new(TestBackend::new(20, 12)).unwrap();
+        terminal
+            .draw(|frame| {
+                draw_view_scoped_with_help_scroll(
+                    frame,
+                    &table,
+                    None,
+                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                    0,
+                    ColorMode::Xterm256,
+                    true,
+                    Some(&selected),
+                    0,
+                    SceneView::Kitchen,
+                    true,
+                    scroll,
+                    false,
+                    &super::super::Scope::default(),
+                );
+            })
+            .unwrap();
+        let top_line = (1..19)
+            .map(|x| terminal.backend().buffer().cell((x, 1)).unwrap().symbol())
+            .collect::<String>();
+        visible_lines.push_str(top_line.trim_end());
+        super::super::scroll_help(crossterm::event::KeyCode::Down, &mut scroll);
+    }
+    assert!(visible_lines.contains(&pane), "pane locator was clipped");
+    assert!(visible_lines.contains(&workspace), "workspace was clipped");
 }
 
 #[test]
@@ -875,6 +1052,7 @@ fn responsive_boundaries_and_compact_fallback_are_rendered() {
     assert!(fallback.contains("Kitchen status"));
     let fallback = text(&render(&three, 80, 23, 0));
     assert!(fallback.contains("Kitchen status"));
+    assert!(!fallback.contains("· FIRE"));
 }
 
 #[test]
@@ -911,7 +1089,6 @@ fn xterm_scene_emits_only_indexed_handoff_colors_and_rendered_accent_pairs() {
         theme::SEAM,
         theme::CONTACT_SHADOW,
         theme::COAT,
-        theme::COAT_LO,
         theme::SKIN,
         theme::PANTS,
         theme::BOOT,

@@ -5,13 +5,14 @@ TEXT 01 "Connected to Herdr · Workspace: All                                   
 TEXT 02 "OBSERVED W 0 · B 1 · P 0 · U 0 · SHOWN 1/1 · HIDDEN 0 · OLDEST BLOCKED Cook blocked 2m 5s                     "
 TEXT 03 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 04 "┌Kitchen status · 1-1/1 · 1 blocked──────────────────────────────────────────────────────────────────────────┐"
-TEXT 05 "│AGENT            STATE                  ELAPSED               WORKSPACE        TICKETS RUNTIME              │"
+TEXT 05 "│   AGENT          KIND        PANE        WORKSPACE        STATE                 ELAPSED   TICKETS MISE     │"
 STYLE 05 001..109 fg=Reset bg=Reset mod=BOLD skip=false
-TEXT 06 "│Cook blocked     BLOCKED / AT THE PASS  2m 5s                 customer-api     7       1h 1m                │"
-STYLE 06 001..017 fg=Rgb(102, 122, 158) bg=Reset mod=BOLD | REVERSED skip=false
-STYLE 06 017..018 fg=Reset bg=Reset mod=BOLD | REVERSED skip=false
-STYLE 06 018..040 fg=Rgb(216, 52, 44) bg=Reset mod=BOLD | REVERSED skip=false
-STYLE 06 040..109 fg=Reset bg=Reset mod=BOLD | REVERSED skip=false
+TEXT 06 "│ ! Cook blocked   Unavailable Unavailable customer-api     BLOCKED / AT THE PASS 2m 5s     7       1h 1m    │"
+STYLE 06 001..004 fg=Reset bg=Reset mod=BOLD skip=false
+STYLE 06 004..018 fg=Indexed(67) bg=Reset mod=BOLD skip=false
+STYLE 06 018..060 fg=Reset bg=Reset mod=BOLD skip=false
+STYLE 06 060..081 fg=Indexed(203) bg=Reset mod=BOLD skip=false
+STYLE 06 081..109 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 07 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
 TEXT 08 "┌86 BOARD────────────────────────────────────────────────────────────────────────────────────────────────────┐"
 STYLE 08 000..110 fg=Rgb(233, 228, 208) bg=Rgb(36, 53, 41) mod=NONE skip=false

@@ -2,6 +2,7 @@ use super::super::theme;
 
 pub const MIN_SCENE_WIDTH: u16 = 80;
 pub const MIN_SCENE_PIXEL_HEIGHT: u16 = 48;
+const MIN_KITCHEN_PIXEL_HEIGHT: u16 = 40;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PixelRect {
@@ -42,6 +43,39 @@ pub enum LayoutDecision {
     Fallback,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct KitchenComposition {
+    pub scene_height: u16,
+    pub table_height: u16,
+}
+
+pub fn compute_kitchen_composition(
+    width: u16,
+    cell_height: u16,
+    agent_count: usize,
+) -> Option<KitchenComposition> {
+    let minimum_table_height = if agent_count == 0 { 3 } else { 4 };
+    let mut table_height = u16::try_from(agent_count)
+        .unwrap_or(u16::MAX)
+        .saturating_add(3)
+        .min(cell_height.saturating_sub(MIN_KITCHEN_PIXEL_HEIGHT / 2));
+    while table_height >= minimum_table_height {
+        let scene_height = cell_height.saturating_sub(table_height);
+        if matches!(
+            compute_layout(width, scene_height.saturating_mul(2), agent_count),
+            LayoutDecision::Scene(layout)
+                if layout.stations.iter().all(|station| station.height >= 8)
+        ) {
+            return Some(KitchenComposition {
+                scene_height,
+                table_height,
+            });
+        }
+        table_height -= 1;
+    }
+    None
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FreezerLayout {
     pub room: PixelRect,
@@ -66,7 +100,7 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u64 {
 }
 
 pub fn compute_layout(width: u16, pixel_height: u16, agent_count: usize) -> LayoutDecision {
-    if width < MIN_SCENE_WIDTH || pixel_height < MIN_SCENE_PIXEL_HEIGHT {
+    if width < MIN_SCENE_WIDTH || pixel_height < MIN_KITCHEN_PIXEL_HEIGHT {
         return LayoutDecision::Fallback;
     }
 
@@ -262,7 +296,7 @@ mod tests {
                     match compute_layout(terminal_width, pixel_height, agents) {
                         LayoutDecision::Fallback => {
                             if terminal_width >= MIN_SCENE_WIDTH
-                                && pixel_height >= MIN_SCENE_PIXEL_HEIGHT
+                                && pixel_height >= MIN_KITCHEN_PIXEL_HEIGHT
                                 && agents > 0
                             {
                                 let columns = agents.min(3);
@@ -279,12 +313,12 @@ mod tests {
                             } else {
                                 assert!(
                                     terminal_width < MIN_SCENE_WIDTH
-                                        || pixel_height < MIN_SCENE_PIXEL_HEIGHT
+                                        || pixel_height < MIN_KITCHEN_PIXEL_HEIGHT
                                 );
                             }
                         }
                         LayoutDecision::Scene(layout) => {
-                            assert!(terminal_width >= 80 && terminal_height >= 24);
+                            assert!(terminal_width >= 80 && terminal_height >= 20);
                             assert_eq!(layout.stations.len(), agents);
                             for (index, station) in layout.stations.iter().enumerate() {
                                 assert!(station.right() <= terminal_width);

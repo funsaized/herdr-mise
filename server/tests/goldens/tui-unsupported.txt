@@ -6,7 +6,7 @@ TEXT 02 "upgrade or downgrade Herdr to a tested release, then retry · Workspace
 TEXT 03 "OBSERVED W 0 · B 0 · P 0 · U 0 · SHOWN 0/0 · HIDDEN 0 · OLDEST BLOCKED None                                   "
 TEXT 04 "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"
 TEXT 05 "┌Kitchen status · 0-0/0 · 0 blocked──────────────────────────────────────────────────────────────────────────┐"
-TEXT 06 "│AGENT            STATE                  ELAPSED               WORKSPACE        TICKETS RUNTIME              │"
+TEXT 06 "│   AGENT          KIND        PANE        WORKSPACE        STATE                 ELAPSED   TICKETS MISE     │"
 STYLE 06 001..109 fg=Reset bg=Reset mod=BOLD skip=false
 TEXT 07 "└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
 TEXT 08 "┌86 BOARD────────────────────────────────────────────────────────────────────────────────────────────────────┐"

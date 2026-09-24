@@ -16,12 +16,15 @@ use std::{
 
 use chrono::Utc;
 use crossterm::{
-    event::{Event, EventStream, KeyCode, KeyEventKind},
+    event::{
+        DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEventKind,
+        MouseButton, MouseEvent, MouseEventKind,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use futures_util::StreamExt;
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
 
@@ -41,6 +44,22 @@ pub(crate) enum SceneView {
 pub(crate) struct Scope {
     pub(crate) id: Option<String>,
     pub(crate) label: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct HitRegion {
+    pub(crate) area: Rect,
+    pub(crate) agent_id: String,
+    pub(crate) table_row: bool,
+}
+
+impl HitRegion {
+    fn contains(&self, column: u16, row: u16) -> bool {
+        column >= self.area.x
+            && column < self.area.right()
+            && row >= self.area.y
+            && row < self.area.bottom()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -122,7 +141,7 @@ static PANIC_RESTORE_HOOK: OnceLock<()> = OnceLock::new();
 
 fn restore_terminal() {
     let _ = disable_raw_mode();
-    let _ = execute!(stdout(), LeaveAlternateScreen);
+    let _ = execute!(stdout(), DisableMouseCapture, LeaveAlternateScreen);
 }
 
 pub fn install_panic_restore_hook() {
@@ -213,6 +232,7 @@ fn select_all(scope: &mut Scope) {
 
 pub(super) const KEY_HELP: &str = "? help";
 pub(super) const KEY_INSPECT: &str = "Tab / Shift+Tab inspect";
+pub(super) const KEY_SELECT: &str = "Tab / Shift+Tab select";
 pub(super) const KEY_BLOCKED: &str = "b next blocked";
 pub(super) const KEY_FREEZER: &str = "f freezer";
 pub(super) const KEY_SCOPE: &str = "w scope";
@@ -237,7 +257,7 @@ pub(super) fn freezer_keys(selected: bool, compact: bool) -> String {
 }
 pub(super) const HELP_LINES: [&str; 8] = [
     KEY_HELP,
-    KEY_INSPECT,
+    KEY_SELECT,
     KEY_BLOCKED,
     KEY_FREEZER,
     KEY_SCOPE,
@@ -354,6 +374,33 @@ fn handle_key_with_scope(
     }
 }
 
+fn handle_mouse(
+    event: MouseEvent,
+    regions: &[HitRegion],
+    selected_id: &mut Option<String>,
+    help_open: bool,
+) {
+    if help_open || event.kind != MouseEventKind::Down(MouseButton::Left) {
+        return;
+    }
+    if let Some(region) = regions
+        .iter()
+        .find(|region| region.contains(event.column, event.row))
+    {
+        *selected_id = Some(region.agent_id.clone());
+    }
+}
+
+fn scroll_help(code: KeyCode, offset: &mut u16) {
+    *offset = match code {
+        KeyCode::Up => offset.saturating_sub(1),
+        KeyCode::Down => offset.saturating_add(1),
+        KeyCode::PageUp => offset.saturating_sub(8),
+        KeyCode::PageDown => offset.saturating_add(8),
+        _ => *offset,
+    };
+}
+
 struct TerminalGuard {
     board_len: AtomicUsize,
 }
@@ -361,8 +408,8 @@ impl TerminalGuard {
     fn enter() -> io::Result<Self> {
         install_panic_restore_hook();
         enable_raw_mode()?;
-        if let Err(error) = execute!(stdout(), EnterAlternateScreen) {
-            let _ = disable_raw_mode();
+        if let Err(error) = execute!(stdout(), EnterAlternateScreen, EnableMouseCapture) {
+            restore_terminal();
             return Err(error);
         }
         Ok(Self {
@@ -400,7 +447,9 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut table_offset = 0;
     let mut view = SceneView::default();
     let mut help_open = false;
+    let mut help_scroll = 0_u16;
     let mut scope = Scope::default();
+    let mut hit_regions = Vec::new();
     loop {
         retain_selection(&mut selected_id, &table, &scope);
         retain_board_selection(&mut freezer_selected_id, &table);
@@ -411,16 +460,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 SceneView::Kitchen => selected_id.as_deref(),
                 SceneView::Freezer => freezer_selected_id.as_deref(),
             };
-            table_offset = view::table_window(
-                frame.area(),
-                &table,
-                now,
-                &scope,
-                active_selected,
-                table_offset,
-            )
-            .offset;
-            scene::draw_view_scoped(
+            hit_regions = scene::draw_view_scoped_with_help_scroll(
                 frame,
                 &table,
                 warning.message(),
@@ -432,10 +472,19 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 table_offset,
                 view,
                 help_open,
+                help_scroll,
                 capabilities.reduced_motion,
                 &scope,
             )
         })?;
+        if view == SceneView::Kitchen {
+            if let Some(first) = hit_regions.iter().find(|region| region.table_row) {
+                table_offset = table
+                    .scoped_agents(scope.id.as_deref())
+                    .position(|agent| agent.id == first.agent_id)
+                    .unwrap_or(table_offset);
+            }
+        }
         tokio::select! {
             _ = shutdown.cancelled() => break,
             _ = interval.tick() => tick = tick.wrapping_add(1),
@@ -453,13 +502,21 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
                 FeedDecision::Closed => break,
             },
             event = events.next() => match event {
-                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press && {
+                Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
+                    if help_open {
+                        scroll_help(key.code, &mut help_scroll);
+                    }
+                    if key.code == KeyCode::Char('?') { help_scroll = 0; }
                     let active_selected = match view {
                         SceneView::Kitchen => &mut selected_id,
                         SceneView::Freezer => &mut freezer_selected_id,
                     };
-                    handle_key_with_scope(key.code, &table, active_selected, &mut view, &mut help_open, &mut scope, &shutdown)
-                } => break,
+                    if handle_key_with_scope(key.code, &table, active_selected, &mut view, &mut help_open, &mut scope, &shutdown) { break; }
+                },
+                Some(Ok(Event::Mouse(mouse))) if view == SceneView::Kitchen => {
+                    handle_mouse(mouse, &hit_regions, &mut selected_id, help_open);
+                }
+                Some(Ok(Event::Resize(_, _))) => hit_regions.clear(),
                 Some(Err(error)) => return Err(error),
                 None => break,
                 _ => {}

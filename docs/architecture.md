@@ -408,10 +408,14 @@ Browser clients request inspection identity with `/ws?paneId=1`. The legacy
 `/ws` shape omits additive `paneId` and `agentKind` fields so already-open strict clients remain compatible
 until reload; both shapes come from the same Feed records. Mise time starts when
 this process first observes a terminal identity and resets on process restart.
-The browser and TUI show full workspace, verified upstream agent kind, and exact
-current pane locator only in selected-agent details. Compact station identities
-retain basename labels and add the locator only for colliding active rendered
-labels (name/basename pairs in the browser and names in the TUI).
+The browser shows full workspace, verified upstream agent kind, and exact current
+pane locator in selected-agent details. The TUI keeps those feed-backed facts in
+a persistent active-agent statistics table; wide terminals allocate pane and
+workspace columns from the roster so full locators fit when space permits;
+`?` shows the selected agent's full current locators in scrollable help when the table is compact.
+Selection only moves its fixed-width marker and viewport. Compact station identities retain basename labels and add
+the locator only for colliding active rendered labels (name/basename pairs in the
+browser and names in the TUI).
 
 ## Ended lifecycle
 
