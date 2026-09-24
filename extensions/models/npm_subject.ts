@@ -143,12 +143,33 @@ export function subjectEnvironment(
     HOME: temp,
     CARGO_HOME: inherited.CARGO_HOME ?? `${inherited.HOME}/.cargo`,
     RUSTUP_HOME: inherited.RUSTUP_HOME ?? `${inherited.HOME}/.rustup`,
-    PLAYWRIGHT_BROWSERS_PATH: "0",
+    PLAYWRIGHT_BROWSERS_PATH:
+      configured.PLAYWRIGHT_BROWSERS_PATH ??
+      inherited.PLAYWRIGHT_BROWSERS_PATH ??
+      "0",
     NPM_CONFIG_USERCONFIG: `${temp}/npmrc`,
     NPM_CONFIG_GLOBALCONFIG: `${temp}/global-npmrc`,
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
   };
+}
+
+/** Vitest 5 writes its JSON report under .vitest unless stdout is forced. That is not source. */
+export async function takeVitestReport(
+  project: string,
+  output: string,
+): Promise<string> {
+  try {
+    output += `\n${await Deno.readTextFile(join(project, ".vitest/json/output.json"))}`;
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+  try {
+    await Deno.remove(join(project, ".vitest"), { recursive: true });
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+  return output;
 }
 
 async function execute(
@@ -326,6 +347,8 @@ async function execute(
         context.signal,
       ),
     });
+    if (operation === "test" && args.reporter === "vitest-json")
+      await takeVitestReport(project, "");
     if (operation === "test")
       receipt.sourceDigestBefore = await sourceDigest(root, context.signal);
     const exitCode = await runLogged(
@@ -382,6 +405,8 @@ async function execute(
       cleanWorktreeAfter: after.clean,
     });
     if (operation === "test") {
+      if (args.reporter === "vitest-json")
+        reportOutput = await takeVitestReport(project, reportOutput);
       receipt.sourceDigestAfter = await sourceDigest(root, context.signal);
       if (receipt.sourceDigestBefore !== receipt.sourceDigestAfter)
         throw new Error("Tests changed the source contents");

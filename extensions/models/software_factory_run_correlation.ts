@@ -346,7 +346,13 @@ export async function checkCorrelatedWorkflowRun(
         summary.workflowRunId === runId &&
         summary.workflowName === workflow
       ) {
-        matches.push({ record, summary });
+        const createdAt = Date.parse(record.createdAt ?? "");
+        if (!Number.isFinite(createdAt)) {
+          return fail(
+            `workflow '${workflow}' runId '${runId}' has a missing or invalid createdAt timestamp`,
+          );
+        }
+        matches.push({ record, summary, createdAt });
       }
     } catch (error) {
       return fail(
@@ -354,21 +360,21 @@ export async function checkCorrelatedWorkflowRun(
       );
     }
   }
-  if (matches.length !== 1) {
+  if (matches.length === 0) {
     return fail(
       `expected one run record for workflow '${workflow}' and runId '${runId}', found ${matches.length}`,
     );
   }
-  const [{ record, summary }] = matches;
+  matches.sort((a, b) => b.createdAt - a.createdAt);
+  if (matches[1]?.createdAt === matches[0].createdAt) {
+    return fail(
+      `expected one latest run record for workflow '${workflow}' and runId '${runId}', found ${matches.length}`,
+    );
+  }
+  const [{ summary, createdAt }] = matches;
   if (summary.status !== expectedStatus) {
     return fail(
       `workflow '${workflow}' runId '${runId}' has status '${summary.status}'`,
-    );
-  }
-  const createdAt = Date.parse(record.createdAt ?? "");
-  if (!Number.isFinite(createdAt)) {
-    return fail(
-      `workflow '${workflow}' runId '${runId}' has a missing or invalid createdAt timestamp`,
     );
   }
   if (createdAt < enteredAt) {
