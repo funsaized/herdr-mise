@@ -1,0 +1,24 @@
+name: Probe anonymous release API
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe-release-api.yml
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: macos-15
+    steps:
+      - name: Inspect anonymous API response without publishing
+        shell: bash
+        run: |
+          url=https://api.github.com/repos/funsaized/herdr-mise/releases/tags/v0.3.0
+          status=$(curl -q --silent --show-error --max-time 15 \
+            -D "$RUNNER_TEMP/release-headers" -o "$RUNNER_TEMP/release-body" \
+            -w '%{http_code}' "$url")
+          printf 'status=%s\n' "$status"
+          rg -i '^(x-ratelimit-|retry-after:|x-github-request-id:|server:|via:|content-type:)' \
+            "$RUNNER_TEMP/release-headers" || true
+          jq -r '.message // empty' "$RUNNER_TEMP/release-body" 2>/dev/null || true
