@@ -81,6 +81,15 @@ Forgejo origin; a GitHub mirror fork alone cannot deliver an upstream release.
 Do not edit generated `.swamp/pulled-extensions` files or
 replace pinned checksums with an unreviewed build.
 
+The [dispatch-parity branch](https://github.com/funsaized/swamp-extensions/tree/fix/factory-status-dispatch-245)
+applies the existing patch to extension commit `76ac0cc59`; 167 model and
+report tests passed locally. The branch must be rebased and retested against
+the advancing upstream before release. It fixes only the dispatch prerequisite;
+it does not evaluate repository-local advance checks from `status` or repair
+interrupted writes.
+[`funsaized/swamp`](https://github.com/funsaized/swamp) is a source fork, not a
+released runtime. Neither fork is installed in this project.
+
 If upstream cannot publish a fix, maintain a versioned extension from the fork:
 apply and test the dispatch patch against the current upstream head, implement
 the missing status/local-check parity and state/journal/approval recovery with

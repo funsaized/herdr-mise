@@ -16,8 +16,9 @@ npm run swamp:local -- data query 'modelType == "@swamp/software-factory" && nam
   --select '{"modelName": modelName, "workItem": attributes.workItem, "stageId": attributes.stageId, "status": attributes.status}' --json
 ```
 
-Choose a row. Normally issue `N` belongs to `nightshift-run-N`; legacy item 77
-belongs to `the-nightshift`. `nightshift-template` is a definition, never a run.
+Choose a row. Normally issue `N` belongs to `nightshift-run-N`. Legacy item 77
+has no retained factory state and must not be dispatched. `nightshift-template` is a
+definition, never a run.
 If no rows exist, stop here; an operator must [intake approved work](operate.md#intake-an-issue).
 Duplicate owners or an item/model mismatch require investigation before dispatch.
 

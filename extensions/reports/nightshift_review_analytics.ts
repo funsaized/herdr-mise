@@ -302,7 +302,14 @@ export async function loadFactoryInput(
     context.modelType,
   );
   for (const resource of allFactoryResources) {
-    if (resource.data.tags.modelName === "nightshift-template") {
+    // Template validation emits method reports even though it never owns a run.
+    if (
+      resource.data.tags.modelName === "nightshift-template" &&
+      !(
+        resource.data.tags.type === "report" &&
+        resource.data.name.startsWith("report-")
+      )
+    ) {
       throw new Error(
         `nightshift-template factory data must never be analyzed (model ${resource.modelId})`,
       );

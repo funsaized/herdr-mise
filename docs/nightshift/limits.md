@@ -57,6 +57,20 @@ The retained September 20 fleet baseline covered 34 items and 872 closed stage
 visits; 642 visits had agent timing. These coverage counts do not establish human
 wait, true provider spend, or a defect-escape rate.
 
+As of September 24, six additional real items have terminal `done` records:
+256, 258, 259, 260, 264, and 266. Some are release or dependency chores, so
+six completions are not six comparable feature observations. Some retained
+invocations report tokens; their provider-reported zero cost is not usable
+spend. Human wait and escaped
+defects remain unavailable. A fresh `nightshift-analytics` report from workflow
+run `6f7decc0-211d-48d5-bea3-76758dc0041e` covers all 40 retained factory
+items, not a controlled six-item pilot. It reports provider-normalized tokens
+with partial coverage and provider-reported zero cost, which does not mean free.
+The first attempt to trigger it through `nightshift-run-266` failed because that
+definition is unavailable locally; the successful trigger used an existing
+definition, `nightshift-run-144`. Neither report measures human wait or escaped
+defects.
+
 Before changing models, skipping review lanes, reusing review output, or raising
 concurrency, complete independent replay of historical/seeded defects, controlled
 cold/warm verification measurements, and observations from at least ten comparable completed pilot

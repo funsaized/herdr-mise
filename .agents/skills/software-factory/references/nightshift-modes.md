@@ -15,22 +15,17 @@ Each work item runs on its own factory instance, one model lock per item:
 
 - `nightshift-run-<N>` — the runtime factory for work item `<N>` only; it must
   never read or write another work item.
-- `the-nightshift` — the retained legacy shared factory; only active work item
-  77 finishes here.
+- `the-nightshift` — retained legacy shared factory. Item 77 has no retained
+  factory run and must not be dispatched as an active item.
 - `nightshift-template` — the canonical lifecycle template; it never runs work
   and owns no runtime records.
 
-Fan-out is the one place that resolves an item's factory. It maps each work item
-once to `{workItem, factory}` and passes that explicit `factory` to the child
-workflow and to failure recording:
-
-```text
-w == "77" ? "the-nightshift" : "nightshift-run-" + w
-```
-
-Item 77 stays routed to `the-nightshift` until it is terminal; every other item
-routes to its own runtime instance. Child workflows never derive the factory
-independently.
+Fan-out resolves each item's factory once and passes it to the child workflow
+and failure recording. Active items other than 77 use `nightshift-run-<N>`.
+The checked-in fan-out still contains a legacy route for 77, but **does not
+reject it**. Never submit 77 to intake or fan-out. Its legacy route is historical
+compatibility, not evidence of an active run. Do not start, advance, or synthesize
+a terminal record for it. Child workflows never derive the factory independently.
 
 ## Fleet census
 
@@ -42,8 +37,11 @@ swamp data query 'modelType == "@swamp/software-factory" && name.startsWith("sta
   --select '{"modelName": modelName, "modelId": modelId, "workItem": attributes.workItem, "stageId": attributes.stageId, "status": attributes.status}' --json
 ```
 
-This returns the active legacy record on `the-nightshift` and every runtime
-record on `^nightshift-run-[1-9][0-9]*$`. Before trusting any row, validate the
+This returns any retained legacy records on `the-nightshift` and every runtime
+record on `^nightshift-run-[1-9][0-9]*$`. Item 77 is absent from the current
+retained census; its historical fixture records `building`/`active`, while
+GitHub issue #77 closed via PR #137. That is an orphan, not a terminal factory
+run. Before trusting any row, validate the
 `(modelName, modelId, workItem)` tuple: `nightshift-run-N` may own only
 `workItem=N`, and a work item must have exactly one owner. A duplicate or
 mismatched owner is a hard stop — never choose an owner heuristically.
