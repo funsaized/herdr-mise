@@ -7,7 +7,7 @@
 | `workItem`            | Decimal GitHub issue number matching `^[1-9][0-9]*$`; no `#` prefix     |
 | `nightshift-template` | Canonical definition for new runs; never executes work                  |
 | `nightshift-run-N`    | Owns only item `N`; independent model lock and stored history           |
-| `the-nightshift`      | Retained legacy definition; item 77 is an orphan, not provably terminal |
+| `the-nightshift`      | Retired legacy name; stored reports and historical fixture retained     |
 | Factory artifact      | Persisted work product such as a plan or review                         |
 | Factory evidence      | Persisted execution fact used by gates                                  |
 | `status` packet       | Current resolved work, transition gates, context manifest, cycle counts |
@@ -19,9 +19,10 @@ or mismatched owners. Refresh per-item status before dispatch; a census or
 Item 77 has no retained factory state; the last historical fixture
 (`scripts/fixtures/nightshift-legacy-baseline.json`) recorded `building`/`active`,
 while product issue #77 closed through PR #137. Do not manufacture approvals or
-mark the factory run terminal from the product issue. Keep the legacy definition
-and route until provenance can be reconciled safely. Do not submit item 77 to
-intake or fan-out; the current workflows do not enforce that exclusion.
+mark the factory run terminal from the product issue. The tracked legacy
+definition and its fan-out route were removed, but stored reports and the
+historical fixture were not deleted. Do not submit item 77 to intake or
+fan-out; factory and agent execution reject it, not the workflow input schema.
 Retained summary failure reports that suggest `start` are not instructions to
 restart it. An accidental local planning run for 77 was cancelled before its
 planner returned; it did not establish a factory run or publish a plan.

@@ -229,6 +229,12 @@ export const extension = {
           args: z.infer<typeof Arguments>,
           context: AgentContext,
         ) => {
+          if (
+            args.tags?.factory === "nightshift" &&
+            args.tags.workItem === "77"
+          ) {
+            throw new Error("Nightshift item 77 is retired");
+          }
           const { model: cliAgent } = await installedAgent(context.repoDir);
           const cwd = await subjectRoot(
             context.repoDir,

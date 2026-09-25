@@ -33,7 +33,7 @@ const nightshiftIssueModel = readFileSync(
   "utf8",
 );
 const nightshiftFactory = readFileSync(
-  "models/@swamp/software-factory/the-nightshift.yaml",
+  "models/@swamp/software-factory/nightshift-template.yaml",
   "utf8",
 );
 const nightshiftIntakeClient = readFileSync(
@@ -515,7 +515,7 @@ export function auditNightshiftStateOwnership(
 
   const sources = {
     ...candidateWorkflows,
-    "the-nightshift.yaml": factory,
+    "nightshift-template.yaml": factory,
     "nightshift-intake.mjs": intakeClient,
   };
   for (const [name, source] of Object.entries(sources)) {
