@@ -32,6 +32,7 @@ type StoredRecord = {
   modelId: string;
   modelName: string;
   specName?: string;
+  tagsType?: string;
   name: string;
   version: number;
   workflowRunId?: string;
@@ -44,6 +45,7 @@ function dataLike(record: StoredRecord): {
   tags: Record<string, string>;
 } {
   const tags: Record<string, string> = { modelName: record.modelName };
+  if (record.tagsType !== undefined) tags.type = record.tagsType;
   if (record.specName !== undefined) tags.specName = record.specName;
   if (record.workflowRunId !== undefined) {
     tags.workflowRunId = record.workflowRunId;
@@ -683,6 +685,67 @@ Deno.test("loadFactoryInput rejects nightshift-template data", async () => {
   }
   if (!message.includes("nightshift-template")) {
     throw new Error("template factory data did not throw an invariant error");
+  }
+});
+
+Deno.test("loadFactoryInput ignores validation reports on the template", async () => {
+  const input = await loadFactoryInput(
+    reportContext(
+      makeRepository([
+        {
+          type: "@swamp/software-factory",
+          modelId: "template-id",
+          modelName: "nightshift-template",
+          name: "report-swamp-method-summary",
+          tagsType: "report",
+          version: 1,
+          content: { status: "succeeded" },
+        },
+        {
+          type: "@swamp/software-factory",
+          modelId: "template-id",
+          modelName: "nightshift-template",
+          name: "report-swamp-method-summary-json",
+          tagsType: "report",
+          version: 1,
+          content: { status: "succeeded" },
+        },
+        stateRecord({
+          modelId: "runtime-id",
+          modelName: "nightshift-run-1",
+          workItem: "1",
+          stageId: "done",
+        }),
+      ]),
+    ),
+  );
+  if (
+    input.factoryItems.length !== 1 ||
+    input.factoryItems[0].workItem !== "1"
+  ) {
+    throw new Error("template validation report masked the real factory run");
+  }
+});
+
+Deno.test("loadFactoryInput rejects a template record disguised as a report", async () => {
+  const repository = makeRepository([
+    {
+      type: "@swamp/software-factory",
+      modelId: "template-id",
+      modelName: "nightshift-template",
+      name: "report-fake",
+      version: 1,
+      content: {},
+    },
+  ]);
+  let message = "";
+  try {
+    await loadFactoryInput(reportContext(repository));
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  if (!message.includes("nightshift-template")) {
+    throw new Error("non-report template data bypassed the invariant");
   }
 });
 
