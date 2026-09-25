@@ -13,6 +13,7 @@ globalArguments:
     - check:herdr-compatibility
     - audit:tokens
     - audit:accessibility
+    - check:bundle
   environment:
     HOME: ${{ env.HOME }}
   defaultTimeoutMs: 2700000

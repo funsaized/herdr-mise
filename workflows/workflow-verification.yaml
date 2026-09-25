@@ -54,6 +54,9 @@ inputs:
       default: ''
   required: [commit, baseCommit, subjectRoot]
 jobs:
+  # Swamp runs steps in dependency waves, and steps sharing a model wait for
+  # its lock (60s limit). Keep each lane's steps chained so no two long
+  # steps on one model are ever ready in the same wave.
   - name: verify
     description: Run deterministic controls against an explicit verification subject.
     steps:
@@ -113,9 +116,7 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: dependencies-root
-            condition: { type: succeeded }
-          - step: dependencies-client
+          - step: format
             condition: { type: succeeded }
       - name: lint
         task:
@@ -127,9 +128,7 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: dependencies-root
-            condition: { type: succeeded }
-          - step: dependencies-client
+          - step: typecheck
             condition: { type: succeeded }
       - name: unit-tests
         task:
@@ -155,9 +154,7 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: dependencies-root
-            condition: { type: succeeded }
-          - step: dependencies-client
+          - step: unit-tests
             condition: { type: succeeded }
       - name: compatibility
         task:
@@ -183,9 +180,7 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: dependencies-root
-            condition: { type: succeeded }
-          - step: dependencies-client
+          - step: compatibility
             condition: { type: succeeded }
       - name: accessibility-audit
         task:
@@ -197,9 +192,7 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: dependencies-root
-            condition: { type: succeeded }
-          - step: dependencies-client
+          - step: token-audit
             condition: { type: succeeded }
       - name: browser-install
         task:
@@ -238,6 +231,8 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
+          - step: lint
+            condition: { type: succeeded }
           - step: fallback-assets-tests
             condition: { type: succeeded }
       - name: rust-verification
@@ -268,7 +263,7 @@ jobs:
       - name: bundle-budget
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-audits
           methodName: run_subject
           inputs:
             script: check:bundle
@@ -276,6 +271,8 @@ jobs:
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
           - step: build
+            condition: { type: succeeded }
+          - step: accessibility-audit
             condition: { type: succeeded }
       - name: bundle
         task:
@@ -336,4 +333,4 @@ jobs:
           - step: accessibility-audit
             condition: { type: succeeded }
     dependsOn: []
-version: 2
+version: 3
