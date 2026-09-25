@@ -113,3 +113,35 @@ test(
     }
   },
 );
+
+// Swamp runs steps in dependency waves and steps sharing a model wait on its
+// lock for at most 60s, so two steps on one model must never share a wave.
+test(
+  "verification never schedules two steps on one model in a wave",
+  { timeout: 60_000 },
+  () => {
+    const steps = swamp(["workflow", "get", "verification"]).jobs.flatMap(
+      (job) => job.steps,
+    );
+    const byName = Object.fromEntries(steps.map((step) => [step.name, step]));
+    const wave = new Map();
+    const level = (name) => {
+      if (!wave.has(name))
+        wave.set(
+          name,
+          1 +
+            Math.max(
+              0,
+              ...byName[name].dependsOn.map((dep) => level(dep.step)),
+            ),
+        );
+      return wave.get(name);
+    };
+    const seen = new Set();
+    for (const step of steps) {
+      const key = `${level(step.name)}:${step.task.modelIdOrName}`;
+      assert.ok(!seen.has(key), `${step.name} shares wave ${key}`);
+      seen.add(key);
+    }
+  },
+);

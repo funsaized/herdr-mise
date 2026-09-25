@@ -266,8 +266,8 @@
     },
     {
       "name": "bundle-budget",
-      "modelName": "verification-root",
-      "modelId": "e40b7444-cebe-4008-90a0-730a9e1137c0",
+      "modelName": "verification-audits",
+      "modelId": "a9d0c61f-57ae-4eb9-a9b3-3661e828c561",
       "modelType": "@funsaized/npm/project",
       "method": "run_subject",
       "operation": "run",
