@@ -113,7 +113,9 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: format
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: lint
         task:
@@ -125,7 +127,9 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: typecheck
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: unit-tests
         task:
@@ -151,7 +155,9 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: unit-tests
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: compatibility
         task:
@@ -177,7 +183,9 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: compatibility
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: accessibility-audit
         task:
@@ -189,7 +197,9 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: token-audit
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: browser-install
         task:
@@ -228,8 +238,6 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: lint
-            condition: { type: succeeded }
           - step: fallback-assets-tests
             condition: { type: succeeded }
       - name: rust-verification
@@ -279,7 +287,7 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: bundle-budget
+          - step: build
             condition: { type: succeeded }
       - name: release-validation
         task:
@@ -328,4 +336,4 @@ jobs:
           - step: accessibility-audit
             condition: { type: succeeded }
     dependsOn: []
-version: 1
+version: 2
