@@ -1,8 +1,8 @@
 type: '@funsaized/cli-agent'
 typeVersion: 2026.09.05.1
-id: 4f7e88b3-e8f1-4c37-8b0f-f4267e37386e
-name: nightshift-frontend
-version: 2
+id: 7352786c-7f49-4daf-880a-2c056013fd86
+name: nightshift-ui
+version: 1
 tags: {}
 globalArguments:
   defaultProvider: opencode

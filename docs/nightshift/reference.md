@@ -41,7 +41,7 @@ inputs from current status for delivery stages.
 | `nightshift-plan`, `nightshift-build`    | Per-item execution called by the fan-outs                                    |
 | `nightshift-run-tests`                   | Execute approved plan selections and collect persisted receipts              |
 | `nightshift-test-receipt`                | Run and verify one selected test; internal serial child                      |
-| `nightshift-review`                      | Seven lanes; phase, subject, workspace, prior findings, receipts             |
+| `nightshift-review`                      | Routed lanes; phase, subject, workspace, prior findings, receipts            |
 | `nightshift-ship`                        | Consume exact-head managed verification and shipping evidence                |
 | `nightshift-deployed-verification`       | Verify the merged PR revision                                                |
 | `nightshift-close`, `nightshift-cleanup` | Complete factory closeout; preserve dirty source                             |
@@ -105,7 +105,7 @@ also runs the other required controls; focused local passes do not replace it.
 | Shared server  | One authenticated loopback `swamp serve` per checkout              |
 | Planning       | One planner                                                        |
 | Building       | Two independent builders                                           |
-| Review         | Seven concurrent lanes in one review                               |
+| Review         | Up to four concurrent routed lanes in one review                   |
 | Major phases   | Mutually exclusive per checkout                                    |
 | Intake overlap | Only `nightshift-create-intake` / `nightshift-intake`, same server |
 

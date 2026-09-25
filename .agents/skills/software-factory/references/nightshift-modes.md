@@ -57,7 +57,7 @@ multi-instance scheduler source.
 | -------------------- | -------------------------------------- | --------------------------------- |
 | Single-feature drive | Drive one factory run                  | Human gate                        |
 | Planning queue       | Serial `nightshift-plan-fanout`        | Plan approval                     |
-| Review swarm         | `nightshift-review` with seven lanes   | Findings recorded                 |
+| Review swarm         | `nightshift-review` with routed lanes  | Findings recorded                 |
 | Build fan-out        | `nightshift-build-fanout`, maximum two | Code review                       |
 | Plan-only            | Drive through plan review              | Plan approval                     |
 | Closeout             | Ship, deployed verification, and close | Merge confirmation                |
@@ -107,12 +107,13 @@ Intake stays idempotent and never calls `start` for an existing run.
 
 Never call `approve` or `reset` without explicit human instruction. Autonomous
 mode never grants `plan-approval`, `ship-approval`, `merge-confirmation`,
-`rework-parked`, `rework-parked-build`, `abort-confirmation`, or a
-`cycle-override:*` approval. A parked item returns through `rework-plan` or
-`rework-build`, never through a cycle override.
-
-Do not add parked to ship-prep. Do not edit factory `maxCycles` to unpark a
-run.
+`rework-parked`, `rework-parked-build`, `abort-confirmation`,
+or a `cycle-override:*` approval. Review is capped at four rounds per review
+stage: a parked item returns through `rework-plan` or `rework-build` only below
+that cap. At the cap the only exit is abort; abort cleanup preserves the dirty
+workspace so a human can finish the change outside the factory. Never add a
+parked exit that skips review. Never request a cycle override for `plan-review` or
+`code-review`, and do not edit factory `maxCycles` to unpark a run.
 
 Ship preparation follows `agent-constraints/ship-prep.md`. The driver may open
 and record the candidate pull request, then leaves the item at `ship-approval`.
@@ -126,7 +127,7 @@ Use one authenticated `swamp serve` process per checkout. Metadata-only
 `nightshift-create-intake` and `nightshift-intake` may overlap factory work.
 Planning, building, reviewing, shipping, and verification are otherwise
 mutually exclusive in one checkout. Internal fan-out is limited to one planner,
-two builders, or the existing seven review lanes. Do not overlap plan and build
+two builders, or the routed review lanes (at most four). Do not overlap plan and build
 fan-outs.
 
 ## Idle and stop

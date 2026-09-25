@@ -9,7 +9,9 @@ import {
 const FACTORY_TYPE = "@swamp/software-factory";
 const CLI_AGENT_TYPES = ["@mgreten/cli-agent", "@funsaized/cli-agent"];
 const RUNTIME_FACTORY_NAME = /^nightshift-run-[1-9][0-9]*$/;
-const LANES = [
+// Current routed lanes first; the seven historical lanes keep old rounds readable.
+const CURRENT_LANES = ["test-coverage", "security", "quality", "ui"] as const;
+const LEGACY_LANES = [
   "accessibility",
   "clean-code",
   "ddd",
@@ -18,6 +20,15 @@ const LANES = [
   "security",
   "test-coverage",
 ] as const;
+const LANES = [...new Set([...CURRENT_LANES, ...LEGACY_LANES])] as Array<
+  (typeof CURRENT_LANES)[number] | (typeof LEGACY_LANES)[number]
+>;
+/** A round is judged only against the lane set it was reviewed with. */
+function laneGeneration(verdicts: Partial<Record<string, unknown>>) {
+  return verdicts.quality !== undefined || verdicts.ui !== undefined
+    ? (CURRENT_LANES as readonly string[])
+    : (LEGACY_LANES as readonly string[]);
+}
 const TOKEN_FIELDS = [
   "input",
   "output",
@@ -966,7 +977,9 @@ function laneAnalytics(rounds: ReviewRound[]) {
   for (const values of subjects(rounds)) {
     const clean = new Set<string>();
     for (const round of values) {
+      const generation = laneGeneration(round.laneVerdicts);
       for (const lane of LANES) {
+        if (!generation.includes(lane)) continue;
         const verdict = round.laneVerdicts[lane];
         if (verdict === undefined) {
           counts[lane].unassessed += 1;

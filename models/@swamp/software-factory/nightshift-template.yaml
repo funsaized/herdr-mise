@@ -2,7 +2,7 @@ type: '@swamp/software-factory'
 typeVersion: 2026.06.24.1
 id: 23616e37-b02b-485e-a273-ee8b5a371dd0
 name: nightshift-template
-version: 3
+version: 4
 tags: {}
 globalArguments:
     stages:
@@ -69,7 +69,7 @@ globalArguments:
                       config: { artifact: plan }
 
         - id: plan-review
-          description: Run seven isolated reviewers against the current plan.
+          description: Run the mandatory review lanes (test-coverage, security, quality) against the current plan.
           maxCycles: 4
           work:
               mode: workflow
@@ -244,7 +244,7 @@ globalArguments:
                       config: { artifact: change-summary }
 
         - id: code-review
-          description: Run seven isolated reviewers against the written code and tests.
+          description: Run the routed review lanes against the written code and tests.
           maxCycles: 4
           work:
               mode: workflow
@@ -329,13 +329,15 @@ globalArguments:
                           message: Only configuration or infrastructure failures retry code review.
 
         - id: parked
-          description: Wait for explicit human approval before another planning or building attempt.
+          description: Wait for a human decision; agent rework stops once a review stage has run four rounds, leaving only abort.
           transitions:
               - name: rework-plan
                 to: planning
                 gates:
                     - type: human-approval
                       config: { id: rework-parked }
+                    - type: max-cycles
+                      config: { stage: plan-review, limit: 4 }
               - name: rework-build
                 to: building
                 gates:
@@ -343,6 +345,8 @@ globalArguments:
                       config: { id: rework-parked-build }
                     - type: artifact-exists
                       config: { artifact: change-summary }
+                    - type: max-cycles
+                      config: { stage: code-review, limit: 4 }
 
         - id: ship-prep
           description: A human creates and reviews the clean commit and pull request candidate.

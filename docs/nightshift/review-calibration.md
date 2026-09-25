@@ -30,15 +30,12 @@ an impact. Reviewers still make that judgment. The repeated-dispute route parks
 unresolved high/critical disagreements for a human after two distinct cycles;
 it does not automatically demote them.
 
-Every full review now records a subject/base/source fingerprint, hashes of the
-trusted review policy and seven skills, and the actual provider/model/variant
-from completed invocations. Source or control changes during review invalidate
-the round. Documentation-only routing is a conservative **shadow recommendation**:
-all seven lanes execute, no receipt is reused, and blocking findings from lanes
-outside the recommendation are retained as `shadow.missedBlockingFindings`.
-Plan, unknown, shared-boundary and trust-boundary changes recommend all lanes.
+Every review round records a subject/base/source fingerprint, hashes of the
+trusted review policy and every lane skill, the routed lanes with their reason,
+and the actual provider/model/variant from completed invocations. Source or
+control changes during review invalidate the round. The historical cases above
+used seven lanes; they now map to quality (clean-code, ddd, observability) and
+UI (frontend, accessibility).
 
 Read the record with `swamp data get <factory>
-review-identity-<item>-<run-id> --json`. Do not enable selective execution from a
-single clean shadow result. Comparable completed pilot items, independent case
-replay and controlled timing measurements remain acceptance work.
+review-identity-<item>-<run-id> --json`.
