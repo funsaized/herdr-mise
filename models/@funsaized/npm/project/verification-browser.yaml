@@ -14,6 +14,7 @@ globalArguments:
     - test:visual:prepared
   environment:
     HOME: ${{ env.HOME }}
+    HERDR_MISE_PLAYWRIGHT_WORKERS: 100%
   defaultTimeoutMs: 2700000
   requireCleanGit: true
 methods: {}
