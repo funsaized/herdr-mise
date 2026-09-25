@@ -5,9 +5,6 @@ export default defineConfig({
   testDir: ".",
   timeout: 60_000,
   retries: 0,
-  // Managed verification sets "100%": by the time browser tests run, the
-  // runner's other lanes are finishing, so Playwright's 50% default idles cores.
-  workers: process.env.HERDR_MISE_PLAYWRIGHT_WORKERS || undefined,
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },
     ...(process.env.HERDR_MISE_CROSS_BROWSER === "1"
