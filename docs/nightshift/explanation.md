@@ -22,7 +22,7 @@ those meanings separate avoids treating board movement as proof of execution.
 One factory per item removes the shared factory lock, but does not isolate the
 whole machine. Planning uses one shared planner. Builders have separate sibling
 workspaces, yet share host resources; two is the current supported cap. A review
-has seven specialist lanes with independent invocation records and no sibling
+has up to four routed lanes with independent invocation records and no sibling
 findings visible during evaluation.
 
 Planning, building, review, shipping, and verification may still contend over
@@ -38,10 +38,14 @@ and stored logs. It prevents accepting stale or empty execution. It cannot prove
 that a test is meaningful or that candidate test code is honest. Reviewers assess
 behavioral relevance and actual impact.
 
-The seven reviews share typed findings, stable identities, severity rules, and
-policy/source fingerprints. Repeated high-impact disputes go to a human rather
-than cycling indefinitely or silently lowering severity. Selective review is
-observed in shadow only: every lane still runs and missed blockers are retained.
+Four review lanes share typed findings, stable identities, severity rules, and
+policy/source fingerprints: test-coverage, security, quality (clean code, domain
+design, observability, and general correctness), and UI (frontend and
+accessibility). Security is never routed out. UI runs only for client, TUI,
+e2e, or asset changes that it has not already passed; routed-out lanes are
+recorded as not-applicable with the reason. Review stops after four rounds per
+stage and parks for a human. Repeated high-impact disputes go to a human rather
+than cycling or silently lowering severity.
 
 Managed verification runs trusted controls from `main` against a separate exact
 PR subject. A trusted gate validates the result and issues a receipt. Shipping

@@ -3,13 +3,52 @@ import { z } from "npm:zod@4.4.3";
 
 export const ReviewLane = z.enum([
   "test-coverage",
-  "clean-code",
-  "frontend",
-  "ddd",
   "security",
-  "accessibility",
-  "observability",
+  "quality",
+  "ui",
 ]);
+export type Lane = z.infer<typeof ReviewLane>;
+/** Each lane loads one or more trusted skills; lanes, not skills, are routed. */
+export const LANE_SKILLS: Record<Lane, string[]> = {
+  "test-coverage": ["test-coverage"],
+  security: ["security"],
+  quality: ["clean-code", "ddd", "observability"],
+  ui: ["frontend", "accessibility"],
+};
+/** Lanes that run on every round; quality doubles as the generalist lane. */
+export const MANDATORY_LANES: Lane[] = ["test-coverage", "security", "quality"];
+const UI_PATH =
+  /^(client|e2e|perf)\/|^server\/src\/tui\/|^server\/static\/|^server\/tests\/goldens\//;
+
+/**
+ * Route lanes for one round. Plans get the mandatory lanes. Code adds the UI
+ * lane when UI paths changed, unless it already passed in the prior round.
+ */
+export function routeLanes(
+  phase: "plan" | "code",
+  files: string[],
+  previousFindings: Array<{ id?: unknown; description?: unknown }>,
+): { lanes: Lane[]; reason: string } {
+  if (phase === "plan")
+    return {
+      lanes: [...MANDATORY_LANES],
+      reason: "Plans are reviewed by the mandatory lanes",
+    };
+  if (!files.some((file) => UI_PATH.test(file)))
+    return {
+      lanes: [...MANDATORY_LANES],
+      reason: "No client, TUI, e2e, or asset paths changed",
+    };
+  // Lane observations are "<verdict>: <summary>"; a routed-out lane records
+  // not-applicable, so only a UI lane that actually ran and passed counts.
+  const priorUi = previousFindings.find((finding) => finding.id === "LANE:ui");
+  if (String(priorUi?.description ?? "").startsWith("pass:"))
+    return {
+      lanes: [...MANDATORY_LANES],
+      reason: "UI lane passed in the prior round; quality covers the rework",
+    };
+  return { lanes: [...ReviewLane.options], reason: "UI paths changed" };
+}
 const Finding = z
   .object({
     id: z.string().min(1).max(160),
@@ -37,15 +76,40 @@ const Arguments = z.object({
     .regex(/^[A-Za-z0-9-]+$/)
     .max(128),
   phase: z.enum(["plan", "code"]),
-  reviews: z.array(LaneReview).length(7),
+  lanes: z.array(ReviewLane).min(1),
+  routingReason: z.string().min(1),
+  reviews: z.array(LaneReview).min(1),
   adjudicateDisputes: z.boolean().default(false),
 });
 
-export function normalizeReviews(reviews: z.infer<typeof LaneReview>[]) {
-  const parsed = z.array(LaneReview).length(7).parse(reviews);
-  const lanes = new Set(parsed.map((review) => review.lane));
-  if (lanes.size !== 7)
-    throw new Error("Every review lane must occur exactly once");
+/**
+ * Validate the executed lanes, then record every routed-out lane as
+ * not-applicable so each round still carries one verdict per lane.
+ */
+export function normalizeReviews(
+  reviews: z.infer<typeof LaneReview>[],
+  executed: Lane[] = [...ReviewLane.options],
+  routingReason = "Routed out",
+) {
+  const ran = z.array(LaneReview).parse(reviews);
+  const lanes = new Set(ran.map((review) => review.lane));
+  if (
+    lanes.size !== ran.length ||
+    lanes.size !== new Set(executed).size ||
+    executed.some((lane) => !lanes.has(lane))
+  )
+    throw new Error("Every executed review lane must occur exactly once");
+  const parsed = [
+    ...ran,
+    ...ReviewLane.options
+      .filter((lane) => !lanes.has(lane))
+      .map((lane) => ({
+        lane,
+        verdict: "not-applicable" as const,
+        summary: `Routed out: ${routingReason}`,
+        findings: [],
+      })),
+  ];
   const findings: Array<{
     id: string;
     severity: "low" | "medium" | "high" | "critical";
@@ -185,7 +249,11 @@ export const extension = {
             ) => Promise<unknown>;
           },
         ) => {
-          const result = normalizeReviews(args.reviews);
+          const result = normalizeReviews(
+            args.reviews,
+            args.lanes,
+            args.routingReason,
+          );
           if (args.adjudicateDisputes) {
             if (
               !context.dataRepository ||

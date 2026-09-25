@@ -57,7 +57,7 @@ strings. Refresh each item's status and record its dispatch before including it.
 The fan-out resolves the owner once and passes it to every child workflow.
 
 Keep major phases mutually exclusive. Limits are one planner, two builders,
-or seven review lanes—not ten simultaneous workers. Only metadata-only intake
+or four review lanes—not ten simultaneous workers. Only metadata-only intake
 may overlap, using the same server. Skip human-wait and parked items while other
 work is actionable. When none remains, report the fresh human queue and idle
 without polling. Stop selecting new work when asked to stop.
@@ -65,15 +65,19 @@ without polling. Stop selecting new work when asked to stop.
 ## Review or resolve disputed findings
 
 Run the review work specification from current status; it supplies the phase,
-subject, workspace, prior findings, and receipts. All seven lanes run. Read
+subject, workspace, prior findings, and receipts. Test-coverage, security, and
+quality always run; the UI lane runs when client, TUI, e2e, or asset paths
+changed and it has not already passed. Read
 findings under the [shared review contract](../../agent-constraints/review.md).
 A disputed high/critical finding remains blocking. New instances park repeated
 disputes after two distinct cycles for human adjudication; retrying the same cycle
 does not count twice.
 
-To resume parked work, obtain explicit approval for `rework-parked` or
-`rework-parked-build` and take its matching exit. Do not raise `maxCycles`, reset
-history, or use a cycle override as an unpark mechanism.
+To resume parked work below the four-round review cap, obtain explicit approval
+for `rework-parked` or `rework-parked-build` and take its matching exit. At the
+cap, abort the item; abort cleanup preserves the dirty workspace so a human can
+finish the change outside the factory. Do not raise `maxCycles`, reset history, or use a cycle
+override as an unpark mechanism.
 
 ## Deliver a reviewed change
 

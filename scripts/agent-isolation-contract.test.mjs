@@ -7,7 +7,7 @@ test("automated agent definitions request a fail-closed OS sandbox", () => {
   const files = readdirSync(directory).filter(
     (name) => name.startsWith("nightshift-") && name.endsWith(".yaml"),
   );
-  assert.equal(files.length, 8);
+  assert.equal(files.length, 5);
   for (const file of files) {
     const definition = readFileSync(`${directory}/${file}`, "utf8");
     assert.match(definition, /^  sandboxMode: auto$/m, file);

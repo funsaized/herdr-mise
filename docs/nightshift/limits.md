@@ -81,6 +81,6 @@ and escaped severity together. Ten items are an operational checkpoint, not
 statistical proof. Stop or revert if a material blocker would be missed or source
 identity cannot be established.
 
-All seven lanes remain active. Shadow routing never authorizes reuse. Historical
+Routing only skips the UI lane; no receipt or prior verdict is reused. Historical
 snapshots without structured test selections retain their original proof path;
 no receipts or human approvals are synthesized from prose.

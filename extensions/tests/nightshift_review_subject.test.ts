@@ -1,30 +1,8 @@
 import {
   extension,
   reviewFingerprint,
-  shadowRouting,
 } from "../models/nightshift_review_subject.ts";
-import { ReviewLane } from "../models/nightshift_review.ts";
-
-Deno.test("shadow routing never authorizes reuse or omits executed lanes", () => {
-  for (const [phase, files, count] of [
-    ["code", ["docs/user-guide.md"], 3],
-    ["plan", ["docs/user-guide.md"], 7],
-    ["code", [], 7],
-    ["code", ["docs/security.md"], 7],
-    ["code", ["docs/user-guide.md", "client/src/store.ts"], 7],
-    ["code", [".agents/skills/nightshift-security/SKILL.md"], 7],
-  ] as const) {
-    const result = shadowRouting(phase, [...files]);
-    if (
-      result.reuseAllowed ||
-      result.executedLanes.length !== 7 ||
-      result.recommendedLanes.length !== count
-    )
-      throw new Error(
-        "Shadow routing changed execution or ignored shared impact",
-      );
-  }
-});
+import { LANE_SKILLS } from "../models/nightshift_review.ts";
 
 Deno.test("review identity detects source, head, policy and skill drift and records actual routes", async () => {
   const parent = await Deno.makeTempDir({ prefix: "review-identity-" });
@@ -41,9 +19,9 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
       "workflows/workflow-nightshift-review.yaml",
       "extensions/models/nightshift_review.ts",
       "extensions/models/nightshift_review_subject.ts",
-      ...ReviewLane.options.map(
-        (lane) => `.agents/skills/nightshift-${lane}/SKILL.md`,
-      ),
+      ...Object.values(LANE_SKILLS)
+        .flat()
+        .map((skill) => `.agents/skills/nightshift-${skill}/SKILL.md`),
     ];
     for (const path of controls) {
       await Deno.mkdir(`${control}/${path.slice(0, path.lastIndexOf("/"))}`, {
@@ -87,6 +65,7 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
       phase: "code" as const,
       subjectRoot: subject,
       subject: { baseCommit, summary: "docs" },
+      previousFindings: [],
     };
     const first = await reviewFingerprint(args, { repoDir: control });
     const same = await reviewFingerprint(
@@ -95,14 +74,13 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
     );
     if (
       first.fingerprint !== same.fingerprint ||
-      first.shadow.recommendedLanes.length !== 3
+      first.routing.lanes.join() !== "test-coverage,security,quality"
     )
       throw new Error(
         "Identity depends on object key order or lost docs scope",
       );
     const records = new Map<string, unknown>();
     let wrongCwd = false;
-    let shadowMiss = false;
     const context = {
       repoDir: control,
       modelType: "@swamp/software-factory",
@@ -130,26 +108,9 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
                   invokedAt: new Date().toISOString(),
                   parsedResponse: {
                     lane: id.slice("nightshift-".length),
-                    verdict:
-                      shadowMiss && id === "nightshift-frontend"
-                        ? "fail"
-                        : "pass",
+                    verdict: "pass",
                     summary: "Fixture clean review",
-                    findings:
-                      shadowMiss && id === "nightshift-frontend"
-                        ? [
-                            {
-                              id: "missed-defect",
-                              severity: "high",
-                              description: "Concrete fixture defect",
-                              requirement: "Fixture requirement",
-                              evidence: "docs/user-guide.md:1",
-                              impact: "Behavior breaks",
-                              regressionProof: "Fixture reproduction",
-                              disposition: "open",
-                            },
-                          ]
-                        : [],
+                    findings: [],
                   },
                 };
           return value ? new TextEncoder().encode(JSON.stringify(value)) : null;
@@ -167,12 +128,21 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
     const capture = extension.methods[0].capture_review_subject!.execute;
     const verify = extension.methods[1].verify_review_subject!.execute;
     await capture(args, context);
+    const captured = records.get("review-subject-245-review-fixture") as {
+      lanePlan: Array<{ lane: string; skills: string }>;
+    };
+    if (
+      captured.lanePlan.map((plan) => plan.lane).join() !==
+        "test-coverage,security,quality" ||
+      captured.lanePlan[2].skills.split(", ").length !== 3
+    )
+      throw new Error("Lane plan lost routing or merged-lane skills");
     await verify(args, context);
     const identity = records.get("review-identity-245-review-fixture") as {
       invocations: Array<{ model: string; variant: string }>;
     };
     if (
-      identity.invocations.length !== 7 ||
+      identity.invocations.length !== 3 ||
       identity.invocations.some(
         (r) =>
           r.model !== "actual-provider/actual-model" ||
@@ -190,20 +160,6 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
       if (!rejected)
         throw new Error("Changed subject or execution identity accepted");
     };
-    shadowMiss = true;
-    await verify(args, context);
-    const missed = records.get("review-identity-245-review-fixture") as {
-      shadow: {
-        missedBlockingFindings: Array<{ id: string }>;
-        reuseAllowed: boolean;
-      };
-    };
-    if (
-      missed.shadow.missedBlockingFindings[0]?.id !== "missed-defect" ||
-      missed.shadow.reuseAllowed
-    )
-      throw new Error("Shadow full review failed to retain a missed blocker");
-    shadowMiss = false;
     wrongCwd = true;
     await rejects();
     wrongCwd = false;

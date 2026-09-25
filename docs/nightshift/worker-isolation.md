@@ -81,7 +81,7 @@ that every Swamp runtime/cancellation route supplies that signal. Children that
 create another process group/session remain outside this cleanup guarantee.
 
 ENG-007 remains open until the outstanding acceptance cases are resolved. Keep
-one planner, two builders or seven review lanes, with major phases mutually
+one planner, two builders or four review lanes, with major phases mutually
 exclusive in a checkout. Metadata-only intake may overlap using the same server.
 
 Direct local runtime cancellation passes, but local cancellation of a server-owned

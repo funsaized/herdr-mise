@@ -1,12 +1,12 @@
 type: '@funsaized/cli-agent'
 typeVersion: 2026.09.05.1
-id: 81222895-9f18-449b-b7a8-8282f1fb089f
-name: nightshift-observability
-version: 2
+id: bfbe93ae-c307-4641-999d-c464f732e58f
+name: nightshift-quality
+version: 1
 tags: {}
 globalArguments:
   defaultProvider: opencode
-  defaultModel: openai/gpt-5.6-luna
+  defaultModel: openai/gpt-5.6-sol
   defaultToolProfile: readonly
   commandsDir: .claude/commands
   commandSubdirs: []

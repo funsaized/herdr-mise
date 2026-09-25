@@ -63,7 +63,7 @@ and the current-cycle human approval. It runs selections serially in per-build
 model instances, verifies stored receipts, and records factory evidence. It
 rejects changed approvals, mismatched argv, old-build receipts, changed HEAD or
 source, missing results and zero passing tests. Review revalidates each receipt
-against the current subject before launching the seven lanes.
+against the current subject before launching the review lanes.
 
 Existing plans without selections retain builder-transcript/reviewer-run proof;
 no receipt is synthesized from old test prose. Existing factory snapshots are

@@ -494,19 +494,13 @@ test(
       serve = await startServe(repo);
       // Exercise local policy hooks through the actual engine and persisted run outputs.
       expectOk(create(repo, serve.server, "nightshift-run-901", "901"));
-      const lanes = [
-        "test-coverage",
-        "clean-code",
-        "frontend",
-        "ddd",
-        "security",
-        "accessibility",
-        "observability",
-      ];
+      const lanes = ["test-coverage", "security", "quality", "ui"];
       const reviewInput = {
         workItem: "901",
         runId: "fixture-review",
         phase: "code",
+        lanes,
+        routingReason: "UI paths changed",
         reviews: lanes.map((lane) => ({
           lane,
           verdict: "pass",

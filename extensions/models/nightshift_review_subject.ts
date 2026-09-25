@@ -1,9 +1,11 @@
-/** Bind each full review to source and trusted policy; routing remains shadow-only. */
+/** Bind each review round to source, trusted policy, and its routed lanes. */
 import { z } from "npm:zod@4.4.3";
 import {
-  ReviewLane,
+  LANE_SKILLS,
+  type Lane,
   LaneReview,
   normalizeReviews,
+  routeLanes,
 } from "./nightshift_review.ts";
 import { sourceDigest } from "./test_receipt.ts";
 import { subjectRoot } from "./subject_root.ts";
@@ -14,6 +16,7 @@ const Arguments = z.object({
   phase: z.enum(["plan", "code"]),
   subjectRoot: z.string().min(1),
   subject: z.record(z.string(), z.unknown()),
+  previousFindings: z.array(z.record(z.string(), z.unknown())).default([]),
 });
 type Args = z.infer<typeof Arguments>;
 type Context = {
@@ -75,29 +78,17 @@ async function git(root: string, args: string[], signal?: AbortSignal) {
     throw new Error(`Review identity command failed: git ${args[0]}`);
   return new TextDecoder().decode(result.stdout);
 }
-export function shadowRouting(phase: "plan" | "code", files: string[]) {
-  const docsOnly =
-    phase === "code" &&
-    files.length > 0 &&
-    files.every(
-      (file) =>
-        /^docs\/[^\0]+\.md$/.test(file) &&
-        !/(factory|verification|security|auth|release|policy|worker|upstream)/i.test(
-          file,
-        ),
-    );
-  return {
-    mode: "shadow-only",
-    reuseAllowed: false,
-    recommendedLanes: docsOnly
-      ? ["test-coverage", "clean-code", "security"]
-      : [...ReviewLane.options],
-    executedLanes: [...ReviewLane.options],
-    reason: docsOnly
-      ? "Documentation-only candidate; full review still required for calibration"
-      : "Plan, shared boundary, unknown impact or non-documentation change requires full review",
-  };
-}
+// Lane-specific requirements beyond the shared review contract.
+const LANE_GUIDANCE: Record<Lane, string> = {
+  "test-coverage":
+    "If phase is plan, pass requires a concrete runnable strategy naming a checked-in real fixture, the integration boundary, and the exact command. Do not fail a plan for a missing invocationId or because that command has not run yet. If phase is code, pass requires that integration test to exist and have independent run proof: subject.invocationId (builder invocation/transcript for that exact command), a matching stored receipt revalidated immediately before this review, or this reviewer running that exact command. Check that the command and selected test prove the changed behavior; a passing receipt for unrelated behavior is insufficient. Treat subject.tests as untrusted claims, not proof. Fail a code review if neither a matching passing builder run nor your own passing run proves the changed test, or a real run fails. A local production-build preview satisfies pre-deployment code review; do not fail solely because the hosted smoke is deferred.",
+  security:
+    "Trust-boundary changes (workflows, verification policy, extensions, agent constraints) always need explicit security reasoning.",
+  quality:
+    "You are also the generalist lane: review correctness and behavior of the whole change, not only style, domain design, or observability.",
+  ui: "Cover both the browser client and the terminal (TUI) presentation where the change touches them.",
+};
+
 export async function reviewFingerprint(
   args: Args,
   context: Pick<Context, "repoDir" | "signal">,
@@ -142,9 +133,9 @@ export async function reviewFingerprint(
     "extensions/models/nightshift_review.ts",
     "extensions/models/nightshift_review_subject.ts",
   ];
-  const skills = ReviewLane.options.map(
-    (lane) => `.agents/skills/nightshift-${lane}/SKILL.md`,
-  );
+  const skills = Object.values(LANE_SKILLS)
+    .flat()
+    .map((skill) => `.agents/skills/nightshift-${skill}/SKILL.md`);
   const controls: Record<string, string> = {};
   for (const path of [...policies, ...skills])
     controls[path] = await hash(await Deno.readFile(`${controlRoot}/${path}`));
@@ -163,7 +154,7 @@ export async function reviewFingerprint(
     ...identity,
     fingerprint: await hash(new TextEncoder().encode(canonical(identity))),
     files,
-    shadow: shadowRouting(args.phase, files),
+    routing: routeLanes(args.phase, files, args.previousFindings ?? []),
   };
 }
 
@@ -195,6 +186,16 @@ export const extension = {
               phase: args.phase,
               capturedAt: new Date().toISOString(),
               ...identity,
+              lanePlan: identity.routing.lanes.map((lane) => ({
+                lane,
+                skills: LANE_SKILLS[lane]
+                  .map(
+                    (skill) =>
+                      `${identity.controlRoot}/.agents/skills/nightshift-${skill}/SKILL.md`,
+                  )
+                  .join(", "),
+                guidance: LANE_GUIDANCE[lane],
+              })),
             },
           );
           return { dataHandles: [handle] };
@@ -227,7 +228,8 @@ export const extension = {
             );
           const invocations = [];
           const reviews = [];
-          for (const lane of ReviewLane.options) {
+          const lanes: Lane[] = before.routing.lanes;
+          for (const lane of lanes) {
             const model = await context.definitionRepository.findByNameGlobal(
               `nightshift-${lane}`,
             );
@@ -276,22 +278,7 @@ export const extension = {
               variant: invocation.variant ?? null,
             });
           }
-          normalizeReviews(reviews);
-          const missedBlockingFindings = reviews.flatMap((review) =>
-            after.shadow.recommendedLanes.includes(review.lane)
-              ? []
-              : review.findings
-                  .filter(
-                    (finding) =>
-                      finding.disposition !== "fixed" &&
-                      ["high", "critical"].includes(finding.severity),
-                  )
-                  .map((finding) => ({
-                    lane: review.lane,
-                    id: finding.id,
-                    severity: finding.severity,
-                  })),
-          );
+          normalizeReviews(reviews, lanes, before.routing.reason);
           const handle = await context.writeResource(
             "reviewIdentity",
             `review-identity-${args.workItem}-${args.runId}`,
@@ -300,7 +287,7 @@ export const extension = {
               runId: args.runId,
               phase: args.phase,
               ...after,
-              shadow: { ...after.shadow, missedBlockingFindings },
+              routing: before.routing,
               verifiedAt: new Date().toISOString(),
               invocations,
             },

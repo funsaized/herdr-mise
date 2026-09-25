@@ -1,6 +1,8 @@
 import {
+  MANDATORY_LANES,
   normalizeReviews,
   ReviewLane,
+  routeLanes,
   type LaneReview,
 } from "../models/nightshift_review.ts";
 import type { z } from "npm:zod@4.4.3";
@@ -31,7 +33,7 @@ function reject(input: z.infer<typeof LaneReview>[]) {
   throw new Error("Invalid review accepted");
 }
 
-Deno.test("seven clean lanes need no invented defect or catchphrase", () => {
+Deno.test("clean lanes need no invented defect or catchphrase", () => {
   const input = reviews();
   input[0].verdict = "not-applicable";
   const result = normalizeReviews(input);
@@ -47,15 +49,14 @@ Deno.test("seven clean lanes need no invented defect or catchphrase", () => {
 Deno.test("historical pager regression remains blocking, including disputed disposition", () => {
   for (const disposition of ["open", "disputed"] as const) {
     const input = reviews();
-    input[2].verdict = "fail";
-    input[2].findings = [{ ...defect, disposition }];
+    input[3].verdict = "fail";
+    input[3].findings = [{ ...defect, disposition }];
     const result = normalizeReviews(input);
     if (
       result.verdict !== "fail" ||
       !result.findings.some(
         (finding) =>
-          finding.id === "frontend:pager-occlusion" &&
-          finding.severity === "high",
+          finding.id === "ui:pager-occlusion" && finding.severity === "high",
       )
     )
       throw new Error("Defect was demoted");
@@ -64,24 +65,24 @@ Deno.test("historical pager regression remains blocking, including disputed disp
 
 Deno.test("fixed defects retain their history without remaining blockers", () => {
   const input = reviews();
-  input[2].findings = [{ ...defect, disposition: "fixed" }];
+  input[3].findings = [{ ...defect, disposition: "fixed" }];
   const result = normalizeReviews(input);
   if (
     result.verdict !== "pass" ||
-    result.reviews[2].findings.length !== 1 ||
-    result.findings.some((finding) => finding.id === "frontend:pager-occlusion")
+    result.reviews[3].findings.length !== 1 ||
+    result.findings.some((finding) => finding.id === "ui:pager-occlusion")
   )
     throw new Error("Resolution lost or stale blocker retained");
 });
 
 Deno.test("prior published identities remain stable and aliases cannot duplicate a defect", () => {
   const input = reviews();
-  input[2].verdict = "fail";
-  input[2].findings = [{ ...defect, id: "frontend:pager-occlusion" }];
+  input[3].verdict = "fail";
+  input[3].findings = [{ ...defect, id: "ui:pager-occlusion" }];
   const result = normalizeReviews(input);
-  if (result.findings[2].id !== "frontend:pager-occlusion")
+  if (result.findings[3].id !== "ui:pager-occlusion")
     throw new Error("Published identity changed during re-review");
-  input[2].findings.push(defect);
+  input[3].findings.push(defect);
   reject(input);
 });
 
@@ -106,8 +107,8 @@ Deno.test("adjudication uses stored disputed findings from distinct cycles witho
   const { extension } = await import("../models/nightshift_review.ts");
   const evaluate = extension.methods[0].evaluate_review.execute;
   const input = reviews();
-  input[2].verdict = "fail";
-  input[2].findings = [{ ...defect, disposition: "disputed" }];
+  input[3].verdict = "fail";
+  input[3].findings = [{ ...defect, disposition: "disputed" }];
   const prior = normalizeReviews(input).findings;
   let cycle = 2;
   let previous = prior;
@@ -144,6 +145,8 @@ Deno.test("adjudication uses stored disputed findings from distinct cycles witho
     workItem: "245",
     runId: "review-2",
     phase: "code" as const,
+    lanes: [...ReviewLane.options],
+    routingReason: "UI paths changed",
     reviews: input,
     adjudicateDisputes: true,
   };
@@ -152,7 +155,7 @@ Deno.test("adjudication uses stored disputed findings from distinct cycles witho
     stored?.verdict !== "fail" ||
     !stored.findings.some((f) => f.id === "ADJUDICATION") ||
     !stored.findings.some(
-      (f) => f.id === "frontend:pager-occlusion" && f.severity === "high",
+      (f) => f.id === "ui:pager-occlusion" && f.severity === "high",
     )
   )
     throw new Error("Repeated dispute was ignored or its blocker demoted");
@@ -175,9 +178,57 @@ Deno.test("adjudication uses stored disputed findings from distinct cycles witho
   await evaluate({ ...args, adjudicateDisputes: false }, context);
   if (stored?.findings.some((f) => f.id === "ADJUDICATION"))
     throw new Error("Legacy routing changed");
-  input[2].findings[0].disposition = "fixed";
-  input[2].verdict = "pass";
+  input[3].findings[0].disposition = "fixed";
+  input[3].verdict = "pass";
   await evaluate(args, context);
   if (stored?.findings.some((f) => f.id === "ADJUDICATION"))
     throw new Error("Fixed defect still requested adjudication");
+});
+
+Deno.test("routing keeps mandatory lanes and adds UI only for UI changes not yet passed", () => {
+  const same = (actual: string[], expected: string[]) => {
+    if (JSON.stringify(actual) !== JSON.stringify(expected))
+      throw new Error(`${actual} !== ${expected}`);
+  };
+  same(routeLanes("plan", ["client/src/App.tsx"], []).lanes, MANDATORY_LANES);
+  same(routeLanes("code", ["server/src/feed.rs"], []).lanes, MANDATORY_LANES);
+  for (const file of [
+    "client/src/App.tsx",
+    "server/src/tui/view.rs",
+    "e2e/x.spec.ts",
+  ])
+    same(routeLanes("code", [file], []).lanes, [...ReviewLane.options]);
+  const passed = [{ id: "LANE:ui", description: "pass: clean" }];
+  same(routeLanes("code", ["client/a.ts"], passed).lanes, MANDATORY_LANES);
+  // A routed-out lane records not-applicable and must not count as a pass.
+  const routedOut = [
+    { id: "LANE:ui", description: "not-applicable: Routed out" },
+  ];
+  same(routeLanes("code", ["client/a.ts"], routedOut).lanes, [
+    ...ReviewLane.options,
+  ]);
+  const failed = [{ id: "LANE:ui", description: "fail: overlap" }];
+  same(routeLanes("code", ["client/a.ts"], failed).lanes, [
+    ...ReviewLane.options,
+  ]);
+});
+
+Deno.test("routed-out lanes are recorded as not-applicable and executed lanes stay exact", () => {
+  const ran = reviews().filter((review) => review.lane !== "ui");
+  const result = normalizeReviews(ran, MANDATORY_LANES, "No UI paths changed");
+  const ui = result.reviews.find((review) => review.lane === "ui");
+  if (
+    result.verdict !== "pass" ||
+    ui?.verdict !== "not-applicable" ||
+    !ui.summary.includes("No UI paths changed")
+  )
+    throw new Error("Routed-out lane not recorded");
+  reject(ran.slice(1));
+  let threw = false;
+  try {
+    normalizeReviews(reviews(), MANDATORY_LANES, "extra lane");
+  } catch {
+    threw = true;
+  }
+  if (!threw) throw new Error("Unrouted lane result accepted");
 });
