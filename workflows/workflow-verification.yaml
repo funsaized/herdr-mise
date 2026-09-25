@@ -130,19 +130,21 @@ jobs:
       - name: unit-tests
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-tests
           methodName: run_subject
           inputs:
             script: test
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: lint
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: extension-tests
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-tests
           methodName: run_subject
           inputs:
             script: test:extensions
@@ -154,19 +156,21 @@ jobs:
       - name: compatibility
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-audits
           methodName: run_subject
           inputs:
             script: check:herdr-compatibility
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: extension-tests
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: token-audit
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-audits
           methodName: run_subject
           inputs:
             script: audit:tokens
@@ -178,7 +182,7 @@ jobs:
       - name: accessibility-audit
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-audits
           methodName: run_subject
           inputs:
             script: audit:accessibility
@@ -190,14 +194,16 @@ jobs:
       - name: browser-install
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-browser
           methodName: run_subject
           inputs:
             script: verify:browser:install
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: accessibility-audit
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: fallback-assets-tests
         task:
@@ -208,7 +214,9 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: browser-install
+          - step: dependencies-root
+            condition: { type: succeeded }
+          - step: dependencies-client
             condition: { type: succeeded }
       - name: build
         task:
@@ -220,6 +228,8 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
+          - step: lint
+            condition: { type: succeeded }
           - step: fallback-assets-tests
             condition: { type: succeeded }
       - name: rust-verification
@@ -236,14 +246,16 @@ jobs:
       - name: browser-tests
         task:
           type: model_method
-          modelIdOrName: verification-root
+          modelIdOrName: verification-browser
           methodName: run_subject
           inputs:
             script: test:visual:prepared
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: rust-verification
+          - step: browser-install
+            condition: { type: succeeded }
+          - step: build
             condition: { type: succeeded }
       - name: bundle-budget
         task:
@@ -255,7 +267,7 @@ jobs:
             expectedGitHead: ${{ inputs.commit }}
             subjectRoot: ${{ inputs.subjectRoot }}
         dependsOn:
-          - step: browser-tests
+          - step: build
             condition: { type: succeeded }
       - name: bundle
         task:
@@ -306,6 +318,14 @@ jobs:
             dispatchActor: ${{ inputs.dispatchActor }}
         dependsOn:
           - step: release-validation
+            condition: { type: succeeded }
+          - step: rust-verification
+            condition: { type: succeeded }
+          - step: browser-tests
+            condition: { type: succeeded }
+          - step: extension-tests
+            condition: { type: succeeded }
+          - step: accessibility-audit
             condition: { type: succeeded }
     dependsOn: []
 version: 1
