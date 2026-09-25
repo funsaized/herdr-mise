@@ -3,7 +3,39 @@ import {
   macosProfile,
   macosLauncher,
   probeMacosSandbox,
+  extension,
 } from "../models/nightshift_agent.ts";
+
+Deno.test("retired item 77 is rejected before any agent is installed or launched", async () => {
+  let message = "";
+  try {
+    await extension.methods[0].invoke_nightshift.execute(
+      {
+        prompt: "should never launch",
+        invocationId: "retired-77",
+        opencodeAgent: "plan",
+        tags: { factory: "nightshift", workItem: "77" },
+      },
+      {
+        repoDir: "/no-agent-here",
+        globalArgs: {
+          defaultProvider: "opencode",
+          defaultToolProfile: "readonly",
+        },
+        writeResource: async () => {
+          throw new Error("unexpected write");
+        },
+      },
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  if (message !== "Nightshift item 77 is retired") {
+    throw new Error(
+      `retired agent launched or failed for another reason: ${message}`,
+    );
+  }
+});
 
 Deno.test("an actor cannot use a launcher in shared writable sandbox storage", () => {
   assertProtectedLauncher("/Users/example/projects/control", "/Users/example");

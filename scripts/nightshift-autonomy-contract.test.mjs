@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const planFanout = readFileSync(
@@ -10,14 +10,11 @@ const buildFanout = readFileSync(
   "workflows/workflow-nightshift-build-fanout.yaml",
   "utf8",
 );
-const factory = readFileSync(
-  "models/@swamp/software-factory/the-nightshift.yaml",
-  "utf8",
-);
 const template = readFileSync(
   "models/@swamp/software-factory/nightshift-template.yaml",
   "utf8",
 );
+const factory = template;
 const factoryWorkflows = [
   "plan",
   "build",
@@ -42,8 +39,7 @@ const repairWorkflow = readFileSync(
 
 const fanoutMapsToFactory =
   /forEach:\n\s+item: entry\n\s+in: '\$\{\{ inputs\.workItems\.map\(/;
-const item77Routing =
-  '"factory": w == "77" ? "the-nightshift" : "nightshift-run-" + w';
+const runtimeRouting = '"factory": "nightshift-run-" + w';
 
 test("Nightshift planning fan-out maps each work item to one factory and serializes", () => {
   assert.match(planFanout, /minItems: 1/);
@@ -52,7 +48,7 @@ test("Nightshift planning fan-out maps each work item to one factory and seriali
   assert.ok(planFanout.includes("pattern: '^[1-9][0-9]*$'"));
   assert.match(planFanout, /maxLength: 16/);
   assert.match(planFanout, fanoutMapsToFactory);
-  assert.ok(planFanout.includes(item77Routing));
+  assert.ok(planFanout.includes(runtimeRouting));
   assert.match(planFanout, /concurrency: 1/);
   assert.match(planFanout, /workflowIdOrName: nightshift-plan/);
   assert.match(planFanout, /factory: \$\{\{ self\.entry\.factory \}\}/);
@@ -76,7 +72,7 @@ test("Nightshift planning fan-out maps each work item to one factory and seriali
 
 test("Nightshift build fan-out maps each work item to one factory with two builders", () => {
   assert.match(buildFanout, fanoutMapsToFactory);
-  assert.ok(buildFanout.includes(item77Routing));
+  assert.ok(buildFanout.includes(runtimeRouting));
   assert.match(buildFanout, /concurrency: 2/);
   assert.match(buildFanout, /workflowIdOrName: nightshift-build/);
   assert.match(buildFanout, /factory: \$\{\{ self\.entry\.factory \}\}/);
@@ -100,7 +96,7 @@ test("Nightshift resident driver takes a fleet census and dispatches from fresh 
   assert.match(nightshiftModes, /Never[^\n]*status-_factory/i);
 });
 
-test("Nightshift repair is explicit and analytics stays off status paths", () => {
+test("Nightshift repair is explicit and the retired model definition is absent", () => {
   assert.match(repairWorkflow, /enum: \[repair\]/u);
   assert.match(repairWorkflow, /modelType: '@swamp\/software-factory'/u);
   assert.match(repairWorkflow, /modelName: \$\{\{ inputs\.modelName \}\}/u);
@@ -108,17 +104,13 @@ test("Nightshift repair is explicit and analytics stays off status paths", () =>
     repairWorkflow,
     /model\.nightshift-template\.definition\.globalArguments/u,
   );
-  assert.match(
-    factory,
-    /name: "@funsaized\/nightshift-factory-analytics",\n\s+methods: \[summary\]/u,
+  assert.equal(
+    existsSync("models/@swamp/software-factory/the-nightshift.yaml"),
+    false,
   );
 });
 
-test("Nightshift template preserves legacy gates and adds prior-review context without runtime reports", () => {
-  const legacyLifecycle = factory.slice(
-    factory.indexOf("globalArguments:\n"),
-    factory.indexOf("reports:\n"),
-  );
+test("Nightshift template includes prior-review context without runtime reports", () => {
   const templateLifecycle = template.slice(
     template.indexOf("globalArguments:\n"),
     template.indexOf("methods: {}\n"),
@@ -128,27 +120,6 @@ test("Nightshift template preserves legacy gates and adds prior-review context w
   assert.equal(priorContext.length, 2);
   assert.ok(priorContext[0].includes('"artifact-plan-review"'));
   assert.ok(priorContext[1].includes('"artifact-code-review"'));
-  assert.equal(
-    templateLifecycle
-      .replace(/^ +previousFindings: .*\n/gmu, "")
-      .replace(/^ +structuredTests: true\n/gmu, "")
-      .replace(/^ +testReceipts: .*\n/gmu, "")
-      .replace(/^ +adjudicateDisputes: true\n/gmu, "")
-      .replace(
-        /              - name: adjudicate\n[\s\S]*?(?=              - name: rework)/gu,
-        "",
-      )
-      .replace(
-        / && !artifacts\.(?:plan|code)_review\.findings\.exists\(f, f\.id == "ADJUDICATION" && f\.category == "round:adjudication" && !f\.\?resolved\.orValue\(false\)\)/gu,
-        "",
-      )
-      .replace(", outOfScope, testSelection]", ", outOfScope]")
-      .replace(
-        /                        testSelection:\n[\s\S]*?(?=                        risks:)/u,
-        "",
-      ),
-    legacyLifecycle,
-  );
   assert.doesNotMatch(template, /^reports:/mu);
 });
 
@@ -282,5 +253,4 @@ test("new templates park repeated disputes without offering competing automatic 
     );
     assert.match(stage, /blocking: \[critical, high\]/u);
   }
-  assert.doesNotMatch(factory, /adjudicateDisputes|name: adjudicate/u);
 });

@@ -57,8 +57,8 @@ jobs:
         task:
           type: assert
           expr: >-
-            size(data.query('modelType == "@swamp/software-factory" && name == "state-' + inputs.workItem + '"')) == 1 && size(data.query('modelType == "@swamp/software-factory" && name == "state-' + inputs.workItem + '" && attributes.workItem == "' + inputs.workItem + '" && (modelName == "the-nightshift" || modelName == "nightshift-run-' + inputs.workItem + '")')) == 1
-          message: Work item must have exactly one valid legacy or runtime factory owner
+            size(data.query('modelType == "@swamp/software-factory" && name == "state-' + inputs.workItem + '"')) == 1 && size(data.query('modelType == "@swamp/software-factory" && name == "state-' + inputs.workItem + '" && attributes.workItem == "' + inputs.workItem + '" && modelName == "nightshift-run-' + inputs.workItem + '"')) == 1
+          message: Work item must have exactly one matching runtime factory owner
           severity: high
         dependsOn:
           - step: start-factory

@@ -15,17 +15,17 @@ Each work item runs on its own factory instance, one model lock per item:
 
 - `nightshift-run-<N>` — the runtime factory for work item `<N>` only; it must
   never read or write another work item.
-- `the-nightshift` — retained legacy shared factory. Item 77 has no retained
-  factory run and must not be dispatched as an active item.
+- `the-nightshift` — retired legacy name. The definition and special route have
+  been removed; historical fixture and stored reports remain for audit.
 - `nightshift-template` — the canonical lifecycle template; it never runs work
   and owns no runtime records.
 
 Fan-out resolves each item's factory once and passes it to the child workflow
-and failure recording. Active items other than 77 use `nightshift-run-<N>`.
-The checked-in fan-out still contains a legacy route for 77, but **does not
-reject it**. Never submit 77 to intake or fan-out. Its legacy route is historical
-compatibility, not evidence of an active run. Do not start, advance, or synthesize
-a terminal record for it. Child workflows never derive the factory independently.
+and failure recording. There is no special legacy route. Item 77 is retired:
+the factory identity check refuses both the old and would-be runtime model,
+and the agent wrapper rejects its invocation before launching a provider.
+Do not submit 77 to intake or fan-out or synthesize a terminal record for it.
+Child workflows never derive the factory independently.
 
 ## Fleet census
 
@@ -37,8 +37,7 @@ swamp data query 'modelType == "@swamp/software-factory" && name.startsWith("sta
   --select '{"modelName": modelName, "modelId": modelId, "workItem": attributes.workItem, "stageId": attributes.stageId, "status": attributes.status}' --json
 ```
 
-This returns any retained legacy records on `the-nightshift` and every runtime
-record on `^nightshift-run-[1-9][0-9]*$`. Item 77 is absent from the current
+This returns every runtime record on `^nightshift-run-[1-9][0-9]*$`. Item 77 is absent from the current
 retained census; its historical fixture records `building`/`active`, while
 GitHub issue #77 closed via PR #137. That is an orphan, not a terminal factory
 run. Before trusting any row, validate the

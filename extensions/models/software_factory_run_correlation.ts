@@ -15,10 +15,6 @@ const State = z.object({
   cycles: z.record(z.string(), z.number().int().positive()),
   enteredAt: z.string(),
 });
-const OwnershipState = z.object({
-  workItem: z.string(),
-  status: z.enum(["active", "terminal"]),
-});
 const Factory = z.object({
   stages: z.array(
     z.object({
@@ -174,7 +170,6 @@ const workItemMethods = [
 
 export async function checkNightshiftFactoryIdentity(
   context: Context,
-  legacyIntakeFrozen = true,
 ): Promise<CheckResult> {
   const storedDefinition = context.definitionRepository
     ? await context.definitionRepository.findById(
@@ -190,35 +185,15 @@ export async function checkNightshiftFactoryIdentity(
   if (typeof name !== "string") {
     return fail("cannot verify factory identity without its definition name");
   }
+  if (name === "the-nightshift" || name === "nightshift-run-77") {
+    return fail(`factory '${name}' is retired`);
+  }
 
   const runtime = /^nightshift-run-([1-9][0-9]*)$/.exec(name);
   if (runtime && typeof workItem !== "string") {
     return fail(`${name} requires its matching work item`);
   }
   if (typeof workItem !== "string") return { pass: true };
-
-  if (name === "the-nightshift") {
-    const state = OwnershipState.safeParse(
-      await latestJson(context, `state-${workItemSlug(workItem)}`),
-    );
-    if (context.methodName === "start" && legacyIntakeFrozen) {
-      return fail("the-nightshift no longer accepts new work items");
-    }
-    if (context.methodName === "start") return { pass: true };
-    if (!state.success) {
-      return fail(
-        `legacy work item '${workItem}' is not owned by the-nightshift`,
-      );
-    }
-    if (["status", "summary"].includes(context.methodName)) {
-      return { pass: true };
-    }
-    return state.data.status === "active"
-      ? { pass: true }
-      : fail(
-          `legacy work item '${workItem}' is terminal and cannot be mutated`,
-        );
-  }
 
   if (!runtime) return { pass: true };
   if (workItem !== runtime[1]) {

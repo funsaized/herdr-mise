@@ -231,35 +231,17 @@ Deno.test("Nightshift template and runtime identity fail closed", async () => {
   }
 });
 
-Deno.test("legacy factory freezes intake while preserving history and active drain", async () => {
-  const start = await checkNightshiftFactoryIdentity(
-    identityContext("the-nightshift", "132", "start"),
-  );
-  if (start.pass) throw new Error("legacy intake remained open");
-
-  const beforeCutover = await checkNightshiftFactoryIdentity(
-    identityContext("the-nightshift", "132", "start"),
-    false,
-  );
-  if (!beforeCutover.pass)
-    throw new Error("legacy intake froze before cutover");
-
-  for (const method of ["status", "summary"]) {
-    const history = await checkNightshiftFactoryIdentity(
-      identityContext("the-nightshift", "23", method, "terminal"),
-    );
-    if (!history.pass) throw new Error(history.errors?.join("\n"));
+Deno.test("retired legacy and item-77 runtime factories reject all methods", async () => {
+  for (const name of ["the-nightshift", "nightshift-run-77"]) {
+    for (const method of ["start", "record_artifact", "status", "summary"]) {
+      const result = await checkNightshiftFactoryIdentity(
+        identityContext(name, "77", method),
+      );
+      if (result.pass || !result.errors?.[0].includes("retired")) {
+        throw new Error(`${name} accepted ${method}`);
+      }
+    }
   }
-
-  const active = await checkNightshiftFactoryIdentity(
-    identityContext("the-nightshift", "77", "record_artifact"),
-  );
-  if (!active.pass) throw new Error(active.errors?.join("\n"));
-
-  const terminal = await checkNightshiftFactoryIdentity(
-    identityContext("the-nightshift", "23", "advance", "terminal"),
-  );
-  if (terminal.pass) throw new Error("terminal legacy history was mutated");
 });
 
 Deno.test("workflow freshness rejects missing, malformed and stale summary timestamps", async () => {

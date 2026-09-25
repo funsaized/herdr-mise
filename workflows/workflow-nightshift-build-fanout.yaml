@@ -23,7 +23,7 @@ jobs:
       - name: build-${{ self.entry.workItem }}
         forEach:
           item: entry
-          in: '${{ inputs.workItems.map(w, {"workItem": w, "factory": w == "77" ? "the-nightshift" : "nightshift-run-" + w}) }}'
+          in: '${{ inputs.workItems.map(w, {"workItem": w, "factory": "nightshift-run-" + w}) }}'
         concurrency: 2
         task:
           type: workflow

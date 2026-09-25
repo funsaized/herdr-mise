@@ -5,7 +5,7 @@ inputs:
   properties:
     factory:
       type: string
-      pattern: '^(the-nightshift|nightshift-run-[1-9][0-9]*)$'
+      pattern: '^nightshift-run-[1-9][0-9]*$'
     workItem:
       type: string
       pattern: '^[1-9][0-9]*$'
