@@ -83,12 +83,13 @@ override as an unpark mechanism.
 
 Follow [ship preparation](../../agent-constraints/ship-prep.md) and the
 [maintainer verification procedure](../local-verification.md). Open a PR linked
-with `Fixes #<issue>` and retain the exact subject commit. Every new commit or
-base movement requires a fresh managed run. Trust-boundary changes require
-`@funsaized` to dispatch from trusted `main`.
+with `Fixes #<issue>` and retain the exact subject commit. Managed verification
+runs automatically on every push; trust-boundary changes pass only in
+`@funsaized` pull requests from this repository.
 
-`nightshift-ship` consumes the validated `swamp-managed-receipt`; a green badge or
-local full-suite pass is insufficient. Preserve ship approval, merge confirmation,
+`nightshift-ship` waits for the gate's `Swamp managed verification` status on the
+exact candidate and checks that the status came from the trusted gate on `main`;
+a similarly named check or local full-suite pass is insufficient. Preserve ship approval, merge confirmation,
 and deployed smoke. After merge, refresh factory status and finish its deployed
 verification and closeout work. A closed GitHub issue does not prove those stages
 completed. Cleanup preserves dirty workspaces for inspection.

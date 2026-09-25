@@ -34,11 +34,6 @@ const jobPermissions = {
     "security-events": "write",
   },
   "gitleaks.yml/scan": { contents: "read", "pull-requests": "read" },
-  "swamp-managed-verification.yml/resolve": {
-    actions: "read",
-    contents: "read",
-    "pull-requests": "read",
-  },
   "swamp-managed-verification.yml/execute": {},
 };
 const required = [

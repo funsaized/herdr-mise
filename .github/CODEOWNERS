@@ -22,10 +22,8 @@
 /extensions/models/ @funsaized
 /extensions/tests/ @funsaized
 /models/ @funsaized
-/scripts/managed-verification-evidence.test.mjs @funsaized
 /scripts/install-swamp-managed.sh @funsaized
-/scripts/managed-verification-evidence.mjs @funsaized
-/scripts/workflow-contract.test.mjs @funsaized
+/scripts/workflow-policy.test.mjs @funsaized
 /verification/ @funsaized
 /workflows/ @funsaized
 /.agents/skills/ @funsaized

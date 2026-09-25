@@ -82,6 +82,57 @@ test(
   },
 );
 
+test(
+  "only an approved code review reaches ship-prep, and review stays capped",
+  { timeout: 60_000 },
+  () => {
+    const { stages } = swamp([
+      "model",
+      "get",
+      "nightshift-template",
+    ]).globalArguments;
+    const byId = Object.fromEntries(stages.map((stage) => [stage.id, stage]));
+    const into = (target) =>
+      stages.flatMap((stage) =>
+        (stage.transitions ?? [])
+          .filter(
+            (transition) => transition.to === target && stage.id !== target,
+          )
+          .map((transition) => `${stage.id}.${transition.name}`),
+      );
+    assert.deepEqual(into("ship-prep"), ["code-review.approve"]);
+    assert.deepEqual(into("shipping"), ["ship-prep.ship"]);
+    const approve = byId["code-review"].transitions.find(
+      (t) => t.name === "approve",
+    );
+    assert.ok(approve.gates.some((gate) => gate.type === "findings-clear"));
+    for (const review of ["plan-review", "code-review"]) {
+      assert.equal(byId[review].maxCycles, 4, review);
+      const cap = (gate) =>
+        gate.type === "max-cycles" &&
+        gate.config.stage === review &&
+        gate.config.limit === 4 &&
+        !gate.config.invert;
+      assert.ok(
+        byId[review].transitions
+          .find((t) => t.name === "rework")
+          .gates.some(cap),
+      );
+      const exit = review === "plan-review" ? "rework-plan" : "rework-build";
+      assert.ok(
+        byId.parked.transitions.find((t) => t.name === exit).gates.some(cap),
+        exit,
+      );
+    }
+    const ship = readFileSync(
+      "workflows/workflow-nightshift-ship.yaml",
+      "utf8",
+    );
+    assert.match(ship, /methodName: require_managed_verification/);
+    assert.match(ship, /methodName: require_issue_link/);
+  },
+);
+
 // Intake may overlap a running factory (see AGENTS.md), so it must stay
 // metadata-only: issue creation, lifecycle start, and a direct factory start.
 test(

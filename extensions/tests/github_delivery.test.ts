@@ -84,8 +84,6 @@ Deno.test("delivery schemas reject flags and missing identities", () => {
     { prNumber: -1, headSha: sha },
     { prNumber: 1, headSha: "short" },
   ]) {
-    if (methods.dispatch_managed.arguments.safeParse(input).success)
-      throw new Error("Unsafe dispatch input accepted");
     if (methods.dispatch_compatibility.arguments.safeParse(input).success)
       throw new Error("Unsafe compatibility dispatch input accepted");
     if (methods.merge_delivery.arguments.safeParse(input).success)

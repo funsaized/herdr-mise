@@ -48,10 +48,10 @@ the full tree, and `swamp help model method run` scopes to a subtree.
 - During parallel development, run only the narrow checks relevant to the change.
 - Use `verification` locally only for advisory feedback on a clean, committed
   tree based on current `upstream/main`.
-- A maintainer must dispatch `Swamp managed verification` for the current pull
-  request head before merge. Any new commit requires a new managed run.
-- Trust-boundary changes must be dispatched by `@funsaized`; proposed controls
-  are verified by the trusted versions on `main`.
+- `Swamp managed verification` runs automatically on every non-draft pull
+  request head and must pass on the current head before merge.
+- Trust-boundary changes pass only in pull requests authored by `@funsaized`
+  from this repository; the gate on `main` enforces this.
 - Metadata-only `nightshift-create-intake` and `nightshift-intake` runs may
   overlap an orchestrated factory run when all callers use the same
   `swamp serve` process.
