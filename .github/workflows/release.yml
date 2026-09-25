@@ -16,7 +16,7 @@ on:
       - docs/releases/**
       - .github/workflows/release.yml
   push:
-    tags: ["v*"]
+    tags: ['v*']
 
 permissions:
   contents: read
