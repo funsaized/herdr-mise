@@ -14,14 +14,15 @@ suffix (for example, `v0.1.0`) is stable.
 
 Pull requests and manual workflow runs build and validate but never publish.
 Only a matching tag can reach the publish job. Do not create a tag until the
-candidate commit, notes, and acceptance record are complete. Published tags
+candidate commit and notes are complete. Published tags
 are immutable: never move, force-update, delete-and-reuse, or otherwise reuse a
 release tag.
 
-The `v0.1.0` stable release is complete; its acceptance contract is retained
-as history in git and in `docs/releases/v0.1.0.md`. The checked-in acceptance
-contract now describes the `v0.2.0` promotion. It must not be reused for another stable release. A future stable release needs a new accepted RC, evidence
-contract, and validator inputs before its tag is created.
+The `v0.1.0` and `v0.2.0` acceptance contracts are retained as release history,
+not requirements for later releases. From `v0.3.0` onward, publication requires
+the tag/version match, successful platform builds, macOS signing and
+notarization, complete stable notes, and exact public assets. The 20-gate
+RC-to-stable evidence document is no longer a publication prerequisite.
 
 Both release classes retain the same three platform archives and three SHA-256
 sidecars, signing/notarization checks, exact-six-asset checks, rerun validation,
@@ -29,78 +30,19 @@ and anonymous public download verification. RCs are marked prerelease and are
 verified not to be Latest. Stable releases are non-prereleases and must become
 the public Latest release.
 
-## Stable acceptance gate
+## Release assembly
 
 Publication first assembles a draft. Retries download and compare every existing
 asset before uploading missing files, then expose the complete set. Existing
 bytes are never overwritten. A timestamp-signed rebuild with different bytes
 fails closed: rerun the publish job using the original retained `release-*`
-artifacts, rather than rebuilding an accepted RC. Build-environment artifacts
+artifacts, rather than rebuilding the release. Build-environment artifacts
 are separate from the six public assets and retained for 30 days.
 
 The Linux release is built on Ubuntu 24.04 (glibc 2.39 baseline); older glibc and
 musl are not claimed supported. Each build retains its actual compiler, Node,
 OS, and libc identities. Supporting older distributions requires a deliberately
 older build sysroot and installation acceptance, not just relaxing the installer.
-
-The gate schema and validator are reusable. Exact accepted RC identities live
-in `acceptance/releases/<stable-tag>.json`; preserve historical manifests.
-The current template and evidence still describe v0.2.0 only. Prepare a future
-candidate with `npm run prepare:acceptance -- v0.3.0 reviewed-rc-evidence.json`.
-Review its stdout as the new manifest, verify the public sidecar hashes, and
-make the intentional version edits listed on stderr. This command never
-publishes or marks a manual gate passed. Collect fresh evidence bound to the
-new RC and promotion commit; old evidence cannot satisfy a new promotion.
-
-Stable publication fails closed before release creation or upload. The
-`stable_acceptance` workflow job runs only for a stable tag and is a dependency
-of `publish`. Configure a protected GitHub environment named `stable-release`
-with the base64-encoded, sanitized JSON record in the
-`STABLE_ACCEPTANCE_EVIDENCE_BASE64` environment secret. Missing, empty,
-malformed, incomplete, failing, or context-mismatched evidence blocks the job.
-The validator must also emit its exact success marker; exit code zero alone is
-not accepted. RC release workflows do not read this secret.
-
-The checked-in acceptance validator owns the reusable gate list and
-JSON Schema. Its evidence has two deliberately separate identities:
-
-- `accepted_rc` identifies public prerelease `v0.2.0-rc.1`, its immutable tag
-  commit, and the public archive URLs and SHA-256 values actually exercised.
-  Every required acceptance row repeats that RC identity and references one or
-  more of those exact artifacts. Public-artifact and manual
-  results therefore describe the public RC they really tested.
-- `promotion` identifies the v0.2.0 stable tag, Cargo version, and exact
-  accepted `main` commit. The stable workflow passed its tag/version/commit to
-  the validator and required an exact match before publication.
-
-Stable workflow asset bytes and checksums are not acceptance inputs. In
-particular, the gate never asks an unpublished stable run to prove a public
-download, and timestamped macOS signatures cannot invalidate
-already-honest RC acceptance evidence.
-
-Keep working evidence outside version control (the root local path
-`.stable-acceptance-evidence.json` is ignored). The environment record must use
-generic tester identities and sanitized references. It must not contain real
-agent names, workspace paths, private Herdr payloads, credentials, personal
-deployment identifiers, or unresolved placeholders. Never manufacture `PASS`
-for a manual gate.
-
-### Recorded v0.1.0 RC-to-stable flow
-
-1. Public `v0.1.0-rc.1` archives, sidecars, URLs, targets, checksums, and the
-   immutable RC tag commit were recorded and frozen.
-2. Every BL-006 automated, manual, and elapsed multi-day soak gate ran against
-   those installed public RC artifacts.
-3. One exact `main` commit containing the stable Cargo version and release-notes
-   template was selected and recorded in `promotion`.
-4. The complete evidence record was validated, sanitized, and configured in the
-   protected environment before tagging.
-5. The stable tag was created at the accepted commit, and the workflow validated
-   promotion identity and RC acceptance before publication.
-
-This process does not use a failed stable job to discover a digest, construct
-evidence, or unlock a rerun. A rerun may only retry a transient failure with the
-same already-complete inputs; it is not an evidence-generation phase.
 
 ## Stable release notes
 
@@ -138,12 +80,10 @@ Before tagging:
    stable release, also confirm `docs/releases/v<VERSION>.md` contains complete
    release notes. Do not leave the manifest or installer pointing at an
    unpublished version after the release workflow completes.
-3. For a stable tag, install the new accepted-RC contract and complete its
-   protected-environment evidence before creating the tag.
-4. Run the relevant local gates from [CONTRIBUTING.md](../CONTRIBUTING.md).
-5. Confirm the Apple signing and notarization secrets are configured for tagged
+3. Run the relevant local checks from [CONTRIBUTING.md](../CONTRIBUTING.md).
+4. Confirm the Apple signing and notarization secrets are configured for tagged
    macOS jobs.
-6. Confirm all three archive/sidecar pairs will use the names resolved by both
+5. Confirm all three archive/sidecar pairs will use the names resolved by both
    plugin and standalone installer modes.
 
 ### Apple trust setup
@@ -250,17 +190,15 @@ label approaches retirement. Do not silently drop the Intel archive.
 
 ## Failure recovery
 
-Before creating the stable tag, fix candidate source, notes template, or
-evidence on a new commit; select that exact commit for promotion; regenerate the
-promotion block; and revalidate. A missing secret, rejected schema, promotion
-mismatch, failed notarization, or incomplete notes is a safe blocked condition,
-not grounds to bypass a gate or fabricate RC acceptance.
+Before creating the stable tag, fix candidate source or notes template on a new
+commit and run the relevant checks. A missing signing secret, failed
+notarization, or incomplete notes is a safe blocked condition, not grounds to
+bypass a release safeguard.
 
 If the immutable stable tag has already been pushed and its run blocks before
-release creation, do not move or reuse it and do not harvest that failed run's
-artifacts to rewrite evidence. A purely transient retry may use the same complete
-inputs. Any source, notes-template, promotion-commit, or acceptance correction
-requires fix-forward with a new version and new tag.
+release creation, do not move or reuse it. A purely transient retry may use the
+same complete inputs. Any source or notes-template correction requires
+fix-forward with a new version and new tag.
 
 If a rerun finds an existing matching release, it validates the release class,
 tag, display name, and absence of unexpected assets before replacing the expected six
@@ -286,8 +224,8 @@ xcrun notarytool log SUBMISSION_ID \
 
 Wrong certificate type, missing hardened runtime or timestamp, and insufficient
 Team Key permissions are common causes. Fix credentials or source as
-appropriate; credential-only transient failures may be rerun, while source or
-acceptance changes require a new version and tag.
+appropriate; credential-only transient failures may be rerun, while source
+changes require a new version and tag.
 
 If public macOS signature verification fails, inspect the extracted public
 artifact with `codesign --verify --deep --strict --verbose=2 ./herdr-mise` and

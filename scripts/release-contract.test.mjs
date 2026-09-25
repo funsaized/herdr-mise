@@ -14,7 +14,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { classifyReleaseTag, validateReleaseTag } from "./release-policy.mjs";
-import { evaluateStableReleaseGate } from "./stable-release-gate.mjs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const cargo = readFileSync("server/Cargo.toml", "utf8");
@@ -29,10 +28,6 @@ const browserSmoke = readFileSync("scripts/smoke-browser.mjs", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const operations = readFileSync("docs/operations.md", "utf8");
 const releasing = readFileSync("docs/releasing.md", "utf8");
-const stableAcceptance = readFileSync("docs/stable-acceptance.md", "utf8");
-const stableAcceptanceTemplate = JSON.parse(
-  readFileSync("docs/stable-acceptance.template.json", "utf8"),
-);
 
 const publishBlocks = [
   ...workflow.matchAll(
@@ -219,77 +214,12 @@ function publishFixture(options = {}) {
   };
 }
 
-test("stable release contract handles the public upgrade truthfully", () => {
-  assert.match(releasing, /must not be reused for another stable release/);
+test("release runbook retains tag, signing, and retirement safeguards", () => {
   assert.match(releasing, /narrow self-reference exception/);
   assert.match(releasing, /RC release deletion, RC\s+remote-tag deletion/);
   assert.match(releasing, /APPLE_CERTIFICATE_P12_BASE64/);
   assert.match(releasing, /git tag -a "\$TAG"/);
   assert.match(releasing, /There is no stapling target/);
-
-  assert.match(stableAcceptance, /valid prior public version/);
-  assert.match(stableAcceptance, /real installer\s+upgrade/);
-  assert.match(stableAcceptance, /isolated install\s+root/);
-  assert.match(stableAcceptance, /production public-artifact\s+verifier/);
-  assert.match(stableAcceptance, /not\s+a synthetic first-release fixture/);
-  assert.match(stableAcceptance, /no\s+temporary selector/);
-  assert.match(stableAcceptance, /```sh\nset -e\n/);
-  assert.match(
-    stableAcceptance,
-    /https:\/\/github\.com\/funsaized\/herdr-mise\/releases\/download\/v0\.2\.0-rc\.1/,
-  );
-  assert.match(
-    stableAcceptance,
-    /https:\/\/github\.com\/funsaized\/herdr-mise\/releases\/download\/v0\.1\.0/,
-  );
-  assert.match(stableAcceptance, /INSTALL_ROOT\/herdr-mise\/current\.next/);
-  assert.match(
-    stableAcceptance,
-    /e4cf8c06845a8fe764042b38816004aa4e23e5abed209f2245ea3b00ec2b9b57/,
-  );
-  assert.match(
-    stableAcceptance,
-    /test -x "\$install_root\/herdr-mise\/0\.1\.0\/bin\/herdr-mise"/,
-  );
-  assert.match(stableAcceptance, /current\/bin\/herdr-mise" --tui/);
-  assert.match(stableAcceptance, /confirm the first render,\s+then press `q`/i);
-  assert.match(stableAcceptance, /current\/bin\/herdr-mise" --version/);
-  assert.match(
-    stableAcceptance,
-    /Manual screen-reader speech listening is not a release gate[\s\S]*not recorded\s+as `PASS`/,
-  );
-  assert.equal(
-    stableAcceptanceTemplate.gates.some(
-      ({ gate_id }) => gate_id === "voiceover-speech-focus",
-    ),
-    false,
-    "screen-reader speech listening must not become a required PASS row",
-  );
-
-  const upgrade = stableAcceptanceTemplate.gates.find(
-    ({ gate_id }) => gate_id === "upgrade",
-  );
-  assert.ok(upgrade, "the schema-compatible upgrade gate ID must be retained");
-  assert.match(upgrade.command_or_action, /public v0\.1\.0-to-RC upgrade/);
-  assert.match(upgrade.command_or_action, /isolated install root/);
-  assert.match(
-    upgrade.command_or_action,
-    /production public-artifact verifier/,
-  );
-  assert.match(upgrade.command_or_action, /exact RC checksum and path/);
-  assert.match(
-    upgrade.command_or_action,
-    /prior public v0\.1\.0 release remains available for rollback/,
-  );
-  assert.match(
-    upgrade.command_or_action,
-    /INSTALL_ROOT\/herdr-mise\/current\.next/,
-  );
-  assert.match(upgrade.command_or_action, /launch succeeds from current/);
-  assert.doesNotMatch(upgrade.command_or_action, /;/);
-
-  assert.match(workflow, /environment: stable-release/);
-  assert.match(workflow, /STABLE_ACCEPTANCE_EVIDENCE_BASE64/);
 });
 
 test("strict release tags distinguish prereleases from stable releases", () => {
@@ -337,158 +267,16 @@ test("release tags must exactly match the authoritative Cargo version", () => {
   );
 });
 
-function createStableGateFixture(result = "PASS", emitPassMarker = true) {
-  const temp = mkdtempSync(join(tmpdir(), "herdr-mise-stable-gate-"));
-  const evidence = join(temp, "evidence.json");
-  const validator = join(temp, "validator.mjs");
-  const tag = "v0.1.0";
-  const commit = "a".repeat(40);
-  writeFileSync(
-    evidence,
-    `${JSON.stringify({
-      accepted_rc: {
-        tag: "v0.1.0-rc.1",
-        version: "0.1.0-rc.1",
-        commit: "b".repeat(40),
-        artifacts: [
-          {
-            target: "aarch64-apple-darwin",
-            archive: "herdr-mise-v0.1.0-rc.1-aarch64-apple-darwin.tar.gz",
-            sha256: "c".repeat(64),
-          },
-        ],
-      },
-      promotion: {
-        tag,
-        version: "0.1.0",
-        commit,
-      },
-      result,
-    })}\n`,
-  );
-  writeFileSync(
-    validator,
-    `import { readFileSync } from "node:fs";
-const value = (name) => process.argv[process.argv.indexOf(name) + 1];
-const evidence = JSON.parse(readFileSync(value("--evidence"), "utf8"));
-const candidate = evidence.promotion;
-const exact = candidate.tag === value("--promotion-tag") &&
-  candidate.version === value("--promotion-version") &&
-  candidate.commit === value("--promotion-commit");
-if (!exact || evidence.result !== "PASS") process.exit(1);
-${emitPassMarker ? 'process.stdout.write("acceptance_evidence=PASS\\n");' : ""}
-`,
-  );
-  return { temp, evidence, validator, tag, commit };
-}
-
-test("RC release evaluation does not require stable acceptance evidence", () => {
-  assert.deepEqual(
-    evaluateStableReleaseGate({
-      tag: "v0.1.0-rc.1",
-      cargoVersion: "0.1.0-rc.1",
-      commit: "a".repeat(40),
-    }),
-    { required: false, releaseClass: "prerelease" },
-  );
-});
-
-test("stable release evaluation fails closed without evidence", () => {
-  const fixture = createStableGateFixture();
-  try {
-    assert.throws(
-      () =>
-        evaluateStableReleaseGate({
-          tag: fixture.tag,
-          cargoVersion: "0.1.0",
-          commit: fixture.commit,
-          validatorPath: fixture.validator,
-        }),
-      /stable acceptance evidence path is required/i,
-    );
-  } finally {
-    rmSync(fixture.temp, { recursive: true, force: true });
-  }
-});
-
-test("stable release evaluation rejects failed or incomplete evidence", () => {
-  const fixture = createStableGateFixture("NOT_RUN");
-  try {
-    assert.throws(
-      () =>
-        evaluateStableReleaseGate({
-          tag: fixture.tag,
-          cargoVersion: "0.1.0",
-          commit: fixture.commit,
-          evidencePath: fixture.evidence,
-          validatorPath: fixture.validator,
-        }),
-      /acceptance evidence validation failed/i,
-    );
-  } finally {
-    rmSync(fixture.temp, { recursive: true, force: true });
-  }
-});
-
-test("stable release evaluation rejects a validator that exits zero without its PASS marker", () => {
-  const fixture = createStableGateFixture("PASS", false);
-  try {
-    assert.throws(
-      () =>
-        evaluateStableReleaseGate({
-          tag: fixture.tag,
-          cargoVersion: "0.1.0",
-          commit: fixture.commit,
-          evidencePath: fixture.evidence,
-          validatorPath: fixture.validator,
-        }),
-      /required PASS marker/i,
-    );
-  } finally {
-    rmSync(fixture.temp, { recursive: true, force: true });
-  }
-});
-
-test("stable release evaluation accepts complete RC evidence for the exact promotion", () => {
-  const fixture = createStableGateFixture();
-  try {
-    assert.deepEqual(
-      evaluateStableReleaseGate({
-        tag: fixture.tag,
-        cargoVersion: "0.1.0",
-        commit: fixture.commit,
-        evidencePath: fixture.evidence,
-        validatorPath: fixture.validator,
-      }),
-      {
-        required: true,
-        releaseClass: "stable",
-      },
-    );
-  } finally {
-    rmSync(fixture.temp, { recursive: true, force: true });
-  }
-});
-
-test("workflow gates stable publication before release creation and keeps RCs prereleases", () => {
-  assert.match(workflow, /stable_acceptance:\n[\s\S]*needs: classify_release/);
-  assert.match(workflow, /environment: stable-release/);
-  assert.match(workflow, /STABLE_ACCEPTANCE_EVIDENCE_BASE64/);
-  const stableGate = workflow.indexOf("stable_acceptance:");
-  const publish = workflow.indexOf("publish:");
-  const create = workflow.indexOf("gh release create");
-  assert.ok(stableGate >= 0 && stableGate < publish && publish < create);
-  assert.match(workflow, /needs\.stable_acceptance\.result == 'success'/);
-  const stableJob = workflow.slice(stableGate, publish);
+test("workflow publishes tagged builds without the retired evidence gate", () => {
   assert.doesNotMatch(
-    stableJob,
-    /download-artifact|--artifacts|artifact-sha256/,
+    workflow,
+    /stable_acceptance:|STABLE_ACCEPTANCE_EVIDENCE_BASE64/,
   );
-  assert.match(stableJob, /--promotion-tag "\$GITHUB_REF_NAME"/);
-  assert.match(stableJob, /--promotion-commit "\$GITHUB_SHA"/);
+  assert.match(workflow, /needs: \[build, classify_release\]/);
+  assert.match(workflow, /needs\.build\.result == 'success'/);
   assert.match(workflow, /--prerelease/);
-  assert.match(workflow, /release_class.*prerelease/);
-  assert.match(workflow, /release_class.*stable/);
+  assert.match(workflow, /prerelease\)/);
+  assert.match(workflow, /stable\)/);
   assert.match(workflow, /expected_prerelease/);
   assert.match(workflow, /--retry 3 --retry-all-errors/);
   assert.match(
@@ -812,7 +600,7 @@ test("release publication remains draft when identity resolution or asset upload
   }
 });
 
-test("public verification survives the intentionally skipped prerelease stable gate", () => {
+test("public verification follows successful publication", () => {
   assert.match(workflow, /verify-public-release:/);
   assert.match(workflow, /always\(\) &&/);
   assert.match(workflow, /needs\.publish\.result == 'success' &&/);

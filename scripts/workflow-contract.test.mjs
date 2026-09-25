@@ -786,7 +786,6 @@ test("shared verification is subject-bounded and never publishes evidence", () =
     "extensions/reports/**",
     "rust-toolchain.toml",
     "acceptance/**",
-    "docs/acceptance-evidence.schema.json",
     ".agents/skills/**",
     "agent-constraints/**",
   ]);
