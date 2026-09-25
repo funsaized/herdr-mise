@@ -32,34 +32,50 @@ async function githubJson(url: string, fetcher: Fetcher, signal?: AbortSignal) {
   return await response.json();
 }
 
-async function tagCommit(tag: string, fetcher: Fetcher, signal?: AbortSignal) {
-  const ref = (await githubJson(
-    `https://api.github.com/repos/${REPOSITORY}/git/ref/tags/${encodeURIComponent(tag)}`,
-    fetcher,
+type TagResolver = (signal?: AbortSignal) => Promise<Map<string, string>>;
+
+/**
+ * Resolve every tag to its commit with one anonymous `git ls-remote`, which is
+ * not subject to the 60-request REST limit. Peeled `^{}` entries win, so
+ * annotated tags resolve to their commit rather than the tag object.
+ */
+export async function lsRemoteTags(signal?: AbortSignal) {
+  const output = await new Deno.Command("git", {
+    args: ["ls-remote", "--tags", `https://github.com/${REPOSITORY}.git`],
+    env: {
+      PATH: Deno.env.get("PATH") ?? "",
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+    },
+    clearEnv: true,
+    stdout: "piped",
+    stderr: "piped",
     signal,
-  )) as { ref?: unknown; object?: { type?: unknown; sha?: unknown } };
-  if (ref.ref !== `refs/tags/${tag}` || !ref.object) return null;
-  let object = ref.object;
-  for (let depth = 0; depth < 5 && object.type === "tag"; depth++) {
-    if (typeof object.sha !== "string" || !SHA.test(object.sha)) return null;
-    const annotated = (await githubJson(
-      `https://api.github.com/repos/${REPOSITORY}/git/tags/${object.sha}`,
-      fetcher,
-      signal,
-    )) as { object?: { type?: unknown; sha?: unknown } };
-    if (!annotated.object) return null;
-    object = annotated.object;
+  }).output();
+  if (!output.success) throw new Error("git ls-remote of Herdr tags failed");
+  return parseTagRefs(new TextDecoder().decode(output.stdout));
+}
+
+export function parseTagRefs(text: string) {
+  const commits = new Map<string, string>();
+  const peeled = new Set<string>();
+  for (const line of text.split("\n")) {
+    const [sha, ref] = line.trim().split("\t");
+    if (!sha || !ref?.startsWith("refs/tags/") || !SHA.test(sha)) continue;
+    const name = ref.slice("refs/tags/".length);
+    if (name.endsWith("^{}")) {
+      commits.set(name.slice(0, -3), sha);
+      peeled.add(name.slice(0, -3));
+    } else if (!peeled.has(name)) commits.set(name, sha);
   }
-  return object.type === "commit" &&
-    typeof object.sha === "string" &&
-    SHA.test(object.sha)
-    ? object.sha
-    : null;
+  return commits;
 }
 
 export async function discoverHerdrReleases(
   fetcher: Fetcher = fetch,
   signal?: AbortSignal,
+  resolveTags: TagResolver = lsRemoteTags,
 ) {
   const fetchedAt = new Date().toISOString();
   const raw = await githubJson(
@@ -69,6 +85,7 @@ export async function discoverHerdrReleases(
   );
   if (!Array.isArray(raw))
     throw new Error("GitHub releases response is not an array");
+  const commits = await resolveTags(signal);
   const releases: Array<z.infer<typeof Release> & { prerelease: boolean }> = [];
   for (const value of raw as ApiRelease[]) {
     if (
@@ -82,7 +99,7 @@ export async function discoverHerdrReleases(
         : !STABLE_TAG.test(value.tag_name))
     )
       continue;
-    const commit = await tagCommit(value.tag_name, fetcher, signal);
+    const commit = commits.get(value.tag_name);
     if (!commit) continue;
     releases.push({
       repository: REPOSITORY,

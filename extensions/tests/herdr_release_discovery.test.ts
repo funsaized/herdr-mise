@@ -1,5 +1,8 @@
 import { discoverReleases } from "../reports/herdr_release_discovery.ts";
-import { discoverHerdrReleases } from "../models/github_herdr_release.ts";
+import {
+  discoverHerdrReleases,
+  parseTagRefs,
+} from "../models/github_herdr_release.ts";
 Deno.test("new public releases are candidates, never automatically supported", () => {
   const supported = ["0.8.2"];
   const release = (tag: string, publishedAt: string) => ({
@@ -86,7 +89,19 @@ Deno.test("release discovery dereferences tags and keeps only the newest preview
       new Response(JSON.stringify(match?.[1]), { status: match ? 200 : 404 }),
     );
   }) as typeof fetch;
-  const result = await discoverHerdrReleases(fetcher);
+  // Resolve tags exactly as `git ls-remote --tags` reports them, including a
+  // peeled annotated tag whose tag-object sha must not be used.
+  const tags = parseTagRefs(
+    [
+      `${sha}\trefs/tags/v0.9.0`,
+      `${"c".repeat(40)}\trefs/tags/v0.9.0^{}`,
+      `${"d".repeat(40)}\trefs/tags/preview-2026-09-06-abcdef123456`,
+      `${"e".repeat(40)}\trefs/tags/preview-2026-09-08-fedcba654321`,
+    ].join("\n"),
+  );
+  const result = await discoverHerdrReleases(fetcher, undefined, () =>
+    Promise.resolve(tags),
+  );
   if (result.stable[0]?.commit !== "c".repeat(40))
     throw new Error("annotated stable tag was not dereferenced");
   if (result.preview?.tag !== "preview-2026-09-08-fedcba654321")
