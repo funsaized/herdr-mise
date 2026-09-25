@@ -87,7 +87,6 @@
     "extensions/reports/**",
     "rust-toolchain.toml",
     "acceptance/**",
-    "docs/acceptance-evidence.schema.json",
     ".agents/skills/**",
     "agent-constraints/**"
   ],

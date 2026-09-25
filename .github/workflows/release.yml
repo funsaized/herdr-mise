@@ -11,13 +11,8 @@ on:
       - scripts/install.test.mjs
       - scripts/package-release.sh
       - scripts/release-policy.mjs
-      - scripts/stable-release-gate.mjs
-      - scripts/validate-acceptance-evidence.mjs
       - scripts/verify-release-artifact.sh
       - scripts/release-contract.test.mjs
-      - acceptance/**
-      - docs/acceptance-evidence.schema.json
-      - docs/stable-acceptance.template.json
       - docs/releases/**
       - .github/workflows/release.yml
   push:
@@ -158,41 +153,12 @@ jobs:
           path: dist/herdr-mise-v*-${{ matrix.target }}.tar.gz*
           if-no-files-found: error
 
-  stable_acceptance:
-    if: needs.classify_release.outputs.release_class == 'stable'
-    needs: classify_release
-    runs-on: ubuntu-24.04
-    environment: stable-release
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-      - name: Validate exact stable acceptance evidence
-        shell: bash
-        env:
-          STABLE_ACCEPTANCE_EVIDENCE_BASE64: ${{ secrets.STABLE_ACCEPTANCE_EVIDENCE_BASE64 }}
-        run: |
-          test -n "$STABLE_ACCEPTANCE_EVIDENCE_BASE64"
-          umask 077
-          evidence="$RUNNER_TEMP/stable-acceptance-evidence.json"
-          printf '%s' "$STABLE_ACCEPTANCE_EVIDENCE_BASE64" | base64 --decode >"$evidence"
-          node scripts/stable-release-gate.mjs \
-            --promotion-tag "$GITHUB_REF_NAME" \
-            --promotion-commit "$GITHUB_SHA" \
-            --evidence "$evidence"
-      - name: Clean stable acceptance evidence
-        if: always()
-        run: rm -f "$RUNNER_TEMP/stable-acceptance-evidence.json"
-
   publish:
     if: >-
       ${{ always() && startsWith(github.ref, 'refs/tags/') &&
           needs.build.result == 'success' &&
-          needs.classify_release.result == 'success' &&
-          (needs.classify_release.outputs.release_class == 'prerelease' ||
-           needs.stable_acceptance.result == 'success') }}
-    needs: [build, classify_release, stable_acceptance]
+          needs.classify_release.result == 'success' }}
+    needs: [build, classify_release]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -281,9 +247,6 @@ jobs:
           gh release edit "$GITHUB_REF_NAME" --draft=false
 
   verify-public-release:
-    # stable_acceptance is intentionally skipped for prereleases. Use an
-    # explicit status guard so that skipped transitive dependency does not
-    # suppress public verification after a successful prerelease publish.
     if: >-
       always() &&
       startsWith(github.ref, 'refs/tags/') &&

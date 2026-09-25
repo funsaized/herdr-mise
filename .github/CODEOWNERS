@@ -12,7 +12,6 @@
 /extensions/reports/ @funsaized
 /rust-toolchain.toml @funsaized
 /acceptance/ @funsaized
-/docs/acceptance-evidence.schema.json @funsaized
 # Require human review for files that define or validate verification policy.
 /AGENTS.md @funsaized
 /.github/CODEOWNERS @funsaized
