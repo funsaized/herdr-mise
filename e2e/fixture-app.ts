@@ -73,6 +73,10 @@ export async function startFixtureApp({
       fixtureServer = createServer((socket) => {
         sockets.add(socket);
         socket.on("close", () => sockets.delete(socket));
+        // The app may reset a subscription at any time (slow runners make this
+        // common); a later write then fails with EPIPE/ECONNRESET. Drop the
+        // connection instead of surfacing an unhandled error in a test.
+        socket.on("error", () => socket.destroy());
         let request = "";
         socket.on("data", (chunk) => {
           request += chunk;
