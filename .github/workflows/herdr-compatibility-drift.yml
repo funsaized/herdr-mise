@@ -80,9 +80,11 @@ jobs:
         if: always()
         run: |
           swamp data get verification-rust preview-canary-result --json > preview-canary-result.json || printf '{"status":"unavailable"}\n' > preview-canary-result.json
-          printf '\n### Preview canary\n```json\n' >> "$GITHUB_STEP_SUMMARY"
-          cat preview-canary-result.json >> "$GITHUB_STEP_SUMMARY"
-          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf '\n### Preview canary\n```json\n'
+            cat preview-canary-result.json
+            printf '\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload sanitized preview canary evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

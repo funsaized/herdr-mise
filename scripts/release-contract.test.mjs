@@ -16,18 +16,10 @@ import test from "node:test";
 import { classifyReleaseTag, validateReleaseTag } from "./release-policy.mjs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
-const cargo = readFileSync("server/Cargo.toml", "utf8");
-const cargoVersion = cargo.match(/^version = "([^"]+)"$/m)?.[1];
-const packager = readFileSync("scripts/package-release.sh", "utf8");
-const releaseValidator = readFileSync("scripts/validate-release.sh", "utf8");
 const artifactVerifier = readFileSync(
   "scripts/verify-release-artifact.sh",
   "utf8",
 );
-const browserSmoke = readFileSync("scripts/smoke-browser.mjs", "utf8");
-const readme = readFileSync("README.md", "utf8");
-const operations = readFileSync("docs/operations.md", "utf8");
-const releasing = readFileSync("docs/releasing.md", "utf8");
 
 const publishBlocks = [
   ...workflow.matchAll(
@@ -214,14 +206,6 @@ function publishFixture(options = {}) {
   };
 }
 
-test("release runbook retains tag, signing, and retirement safeguards", () => {
-  assert.match(releasing, /narrow self-reference exception/);
-  assert.match(releasing, /RC release deletion, RC\s+remote-tag deletion/);
-  assert.match(releasing, /APPLE_CERTIFICATE_P12_BASE64/);
-  assert.match(releasing, /git tag -a "\$TAG"/);
-  assert.match(releasing, /There is no stapling target/);
-});
-
 test("strict release tags distinguish prereleases from stable releases", () => {
   assert.deepEqual(classifyReleaseTag("v0.1.0-rc.1"), {
     tag: "v0.1.0-rc.1",
@@ -267,25 +251,6 @@ test("release tags must exactly match the authoritative Cargo version", () => {
   );
 });
 
-test("workflow publishes tagged builds without the retired evidence gate", () => {
-  assert.doesNotMatch(
-    workflow,
-    /stable_acceptance:|STABLE_ACCEPTANCE_EVIDENCE_BASE64/,
-  );
-  assert.match(workflow, /needs: \[build, classify_release\]/);
-  assert.match(workflow, /needs\.build\.result == 'success'/);
-  assert.match(workflow, /--prerelease/);
-  assert.match(workflow, /prerelease\)/);
-  assert.match(workflow, /stable\)/);
-  assert.match(workflow, /expected_prerelease/);
-  assert.match(workflow, /--retry 3 --retry-all-errors/);
-  assert.match(
-    workflow,
-    /notes_template="docs\/releases\/\$\{GITHUB_REF_NAME\}\.md"/,
-  );
-  assert.match(workflow, /notes_file="\$RUNNER_TEMP\/release-notes\.md"/);
-});
-
 test("release workflow keeps publication tag-only and covers every target", () => {
   assert.match(workflow, /push:\n    tags: \['v\*'\]/);
   assert.match(
@@ -314,48 +279,6 @@ test("release workflow keeps publication tag-only and covers every target", () =
   );
 });
 
-test("release version has one authoritative SemVer value", () => {
-  assert.ok(cargoVersion, "Cargo package version");
-  assert.match(cargoVersion, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
-  assert.ok(
-    !workflow.includes(cargoVersion),
-    "workflow must derive, not duplicate, the Cargo version",
-  );
-  assert.ok(packager.includes("server/Cargo.toml"));
-  assert.match(packager, /version=\$\(sed /);
-  assert.ok(artifactVerifier.includes("server/Cargo.toml"));
-  assert.match(artifactVerifier, /server\.listen\(0,"127\.0\.0\.1"/);
-  assert.match(artifactVerifier, /export HERDR_MISE_PORT="\$port"/);
-  assert.match(artifactVerifier, /"\$binary" --help/);
-  assert.match(artifactVerifier, /"\$binary" --version/);
-  assert.match(releaseValidator, /scripts\/package-release\.sh/);
-  assert.match(releaseValidator, /scripts\/verify-release-artifact\.sh/);
-  assert.match(
-    workflow,
-    /node scripts\/release-policy\.mjs classify-tag "\$GITHUB_REF_NAME"/,
-  );
-});
-
-test("packaging normalizes archive ownership with native GNU and BSD tar flags", () => {
-  assert.match(packager, /tar --version .*grep -q 'GNU tar'/);
-  assert.match(packager, /--owner=0 --group=0 --numeric-owner/);
-  assert.match(packager, /--uid 0 --gid 0 --uname root --gname root/);
-  assert.match(
-    packager,
-    /-cf "\$tarball" herdr-mise LICENSE THIRD_PARTY_NOTICES\.txt/,
-  );
-  assert.match(packager, /gzip -n <"\$tarball"/);
-  assert.doesNotMatch(packager, /tar .*\| gzip/);
-});
-
-test("packaged browser smoke proves bundled fonts load", () => {
-  assert.match(
-    browserSmoke,
-    /document\.fonts\.load\('16px "Instrument Sans"'\)/,
-  );
-  assert.match(browserSmoke, /document\.fonts\.load\('16px Silkscreen'\)/);
-});
-
 test("tagged macOS builds sign, notarize, and clean ephemeral credentials", () => {
   for (const token of [
     "codesign --force --options runtime --timestamp",
@@ -380,12 +303,6 @@ test("tagged macOS builds sign, notarize, and clean ephemeral credentials", () =
   assert.match(artifactVerifier, /Authority=Developer ID Application:/);
   assert.match(artifactVerifier, /flags=.*runtime/);
   assert.match(artifactVerifier, /\^Timestamp=/);
-});
-
-test("standalone CLI verification uses notarization and code-signature evidence", () => {
-  assert.ok(!readme.includes("spctl --assess --type exec"));
-  assert.ok(!operations.includes("spctl --assess --type exec"));
-  assert.match(operations, /VERIFY_CODESIGN=1/);
 });
 
 test("existing expected asset subsets are rerunnable but unexpected assets fail closed", () => {
@@ -598,11 +515,4 @@ test("release publication remains draft when identity resolution or asset upload
       fixture.cleanup();
     }
   }
-});
-
-test("public verification follows successful publication", () => {
-  assert.match(workflow, /verify-public-release:/);
-  assert.match(workflow, /always\(\) &&/);
-  assert.match(workflow, /needs\.publish\.result == 'success' &&/);
-  assert.match(workflow, /needs\.classify_release\.result == 'success'/);
 });

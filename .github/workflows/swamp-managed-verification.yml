@@ -235,7 +235,9 @@ jobs:
           CONTROL_ROOT: ${{ runner.temp }}/control
         run: swamp extension install --repo-dir "$CONTROL_ROOT"
       - name: Resolve Swamp Deno runtime
-        run: swamp doctor extensions --repo-dir "$RUNNER_TEMP/control" --json | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const p=JSON.parse(s).denoPath;if(!p)process.exit(1);require("node:fs").appendFileSync(process.env.GITHUB_ENV,`DENO_EXEC_PATH=${p}\n`)})'
+        run: |
+          deno_path="$(swamp doctor extensions --repo-dir "$RUNNER_TEMP/control" --json | jq -er '.denoPath')"
+          echo "DENO_EXEC_PATH=$deno_path" >> "$GITHUB_ENV"
       - name: Run shared Swamp verification
         env:
           NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-download-cache
