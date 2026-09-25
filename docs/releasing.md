@@ -161,18 +161,25 @@ asset anonymously and rerun its checksum and archive verifier.
 
 After the release passes public verification:
 
-1. Copy the three SHA-256 values from the published sidecars, never local
-   rebuilds.
-2. Open a `funsaized/homebrew-tap` pull request updating the formula version,
-   three URLs, and three hashes.
+1. Regenerate the formula from the published sidecars, never local rebuilds,
+   and open the tap pull request:
+
+   ```sh
+   gh repo clone funsaized/homebrew-tap /tmp/homebrew-tap
+   node scripts/homebrew-formula.mjs "$TAG" \
+     < /tmp/homebrew-tap/Formula/herdr-mise.rb > /tmp/herdr-mise.rb
+   mv /tmp/herdr-mise.rb /tmp/homebrew-tap/Formula/herdr-mise.rb
+   ```
+
+2. Commit the formula on a branch in the tap and open its pull request.
 3. Require tap CI to audit, install, test, and uninstall the formula on macOS
    arm64, macOS x86_64 while runners exist, and Linux x86_64.
 4. Merge the tap update and record its pull request or commit in the release
    checklist.
 5. Verify `brew update && brew upgrade herdr-mise` from the preceding version.
 
-Keep tap updates manual until at least two releases show cross-repository
-automation is worth its token and maintenance cost.
+The script rejects prereleases and malformed or mismatched sidecars. Opening the
+tap pull request stays a maintainer action, so no cross-repository token exists.
 
 ### Standalone CLI notarization
 
@@ -252,6 +259,9 @@ verification and explicit authorization, retire RCs in this order:
 1. Delete the obsolete RC GitHub release records.
 2. Confirm the stable release and assets remain publicly correct.
 3. Delete the corresponding remote RC tags.
+
+`sh scripts/retire-rcs.sh "$TAG"` shows the RC releases and tags for a stable
+tag; add `--apply` to perform exactly these steps in this order.
 
 Do not delete local or remote RC tags first, do not delete the stable tag, and
 do not close release issues merely because stable automation started.
