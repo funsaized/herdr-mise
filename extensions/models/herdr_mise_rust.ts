@@ -684,7 +684,7 @@ async function runChecks(
 /** Project-specific Rust verification model. */
 export const model = {
   type: "@funsaized/herdr-mise-rust",
-  version: "2026.09.12.3",
+  version: "2026.09.25.1",
   globalArguments: GlobalArguments,
   files: rustReceiptFiles,
   resources: {
@@ -833,7 +833,7 @@ export const model = {
           "verification-result",
           [
             { name: "format", args: ["fmt", "--all", "--check"] },
-            { name: "check", args: ["check", "--workspace", "--locked"] },
+            // clippy type-checks every target, so a separate `cargo check` is redundant.
             {
               name: "clippy",
               args: [

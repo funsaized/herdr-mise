@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { computeLayout } from "../client/src/scene/layout";
+import { visualOrigin } from "./visual-origin";
 import {
   watchErrors,
   sceneMetrics,
@@ -352,7 +353,7 @@ test("preview explorer reloads shareable scenes and preserves larger URL rosters
     escapedRequests: string[] = [];
   page.on("websocket", (socket) => sockets.push(socket.url()));
   page.on("request", (request) => {
-    if (new URL(request.url()).origin !== "http://127.0.0.1:4174")
+    if (new URL(request.url()).origin !== visualOrigin)
       escapedRequests.push(request.url());
   });
   await page.setViewportSize({ width: 320, height: 640 });
@@ -458,7 +459,7 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
   page.on("websocket", (socket) => sockets.push(socket.url()));
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.host !== "127.0.0.1:4174" || url.port === "8686")
+    if (url.origin !== visualOrigin || url.port === "8686")
       escapedRequests.push(request.url());
   });
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -585,7 +586,7 @@ test("TUI recording respects viewport bounds and serves local assets", async ({
   page.on("websocket", (socket) => sockets.push(socket.url()));
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.host !== "127.0.0.1:4174" || url.port === "8686")
+    if (url.origin !== visualOrigin || url.port === "8686")
       escapedRequests.push(request.url());
   });
   await page.setViewportSize({ width: 901, height: 641 });

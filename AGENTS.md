@@ -56,4 +56,6 @@ the full tree, and `swamp help model method run` scopes to a subtree.
   overlap an orchestrated factory run when all callers use the same
   `swamp serve` process.
 - All other Swamp workflows remain mutually exclusive in one checkout because
-  they may share checkout files, build outputs, or runtime processes.
+  they may share checkout files and build outputs. Separate worktrees may run
+  them concurrently: each checkout derives its own browser-test port
+  (override with `HERDR_MISE_VISUAL_PORT`).

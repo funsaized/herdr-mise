@@ -276,6 +276,7 @@ export const extension = {
             ),
           commit: Sha,
           baseCommit: Sha,
+          waitMinutes: z.number().int().min(0).max(90).default(30),
         }),
         execute: async (
           args: {
@@ -283,6 +284,7 @@ export const extension = {
             prUrl: string;
             commit: string;
             baseCommit: string;
+            waitMinutes: number;
           },
           context: Context,
         ) => {
@@ -309,13 +311,24 @@ export const extension = {
               );
           };
           await checkCurrent();
-          const statuses = await api(
-            `commits/${args.commit}/statuses?per_page=100`,
-          );
-          const status = statuses.find(
-            (entry: { context: string }) =>
-              entry.context === "Swamp managed verification",
-          );
+          const managedStatus = async () =>
+            (await api(`commits/${args.commit}/statuses?per_page=100`)).find(
+              (entry: { context: string }) =>
+                entry.context === "Swamp managed verification",
+            );
+          // Managed verification typically finishes after ship starts; wait
+          // for a terminal status instead of failing on timing alone.
+          const deadline = Date.now() + args.waitMinutes * 60_000;
+          let status = await managedStatus();
+          while (
+            (!status || status.state === "pending") &&
+            Date.now() < deadline
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 30_000));
+            context.signal?.throwIfAborted();
+            await checkCurrent();
+            status = await managedStatus();
+          }
           const match =
             typeof status?.target_url === "string"
               ? status.target_url.match(

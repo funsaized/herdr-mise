@@ -305,7 +305,8 @@ npm --prefix client run test -- --run src/visual-harness.test.ts
 
 The browser acceptance matrix is checked in as `e2e/visual-matrix.spec.ts`
 and runs in CI via `npm run test:visual`. It builds `client/dist-visual`, serves
-it with `vite preview` on port 4174, and covers every preset and
+it with `vite preview` on a per-checkout port (derived from the checkout path;
+override with `HERDR_MISE_VISUAL_PORT`), and covers every preset and
 supported count, the ended 86-board flow, the exact dinner URL,
 invalid-query fallback, storage isolation, emitted TUI fixtures, hosted socket
 isolation, and liveness beyond the client stale timeout.

@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { visualOrigin, visualPort } from "./visual-origin";
 const hostedVisualUrl = process.env.HOSTED_VISUAL_URL;
 export default defineConfig({
   testDir: ".",
@@ -32,7 +33,7 @@ export default defineConfig({
       : []),
   ],
   use: {
-    baseURL: hostedVisualUrl ?? "http://127.0.0.1:4174",
+    baseURL: hostedVisualUrl ?? visualOrigin,
     headless: true,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -44,9 +45,9 @@ export default defineConfig({
           (process.env.HERDR_MISE_PREBUILT === "1"
             ? ""
             : "npm --prefix client run build && ") +
-          "cargo build --locked --bin herdr-mise && npm --prefix client run build -- --mode visual && npm --prefix client run preview -- --host 127.0.0.1 --port 4174 --strictPort --outDir dist-visual",
+          `cargo build --locked --bin herdr-mise && npm --prefix client run build -- --mode visual && npm --prefix client run preview -- --host 127.0.0.1 --port ${visualPort} --strictPort --outDir dist-visual`,
         cwd: "..",
-        url: "http://127.0.0.1:4174",
+        url: visualOrigin,
         reuseExistingServer: false,
         timeout: 120_000,
       },
