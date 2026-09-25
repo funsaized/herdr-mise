@@ -1,4 +1,4 @@
-/** Compile approved test names into bounded runner calls, retaining legacy plans. */
+/** Compile approved test names into bounded runner calls. */
 import { z } from "npm:zod@4.4.3";
 import { rustTestArguments } from "./rust_test_receipt.ts";
 import { sourceDigest } from "./test_receipt.ts";
@@ -58,7 +58,8 @@ type Context = {
 };
 
 export function compileTestSelection(value: unknown, args: Args) {
-  if (value === undefined) return [];
+  // Every approved plan carries 1-10 structured selections; there is no
+  // transcript-only fallback.
   const selections = z.array(Selection).min(1).max(10).parse(value);
   return selections.map((selection, index) => {
     const identity = {
@@ -246,7 +247,7 @@ export const extension = {
             ...args,
             preparedAt: new Date().toISOString(),
             planVersion: plan.version,
-            mode: entries.length ? "receipts" : "legacy-transcript",
+            mode: "receipts",
             entries,
           });
           return { dataHandles: [handle] };

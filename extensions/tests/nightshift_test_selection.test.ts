@@ -18,9 +18,16 @@ const args = {
   subjectRoot: ".",
   expectedGitHead: "a".repeat(40),
 };
-Deno.test("approved test selection uses bounded literal names and preserves legacy plans", () => {
-  if (compileTestSelection(undefined, args).length)
-    throw new Error("Legacy plan acquired fabricated tests");
+Deno.test("approved test selection uses bounded literal names and requires a selection", () => {
+  for (const missing of [undefined, []]) {
+    let rejected = false;
+    try {
+      compileTestSelection(missing, args);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) throw new Error("Plan without a test selection accepted");
+  }
   const entries = compileTestSelection(
     [
       { runner: "node", selector: "fixture [a].*" },
