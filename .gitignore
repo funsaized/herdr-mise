@@ -24,5 +24,8 @@
 .swamp-sources.yaml
 # END swamp managed section
 
+# Runtime factories created per work item by scripts/nightshift-start-factory.mjs
+/models/@swamp/software-factory/nightshift-run-*.yaml
+
 # Checksum-pinned project tools; provisioned through Swamp
 /.tools/

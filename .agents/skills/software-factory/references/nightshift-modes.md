@@ -101,7 +101,9 @@ Classify each item from its fresh status packet, never from the census
 
 Prepared features may enter through `nightshift-create-intake`, and open GitHub
 issues without a matching factory state may enter through `nightshift-intake`.
-Intake stays idempotent and never calls `start` for an existing run.
+Both only bind the issue; then create and start the runtime factory with
+`node scripts/nightshift-start-factory.mjs <item>`, which is idempotent and never
+calls `start` for an existing run. Never create a factory from workflow data.
 
 ## Human boundary
 

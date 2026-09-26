@@ -1,16 +1,16 @@
 {
-  "version": "20260904.044433.0",
-  "tag": "v20260904.044433.0-sha.ab26e35b",
+  "version": "20260926.025243.0",
+  "tag": "v20260926.025243.0-sha.0f086bc8",
   "assets": {
     "aarch64": {
       "name": "swamp-darwin-aarch64",
-      "sha256": "450899aa0f06ee72e9a719789a36b2f2ff89fd517e748cfbd8e8f03a971990f4",
-      "size": 304212866
+      "sha256": "16f561311d678b390e27535c627f4396d87759a6832b5540ac1cd82b4d4ac399",
+      "size": 306954130
     },
     "x86_64": {
       "name": "swamp-darwin-x86_64",
-      "sha256": "31082ae50a5c1737b3438768bdc9081ea75aa9a1adbde874879c4472e038880b",
-      "size": 333075020
+      "sha256": "1b2d5ea21e6ae8bdeca2f88e110e9c48c658ffe3f989019d2d90e18a01cb7f75",
+      "size": 335856303
     }
   }
 }

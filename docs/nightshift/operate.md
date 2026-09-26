@@ -14,7 +14,13 @@ ITEM=123
 npm run swamp:local -- workflow validate nightshift-intake
 npm run swamp:local -- workflow run nightshift-intake \
   --input workItem="$ITEM" --input issueNumber="$ITEM"
+npm run with:swamp-local -- node scripts/nightshift-start-factory.mjs "$ITEM"
 ```
+
+The workflow binds the issue; the script creates `nightshift-run-$ITEM` from
+`nightshift-template` and starts it. Swamp refuses to persist a definition built
+from workflow data, so runtime factories are never created inside a workflow.
+Re-running the script for a started item is a no-op.
 
 For prepared new features, review the non-empty array in
 [`intake/nightshift-features.json`](../../intake/nightshift-features.json), then:
@@ -26,9 +32,9 @@ npm run with:swamp-local -- npm run intake:nightshift
 
 Each entry has a stable `idempotencyKey`, `title`, optional `body`, and optional
 `labels`. Reuse its key on retry. The client retries only model-lock timeouts with
-bounded backoff and retrieves failure reports first. Intake must remain the
-single creator of runtime definitions through the shared server; it is not
-atomic create-if-absent across arbitrary writers.
+bounded backoff and retrieves failure reports first, then starts each item's
+factory. Intake must remain the single creator of runtime definitions through the
+shared server; it is not atomic create-if-absent across arbitrary writers.
 
 ## Drive one issue or stop after planning
 
@@ -111,8 +117,9 @@ failures return to implementation; diagnosed infrastructure/configuration failur
 retry their operational stage. Ask for human input when classification is ambiguous.
 Review a diagnosis before `run doctor --fix`.
 
-Explicit snapshot restoration uses `nightshift-factory-repair` with `modelName`
-and `confirm=repair`, after validation and human authorization to repair. It
+Explicit snapshot restoration uses
+`node scripts/nightshift-start-factory.mjs --repair <item>`, after validation and
+human authorization to repair. It
 preserves model identity and data. Do not use repair to silently migrate an active
 item to a newer template. Avoid local cancellation of server-owned runs on the
 [current runtime](limits.md#shared-server-cancellation).

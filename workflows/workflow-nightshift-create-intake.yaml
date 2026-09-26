@@ -1,6 +1,6 @@
 id: f9b56e21-fd57-49c3-8969-3cd0f153cba6
 name: nightshift-create-intake
-description: Idempotently create a GitHub issue and start its Nightshift factory run.
+description: Idempotently create a GitHub issue and bind it to its Nightshift work item.
 tags:
   factory: nightshift
   stage: intake
@@ -49,4 +49,4 @@ jobs:
           - step: create-issue
             condition: { type: succeeded }
     dependsOn: []
-version: 2
+version: 3
