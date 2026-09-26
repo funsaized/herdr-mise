@@ -105,11 +105,11 @@ swamp workflow run verification \
   --input subjectRoot=.
 ```
 
-Before merge, a maintainer reviews the current head and dispatches the
-`Swamp managed verification` GitHub workflow with the pull request number. The
-required status applies only to that exact head; every new commit requires a new
-dispatch. Trust-boundary changes require dispatch by `@funsaized` and run using
-the trusted controls from `main`.
+Every non-draft pull request head is verified automatically by the
+`Swamp managed verification` GitHub workflow; the required status applies only
+to that exact head, and every push starts a new run. Pull requests that change
+trust-boundary paths pass only when authored by `@funsaized` from this
+repository.
 
 See [Managed verification](docs/local-verification.md) for the contributor and
 maintainer runbook.

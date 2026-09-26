@@ -1,15 +1,16 @@
 /** Runs the repository's deterministic Rust verification controls. */
 import { z } from "npm:zod@4.4.3";
-import { subjectPath, subjectRoot } from "./subject_root.ts";
+import {
+  readRegularFile,
+  sha256 as sha256Bytes,
+  subjectPath,
+  subjectRoot,
+} from "./subject_root.ts";
 import {
   rustReceiptFiles,
   rustReceiptMethods,
   rustReceiptResources,
 } from "./rust_test_receipt.ts";
-import {
-  readRegularFile,
-  sha256 as sha256Bytes,
-} from "./verification_evidence.ts";
 
 const GlobalArguments = z.object({});
 const VerifyArguments = z.object({

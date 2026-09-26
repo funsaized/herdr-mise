@@ -64,3 +64,44 @@ export async function subjectPath(
   }
   return join(parent, basename(candidate));
 }
+
+export async function sha256(bytes: Uint8Array | string): Promise<string> {
+  const content =
+    typeof bytes === "string" ? new TextEncoder().encode(bytes) : bytes;
+  return Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", content as BufferSource),
+    ),
+  )
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export function inside(root: string, path: string): string {
+  const absolute = resolve(root, path);
+  const child = relative(root, absolute);
+  if (
+    isAbsolute(child) ||
+    child === ".." ||
+    child.startsWith("../") ||
+    child.startsWith("..\\")
+  ) {
+    throw new Error(`path escapes repository: ${path}`);
+  }
+  return absolute;
+}
+
+/** Read a regular, non-symlinked file that resolves inside root. */
+export async function readRegularFile(
+  root: string,
+  path: string,
+): Promise<Uint8Array> {
+  const absolute = inside(root, path);
+  const info = await Deno.lstat(absolute);
+  if (!info.isFile || info.isSymlink)
+    throw new Error(`${path} is not a regular file`);
+  const realRoot = await Deno.realPath(root);
+  const realPath = await Deno.realPath(absolute);
+  inside(realRoot, realPath);
+  return await Deno.readFile(realPath);
+}

@@ -1,6 +1,5 @@
 /** Owner-operated delivery through the existing authenticated GitHub integration. */
 import { z } from "npm:zod@4.4.3";
-import { validateManagedReceipt } from "./managed_receipt.ts";
 
 const repo = "funsaized/herdr-mise";
 const Sha = z.string().regex(/^[0-9a-f]{40}$/);
@@ -266,7 +265,7 @@ export const extension = {
     {
       require_managed_verification: {
         description:
-          "Verify the trusted gate receipt for the exact current candidate without rerunning local verification",
+          "Require the trusted gate's managed verification status on the exact current candidate",
         arguments: z.object({
           workItem: z.string().regex(/^[1-9][0-9]*$/),
           prUrl: z
@@ -340,119 +339,26 @@ export const extension = {
               "Current candidate needs a successful trusted managed gate",
             );
           const gateRunId = match[1];
+          // Only the trusted gate (always run from main) sets this status, and
+          // only for a successful managed run of this exact head.
           const gate = await api(`actions/runs/${gateRunId}`);
           const workflow = await api(`actions/workflows/${gate.workflow_id}`);
-          const artifacts = (
-            await api(`actions/runs/${gateRunId}/artifacts?per_page=100`)
-          ).artifacts.filter(
-            (artifact: { name: string }) =>
-              artifact.name === "swamp-managed-receipt",
-          );
-          if (
-            artifacts.length !== 1 ||
-            artifacts[0].expired ||
-            artifacts[0].size_in_bytes > 262144
-          )
-            throw new Error(
-              "Managed receipt artifact missing, ambiguous, expired or oversized",
-            );
-          // Reject untrusted workflows before downloading their output.
           if (
             workflow.path !== ".github/workflows/swamp-managed-gate.yml" ||
             gate.event !== "workflow_run" ||
-            gate.head_sha !== args.baseCommit ||
+            gate.head_branch !== "main" ||
             gate.conclusion !== "success"
           )
-            throw new Error(
-              "Status target is not the trusted current-main gate",
-            );
-          const temp = await Deno.makeTempDir({
-            prefix: "nightshift-managed-receipt-",
+            throw new Error("Status target is not the trusted managed gate");
+          await checkCurrent();
+          return record(context, `managed-${args.workItem}-${args.commit}`, {
+            prNumber,
+            headSha: args.commit,
+            baseSha: args.baseCommit,
+            gateRunId,
+            statusId: status.id,
+            verifiedAt: new Date().toISOString(),
           });
-          try {
-            await gh(
-              [
-                "run",
-                "download",
-                gateRunId,
-                "--repo",
-                repo,
-                "--name",
-                "swamp-managed-receipt",
-                "--dir",
-                temp,
-              ],
-              context.signal,
-            );
-            const path = `${temp}/receipt.json`;
-            const info = await Deno.lstat(path);
-            if (!info.isFile || info.isSymlink || info.size > 131072)
-              throw new Error("Managed receipt is not a bounded regular file");
-            const raw = JSON.parse(await Deno.readTextFile(path));
-            if (!/^[1-9][0-9]*$/.test(String(raw.producerRunId)))
-              throw new Error("Invalid producer run identity");
-            const producer = await api(`actions/runs/${raw.producerRunId}`);
-            const contents = async (path: string) => {
-              const data = await api(`contents/${path}?ref=${args.baseCommit}`);
-              if (data.encoding !== "base64")
-                throw new Error("Expected bounded GitHub content");
-              return Uint8Array.from(
-                atob(data.content.replace(/\s/g, "")),
-                (character) => character.charCodeAt(0),
-              );
-            };
-            const digest = async (bytes: Uint8Array) =>
-              [
-                ...new Uint8Array(
-                  await crypto.subtle.digest("SHA-256", bytes as BufferSource),
-                ),
-              ]
-                .map((byte) => byte.toString(16).padStart(2, "0"))
-                .join("");
-            const policyBytes = await contents(
-              "verification/managed-policy.json",
-            );
-            const policy = JSON.parse(new TextDecoder().decode(policyBytes));
-            const receipt = validateManagedReceipt(
-              raw,
-              {
-                prNumber,
-                headSha: args.commit,
-                baseSha: args.baseCommit,
-                gateRunId,
-                maxAgeHours: policy.maxAgeHours,
-                policySha256: await digest(policyBytes),
-                workflowSha256: await digest(
-                  await contents("workflows/workflow-verification.yaml"),
-                ),
-              },
-              gate,
-              workflow,
-              producer,
-            );
-            await checkCurrent();
-            const currentStatuses = await api(
-              `commits/${args.commit}/statuses?per_page=100`,
-            );
-            const currentStatus = currentStatuses.find(
-              (entry: { context: string }) =>
-                entry.context === "Swamp managed verification",
-            );
-            if (
-              currentStatus?.id !== status.id ||
-              currentStatus?.state !== "success"
-            )
-              throw new Error(
-                "Managed status changed during receipt validation",
-              );
-            return record(
-              context,
-              `managed-${args.workItem}-${args.commit}`,
-              receipt,
-            );
-          } finally {
-            await Deno.remove(temp, { recursive: true });
-          }
         },
       },
     },
@@ -662,48 +568,6 @@ export const extension = {
                 ),
               };
           return record(context, "open-pr", result);
-        },
-      },
-    },
-    {
-      dispatch_managed: {
-        description:
-          "Owner-dispatch trusted main verification for an exact PR head",
-        arguments: z.object({ prNumber: Pr, headSha: Sha }),
-        execute: async (
-          args: { prNumber: number; headSha: string },
-          context: Context,
-        ) => {
-          const actor = await gh(
-            ["api", "user", "--jq", ".login"],
-            context.signal,
-          );
-          if (actor !== "funsaized")
-            throw new Error("Trust-boundary dispatch requires funsaized");
-          requireSubject(
-            await view(args.prNumber, context.signal),
-            args.headSha,
-          );
-          await gh(
-            [
-              "workflow",
-              "run",
-              "swamp-managed-verification.yml",
-              "--repo",
-              repo,
-              "--ref",
-              "main",
-              "-f",
-              `prNumber=${args.prNumber}`,
-            ],
-            context.signal,
-          );
-          return record(context, "dispatch", {
-            ...args,
-            actor,
-            controlRef: "main",
-            accepted: true,
-          });
         },
       },
     },

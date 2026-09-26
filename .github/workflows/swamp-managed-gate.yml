@@ -1,4 +1,7 @@
 name: Swamp managed verification gate
+# Always runs the definition on main. It never checks out or executes pull
+# request code: it reads run and pull request metadata through the API and
+# sets the required status on the exact head that was verified.
 on:
   workflow_run:
     workflows: [Swamp managed verification]
@@ -19,252 +22,79 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Verify event-derived managed workflow identity
-        id: identity
+      - name: Set exact-head managed verification status
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const repository = 'funsaized/herdr-mise';
             const expectedPath = '.github/workflows/swamp-managed-verification.yml';
-            const eventRun = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
             const run = (await github.rest.actions.getWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: eventRun.id,
+              owner, repo, run_id: context.payload.workflow_run.id,
             })).data;
             const workflow = (await github.rest.actions.getWorkflow({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: eventRun.workflow_id,
+              owner, repo, workflow_id: run.workflow_id,
             })).data;
-            if (
-              run.id !== eventRun.id || run.workflow_id !== eventRun.workflow_id ||
-              workflow.id !== eventRun.workflow_id || workflow.path !== expectedPath ||
-              run.event !== 'workflow_dispatch' || run.head_branch !== 'main' ||
-              run.head_sha !== eventRun.head_sha
-            ) throw new Error('workflow_run does not identify the trusted managed executor');
-            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: eventRun.id,
-              per_page: 100,
+            if (workflow.path !== expectedPath || run.event !== 'pull_request') {
+              throw new Error('workflow_run does not identify the managed pull request executor');
+            }
+            // Drafts are skipped and superseded heads are cancelled; the run
+            // for the current head sets the status.
+            if (['skipped', 'cancelled'].includes(run.conclusion)) {
+              core.notice(`No status for ${run.conclusion} run ${run.id}`);
+              return;
+            }
+            const head = `${run.head_repository.owner.login}:${run.head_branch}`;
+            const candidates = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', base: 'main', head, per_page: 100,
             });
-            const requestArtifacts = artifacts.filter(({ name }) => name === 'swamp-managed-request');
-            const attestations = artifacts.filter(({ name }) => name === 'swamp-managed-attestation');
-            if (requestArtifacts.length !== 1 || requestArtifacts[0].expired) {
-              throw new Error('managed request artifact is missing or ambiguous');
+            const pr = candidates.find((candidate) =>
+              candidate.head.sha === run.head_sha &&
+              candidate.head.repo?.id === run.head_repository.id &&
+              candidate.base.repo.full_name === repository
+            );
+            if (!pr) {
+              core.notice(`Head ${run.head_sha} is no longer the head of an open pull request`);
+              return;
             }
-            if (eventRun.conclusion === 'success' && (attestations.length !== 1 || attestations[0].expired)) {
-              throw new Error('managed attestation artifact is missing or ambiguous');
-            }
-            core.setOutput('actor', run.triggering_actor?.login ?? run.actor.login);
-            core.setOutput('attempt', String(run.run_attempt));
-            core.setOutput('conclusion', eventRun.conclusion ?? '');
-            core.setOutput('head_sha', run.head_sha);
-            core.setOutput('run_id', String(run.id));
-            core.setOutput('workflow_id', String(run.workflow_id));
-            core.setOutput('workflow_path', workflow.path);
-            core.setOutput('workflow_ref', `${context.repo.owner}/${context.repo.repo}/${workflow.path}@refs/heads/main`);
-      - name: Download request from the triggering run
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: swamp-managed-request
-          path: ${{ runner.temp }}/request
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-      - name: Correlate request with the current pull request
-        id: correlate
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          EVENT_ACTOR: ${{ steps.identity.outputs.actor }}
-          EVENT_ATTEMPT: ${{ steps.identity.outputs.attempt }}
-          EVENT_CONCLUSION: ${{ steps.identity.outputs.conclusion }}
-          EVENT_CONTROL_SHA: ${{ steps.identity.outputs.head_sha }}
-          EVENT_RUN_ID: ${{ steps.identity.outputs.run_id }}
-          EVENT_WORKFLOW_ID: ${{ steps.identity.outputs.workflow_id }}
-          EVENT_WORKFLOW_PATH: ${{ steps.identity.outputs.workflow_path }}
-          EVENT_WORKFLOW_REF: ${{ steps.identity.outputs.workflow_ref }}
-        with:
-          script: |
-            const fs = require('node:fs');
-            const requestPath = `${process.env.RUNNER_TEMP}/request/resolved.json`;
-            const info = fs.lstatSync(requestPath);
-            if (!info.isFile() || info.isSymbolicLink() || info.size > 128 * 1024) {
-              throw new Error('request metadata is not a bounded regular file');
-            }
-            const request = JSON.parse(fs.readFileSync(requestPath));
-            if (
-              request.schemaVersion !== 1 || request.repository !== 'funsaized/herdr-mise' ||
-              !Number.isInteger(request.prNumber) || request.prNumber < 1 ||
-              !/^[0-9a-f]{40}$/.test(request.head?.sha) ||
-              !/^[0-9a-f]{40}$/.test(request.base?.sha) ||
-              !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(request.head?.repository) ||
-              !/^[0-9]+$/.test(String(request.head?.repositoryId))
-            ) throw new Error('request metadata is malformed');
-            if (
-              request.workflow.id !== process.env.EVENT_WORKFLOW_ID ||
-              request.workflow.path !== process.env.EVENT_WORKFLOW_PATH ||
-              request.workflow.ref !== process.env.EVENT_WORKFLOW_REF ||
-              request.workflow.runId !== process.env.EVENT_RUN_ID ||
-              request.workflow.runAttempt !== process.env.EVENT_ATTEMPT ||
-              request.workflow.actor !== process.env.EVENT_ACTOR ||
-              request.actor !== process.env.EVENT_ACTOR ||
-              request.controlSha !== process.env.EVENT_CONTROL_SHA
-            ) throw new Error('request does not match the triggering workflow');
-            core.setOutput('safe', 'true');
-            core.setOutput('head_sha', request.head.sha);
-            const pr = (await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: request.prNumber,
+            const policyFile = (await github.rest.repos.getContent({
+              owner, repo, path: 'verification/managed-policy.json', ref: 'main',
             })).data;
-            const main = (await github.rest.repos.getBranch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              branch: 'main',
-            })).data.commit.sha;
-            if (
-              pr.state !== 'open' || pr.base.repo.full_name !== 'funsaized/herdr-mise' ||
-              pr.base.ref !== 'main' || pr.base.sha !== main || request.base.sha !== main ||
-              request.controlSha !== main || pr.head.repo.full_name !== request.head.repository ||
-              String(pr.head.repo.id) !== request.head.repositoryId || pr.head.sha !== request.head.sha
-            ) throw new Error('request is stale or does not identify the current pull request');
-            if (request.trustBoundary === true && request.actor !== 'funsaized') {
-              throw new Error('trust-boundary request was not dispatched by the code owner');
+            if (Array.isArray(policyFile) || policyFile.type !== 'file' || policyFile.size > 128 * 1024) {
+              throw new Error('trusted managed policy is missing or oversized');
             }
-            const gate = {
-              schemaVersion: 1,
-              repository: 'funsaized/herdr-mise',
-              currentMainSha: main,
-              workflow: {
-                id: process.env.EVENT_WORKFLOW_ID,
-                path: process.env.EVENT_WORKFLOW_PATH,
-                ref: process.env.EVENT_WORKFLOW_REF,
-                runId: process.env.EVENT_RUN_ID,
-                runAttempt: process.env.EVENT_ATTEMPT,
-                actor: process.env.EVENT_ACTOR,
-                event: 'workflow_dispatch',
-                headBranch: 'main',
-                headSha: process.env.EVENT_CONTROL_SHA,
-                conclusion: process.env.EVENT_CONCLUSION,
-              },
-              pr: {
-                number: pr.number,
-                state: pr.state,
-                head: {
-                  repository: pr.head.repo.full_name,
-                  repositoryId: String(pr.head.repo.id),
-                  sha: pr.head.sha,
-                },
-                base: { repository: pr.base.repo.full_name, branch: pr.base.ref, sha: pr.base.sha },
-              },
-            };
-            fs.writeFileSync(`${process.env.RUNNER_TEMP}/gate-context.json`, `${JSON.stringify(gate, null, 2)}\n`);
-            core.setOutput('base_sha', main);
-            core.setOutput('control_sha', request.controlSha);
-            core.setOutput('head_repository', request.head.repository);
-      - name: Download attestation from the triggering run
-        if: steps.identity.outputs.conclusion == 'success'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: swamp-managed-attestation
-          path: ${{ runner.temp }}/attestation
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-      - name: Passively check out trusted control and exact subject
-        if: steps.identity.outputs.conclusion == 'success'
-        env:
-          BASE_SHA: ${{ steps.correlate.outputs.base_sha }}
-          CONTROL_SHA: ${{ steps.correlate.outputs.control_sha }}
-          HEAD_REPOSITORY: ${{ steps.correlate.outputs.head_repository }}
-          HEAD_SHA: ${{ steps.correlate.outputs.head_sha }}
-        run: |
-          set -eu
-          control="$RUNNER_TEMP/control"
-          subject="$RUNNER_TEMP/subject"
-          git init "$control"
-          git -C "$control" config core.hooksPath /dev/null
-          git -C "$control" remote add origin https://github.com/funsaized/herdr-mise.git
-          git -C "$control" fetch --no-tags origin "$CONTROL_SHA"
-          git -C "$control" checkout --detach "$CONTROL_SHA"
-          git init "$subject"
-          git -C "$subject" config core.hooksPath /dev/null
-          git -C "$subject" remote add subject "https://github.com/$HEAD_REPOSITORY.git"
-          git -C "$subject" remote add upstream https://github.com/funsaized/herdr-mise.git
-          git -C "$subject" fetch --no-tags subject "$HEAD_SHA"
-          git -C "$subject" fetch --no-tags upstream "$BASE_SHA"
-          git -C "$subject" checkout --detach "$HEAD_SHA"
-          git -C "$subject" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: steps.identity.outputs.conclusion == 'success'
-        with:
-          node-version: 22
-      - name: Validate trusted managed audit record
-        id: validate
-        if: steps.identity.outputs.conclusion == 'success'
-        continue-on-error: true
-        run: |
-          node "$RUNNER_TEMP/control/scripts/managed-verification-evidence.mjs" \
-            --policy-root "$RUNNER_TEMP/control" \
-            --subject-root "$RUNNER_TEMP/subject" \
-            --artifact-dir "$RUNNER_TEMP/attestation" \
-            --request "$RUNNER_TEMP/request/resolved.json" \
-            --context "$RUNNER_TEMP/gate-context.json"
-      - name: Record validated managed receipt
-        if: steps.identity.outputs.conclusion == 'success' && steps.validate.outcome == 'success'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const fs = require('node:fs');
-            const crypto = require('node:crypto');
-            const root = process.env.RUNNER_TEMP;
-            const request = JSON.parse(fs.readFileSync(`${root}/request/resolved.json`, 'utf8'));
-            const digest = (path) => crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex');
-            const receipt = {
-              schemaVersion: 1,
-              repository: 'funsaized/herdr-mise',
-              prNumber: request.prNumber,
-              headSha: request.head.sha,
-              baseSha: request.base.sha,
-              controlSha: request.controlSha,
-              gateRunId: String(context.runId),
-              gateRunAttempt: String(process.env.GITHUB_RUN_ATTEMPT),
-              producerRunId: request.workflow.runId,
-              producerWorkflowPath: request.workflow.path,
-              actor: request.actor,
-              trustBoundary: request.trustBoundary,
-              verifiedAt: new Date().toISOString(),
-              policySha256: digest(`${root}/control/verification/managed-policy.json`),
-              workflowSha256: digest(`${root}/control/workflows/workflow-verification.yaml`),
-              manifestSha256: digest(`${root}/attestation/manifest.json`),
-            };
-            fs.mkdirSync(`${root}/receipt`);
-            fs.writeFileSync(`${root}/receipt/receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`);
-      - name: Retain validated managed receipt
-        id: receipt
-        if: steps.identity.outputs.conclusion == 'success' && steps.validate.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: swamp-managed-receipt
-          path: ${{ runner.temp }}/receipt/receipt.json
-          if-no-files-found: error
-          retention-days: 30
-      - name: Set exact-SHA managed verification status
-        if: always() && steps.correlate.outputs.safe == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          MANAGED_CONCLUSION: ${{ steps.identity.outputs.conclusion }}
-          SOURCE_SHA: ${{ steps.correlate.outputs.head_sha }}
-          VALIDATION_OUTCOME: ${{ steps.validate.outcome }}
-          RECEIPT_OUTCOME: ${{ steps.receipt.outcome }}
-        with:
-          script: |
-            const success = process.env.MANAGED_CONCLUSION === 'success' && process.env.VALIDATION_OUTCOME === 'success' && process.env.RECEIPT_OUTCOME === 'success';
+            const policy = JSON.parse(Buffer.from(policyFile.content, 'base64'));
+            if (
+              typeof policy.codeOwner !== 'string' || !Array.isArray(policy.trustBoundaryPaths) ||
+              policy.trustBoundaryPaths.length < 1 ||
+              policy.trustBoundaryPaths.some((path) => typeof path !== 'string' || path.startsWith('/') || path.includes('..'))
+            ) throw new Error('trusted trust-boundary policy is malformed');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+            const matches = (path, pattern) => pattern.endsWith('/**')
+              ? path.startsWith(pattern.slice(0, -2))
+              : path === pattern;
+            const touched = files
+              .flatMap(({ filename, previous_filename }) => previous_filename ? [filename, previous_filename] : [filename])
+              .filter((path) => policy.trustBoundaryPaths.some((pattern) => matches(path, pattern)));
+            // A trust-boundary change can rewrite the executor itself, so only
+            // the code owner's own pull requests from this repository pass.
+            const ownerChange = pr.user.login === policy.codeOwner && pr.head.repo.full_name === repository;
+            let state = 'failure';
+            let description = `Managed verification ${run.conclusion}`;
+            if (touched.length && !ownerChange) {
+              description = 'Trust-boundary change requires a code-owner pull request from this repository';
+            } else if (run.conclusion === 'success') {
+              state = 'success';
+              description = 'Managed verification passed for this exact head';
+            }
             await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: process.env.SOURCE_SHA,
-              state: success ? 'success' : 'failure',
+              owner, repo, sha: run.head_sha, state, description,
               context: 'Swamp managed verification',
-              description: success ? 'Managed run and audit record validated' : 'Managed verification failed closed',
-              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
             });
+            core.summary.addRaw(
+              `PR #${pr.number} head ${run.head_sha}: ${state} (${description}); run ${run.html_url}; trust-boundary files: ${touched.length}`,
+            );
+            await core.summary.write();

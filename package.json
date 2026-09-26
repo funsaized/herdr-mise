@@ -36,7 +36,6 @@
     "test:hosted": "HOSTED_VISUAL_URL=https://herdr-mise.s11a.com playwright test --config e2e/playwright.config.ts e2e/hosted-smoke.spec.ts",
     "test:acceptance": "node --test scripts/public-artifact.test.mjs",
     "verify:browser:install": "playwright install --with-deps chromium firefox webkit",
-    "validate:managed-verification-evidence": "node scripts/managed-verification-evidence.mjs",
     "orchestrator:serve": "sh scripts/nightshift-serve.sh",
     "intake:nightshift": "node scripts/nightshift-intake.mjs intake/nightshift-features.json",
     "test:release": "node scripts/test-node.mjs release",

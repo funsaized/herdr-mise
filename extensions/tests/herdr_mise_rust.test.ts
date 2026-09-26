@@ -8,7 +8,7 @@ import {
 import {
   readRegularFile,
   sha256 as sha256Bytes,
-} from "../models/verification_evidence.ts";
+} from "../models/subject_root.ts";
 
 const bytes = (value = "") => new TextEncoder().encode(value);
 const hasBwrap = (Deno.env.get("PATH") ?? "").split(":").some((path) => {

@@ -1,86 +1,70 @@
 # Managed verification
 
-Pull-request verification runs through a maintainer-dispatched GitHub workflow.
-Local Swamp runs are optional advisory feedback and cannot satisfy branch
-protection.
-
-Nightshift shipping consumes `swamp-managed-receipt`, emitted by the trusted gate
-only after validating the managed attestation. The factory checks its originating
-gate and producer, current head/base/control identities, policy/workflow digests,
-dispatcher and freshness. A green status alone is insufficient. The shipping
-workflow records that receipt instead of rerunning the full local suite; focused
-development checks and post-merge deployed verification remain required.
-
-Migration: the receipt-producing gate must first be installed on canonical main.
-Older gate runs have no receipt and cannot satisfy the new factory shipping
-method. Dispatch managed verification against current main to obtain one. Missing
-or stale evidence is a request for a fresh managed run, not a reason to rebuild
-unchanged product code or repeatedly retry local browsers.
+Every non-draft pull request head is verified automatically by the
+`Swamp managed verification` GitHub workflow. Local Swamp runs are optional
+advisory feedback and cannot satisfy branch protection.
 
 ## Contributor flow
 
 1. Use narrow checks while developing.
 2. Commit a clean branch based on current canonical `main`.
-3. Push the branch and open or update the pull request.
-4. Ask a maintainer to dispatch managed verification for the current PR number.
-5. Do not push another commit while expecting the old status to remain valid.
+3. Push the branch and open or update the pull request (mark it ready for
+   review; drafts are skipped).
+4. Wait for the `Swamp managed verification` status on the current head. Every
+   push or rebase starts a new run and supersedes the previous one.
 
 To run the same deterministic controls locally, configure `upstream` as the
-canonical repository and run:
+canonical repository and run from a clean sibling worktree of the change:
 
 ```sh
 swamp workflow validate verification
 swamp workflow run verification \
   --input commit=$(git rev-parse HEAD) \
   --input baseCommit=$(git rev-parse upstream/main) \
-  --input subjectRoot=.
+  --input subjectRoot=../herdr-mise-subject
 ```
 
-The local result is advisory. It writes a schema-v2 manifest under ignored
-Swamp runtime state but does not publish evidence or set a GitHub status.
+The local result is advisory and sets no GitHub status. Independent checks run
+in parallel lanes, so a local run takes about five minutes.
 
-## Maintainer flow
+## How the status is set
 
-1. Review the exact current pull-request head.
-2. Open **Actions**, select **Swamp managed verification**, and choose **Run
-   workflow** from `main`.
-3. Enter the open pull request number as `prNumber`.
-4. Wait for the `Swamp managed verification` status on the current head.
-5. Investigate failures before rerunning. Dispatch again after any new commit or
-   `main` movement.
+The executor runs on `pull_request` with no token permissions or secrets. It
+checks out the pull request's base as the trusted controls and the exact head
+as a separate subject, then runs the shared `verification` Swamp workflow.
 
-The resolver classifies changes to workflows, models, extensions, policy, and
-other configured trust-boundary paths. Only `@funsaized` may dispatch those
-changes. The executor uses the trusted controls from `main`, checks out the
-proposed source separately, and has no repository permissions or secrets.
+A separate gate always runs its definition from `main` and never executes pull
+request code. For the completed run it confirms the executor's identity, that
+the run's head is still the head of an open pull request against `main`, and
+whether the pull request touches any path in `verification/managed-policy.json`.
+It then sets `Swamp managed verification` on that exact head:
 
-## Gate behavior
+- success when the run succeeded;
+- failure when the run failed, or when a trust-boundary path changed and the
+  pull request is not authored by the code owner from this repository (such a
+  pull request could rewrite the executor itself);
+- no status for skipped (draft) or cancelled (superseded) runs.
 
-The managed executor runs the shared `verification` Swamp workflow against the
-exact PR SHA. It retains request metadata and the schema-v2 attestation as
-GitHub Actions artifacts for 30 days.
+Branch protection requires the status and an up-to-date branch, so a moved
+`main` means a rebase and a fresh run. Security, dependency, release, signing,
+publication, and public-artifact checks remain separate remote controls.
 
-A separate trusted gate checks the workflow identity, dispatcher, current PR
-head and base, source and control SHAs, policy and workflow digests, step
-results, timing, lockfiles, artifacts, freshness, and canonical evidence root.
-It sets the required status only when all checks agree. A moved head, moved
-base, failed run, local attestation, malformed record, or unauthorized
-trust-boundary dispatch fails closed.
+## Trust-boundary changes from other contributors
 
-Security, dependency, release, signing, publication, and public-artifact checks
-remain separate remote controls.
+The gate fails these by design. A maintainer reviews the change and pushes it
+to a branch in this repository as their own pull request, which then verifies
+normally.
 
 ## Failure handling
 
-Inspect the managed workflow logs first. When Swamp itself fails, inspect its
-generated workflow summary before changing definitions or retrying:
+Inspect the managed workflow logs and the `swamp-managed-diagnostics` artifact
+first. When Swamp itself fails, inspect its generated workflow summary before
+changing definitions or retrying:
 
 ```sh
 swamp report get @swamp/workflow-summary --workflow verification --json
 ```
 
-Fix source failures in a new commit and dispatch a new run. Do not try to reuse
-the status or attestation from an older head.
-
-The protected `ops/evidence` branch is retained as historical schema-v1 evidence.
-No active workflow writes to or validates against it.
+Fix source failures in a new commit; infrastructure failures can be re-run from
+the Actions page. The protected `ops/evidence` branch is retained as historical
+schema-v1 evidence; no active workflow writes to or validates against it.
