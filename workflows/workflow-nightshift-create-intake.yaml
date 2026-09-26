@@ -31,7 +31,7 @@ jobs:
         task:
           type: model_method
           modelIdOrName: nightshift-github
-          methodName: create_issue
+          methodName: create_nightshift_issue
           inputs:
             idempotencyKey: ${{ inputs.idempotencyKey }}
             title: ${{ inputs.title }}

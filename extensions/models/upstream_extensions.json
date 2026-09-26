@@ -1,7 +1,7 @@
 {
   "@funsaized/npm": {
     "version": "2026.08.26.3",
-    "pulledAt": "2026-08-27T20:27:50.135Z",
+    "pulledAt": "2026-09-26T14:55:02.699Z",
     "files": [
       ".swamp/bundles/4f9f5904/project.js",
       ".swamp/pulled-extensions/@funsaized/npm/files/LICENSE",
@@ -10,12 +10,12 @@
       ".swamp/pulled-extensions/@funsaized/npm/models/project.ts"
     ],
     "checksum": "d2f146cc246c5651f368c7ff2868c39aebbc1d3d4e389ad7ff722c30a41b7a30",
-    "filesChecksum": "573fbac04c7878f8470086bfd72e1829839570c08f4bd16554fd59167a8ff67c",
+    "filesChecksum": "0c816ad67660ac77b0ed00a65ae9bbbb506e01fb03df31c4e46ea754bac77710",
     "serverUrl": "https://swamp-club.com"
   },
   "@swamp/git": {
-    "version": "2026.08.25.1",
-    "pulledAt": "2026-08-27T21:52:34.233Z",
+    "version": "2026.09.26.1",
+    "pulledAt": "2026-09-26T14:53:04.655Z",
     "files": [
       ".swamp/bundles/2b63a75e/git.js",
       ".swamp/pulled-extensions/@swamp/git/files/LICENSE.txt",
@@ -29,8 +29,8 @@
       ".swamp/pulled-extensions/@swamp/git/models/_lib/types.ts",
       ".swamp/pulled-extensions/@swamp/git/models/git.ts"
     ],
-    "checksum": "78174c10498cef22fd70f93f93b5914e7fcbd141faa006a45ed3946356b4d135",
-    "filesChecksum": "1e59ff0450a15da68626ae20b8abd6518f0e854a9010f34082f149b7b6746a7c",
+    "checksum": "ca8509c09d07d4e7036e62e3ab4471351e9e0fb5927eed4bbf50c17a3a40742e",
+    "filesChecksum": "ada10343bcef32bc8961af728a15179f12fdd37bf202372c1a3540202cb0bcdf",
     "serverUrl": "https://swamp-club.com"
   },
   "@mgreten/software-factory-flow-metrics": {
@@ -48,8 +48,8 @@
     "serverUrl": "https://swamp-club.com"
   },
   "@swamp/software-factory": {
-    "version": "2026.06.24.1",
-    "pulledAt": "2026-08-29T19:40:12.242Z",
+    "version": "2026.09.24.2",
+    "pulledAt": "2026-09-26T14:53:05.490Z",
     "files": [
       ".agents/skills/software-factory",
       ".swamp/bundles/a324fda6/software_factory.js",
@@ -69,27 +69,29 @@
       ".swamp/pulled-extensions/@swamp/software-factory/reports/work_item_summary_report.ts",
       ".swamp/report-bundles/637144ef/work_item_summary_report.js"
     ],
-    "checksum": "29622d1cb0a3bffabf82f68b3d6cbe7e18efcac2c38458b7231e436eb91ab55f",
-    "filesChecksum": "b67885110295b63236743cdc42522703b2c5b18fae873892420b72e662c6c9d7",
+    "checksum": "e7b28f2c5ed8ebe8df690cd3c3a37abfb72d67ff1e3e578163fe7b14c83ffdd0",
+    "filesChecksum": "85ecab8ac91d405b7f7b65b1bbc7df4283010b9741fe4d02809716d3394763a8",
     "serverUrl": "https://swamp-club.com"
   },
   "@webframp/github": {
-    "version": "2026.08.28.1",
-    "pulledAt": "2026-08-29T19:43:15.081Z",
+    "version": "2026.09.18.1",
+    "pulledAt": "2026-09-26T14:53:06.132Z",
     "files": [
       ".swamp/bundles/9d92b9c9/github/repos.js",
+      ".swamp/bundles/9d92b9c9/github/triage.js",
       ".swamp/pulled-extensions/@webframp/github/files/LICENSE.md",
       ".swamp/pulled-extensions/@webframp/github/files/README.md",
       ".swamp/pulled-extensions/@webframp/github/manifest.yaml",
-      ".swamp/pulled-extensions/@webframp/github/models/github/repos.ts"
+      ".swamp/pulled-extensions/@webframp/github/models/github/repos.ts",
+      ".swamp/pulled-extensions/@webframp/github/models/github/triage.ts"
     ],
-    "checksum": "6b8dae42f6943125fdfaff803cc34fd407a8b5b02ae6850d8505c92f5fccb488",
-    "filesChecksum": "07c08a05ece9b9a8a05036d4749798ab57eb5e2e9595afd7ee0042a866dbc5f2",
+    "checksum": "1731cef76aaeeb5e9fcd3298a44a4561a9002c18a76805d2c8407c350232d1f3",
+    "filesChecksum": "6aecd8c2e3b0a0648dd861fa9404da3653d48d814298f6a54367b61489f7b2eb",
     "serverUrl": "https://swamp-club.com"
   },
   "@webframp/github-issue-lifecycle": {
-    "version": "2026.08.28.1",
-    "pulledAt": "2026-08-29T19:43:15.115Z",
+    "version": "2026.09.18.1",
+    "pulledAt": "2026-09-26T14:53:06.814Z",
     "files": [
       ".swamp/bundles/54d902f8/github-issue-lifecycle/lifecycle.js",
       ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/files/LICENSE.md",
@@ -100,8 +102,8 @@
       ".swamp/pulled-extensions/@webframp/github-issue-lifecycle/workflows/issue-lifecycle-drive.yaml",
       ".swamp/report-bundles/32cfbffd/lifecycle_metrics.js"
     ],
-    "checksum": "bdc2cba9c068248d9d1f237526c2f96b5fc989fba939b6f1fbaeb321a69b804f",
-    "filesChecksum": "053e1e6baa09e771ad93f54d81fde92f26fe9052dc59c9fe86ed49e411c93215",
+    "checksum": "11658851693810ba89631b93066b476356340b96b23a4a2baa9fe6e8f9dbb82b",
+    "filesChecksum": "b5258c974e0d65424f41c5e065583cc248992ebc20429ed52cfa24fea688ffed",
     "serverUrl": "https://swamp-club.com"
   },
   "@funsaized/cli-agent": {
