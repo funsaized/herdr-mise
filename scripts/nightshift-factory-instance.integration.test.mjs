@@ -14,8 +14,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
+  repairFactoryInstance,
+  startFactoryInstance,
+} from "./lib/factory-instance.mjs";
+import {
   parseLastJson,
-  runJson,
   startServe,
   stopChild,
 } from "./lib/swamp-test-process.mjs";
@@ -48,29 +51,21 @@ function runRemote(repo, server, args, input) {
   return run(repo, [...args, "--server", server], input);
 }
 
-function runRemoteAsync(repo, server, args, input) {
-  return runJson(
-    "swamp",
-    [...args, "--server", server, "--json", "--no-color"],
-    { cwd: repo },
-    input,
-  );
-}
-
 async function stopServe(server) {
   await stopChild(server.child);
 }
 
+// The same helper intake uses, bound to the test's serve process.
+const remoteSwamp = (repo, server) => (args, input) =>
+  runRemote(repo, server, args, input);
+const template = "phase0-factory-template";
+
 function create(repo, server, modelName, workItem) {
-  return runRemote(repo, server, [
-    "workflow",
-    "run",
-    "phase0-factory-instance-create",
-    "--input",
-    `modelName=${modelName}`,
-    "--input",
-    `workItem=${workItem}`,
-  ]);
+  return startFactoryInstance(remoteSwamp(repo, server), {
+    workItem,
+    modelName,
+    template,
+  });
 }
 
 function method(repo, server, model, name, inputs = []) {
@@ -133,7 +128,6 @@ test(
       await mkdir(join(repo, "models", "@swamp", "software-factory"), {
         recursive: true,
       });
-      await mkdir(join(repo, "workflows"), { recursive: true });
       await copyFile(
         join(fixtures, "factory-instance-template.yaml"),
         join(
@@ -144,34 +138,14 @@ test(
           "phase0-factory-template.yaml",
         ),
       );
-      await copyFile(
-        join(fixtures, "factory-instance-create.yaml"),
-        join(repo, "workflows", "workflow-phase0-factory-instance-create.yaml"),
-      );
-      await copyFile(
-        join(fixtures, "factory-instance-repair.yaml"),
-        join(repo, "workflows", "workflow-phase0-factory-instance-repair.yaml"),
-      );
-
-      expectOk(
-        run(repo, ["workflow", "validate", "phase0-factory-instance-create"]),
-      );
-      expectOk(
-        run(repo, ["workflow", "validate", "phase0-factory-instance-repair"]),
-      );
       serve = await startServe(repo);
 
       expectOk(
         method(repo, serve.server, "phase0-factory-template", "validate"),
       );
-      const started = expectOk(
+      assert.deepEqual(
         create(repo, serve.server, "phase0-runtime-main", "101"),
-      );
-      assert.equal(started.status, "succeeded");
-      assert.equal(
-        started.jobs[0].steps[0].assertResult.passed,
-        true,
-        "missing-model data.latest must return null",
+        { modelName: "phase0-runtime-main", created: true, started: true },
       );
 
       const definition = expectOk(
@@ -199,30 +173,16 @@ test(
         { factory: "phase0-runtime-main", workItem: "101" },
       );
 
-      const same = await Promise.all([
-        runRemoteAsync(repo, serve.server, [
-          "workflow",
-          "run",
-          "phase0-factory-instance-create",
-          "--input",
-          "modelName=phase0-runtime-same",
-          "--input",
-          "workItem=201",
-        ]),
-        runRemoteAsync(repo, serve.server, [
-          "workflow",
-          "run",
-          "phase0-factory-instance-create",
-          "--input",
-          "modelName=phase0-runtime-same",
-          "--input",
-          "workItem=201",
-        ]),
-      ]);
-      assert.deepEqual(same.map(({ json }) => json.status).sort(), [
-        "failed",
-        "succeeded",
-      ]);
+      // Re-running intake is a no-op; a second model cannot claim the item.
+      create(repo, serve.server, "phase0-runtime-same", "201");
+      assert.deepEqual(
+        create(repo, serve.server, "phase0-runtime-same", "201"),
+        { modelName: "phase0-runtime-same", created: false, started: false },
+      );
+      assert.throws(
+        () => create(repo, serve.server, "phase0-runtime-other", "201"),
+        /already owned/,
+      );
       const sameState = expectOk(
         runRemote(repo, serve.server, [
           "data",
@@ -234,33 +194,11 @@ test(
       assert.equal(
         sameState.version,
         1,
-        "concurrent duplicate intake must not reset state",
+        "repeated intake must not reset state",
       );
 
-      const cross = await Promise.all([
-        runRemoteAsync(repo, serve.server, [
-          "workflow",
-          "run",
-          "phase0-factory-instance-create",
-          "--input",
-          "modelName=phase0-runtime-a",
-          "--input",
-          "workItem=301",
-        ]),
-        runRemoteAsync(repo, serve.server, [
-          "workflow",
-          "run",
-          "phase0-factory-instance-create",
-          "--input",
-          "modelName=phase0-runtime-b",
-          "--input",
-          "workItem=302",
-        ]),
-      ]);
-      assert.deepEqual(
-        cross.map(({ json }) => json.status),
-        ["succeeded", "succeeded"],
-      );
+      create(repo, serve.server, "phase0-runtime-a", "301");
+      create(repo, serve.server, "phase0-runtime-b", "302");
       const modelA = expectOk(
         runRemote(repo, serve.server, ["model", "get", "phase0-runtime-a"]),
       );
@@ -286,26 +224,24 @@ test(
       );
       assert.notEqual(duplicate.status, 0);
       assert.match(duplicate.json.error, /already has a run/);
-      const overwritten = expectOk(
-        runRemote(repo, serve.server, ["model", "get", "phase0-runtime-main"]),
+      // Drift the stored definition, then restore it through explicit repair.
+      const drifted = structuredClone(definition);
+      drifted.globalArguments.stages[0].description = "unsafe-overwrite";
+      expectOk(
+        runRemote(
+          repo,
+          serve.server,
+          ["model", "edit", "phase0-runtime-main"],
+          JSON.stringify({ ...drifted, methods: {} }),
+        ),
       );
-      assert.equal(overwritten.id, definition.id);
-      assert.equal(
-        overwritten.globalArguments.stages[0].description,
-        "unsafe-overwrite",
-        "globalArgs update occurs before duplicate start failure",
+      assert.deepEqual(
+        repairFactoryInstance(remoteSwamp(repo, serve.server), {
+          modelName: "phase0-runtime-main",
+          template,
+        }),
+        { modelName: "phase0-runtime-main", repaired: true },
       );
-
-      const repairedRun = expectOk(
-        runRemote(repo, serve.server, [
-          "workflow",
-          "run",
-          "phase0-factory-instance-repair",
-          "--input",
-          "modelName=phase0-runtime-main",
-        ]),
-      );
-      assert.equal(repairedRun.status, "succeeded");
       const repaired = expectOk(
         runRemote(repo, serve.server, ["model", "get", "phase0-runtime-main"]),
       );
@@ -360,16 +296,10 @@ test(
           before.globalArguments,
           "inspection must not mutate malformed definitions",
         );
-        const repair = expectOk(
-          runRemote(repo, serve.server, [
-            "workflow",
-            "run",
-            "phase0-factory-instance-repair",
-            "--input",
-            `modelName=${name}`,
-          ]),
-        );
-        assert.equal(repair.status, "succeeded");
+        repairFactoryInstance(remoteSwamp(repo, serve.server), {
+          modelName: name,
+          template,
+        });
         assert.equal(
           expectOk(runRemote(repo, serve.server, ["model", "get", name])).id,
           before.id,
@@ -493,7 +423,7 @@ test(
       );
       serve = await startServe(repo);
       // Exercise local policy hooks through the actual engine and persisted run outputs.
-      expectOk(create(repo, serve.server, "nightshift-run-901", "901"));
+      create(repo, serve.server, "nightshift-run-901", "901");
       const lanes = ["test-coverage", "security", "quality", "ui"];
       const reviewInput = {
         workItem: "901",

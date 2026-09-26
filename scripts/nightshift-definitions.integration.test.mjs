@@ -134,7 +134,8 @@ test(
 );
 
 // Intake may overlap a running factory (see AGENTS.md), so it must stay
-// metadata-only: issue creation, lifecycle start, and a direct factory start.
+// metadata-only: issue creation and lifecycle start. Runtime factories are
+// created by scripts/nightshift-start-factory.mjs, never from workflow data.
 test(
   "parallel intake workflows stay metadata-only",
   { timeout: 60_000 },
@@ -142,7 +143,6 @@ test(
     const allowed = new Set([
       "model_method:nightshift-github.create_issue",
       "model_method:nightshift-issues.start",
-      "model_method:@swamp/software-factory.start",
       "workflow:nightshift-intake",
     ]);
     for (const name of ["nightshift-create-intake", "nightshift-intake"]) {

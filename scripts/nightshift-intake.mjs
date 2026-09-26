@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { startFactoryInstance } from "./lib/factory-instance.mjs";
+import { swampCli } from "./nightshift-start-factory.mjs";
 
 const inputPath = process.argv[2];
 if (!inputPath) throw new Error("usage: nightshift-intake.mjs <features.json>");
@@ -74,4 +76,21 @@ for (const feature of features) {
   }
   if (!completed)
     throw new Error(`intake failed for ${feature.idempotencyKey}`);
+  // Swamp will not persist a factory definition built from workflow data, so
+  // the runtime factory is created from the template by the client.
+  const client = swampCli();
+  const issue = client([
+    "data",
+    "get",
+    "nightshift-github",
+    `created-issue-${feature.idempotencyKey}`,
+  ]);
+  const workItem = String(issue.json?.content?.number ?? "");
+  if (issue.status !== 0 || !/^[1-9][0-9]*$/.test(workItem))
+    throw new Error(
+      `cannot resolve the created issue for ${feature.idempotencyKey}`,
+    );
+  process.stdout.write(
+    `${JSON.stringify(startFactoryInstance(client, { workItem }))}\n`,
+  );
 }

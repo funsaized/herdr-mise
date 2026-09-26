@@ -35,7 +35,7 @@ inputs from current status for delivery stages.
 | Workflow                                 | Purpose / principal inputs                                                   |
 | ---------------------------------------- | ---------------------------------------------------------------------------- |
 | `nightshift-create-intake`               | Create issue and intake; `idempotencyKey`, `title`, optional `body`/`labels` |
-| `nightshift-intake`                      | Refresh issue and create missing run; matching `workItem`, `issueNumber`     |
+| `nightshift-intake`                      | Bind the issue to its work item; matching `workItem`, `issueNumber`          |
 | `nightshift-plan-fanout`                 | Serial planning; `workItems` array                                           |
 | `nightshift-build-fanout`                | At most two independent approved builds; `workItems` array                   |
 | `nightshift-plan`, `nightshift-build`    | Per-item execution called by the fan-outs                                    |
@@ -46,7 +46,6 @@ inputs from current status for delivery stages.
 | `nightshift-deployed-verification`       | Verify the merged PR revision                                                |
 | `nightshift-close`, `nightshift-cleanup` | Complete factory closeout; preserve dirty source                             |
 | `nightshift-record-failure`              | Persist diagnosed failure for the owning item                                |
-| `nightshift-factory-repair`              | Explicit snapshot repair; `modelName`, `confirm=repair`                      |
 | `nightshift-analytics`                   | Trigger retained-fleet report; existing `factory`, `workItem`                |
 | `verification`                           | Full deterministic checks; `commit`, `baseCommit`, `subjectRoot`             |
 

@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 
-expected_version=20260904.044433.0
-release_tag=v20260904.044433.0-sha.ab26e35b
-expected_sha256=a99d5833e1352c693cf2ae5f8284d6bcc12893f6ebbb55fbf06510c49de00d59
+expected_version=20260926.025243.0
+release_tag=v20260926.025243.0-sha.0f086bc8
+expected_sha256=5ded771704f72639aee964941eca052556b9dbeca08760f0c4f592415655b419
 
 version=
 while IFS=': ' read -r key value; do
