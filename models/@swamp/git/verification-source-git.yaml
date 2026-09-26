@@ -1,10 +1,10 @@
 type: '@swamp/git'
-typeVersion: 2026.08.28.1
+typeVersion: 2026.09.26.1
 id: dc3f1035-7891-4879-8fc3-961645514d08
 name: verification-source-git
 version: 1
 tags: {}
 globalArguments:
-  repoPath: .
+  repoPath: "."
   remote: origin
 methods: {}

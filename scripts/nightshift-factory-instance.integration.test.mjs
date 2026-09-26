@@ -116,13 +116,18 @@ test(
         }
       }
       expectOk(run(repo, ["extension", "install"]));
-      const installed = expectOk(
-        run(repo, ["model", "type", "describe", "@swamp/software-factory"]),
-      );
+      // Compare package versions: a package release may ship an unchanged
+      // model whose own type version is older.
+      const installed = expectOk(run(repo, ["extension", "list"]));
       assert.equal(
-        installed.version,
+        (installed.extensions ?? installed).find(
+          (extension) => extension.name === "@swamp/software-factory",
+        )?.version,
         lock["@swamp/software-factory"].version,
         "factory provisioning must resolve the pinned version before testing",
+      );
+      expectOk(
+        run(repo, ["model", "type", "describe", "@swamp/software-factory"]),
       );
 
       await mkdir(join(repo, "models", "@swamp", "software-factory"), {

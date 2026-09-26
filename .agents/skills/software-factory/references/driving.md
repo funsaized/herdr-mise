@@ -18,8 +18,10 @@ definition supplies all meaning.
 Step 2 is mandatory before executing a stage that has a `work` block: it
 records that the stage ran (a work-bearing stage **cannot advance** until it
 has — the work can't be silently skipped) and it arms the runaway-loop guard.
-Pass `mode=` and, for workflow/method stages, `runId=` so the journal carries
-the attempt history.
+Pass `mode=` and, for workflow/method stages, `runId=` when you already know
+it, so the journal carries the attempt history. Don't call `record_dispatch`
+again from inside the workflow to supply the id — that counts as another
+attempt and trips the loop guard; record it in the outcome evidence instead.
 
 One factory serves many work items: every call is scoped by `workItem`, and
 `status` without it returns a factory-wide overview
@@ -301,7 +303,11 @@ queries together.
 - **workflow** — trigger the named swamp workflow with the resolved inputs
   (`swamp workflow run <name> --input k=v --json`), wait for completion, then record
   the outcome: `record_evidence name=<resultEvidence>
-payload='{"status":"succeeded|failed","runId":"…"}'`. The outcome must
+payload='{"status":"succeeded|failed","runId":"…"}'`. `runId` is the run's
+  `id` from `swamp workflow run --json` output — never a placeholder. The
+  `workflow-succeeded` gate verifies exactly that run (it takes precedence
+  over a `record_dispatch` runId), so parallel work items on the same
+  workflow each need their own recorded runId. The outcome must
   satisfy the built-in contract (`status` + `runId` required) — an empty or
   malformed record is rejected, so a workflow that "succeeded" without
   recording surfaces as a loud `record_evidence` error rather than a silent
@@ -338,10 +344,14 @@ worktree) as `configuration`. Classify verification test failures as
   without the human explicitly saying so; record rejections with their
   reason verbatim via `reject`.
 - Multiple transitions satisfied → ask the human which to take.
-- `cycleLimitBlocked: true` → present the cycle history from the journal query
-  (see "Resuming and recovery") and follow the definition's explicit parking
-  or escalation policy. Only a generic factory without such a route should
-  offer a human `cycle-override:<stage>` for one entry.
+- `cycleLimitBlocked: true` → the run is parked. Present the cycle history
+  from the journal query (see "Resuming and recovery") — not from memory —
+  and let the human grant `approve gateId=cycle-override:<stage>` or
+  abort/escalate. Each grant adds one entry, not a reset: grants accumulate
+  (allowed entries = `maxCycles` + grants), so a run that will loop again
+  needs another grant each time it re-enters past the limit. Tell the human
+  this when presenting the choice.
+  Nightshift instead follows its explicit `parked` route (see below).
 
 ## Nightshift resident mode
 

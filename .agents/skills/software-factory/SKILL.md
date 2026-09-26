@@ -116,11 +116,16 @@ query`, present their actual payloads, and stop. If several transitions
 
 ## Cycle limits
 
-Every stage has `maxCycles` (default 5). When an entry is blocked at the limit,
-follow the definition's explicit parking or escalation route. A generic factory
-without one may let a human approve `cycle-override:<stage>` for one entry.
+Every stage has `maxCycles` (default 5). When an entry is blocked at the
+limit, the run is parked for a human: present the history and let them
+`approve gateId=cycle-override:<stage>`, take an escalation/abort
+transition, or rethink the approach. Each grant adds exactly one entry to
+that stage's allowance — it does not reset the counter. Grants accumulate:
+the stage allows `maxCycles` + (number of grants) entries, so every further
+re-entry past the limit needs another grant.
 
-Nightshift uses an explicit `parked` stage instead. Follow
+Nightshift uses an explicit `parked` stage instead and never requests a cycle
+override for `plan-review` or `code-review`. Follow
 [references/nightshift-modes.md](references/nightshift-modes.md); a cycle
 override is not a parked exit.
 

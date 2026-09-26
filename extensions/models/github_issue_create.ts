@@ -149,7 +149,7 @@ export const extension = {
   },
   methods: [
     {
-      create_issue: {
+      create_nightshift_issue: {
         description: "Create one GitHub issue using the authenticated gh CLI",
         arguments: Arguments,
         execute: async (args: z.infer<typeof Arguments>, context: Context) => {

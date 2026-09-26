@@ -141,7 +141,7 @@ test(
   { timeout: 60_000 },
   () => {
     const allowed = new Set([
-      "model_method:nightshift-github.create_issue",
+      "model_method:nightshift-github.create_nightshift_issue",
       "model_method:nightshift-issues.start",
       "workflow:nightshift-intake",
     ]);
