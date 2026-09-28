@@ -124,6 +124,20 @@ test("repository workflows satisfy the supply-chain and permission policy", () =
   assert.deepEqual(auditWorkflows(workflows), []);
 });
 
+test("codeql init and analyze consume the same pinned revision", () => {
+  const steps = [
+    ...workflows["codeql.yml"].matchAll(
+      /^\s+uses: github\/codeql-action\/(init|analyze)@([0-9a-f]{40}) # (v\S+)$/gm,
+    ),
+  ];
+  assert.deepEqual(steps.map(([, action]) => action).sort(), [
+    "analyze",
+    "init",
+  ]);
+  assert.equal(steps[0][2], steps[1][2]);
+  assert.equal(steps[0][3], steps[1][3]);
+});
+
 test("policy rejects unpinned actions, privileged triggers, and broadened permissions", () => {
   const ci = workflows["ci.yml"];
   const mutate = (source) => auditWorkflows({ ...workflows, "ci.yml": source });
