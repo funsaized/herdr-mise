@@ -133,6 +133,38 @@ test(
   },
 );
 
+// A fan-out stands in for its stage's own work spec, so it must forward every
+// input that spec passes; a missing one silently falls back to the child
+// workflow's default.
+test(
+  "fan-outs forward every input their factory stage passes",
+  { timeout: 60_000 },
+  () => {
+    const { stages } = swamp([
+      "model",
+      "get",
+      "nightshift-template",
+    ]).globalArguments;
+    for (const [fanout, stageId] of [
+      ["nightshift-plan-fanout", "planning"],
+      ["nightshift-build-fanout", "building"],
+    ]) {
+      const { workflow } = stages.find((stage) => stage.id === stageId).work;
+      const children = swamp(["workflow", "get", fanout])
+        .jobs.flatMap((job) => job.steps)
+        .filter((step) => step.task.workflowIdOrName === workflow.name);
+      assert.equal(children.length, 1, fanout);
+      assert.deepEqual(
+        Object.keys(workflow.inputs).filter(
+          (key) => !(key in children[0].task.inputs),
+        ),
+        [],
+        fanout,
+      );
+    }
+  },
+);
+
 // Intake may overlap a running factory (see AGENTS.md), so it must stay
 // metadata-only: issue creation and lifecycle start. Runtime factories are
 // created by scripts/nightshift-start-factory.mjs, never from workflow data.
