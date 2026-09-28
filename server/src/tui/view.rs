@@ -1442,6 +1442,78 @@ mod tests {
         assert!(!rendered.contains("example-baker"), "{rendered}");
     }
 
+    #[tokio::test]
+    async fn blocked_fixture_selection_tracks_current_pane_locator() {
+        let mut source: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+        ))
+        .unwrap();
+        // Derived scenarios, not captured upstream events.
+        source["agents"][0]["agent_status"] = "blocked".into();
+        let mut normalizer = Normalizer::default();
+        let blocked = normalizer
+            .normalize_snapshot_value(source.clone(), "2026-08-13T12:00:00Z")
+            .unwrap();
+        let feed = Feed::fixed(AppMode::Live, vec![]).await;
+        feed.apply_normalized_for_test(blocked).await;
+        let mut table = AgentTable::default();
+        table.apply(feed.snapshot().await);
+        let mut selected = None;
+        let shutdown = CancellationToken::new();
+        assert!(!handle_key_with_scope(
+            KeyCode::Char('b'),
+            &table,
+            &mut selected,
+            &mut SceneView::Kitchen,
+            &mut false,
+            &mut Scope::default(),
+            &shutdown,
+        ));
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
+
+        let moved_locator = "fictional-moved-pane-20-current-locator";
+        source["agents"][0]["pane_id"] = moved_locator.into();
+        let moved = normalizer
+            .normalize_snapshot_value(source.clone(), "2026-08-13T12:00:01Z")
+            .unwrap();
+        feed.apply_normalized_for_test(moved).await;
+        table.apply(feed.snapshot().await);
+        retain_selection(&mut selected, &table, &Scope::default());
+        assert_eq!(selected.as_deref(), Some("fictional-terminal-20"));
+        assert_eq!(
+            table.agents().next().unwrap().pane_id.as_deref(),
+            Some(moved_locator)
+        );
+        let inspection = render_scene(
+            &table,
+            160,
+            40,
+            selected.as_deref(),
+            SceneView::Kitchen,
+            false,
+        );
+        assert!(inspection.contains(moved_locator), "{inspection}");
+        let help = render_scene(
+            &table,
+            100,
+            40,
+            selected.as_deref(),
+            SceneView::Kitchen,
+            true,
+        );
+        assert!(help.contains(moved_locator), "{help}");
+        assert!(!help.contains("fictional-pane-20"), "{help}");
+
+        source["agents"] = serde_json::json!([]);
+        let absent = normalizer
+            .normalize_snapshot_value(source, "2026-08-13T12:00:02Z")
+            .unwrap();
+        feed.apply_normalized_for_test(absent).await;
+        table.apply(feed.snapshot().await);
+        retain_selection(&mut selected, &table, &Scope::default());
+        assert_eq!(selected, None);
+    }
+
     #[test]
     fn real_herdr_snapshot_drives_keyboard_inspection_lifecycle() {
         let raw = serde_json::from_str(include_str!(

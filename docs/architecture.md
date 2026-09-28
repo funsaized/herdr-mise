@@ -417,6 +417,16 @@ Selection only moves its fixed-width marker and viewport. Compact station identi
 the locator only for colliding active rendered labels (name/basename pairs in the
 browser and names in the TUI).
 
+**Proposed, unimplemented exception:** [The pane-focus feasibility spike](herdr-pane-focus-spike.md)
+documents pinned upstream support and a possible explicitly gated TUI action.
+Today's adapter, Feed, TUI and browser remain read-only toward Herdr; selecting
+or copying a locator does not focus a pane. No browser command interface exists.
+Human approval of the precise operation, target-safety decision and surfaces
+is required before any focus implementation or live experiment; issue
+acceptance is not approval. A trust-boundary change additionally needs an
+`@funsaized`-authored same-repository PR and managed verification on its
+current head.
+
 ## Ended lifecycle
 
 ```
