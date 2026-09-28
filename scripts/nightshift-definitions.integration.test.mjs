@@ -165,6 +165,46 @@ test(
   },
 );
 
+// The factory rejects evidence its current stage does not declare, so every
+// literal evidence name a workflow records must be declared somewhere.
+test(
+  "workflows record only evidence the factory declares",
+  { timeout: 60_000 },
+  () => {
+    const { stages } = swamp([
+      "model",
+      "get",
+      "nightshift-template",
+    ]).globalArguments;
+    const declared = new Set(
+      stages.flatMap((stage) => [
+        ...(stage.work?.resultEvidence ? [stage.work.resultEvidence] : []),
+        ...(stage.evidence ?? []).map((evidence) => evidence.name),
+      ]),
+    );
+    const recorded = readdirSync("workflows")
+      .filter((name) => name.startsWith("workflow-nightshift-"))
+      .flatMap((name) =>
+        swamp([
+          "workflow",
+          "get",
+          name.replace(/^workflow-|\.yaml$/g, ""),
+        ]).jobs.flatMap((job) => job.steps),
+      )
+      .filter(
+        ({ task }) =>
+          task.methodName === "record_evidence" &&
+          !String(task.inputs.name).includes("${{"),
+      )
+      .map(({ task }) => task.inputs.name);
+    assert.ok(recorded.includes("test-receipts"));
+    assert.deepEqual(
+      recorded.filter((name) => !declared.has(name)),
+      [],
+    );
+  },
+);
+
 // Intake may overlap a running factory (see AGENTS.md), so it must stay
 // metadata-only: issue creation and lifecycle start. Runtime factories are
 // created by scripts/nightshift-start-factory.mjs, never from workflow data.

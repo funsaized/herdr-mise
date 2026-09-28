@@ -203,6 +203,14 @@ globalArguments:
                       plan: '${{ data.latest(self.name, "artifact-plan").payload }}'
                       reviewFeedback: '${{ data.latest(self.name, "artifact-code-review").?payload.?findings.orValue([]) + (data.latest(self.name, "artifact-ship-feedback").?subjectVersion.orValue(0) == data.latest(self.name, "artifact-release-candidate").?version.orValue(-1) ? [{"id": "SHIP-REVIEW", "severity": "high", "category": "human-review", "description": data.latest(self.name, "artifact-ship-feedback").payload.feedback}] : []) }}'
               resultEvidence: build-run
+          evidence:
+              - name: test-receipts
+                schema:
+                    type: object
+                    additionalProperties: true
+                    required: [receipts]
+                    properties:
+                        receipts: { type: array, minItems: 1 }
           artifacts:
               - name: workspace
                 schema:
@@ -407,6 +415,14 @@ globalArguments:
                       subjectRoot: '${{ data.latest(self.name, "artifact-release-candidate").payload.subjectRoot }}'
                       prUrl: '${{ data.latest(self.name, "artifact-release-candidate").payload.prUrl }}'
               resultEvidence: shipping-run
+          evidence:
+              - name: managed-verification
+                schema:
+                    type: object
+                    additionalProperties: true
+                    required: [headSha]
+                    properties:
+                        headSha: { type: string, pattern: "^[0-9a-f]{40}$" }
           transitions:
               - name: complete
                 to: await-merge
