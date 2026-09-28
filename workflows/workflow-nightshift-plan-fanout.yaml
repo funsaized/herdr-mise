@@ -32,6 +32,7 @@ jobs:
             factory: ${{ self.entry.factory }}
             workItem: ${{ self.entry.workItem }}
             issueNumber: ${{ int(self.entry.workItem) }}
+            structuredTests: true
             reviewFeedback: ${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan-review").?attributes.?payload.?findings.orValue([]) }}
             currentPlan: ${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan").?attributes.?payload.orValue({}) }}
             humanFeedback: '${{ data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan-feedback").?attributes.?subjectVersion.orValue(0) == data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan").?version.orValue(-1) ? data.latest(self.entry.factory, "artifact-" + self.entry.workItem + "-plan-feedback").attributes.payload.feedback : "" }}'
