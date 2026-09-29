@@ -1108,3 +1108,18 @@ interval or subscriptions.
   `perf/client.perf.spec.ts-snapshots/demo-service-darwin.png`. If the perf
   suite reports a meaningful pixel diff, investigate the scene change and
   re-baseline deliberately only when the new rendering is correct.
+
+## Service recap
+
+Open **Recap** beside the workspace selector in the browser, or press **R** in
+the TUI (listed in `?` help; R/Esc returns; q quits). Recap scopes include departed
+workspaces until their evidence is evicted; they do not change the kitchen
+filter. The recap resets when switching demo/live, not on reconnect or scope
+changes. It retains 4096 closed observations plus the current roster, with
+bounded visible rows. Plated means observed entries into Done and 86’d means
+explicit ended observations, not upstream completed-task counts. **Observed
+time blocked** can commonly mean awaiting human attention but does not verify
+its cause. Open durations/waits are provisional; transport/source interruptions
+exclude the unverified interval since the last healthy state observation.
+Quiet healthy time may also be excluded and provisional totals may decrease
+after delayed failure detection. No history is persisted or backfilled.

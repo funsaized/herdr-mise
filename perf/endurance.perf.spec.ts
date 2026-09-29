@@ -4,7 +4,8 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { startFixtureApp } from "../e2e/fixture-app";
+import { startFixtureApp, type FixtureApp } from "../e2e/fixture-app";
+import { RECAP_LIMIT } from "../client/src/state/recap";
 
 const durationMinutes = Number(
     process.env.HERDR_MISE_ENDURANCE_DURATION_MINUTES ?? "480",
@@ -137,6 +138,93 @@ function churn(snapshot: HerdrSnapshot, generation: number): HerdrSnapshot {
     };
   }
   return { ...snapshot, agents };
+}
+
+function recapChurnRoster(
+  source: HerdrSnapshot,
+  count: number,
+  generation: number,
+): HerdrSnapshot {
+  const template = source.agents[0]!;
+  return {
+    ...source,
+    workspaces: Array.from({ length: count }, (_, index) => ({
+      workspace_id: `recap-workspace-${generation}-${index}`,
+      label: `Recap workspace ${generation}-${index}`,
+    })),
+    agents: Array.from({ length: count }, (_, index) => ({
+      ...template,
+      terminal_id: `recap-${generation}-${index}`,
+      pane_id: `recap-pane-${generation}-${index}`,
+      workspace_id: `recap-workspace-${generation}-${index}`,
+      display_agent: `recap-cook-${generation}-${index}`,
+      agent_status:
+        index % 3 === 0 ? "blocked" : index % 3 === 1 ? "working" : "idle",
+      state_change_seq: generation * count + index + 1,
+      agent_session: { value: `recap-session-${generation}-${index}` },
+    })),
+  };
+}
+
+type RecapRetention = {
+  generation: number;
+  snapshot: HerdrSnapshot;
+  renderedRows: number;
+  workspaceScopes: number;
+  pages: number;
+};
+
+// Drive identity/workspace churn through the real fixture Feed until the
+// renderer-local recap rolls its retained window, then read the bound back
+// through the accessible DOM instead of a debug-only store handle.
+async function exerciseRecapRetention(
+  page: Page,
+  fixture: FixtureApp,
+  source: HerdrSnapshot,
+  agents: number,
+): Promise<RecapRetention> {
+  const gotIt = page.getByRole("button", { name: "Got it" });
+  if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
+  const recap = page.locator("details.serviceRecap"),
+    summary = recap.locator(":scope > summary");
+  await summary.click();
+  await expect(recap.locator("table")).toBeVisible({ timeout: 15_000 });
+  const generations = Math.ceil((RECAP_LIMIT + 1) / agents) + 3;
+  let generation = 0;
+  for (let index = 0; index < generations; index++) {
+    generation++;
+    fixture.setSnapshot(recapChurnRoster(source, agents, generation));
+    await expect(
+      recap.getByRole("option", { name: `Recap workspace ${generation}-0` }),
+    ).toBeAttached({ timeout: 15_000 });
+  }
+  // Drop the open roster so the scope list is bounded only by retained closed
+  // observations, then confirm rollover is disclosed and the DOM stays capped.
+  fixture.setSnapshot({
+    ...recapChurnRoster(source, agents, generation),
+    agents: [],
+    workspaces: [],
+  });
+  await expect(recap).toContainText("Retained window truncated", {
+    timeout: 15_000,
+  });
+  const renderedRows = await recap.locator("table tbody tr").count(),
+    workspaceScopes = (await recap.locator("select option").count()) - 1,
+    pagination = await recap
+      .locator('nav[aria-label="Recap pages"]')
+      .innerText(),
+    pages = Number(/of (\d+)/.exec(pagination)?.[1]);
+  expect(renderedRows).toBeGreaterThan(0);
+  expect(renderedRows).toBeLessThanOrEqual(20);
+  expect(workspaceScopes).toBeGreaterThan(0);
+  expect(workspaceScopes).toBeLessThanOrEqual(RECAP_LIMIT);
+  expect(Number.isFinite(pages)).toBe(true);
+  expect(pages).toBeLessThanOrEqual(Math.ceil(RECAP_LIMIT / 20));
+  await summary.click();
+  await expect(recap.locator("table")).toHaveCount(0);
+  const snapshot = recapChurnRoster(source, agents, generation);
+  fixture.setSnapshot(snapshot);
+  return { generation, snapshot, renderedRows, workspaceScopes, pages };
 }
 
 function slope(
@@ -460,10 +548,29 @@ test("eight-hour production-boundary endurance matrix", async ({ browser }) => {
           const due = scenarioStartedAt + iteration * sampleInterval,
             wait = due - Date.now();
           if (wait > 0) await pages[0]!.waitForTimeout(wait);
-          generation++;
+          if (iteration === 0) {
+            const retention = await exerciseRecapRetention(
+              pages[0]!,
+              fixture,
+              source,
+              scenario.agents,
+            );
+            generation = retention.generation;
+            snapshot = retention.snapshot;
+            await record({
+              type: "recap-retention",
+              ...scenario,
+              generation: retention.generation,
+              renderedRows: retention.renderedRows,
+              workspaceScopes: retention.workspaceScopes,
+              pages: retention.pages,
+            });
+          } else {
+            generation++;
+            snapshot = churn(snapshot, generation);
+            fixture.setSnapshot(snapshot);
+          }
           completedSessions += Math.max(1, Math.floor(scenario.agents / 10));
-          snapshot = churn(snapshot, generation);
-          fixture.setSnapshot(snapshot);
 
           if (iteration % 2 === 1) {
             await fixture.stopSource();

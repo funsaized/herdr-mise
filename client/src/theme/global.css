@@ -555,7 +555,8 @@ summary:focus-visible {
   position: static;
 }
 .workspaceScope select,
-.workspaceScope button {
+.workspaceScope button,
+.serviceRecap > summary {
   max-width: 100%;
   min-height: 44px;
   padding: 5px 11px;
@@ -566,7 +567,8 @@ summary:focus-visible {
   font-size: var(--fontSecondarySize);
   cursor: pointer;
 }
-.workspaceScope button {
+.workspaceScope button,
+.serviceRecap > summary {
   color: var(--text);
 }
 .emptyPill,
@@ -1201,4 +1203,54 @@ summary:focus-visible {
 .rendererFallback p,
 .rendererFallback button {
   pointer-events: auto;
+}
+/* The recap opens from the workspace controls: upward from the desktop
+   footer, downward from the narrow header. */
+:is(.workspaceScope, .workspaceControls):has(.serviceRecap[open]) {
+  z-index: 21;
+}
+.serviceRecap > summary {
+  display: flex;
+  align-items: center;
+  list-style: none;
+}
+.serviceRecap > summary::-webkit-details-marker {
+  display: none;
+}
+.serviceRecap > div {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: min(440px, calc(100vw - 28px));
+  max-height: min(60vh, 32rem);
+  overflow: auto;
+  padding: 0.75rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radiusPanel);
+}
+@media (max-width: 480px) {
+  .serviceRecap > div {
+    top: calc(100% + 6px);
+    right: 0;
+    bottom: auto;
+    width: auto;
+  }
+}
+.serviceRecap p {
+  margin: 0.5rem 0;
+}
+.serviceRecap .recapRows {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.serviceRecap table {
+  border-collapse: collapse;
+  text-align: left;
+}
+.serviceRecap th,
+.serviceRecap td {
+  padding: 0.35rem;
+  border-bottom: 1px solid currentColor;
 }

@@ -739,3 +739,40 @@ test("settings restores focus to its visible trigger", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
 });
+
+test("narrow demo service recap stays clickable beside settings and placard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 400, height: 700 });
+  await page.goto("/?preset=blocked&agents=1");
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await expect(placard(page)).toBeVisible();
+  const recap = page.locator(".serviceRecap");
+  // Playwright refuses the click if the placard or panel intercepts it.
+  await recap.locator("summary").click();
+  await expect(recap).toHaveAttribute("open");
+  const headers = await recap.locator("thead th").allTextContents();
+  expect(headers).toContain("Blocked time");
+  expect(headers).toContain("Blocked occurrences");
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/?preset=blocked&agents=30");
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await recap.locator("summary").click();
+  const content = recap.locator(":scope > div");
+  await expect(content).toBeInViewport({ ratio: 1 });
+  // The open recap stacks above the settings panel rather than behind it.
+  expect(
+    await content.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const top = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      return element.contains(top);
+    }),
+  ).toBe(true);
+  await recap.getByRole("button", { name: "Next" }).click();
+  await expect(
+    recap.getByRole("navigation", { name: "Recap pages" }),
+  ).toContainText("Page 2 of 2");
+});

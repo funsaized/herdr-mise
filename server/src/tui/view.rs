@@ -21,10 +21,380 @@ pub(super) fn sanitize_external(value: &str) -> String {
         .collect()
 }
 
+pub(crate) fn draw_service_recap(
+    frame: &mut Frame<'_>,
+    table: &AgentTable,
+    scope: &Scope,
+    now_ms: i64,
+    offset: usize,
+) {
+    let summary = if scope.id.is_none() && scope.label.is_some() {
+        table.recap().summary_missing(now_ms)
+    } else {
+        table.recap().summary(scope.id.as_deref(), now_ms)
+    };
+    let label = scope.label.as_deref().map_or("All", workspace_display_name);
+    let scopes = table.recap().workspaces();
+    let duplicate = scope.id.is_some()
+        && scopes
+            .iter()
+            .filter(|workspace| {
+                workspace.id.is_some() && workspace_display_name(&workspace.label) == label
+            })
+            .count()
+            > 1;
+    let label = format!(
+        "{}{}",
+        sanitize_external(label),
+        if duplicate {
+            format!(
+                " ({})",
+                scopes
+                    .iter()
+                    .position(|workspace| workspace.id.as_deref() == scope.id.as_deref())
+                    .map_or(0, |index| index + 1)
+            )
+        } else {
+            String::new()
+        }
+    );
+    let wait = |value: Option<f64>| {
+        value.map_or_else(
+            || "Unavailable".into(),
+            |ms| format_duration(ms.max(0.0) as u64),
+        )
+    };
+    let (title, status) = status_lines(
+        table.mode(),
+        table.source_status(),
+        table.source_diagnostic(),
+        table.agents().count(),
+    );
+    let mut lines = vec![
+        title,
+        status,
+        format!("Scope: {label}"),
+        format!(
+            "Observed time blocked: {}",
+            format_duration(summary.blocked_ms)
+        ),
+        "Commonly awaits human attention".into(),
+        "Cause unverified".into(),
+        format!(
+            "Working {} · Median wait {} · Worst {}",
+            format_duration(summary.working_ms),
+            wait(summary.median_wait_ms),
+            summary
+                .worst_wait_ms
+                .map_or_else(|| "Unavailable".into(), format_duration)
+        ),
+        format!(
+            "Blocked {} · Plated {} · 86'd {}",
+            summary.blocked_occurrences, summary.plated_count, summary.ended_count
+        ),
+        format!(
+            "Started {}",
+            summary.start_ms.map_or_else(
+                || "Unavailable".into(),
+                |ms| chrono::DateTime::from_timestamp_millis(ms)
+                    .map_or_else(|| "Unavailable".into(), |dt| dt.to_rfc3339())
+            )
+        ),
+        if summary.partial {
+            "Partial / provisional"
+        } else {
+            "Observed"
+        }
+        .into(),
+        "R return · w scope · a all · Up/Down scroll · q quit · Esc return".into(),
+        "Agent · Working · Blocked · Median / Worst · B / P / 86".into(),
+    ];
+    if summary.interrupted {
+        lines.push("Interrupted gap".into());
+    }
+    if summary.truncated {
+        lines.push("Retained window truncated".into());
+    }
+    let rows = if scope.id.is_none() && scope.label.is_some() {
+        table.recap().rows_missing(now_ms)
+    } else {
+        table.recap().rows(scope.id.as_deref(), now_ms)
+    };
+    let available = frame.area().height.saturating_sub(lines.len() as u16 + 2) as usize;
+    for row in rows
+        .iter()
+        .skip(offset.min(rows.len().saturating_sub(available)))
+        .take(available)
+    {
+        let stats = &row.summary;
+        let name = sanitize_external(&row.name);
+        if frame.area().width < 80 {
+            lines.push(format!(
+                "{}{} · Blocked {}",
+                if stats.partial { "Partial " } else { "" },
+                compact_text(&name, 10),
+                format_duration(stats.blocked_ms)
+            ));
+            continue;
+        }
+        lines.push(format!(
+            "{} · {} · {} · {} / {} · {} / {} / {}{}",
+            name,
+            format_duration(stats.working_ms),
+            format_duration(stats.blocked_ms),
+            wait(stats.median_wait_ms),
+            stats
+                .worst_wait_ms
+                .map_or_else(|| "Unavailable".into(), format_duration),
+            stats.blocked_occurrences,
+            stats.plated_count,
+            stats.ended_count,
+            if stats.partial { " · partial" } else { "" }
+        ));
+    }
+    let text = lines.into_iter().map(Line::from).collect::<Vec<_>>();
+    frame.render_widget(
+        Paragraph::new(text).block(
+            Block::default()
+                .title(" SERVICE RECAP ")
+                .borders(Borders::ALL),
+        ),
+        frame.area(),
+    );
+}
+
+#[cfg(test)]
+mod recap_view_tests {
+    use super::*;
+    use crate::protocol::{
+        AgentRecord, AgentState, AgentStateEvent, AppMode, SessionStats, SourceStatus,
+    };
+    use ratatui::{backend::TestBackend, Terminal};
+
+    pub(super) fn check_recap_view() {
+        let agent = AgentRecord {
+            id: "id\u{1b}".into(),
+            name: "cook\nALERT".into(),
+            state: AgentState::Blocked,
+            state_known: None,
+            state_entered_at: "2026-01-01T00:00:00Z".into(),
+            workspace_id: Some("ws".into()),
+            workspace: "/secret/full/path\nroot".into(),
+            pane_id: None,
+            agent_kind: None,
+            progress: None,
+            accent_index: 0,
+            model: "".into(),
+            session: SessionStats {
+                runtime_ms: 0,
+                tickets: 0,
+                tickets_available: None,
+            },
+        };
+        let mut table = AgentTable::default();
+        table.apply_at(
+            AgentStateEvent::Snapshot {
+                version: 1,
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                source_diagnostic: None,
+                agents: vec![agent],
+                workspaces: Some(vec![crate::protocol::WorkspaceRecord {
+                    id: "ws".into(),
+                    label: "C:\\secret\\kitchen\nALERT".into(),
+                }]),
+            },
+            1000,
+        );
+        let scope = Scope {
+            id: Some("ws".into()),
+            label: Some("C:\\secret\\kitchen\nALERT".into()),
+        };
+        for width in [36, 100] {
+            let mut terminal = Terminal::new(TestBackend::new(width, 18)).unwrap();
+            terminal
+                .draw(|frame| draw_service_recap(frame, &table, &scope, 2000, 0))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let text = buffer
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert!(text.contains("Observed time blocked"));
+            assert!(text.contains("Cause unverified"));
+            assert!(text.contains("Partial / provisional"));
+            assert!(!text.contains("secret"));
+            assert!(!text.contains("\n"));
+            assert!(!text.contains("\u{1b}"));
+        }
+        table.gap_at(3000);
+        let mut narrow = Terminal::new(TestBackend::new(36, 18)).unwrap();
+        narrow
+            .draw(|frame| draw_service_recap(frame, &table, &scope, 4000, 0))
+            .unwrap();
+        let text = narrow
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("Interrupted gap"), "{text}");
+        assert!(text.contains("Cause unverified"), "{text}");
+        assert!(text.contains("Partial / provisional"), "{text}");
+
+        let mut duplicate = AgentTable::default();
+        duplicate.apply_at(
+            AgentStateEvent::Snapshot {
+                version: 1,
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                source_diagnostic: None,
+                agents: vec![],
+                workspaces: Some(vec![
+                    crate::protocol::WorkspaceRecord {
+                        id: "pantry-a".into(),
+                        label: "/a/pantry".into(),
+                    },
+                    crate::protocol::WorkspaceRecord {
+                        id: "pantry-b".into(),
+                        label: "/b/pantry".into(),
+                    },
+                ]),
+            },
+            1000,
+        );
+        let mut first = table.agents().next().unwrap().clone();
+        first.id = "first".into();
+        first.name = "first".into();
+        first.workspace_id = Some("pantry-a".into());
+        let mut second = first.clone();
+        second.id = "second".into();
+        second.name = "second".into();
+        second.workspace_id = Some("pantry-b".into());
+        duplicate.apply_at(
+            AgentStateEvent::Snapshot {
+                version: 1,
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                source_diagnostic: None,
+                agents: vec![first, second],
+                workspaces: Some(vec![
+                    crate::protocol::WorkspaceRecord {
+                        id: "pantry-a".into(),
+                        label: "/a/pantry".into(),
+                    },
+                    crate::protocol::WorkspaceRecord {
+                        id: "pantry-b".into(),
+                        label: "/b/pantry".into(),
+                    },
+                ]),
+            },
+            2000,
+        );
+        for (id, expected) in [("pantry-a", "first"), ("pantry-b", "second")] {
+            let mut terminal = Terminal::new(TestBackend::new(80, 18)).unwrap();
+            terminal
+                .draw(|frame| {
+                    draw_service_recap(
+                        frame,
+                        &duplicate,
+                        &Scope {
+                            id: Some(id.into()),
+                            label: Some(format!("/{id}/pantry")),
+                        },
+                        3000,
+                        0,
+                    )
+                })
+                .unwrap();
+            let text = terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            let ordinal = duplicate
+                .recap()
+                .workspaces()
+                .iter()
+                .position(|workspace| workspace.id.as_deref() == Some(id))
+                .unwrap()
+                + 1;
+            assert!(text.contains(&format!("pantry ({ordinal})")), "{text}");
+            assert!(text.contains(expected), "{text}");
+            assert!(
+                !text.contains(if id == "pantry-a" { "second" } else { "first" }),
+                "{text}"
+            );
+            assert!(!text.contains("/pantry"), "{text}");
+        }
+
+        let render_status = |mode, source_status, source_diagnostic, width| {
+            let mut table = AgentTable::default();
+            table.apply_at(
+                AgentStateEvent::Snapshot {
+                    version: 1,
+                    mode,
+                    source_status,
+                    source_diagnostic,
+                    agents: vec![],
+                    workspaces: None,
+                },
+                1000,
+            );
+            let mut terminal = Terminal::new(TestBackend::new(width, 18)).unwrap();
+            terminal
+                .draw(|frame| draw_service_recap(frame, &table, &Scope::default(), 2000, 0))
+                .unwrap();
+            terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>()
+        };
+        for width in [36, 160] {
+            let demo = render_status(AppMode::Demo, SourceStatus::UnavailableSocket, None, width);
+            assert!(demo.contains("DEMO SERVICE"));
+            assert!(demo.contains("Mock feed"));
+            assert!(demo.contains("Nothing here is real"));
+            let failed = render_status(AppMode::Live, SourceStatus::Timeout, None, width);
+            assert!(failed.contains("Herdr did not respond in time"));
+        }
+        let empty = render_status(AppMode::Live, SourceStatus::Connected, None, 160);
+        assert!(empty.contains("Waiting for agents — start one in herdr"));
+        let unsupported = render_status(
+            AppMode::Live,
+            SourceStatus::UnsupportedProtocol,
+            Some(crate::protocol::SourceDiagnostic {
+                observed_protocol: 42,
+                supported_protocols: vec![1, 2],
+                next_action: "Upgrade Herdr".into(),
+            }),
+            160,
+        );
+        for expected in [
+            "Herdr protocol is unsupported",
+            "observed 42",
+            "supported: 1, 2",
+            "Upgrade Herdr",
+        ] {
+            assert!(
+                unsupported.contains(expected),
+                "missing {expected}: {unsupported}"
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 use ratatui::buffer::CellDiffOption;
 
-fn workspace_display_name(workspace: &str) -> &str {
+pub(super) fn workspace_display_name(workspace: &str) -> &str {
     let value = workspace.trim();
     let bytes = value.as_bytes();
     let windows_root = bytes.len() >= 2
@@ -200,7 +570,7 @@ pub(super) fn freezer_inspect_height(
         .unwrap_or(u16::MAX)
 }
 
-fn format_duration(milliseconds: u64) -> String {
+pub(super) fn format_duration(milliseconds: u64) -> String {
     let seconds = milliseconds / 1_000;
     let minutes = seconds / 60;
     let hours = minutes / 60;
@@ -881,6 +1251,10 @@ pub(crate) fn draw_freezer_scoped(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn service_recap_renders_observed_waits_and_compact_disclosures() {
+        super::recap_view_tests::check_recap_view();
+    }
     #[test]
     fn shared_provenance_fixture_distinguishes_unavailable_from_zero() {
         let event: crate::protocol::AgentStateEvent = serde_json::from_str(include_str!(
@@ -1911,6 +2285,7 @@ mod tests {
             &shutdown,
         ));
         let kitchen = render_scene(&table, 80, 24, selected.as_deref(), scene_view, help_open);
+        assert!(kitchen.contains("R recap"));
         assert!(!handle_key_with_scope(
             KeyCode::Char('?'),
             &table,
