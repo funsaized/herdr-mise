@@ -89,6 +89,24 @@ Herdr-managed pane registration.
 
 ## Local run
 
+### Browser attention
+
+An open browser page shows the global known blocked count in its tab title and a
+static attention favicon while the live Herdr source is connected, even when a
+workspace is selected or the page is backgrounded. The cue clears when work
+resolves; demo shows `DEMO SERVICE`, and connecting/disconnected pages do not
+present retained records as current blocked work. The title is the textual
+fallback when a browser does not display SVG favicons.
+
+Desktop notifications are **off by default**. Enable them in Settings with a
+browser permission gesture. Only newly observed hidden blocked episodes and
+later offscreen escalations notify; opening, hiding, reconnecting, or enabling
+does not replay existing blocked work. Notifications use generic counts and
+stages, never agent identities, workspace paths, or pane locators. They require
+an open page with live connectivity and browser permission; browser background
+throttling, OS policy, and permission revocation can delay or suppress delivery.
+Each opted-in page delivers independently (there is no cross-tab coordination).
+
 ### Build and run from source
 
 ```sh

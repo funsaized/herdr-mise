@@ -137,6 +137,7 @@ export interface ChromeProps {
   focusedId: string | null;
   hits: readonly SceneHit[];
   settingsOpen: boolean;
+  notificationDeliveryFailed?: boolean;
   statsOpen: boolean;
   lastUpdateSeconds: number;
   metrics: DebugMetrics;
@@ -236,6 +237,7 @@ export function Chrome(props: ChromeProps) {
       {props.settingsOpen && (
         <SettingsPanel
           settings={props.coarse.settings}
+          notificationDeliveryFailed={props.notificationDeliveryFailed}
           onChange={(patch) => props.store.setSettings(patch)}
           onClose={props.onCloseSettings}
         />

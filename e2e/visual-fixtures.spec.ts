@@ -30,6 +30,207 @@ async function panelFixture() {
   );
 }
 
+test("fixture-backed offscreen attention updates global title and favicon without waking the scene", async ({
+  page,
+}) => {
+  const snapshot = await panelFixture();
+  snapshot.workspaces.push({
+    workspace_id: "fictional-other",
+    label: "Other kitchen",
+  });
+  snapshot.agents.push({
+    ...snapshot.agents[0],
+    terminal_id: "fictional-terminal-21",
+    pane_id: "fictional-pane-21",
+    workspace_id: "fictional-other",
+    display_agent: "example-sous",
+  });
+  const app = await startFixtureApp({
+    prefix: "mise-offscreen-metadata-",
+    snapshot,
+  });
+  try {
+    await page.goto(`${app.appUrl}/?stats`);
+    await expect(
+      page.getByRole("button", { name: /^example-sous, Working/ }),
+    ).toBeAttached();
+    const icon = page.locator('link[rel="icon"]');
+    const normal = await icon.getAttribute("href");
+    await page
+      .getByRole("combobox", { name: "Workspace" })
+      .selectOption("fictional-kitchen");
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const before = (await sceneMetrics(page))?.rafCount;
+    app.setSnapshot({
+      ...snapshot,
+      agents: snapshot.agents.map((agent: (typeof snapshot.agents)[number]) =>
+        agent.terminal_id === "fictional-terminal-21"
+          ? { ...agent, agent_status: "blocked", state_change_seq: 43 }
+          : agent,
+      ),
+    });
+    await expect(page).toHaveTitle("(1 blocked) herdr-mise");
+    await expect.poll(() => icon.getAttribute("href")).not.toBe(normal);
+    expect((await sceneMetrics(page))?.rafCount).toBe(before);
+    app.setSnapshot({
+      ...snapshot,
+      agents: snapshot.agents.map(
+        (agent: (typeof snapshot.agents)[number]) => ({
+          ...agent,
+          state_change_seq: 44,
+        }),
+      ),
+    });
+    await expect(page).toHaveTitle("herdr-mise");
+    await expect(icon).toHaveAttribute("href", normal!);
+    app.setSnapshot({
+      ...snapshot,
+      agents: snapshot.agents.map(
+        (agent: (typeof snapshot.agents)[number]) => ({
+          ...agent,
+          agent_status: "blocked",
+          state_change_seq: 45,
+        }),
+      ),
+    });
+    await expect(page).toHaveTitle("(2 blocked) herdr-mise");
+    await app.stopSource();
+    await expect(page).toHaveTitle("Disconnected — herdr-mise", {
+      timeout: 15_000,
+    });
+    await expect(icon).toHaveAttribute("href", normal!);
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed offscreen attention delivers one opted-in notification for a blocked burst", async ({
+  page,
+}) => {
+  const snapshot = await panelFixture();
+  snapshot.agents.push({
+    ...snapshot.agents[0],
+    terminal_id: "fictional-terminal-21",
+    pane_id: "fictional-pane-21",
+    display_agent: "example-sous",
+  });
+  const app = await startFixtureApp({
+    prefix: "mise-offscreen-notify-",
+    snapshot,
+  });
+  try {
+    await page.addInitScript(() => {
+      const calls: { title: string; body: string }[] = [];
+      Object.assign(window, { __notificationCalls: calls });
+      class FakeNotification {
+        static permission = "granted";
+        static requestPermission = async () => "granted";
+        constructor(title: string, options: NotificationOptions) {
+          calls.push({ title, body: options.body ?? "" });
+        }
+        close() {}
+      }
+      Object.assign(window, { Notification: FakeNotification });
+    });
+    await page.goto(app.appUrl);
+    await expect(
+      page.getByRole("button", { name: /^example-sous, Working/ }),
+    ).toBeAttached();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("switch", { name: "Desktop notifications" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Desktop notifications" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const blocked = {
+      ...snapshot,
+      agents: snapshot.agents.map(
+        (agent: (typeof snapshot.agents)[number]) => ({
+          ...agent,
+          agent_status: "blocked",
+          state_change_seq: 43,
+        }),
+      ),
+    };
+    app.setSnapshot(blocked);
+    const calls = () =>
+      page.evaluate(
+        () =>
+          (
+            window as Window & {
+              __notificationCalls: { title: string; body: string }[];
+            }
+          ).__notificationCalls,
+      );
+    await expect.poll(async () => (await calls()).length).toBe(1);
+    const [notification] = await calls();
+    expect(notification!.title).toBe("herdr-mise");
+    expect(notification!.body).toContain("2 blocked agents");
+    for (const identity of [
+      "example-cook",
+      "example-sous",
+      "fictional-kitchen",
+      "fictional-pane-20",
+      "fictional-pane-21",
+    ])
+      expect(JSON.stringify(notification)).not.toContain(identity);
+    app.setSnapshot(blocked);
+    await page.waitForTimeout(400);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => false,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(await calls()).toHaveLength(1);
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed settings scrolls to the final escalation control in a short viewport", async ({
+  page,
+}) => {
+  const app = await startFixtureApp({
+    prefix: "mise-short-settings-",
+    snapshot: await panelFixture(),
+  });
+  try {
+    await page.setViewportSize({ width: 1024, height: 500 });
+    await page.goto(app.appUrl);
+    await page.getByRole("button", { name: "Open settings" }).click();
+    const panel = page.getByRole("complementary", { name: "Settings" });
+    const last = page.getByRole("combobox", { name: "Screen-edge glow after" });
+    expect(
+      await panel.evaluate((el) => el.scrollHeight > el.clientHeight),
+    ).toBe(true);
+    await last.focus();
+    await expect(last).toBeInViewport();
+    await expect(last).toHaveValue("300000");
+    // ArrowDown on a closed <select> opens the picker on macOS but changes
+    // the value on Linux, so change it explicitly.
+    await last.selectOption("600000");
+    await expect(last).toHaveValue("600000");
+    const bounds = await panel.boundingBox();
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(500);
+  } finally {
+    await app.close();
+  }
+});
+
 test("fixture-backed canvas selection replaces settings with agent details in one click", async ({
   page,
 }) => {

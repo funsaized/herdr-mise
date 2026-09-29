@@ -18,6 +18,7 @@ describe("versioned settings persistence", () => {
       store = new AgentStore(undefined, {}, storage),
       expected = {
         sound: true,
+        desktopNotifications: true,
         atmosphere: false,
         theme: "dark" as const,
         doneTimeoutMs: 300_000,
@@ -67,6 +68,7 @@ describe("versioned settings persistence", () => {
     expect(loadSettings(storage, defaultSettings)).toEqual({
       ...defaultSettings,
       sound: true,
+      desktopNotifications: false,
       doneTimeoutMs: 300_000,
       escalationFastMs: 30_000,
       escalationVignetteMs: 180_000,
@@ -88,6 +90,7 @@ describe("versioned settings persistence", () => {
     const settings = loadSettings(storage, defaultSettings);
     expect(settings).toEqual({
       sound: true,
+      desktopNotifications: false,
       atmosphere: true,
       theme: "dark",
       doneTimeoutMs: 300_000,
@@ -95,5 +98,19 @@ describe("versioned settings persistence", () => {
       escalationVignetteMs: 180_000,
     });
     expect(settings).not.toHaveProperty("reducedMotion");
+  });
+  it("defaults old desktop preferences off and validates the stored boolean", () => {
+    const storage = new MemoryStorage();
+    storage.value = JSON.stringify({ version: 1, settings: { sound: true } });
+    expect(loadSettings(storage, defaultSettings).desktopNotifications).toBe(
+      false,
+    );
+    storage.value = JSON.stringify({
+      version: 1,
+      settings: { desktopNotifications: "true" },
+    });
+    expect(loadSettings(storage, defaultSettings).desktopNotifications).toBe(
+      false,
+    );
   });
 });

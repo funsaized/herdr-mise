@@ -48,14 +48,6 @@ function visualSite(): Plugin {
             attrs: { name: "description", content: description },
             injectTo: "head",
           },
-          {
-            tag: "link",
-            attrs: {
-              rel: "icon",
-              href: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23231f20'/%3E%3Cpath d='M14 42h36v8H14zm6-28h24v8H20zm-6 14h36v8H14z' fill='%23f4ead7'/%3E%3C/svg%3E",
-            },
-            injectTo: "head",
-          },
           ...["og:image", "twitter:image"].map((name) => ({
             tag: "meta",
             attrs: {

@@ -7,6 +7,18 @@ import type {
 } from "../state/store";
 
 const BURST_MS = 100;
+export type AttentionStage = "enter" | "fast" | "vignette";
+export interface AttentionCandidate {
+  agentId: string;
+  episode: readonly [unknown, number];
+  stage: AttentionStage;
+  eligible: boolean;
+}
+const stageRank: Record<AttentionStage, number> = {
+  enter: 0,
+  fast: 1,
+  vignette: 2,
+};
 
 type StateEvent = Extract<StoreEvent, { type: "state" }>;
 
@@ -17,6 +29,7 @@ const nativeScheduler: Pick<Scheduler, "setTimeout" | "clearTimeout"> = {
 
 export class StateAnnouncementController {
   private pending = new Map<string, StateEvent>();
+  private desktop = new Map<string, AttentionCandidate>();
   private timer: unknown = null;
   private unsubscribe: () => void;
 
@@ -24,6 +37,9 @@ export class StateAnnouncementController {
     private store: AgentStore,
     private announce: (message: string) => void,
     private scheduler = nativeScheduler,
+    private deliver: (
+      candidates: readonly AttentionCandidate[],
+    ) => void = () => {},
   ) {
     this.unsubscribe = store.onEvent((event) => this.onEvent(event));
   }
@@ -33,6 +49,25 @@ export class StateAnnouncementController {
     if (this.timer !== null) this.scheduler.clearTimeout(this.timer);
     this.timer = null;
     this.pending.clear();
+    this.desktop.clear();
+  }
+
+  enqueue(candidate: AttentionCandidate) {
+    if (!candidate.eligible) return;
+    const previous = this.desktop.get(candidate.agentId);
+    if (
+      !previous ||
+      previous.episode[0] !== candidate.episode[0] ||
+      previous.episode[1] !== candidate.episode[1] ||
+      stageRank[candidate.stage] > stageRank[previous.stage]
+    )
+      this.desktop.set(candidate.agentId, candidate);
+    if (this.timer === null)
+      this.timer = this.scheduler.setTimeout(() => this.flush(), BURST_MS);
+  }
+
+  cancelDesktop() {
+    this.desktop.clear();
   }
 
   private onEvent(event: StoreEvent) {
@@ -60,6 +95,9 @@ export class StateAnnouncementController {
 
   private flush() {
     this.timer = null;
+    const candidates = [...this.desktop.values()];
+    this.desktop.clear();
+    if (candidates.length) this.deliver(candidates);
     const snapshot = this.store.snapshot(),
       stationNames = semanticStationNames([...snapshot.agents.values()]);
     const transitions = [...this.pending.values()].filter((event) => {

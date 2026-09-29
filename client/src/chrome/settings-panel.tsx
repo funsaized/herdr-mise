@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { resumeBellAudio } from "../sound/bell";
 import type { Settings } from "../state/store";
 import { FocusedPanel } from "./panel-support";
@@ -27,16 +27,78 @@ function Toggle({
 
 export function SettingsPanel({
   settings,
+  notificationDeliveryFailed = false,
   onChange,
   onClose,
 }: {
   settings: Settings;
+  notificationDeliveryFailed?: boolean;
   onChange(patch: Partial<Settings>): void;
   onClose(): void;
 }) {
   const toggleSound = () => {
     if (!settings.sound) void resumeBellAudio();
     onChange({ sound: !settings.sound });
+  };
+  const [permissionStatus, setPermissionStatus] = useState("");
+  const request = useRef(0);
+  const pending = useRef(false);
+  useEffect(
+    () => () => {
+      request.current++;
+    },
+    [],
+  );
+  const toggleNotifications = () => {
+    const generation = ++request.current;
+    if (pending.current) {
+      pending.current = false;
+      setPermissionStatus("Permission request cancelled");
+      return;
+    }
+    if (settings.desktopNotifications) {
+      onChange({ desktopNotifications: false });
+      setPermissionStatus("Desktop notifications off");
+      return;
+    }
+    if (typeof Notification === "undefined") {
+      setPermissionStatus(
+        "Desktop notifications are unavailable in this browser",
+      );
+      return;
+    }
+    if (Notification.permission === "granted") {
+      onChange({ desktopNotifications: true });
+      setPermissionStatus("Desktop notifications on while this page is open");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setPermissionStatus("Notifications are blocked by browser settings");
+      return;
+    }
+    try {
+      pending.current = true;
+      void Notification.requestPermission()
+        .then((permission) => {
+          if (request.current !== generation) return;
+          pending.current = false;
+          if (permission === "granted") {
+            onChange({ desktopNotifications: true });
+            setPermissionStatus(
+              "Desktop notifications on while this page is open",
+            );
+          } else setPermissionStatus("Notifications were not allowed");
+        })
+        .catch(() => {
+          if (request.current === generation) {
+            pending.current = false;
+            setPermissionStatus("Permission request failed");
+          }
+        });
+    } catch {
+      pending.current = false;
+      setPermissionStatus("Permission request failed");
+    }
   };
   return (
     <FocusedPanel className="panel settingsPanel" label="Settings">
@@ -53,6 +115,28 @@ export function SettingsPanel({
           onChange={toggleSound}
         />
       </SettingRow>
+      <SettingRow
+        title="Desktop notifications"
+        note="Optional, generic blocked alerts while this page is open and hidden"
+      >
+        <Toggle
+          label="Desktop notifications"
+          on={settings.desktopNotifications}
+          onChange={toggleNotifications}
+        />
+      </SettingRow>
+      <small role="status">
+        {settings.desktopNotifications &&
+        (typeof Notification === "undefined" ||
+          Notification.permission !== "granted")
+          ? "Browser permission does not allow notifications; check browser settings"
+          : settings.desktopNotifications && notificationDeliveryFailed
+            ? "Last notification delivery failed; check browser or OS settings"
+            : permissionStatus ||
+              (settings.desktopNotifications
+                ? "Enabled; browser and OS delivery may vary"
+                : "Off by default")}
+      </small>
       <SettingRow
         title="Atmosphere"
         note="Working steam, warm light, and freezer frost"

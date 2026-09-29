@@ -26,6 +26,10 @@ export function loadSettings(
       return { ...defaults };
     const settings = value.settings as Record<string, unknown>;
     return {
+      desktopNotifications:
+        typeof settings.desktopNotifications === "boolean"
+          ? settings.desktopNotifications
+          : defaults.desktopNotifications,
       sound:
         typeof settings.sound === "boolean" ? settings.sound : defaults.sound,
       atmosphere:
