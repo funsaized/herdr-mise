@@ -29,6 +29,7 @@ import {
   type SemanticAgent,
 } from "./state/semantic-stations";
 import { StateAnnouncementController } from "./chrome/state-announcements";
+import { OffscreenAttentionController } from "./chrome/offscreen-attention";
 import { SemanticStationControls } from "./chrome/SemanticStationControls";
 
 const cssTokens = {
@@ -132,6 +133,8 @@ export function App() {
     [lastUpdateSeconds, setLastUpdateSeconds] = useState(0),
     [metrics, setMetrics] = useState<DebugMetrics>(initialMetrics),
     [announcement, setAnnouncement] = useState(""),
+    [notificationDeliveryFailed, setNotificationDeliveryFailed] =
+      useState(false),
     [hintVisible, setHintVisible] = useState(() => hintPersistence.isVisible());
   const [rendererFailed, setRendererFailed] = useState(false);
   useEffect(
@@ -173,8 +176,19 @@ export function App() {
     const controller = new StateAnnouncementController(
       clientStore,
       setAnnouncement,
+      undefined,
+      (candidates) => offscreen.deliver(candidates),
     );
-    return () => controller.destroy();
+    const offscreen = new OffscreenAttentionController(
+      clientStore,
+      controller,
+      undefined,
+      setNotificationDeliveryFailed,
+    );
+    return () => {
+      offscreen.destroy();
+      controller.destroy();
+    };
   }, []);
   useEffect(() => {
     if (!host.current) return;
@@ -581,6 +595,7 @@ export function App() {
           focusedId={focusedId}
           hits={hits}
           settingsOpen={settingsOpen}
+          notificationDeliveryFailed={notificationDeliveryFailed}
           statsOpen={statsOpen}
           lastUpdateSeconds={lastUpdateSeconds}
           metrics={metrics}

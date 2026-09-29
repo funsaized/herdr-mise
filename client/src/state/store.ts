@@ -15,6 +15,7 @@ export const HISTORY_LIMIT = 256;
 export const BOARD_LIMIT = 50;
 export interface Settings {
   sound: boolean;
+  desktopNotifications: boolean;
   atmosphere: boolean;
   doneTimeoutMs: number;
   escalationFastMs: number;
@@ -107,6 +108,7 @@ const nativeScheduler: Scheduler = {
 };
 export const defaultSettings: Settings = {
   sound: false,
+  desktopNotifications: false,
   atmosphere: true,
   doneTimeoutMs: 600_000,
   escalationFastMs: 60_000,

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import {
   act,
   cleanup,
@@ -9,6 +10,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { AgentRecord } from "../../protocol/generated/agent-state-event";
+import attentionFixture from "../../protocol/fixtures/snapshot.v1.json";
 import beforeMove from "../../server/tests/fixtures/snapshot-herdr-0.8.2-p20.json";
 import afterMove from "../../server/tests/fixtures/snapshot-herdr-0.8.2-p20-moved.json";
 const sceneFocus = vi.hoisted(() => vi.fn());
@@ -61,8 +63,12 @@ class FakeWebSocket {
   close() {}
 }
 
+const hiddenDescriptor = Object.getOwnPropertyDescriptor(document, "hidden");
 afterEach(() => {
   cleanup();
+  if (hiddenDescriptor)
+    Object.defineProperty(document, "hidden", hiddenDescriptor);
+  else Reflect.deleteProperty(document, "hidden");
   vi.unstubAllGlobals();
   FakeWebSocket.instances = [];
   sceneFocus.mockClear();
@@ -89,7 +95,10 @@ afterEach(() => {
     sourceStatus: "connected",
     agents: [],
   });
-  clientStore.setSettings({ doneTimeoutMs: 600_000 });
+  clientStore.setSettings({
+    doneTimeoutMs: 600_000,
+    desktopNotifications: false,
+  });
   vi.useRealTimers();
 });
 
@@ -103,6 +112,120 @@ const panelAgent = (id: string, name: string): AgentRecord => ({
   model: "codex",
   workspace: "/work",
   session: { runtimeMs: 1_000, tickets: 1 },
+});
+
+it("requests desktop notification permission only from an explicit enable gesture", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  let resolve!: (value: NotificationPermission) => void;
+  const requestPermission = vi.fn(
+    () =>
+      new Promise<NotificationPermission>((done) => {
+        resolve = done;
+      }),
+  );
+  vi.stubGlobal("Notification", { permission: "default", requestPermission });
+  const view = render(<App />);
+  expect(requestPermission).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  const toggle = screen.getByRole("switch", { name: "Desktop notifications" });
+  toggle.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(requestPermission).toHaveBeenCalledOnce();
+  await act(async () => resolve("granted"));
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  fireEvent.click(toggle);
+  fireEvent.click(toggle);
+  await act(async () => resolve("granted"));
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  fireEvent.click(toggle);
+  view.unmount();
+  await act(async () => resolve("granted"));
+  expect(clientStore.snapshot().settings.desktopNotifications).toBe(false);
+  vi.stubGlobal(
+    "Notification",
+    class {
+      static permission = "granted";
+      constructor() {
+        throw new Error("OS endpoint unavailable");
+      }
+    },
+  );
+  let hidden = false;
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => hidden,
+  });
+  render(<App />);
+  const socket = FakeWebSocket.instances.at(-1)!;
+  act(() => {
+    socket.onopen?.();
+    socket.onmessage?.({ data: JSON.stringify(attentionFixture) });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  const enabledToggle = screen.getByRole("switch", {
+    name: "Desktop notifications",
+  });
+  fireEvent.click(enabledToggle);
+  expect(enabledToggle.getAttribute("aria-checked")).toBe("true");
+  vi.useFakeTimers();
+  hidden = true;
+  act(() => document.dispatchEvent(new Event("visibilitychange")));
+  act(() =>
+    socket.onmessage?.({
+      data: JSON.stringify({
+        ...attentionFixture,
+        agents: [
+          {
+            ...attentionFixture.agents[0],
+            state: "blocked",
+            stateEnteredAt: "2026-08-13T12:00:01Z",
+            progress: null,
+          },
+          attentionFixture.agents[1],
+        ],
+      }),
+    }),
+  );
+  act(() => vi.advanceTimersByTime(100));
+  expect(screen.getByRole("status").textContent).toMatch(
+    /Last notification delivery failed/,
+  );
+  (Notification as unknown as { permission: string }).permission = "denied";
+  fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  expect(
+    screen
+      .getByRole("switch", { name: "Desktop notifications" })
+      .getAttribute("aria-checked"),
+  ).toBe("true");
+  expect(screen.getByRole("status").textContent).toMatch(
+    /Browser permission does not allow notifications/,
+  );
+});
+
+it("keeps desktop notifications off when permission is unavailable, denied or rejects", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const view = render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  const toggle = screen.getByRole("switch", { name: "Desktop notifications" });
+  vi.stubGlobal("Notification", undefined);
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  vi.stubGlobal("Notification", {
+    permission: "denied",
+    requestPermission: vi.fn(),
+  });
+  fireEvent.click(toggle);
+  expect(Notification.requestPermission).not.toHaveBeenCalled();
+  vi.stubGlobal("Notification", {
+    permission: "default",
+    requestPermission: () => Promise.reject(new Error("blocked")),
+  });
+  await act(async () => fireEvent.click(toggle));
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  view.unmount();
 });
 
 it("initial selection while settings is open replaces it with focused details", () => {
