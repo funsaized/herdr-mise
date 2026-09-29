@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "promotionTag": "v0.3.0",
+  "acceptedRcTag": "v0.3.0-rc.1",
+  "acceptedRcCommit": "011ab2ad071ca61dd4148cc2340cb8ef844ecdc7",
+  "artifacts": {
+    "aarch64-apple-darwin": "131fe74e30fc51d890aa4765eb9b9a8c867da96c312b490c106a9a0a7ae4821f",
+    "x86_64-apple-darwin": "a7e642b8679e0046b56af5b73d9ad7e954aa58647170994fd8cefd9baa9f6995",
+    "x86_64-unknown-linux-gnu": "c64337e1d6f9535a3ca09cfeb343c55e42133068628f6b1514af974aa8273296"
+  }
+}
