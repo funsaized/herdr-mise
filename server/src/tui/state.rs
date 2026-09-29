@@ -1,3 +1,4 @@
+use super::recap::ServiceRecap;
 use crate::protocol::{
     AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic,
     SourceStatus, WorkspaceRecord,
@@ -25,6 +26,7 @@ pub struct AgentTable {
     agents: Vec<AgentRecord>,
     board: Vec<BoardEntry>,
     workspaces: Vec<WorkspaceRecord>,
+    recap: ServiceRecap,
 }
 
 #[derive(Debug, PartialEq)]
@@ -46,12 +48,18 @@ impl Default for AgentTable {
             agents: Vec::new(),
             board: Vec::new(),
             workspaces: Vec::new(),
+            recap: ServiceRecap::default(),
         }
     }
 }
 
 impl AgentTable {
     pub fn apply(&mut self, event: AgentStateEvent) {
+        self.apply_at(event, chrono::Utc::now().timestamp_millis());
+    }
+
+    pub fn apply_at(&mut self, event: AgentStateEvent, now_ms: i64) {
+        self.recap.apply_at(&event, now_ms);
         match event {
             AgentStateEvent::Snapshot {
                 mode,
@@ -109,6 +117,14 @@ impl AgentTable {
             }
             AgentStateEvent::Heartbeat { .. } => {}
         }
+    }
+
+    pub fn gap_at(&mut self, now_ms: i64) {
+        self.recap.gap_at(now_ms);
+    }
+
+    pub fn recap(&self) -> &ServiceRecap {
+        &self.recap
     }
 
     pub fn mode(&self) -> AppMode {

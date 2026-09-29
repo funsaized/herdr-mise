@@ -649,6 +649,16 @@ pub(crate) fn draw_view_scoped_with_help_scroll(
     hits
 }
 
+pub(crate) fn draw_recap(
+    frame: &mut Frame<'_>,
+    table: &AgentTable,
+    scope: &super::Scope,
+    now: DateTime<Utc>,
+    offset: usize,
+) {
+    view::draw_service_recap(frame, table, scope, now.timestamp_millis(), offset);
+}
+
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_view_scoped(

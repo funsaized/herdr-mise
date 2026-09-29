@@ -72,3 +72,28 @@ closes, reconnects, and waits at most 2.9 seconds for a fresh snapshot. Deltas
 and heartbeats do not extend that initial wait. A second rejection before an
 accepted snapshot is shown as an incompatible browser-to-Mise feed; Feed v1 and
 Herdr compatibility are unchanged.
+
+## Local service recap
+
+The browser page and each TUI instance observe their own Feed v1 receipts; neither
+reconstructs upstream history. The recap resets on demo/live mode changes, not
+workspace selection or ordinary reconnect. Working and blocked durations use
+local receipt time, never `session.runtimeMs` or `stateEnteredAt` as elapsed time.
+Initial blocked/done states count as observed occurrences without backdating;
+same-generation replays, metric changes, and recovery do not count again. A
+newer same-state `stateEnteredAt` is another observed occurrence. Only explicit
+ended upserts count as 86’d, not removal or roster absence. Unknown states
+contribute no working or blocked duration.
+
+Each renderer retains at most 4096 closed portions/outcome markers and the
+current roster (at most 4096). Median/worst and counts describe that retained
+window, not lifetime totals. Workspace moves split observed duration at receipt;
+missing workspace identity is a separate scope. Open waits are provisional,
+and interrupted or evicted portions are partial. Heartbeats do not establish a
+healthy state observation. A live source-error snapshot, transport disconnect,
+or TUI lag excludes time since the last healthy state-bearing receipt, even
+when failure is reported after three failed polls. Recovery starts a fresh
+portion without fabricating an occurrence. Feed v1 provides renderer receipt
+boundaries, not exact upstream outage onset: this conservative exclusion can
+discard quiet healthy time, and provisional values may decrease after a
+delayed failure. Existing HistoryStrip gap semantics remain independent.

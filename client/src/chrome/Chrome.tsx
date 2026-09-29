@@ -16,6 +16,7 @@ import { DetailCard, SessionSummary, Tooltip } from "./agent-panels";
 import { formatDuration } from "./duration";
 import { SettingsPanel } from "./settings-panel";
 import { useClock } from "./use-clock";
+import { ServiceRecap } from "./ServiceRecap";
 import {
   ModeTreatment,
   StatsOverlay,
@@ -344,6 +345,7 @@ export function Chrome(props: ChromeProps) {
               {props.coarse.blockedElsewhere} blocked elsewhere — Show all
             </button>
           )}
+          <ServiceRecap store={props.store} coarse={props.coarse} />
         </div>
         <ModeTreatment
           mode={props.coarse.mode}

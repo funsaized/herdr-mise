@@ -1,0 +1,10 @@
+{
+  "delayedFailure": { "healthy": 1000, "failedPolls": [2000, 3000, 4000], "notification": 4000, "recovery": 7000, "finish": 8000 },
+  "transitions": [
+    { "at": 1000, "state": "working", "generation": "2026-01-01T00:00:00Z", "workspace": "one" },
+    { "at": 2000, "state": "blocked", "generation": "2026-01-01T00:00:01Z", "workspace": "one" },
+    { "at": 3000, "state": "working", "generation": "2026-01-01T00:00:02Z", "workspace": "one" },
+    { "at": 4000, "state": "done", "generation": "2026-01-01T00:00:03Z", "workspace": "one" },
+    { "at": 5000, "state": "ended", "generation": "2026-01-01T00:00:04Z", "workspace": "one" }
+  ]
+}

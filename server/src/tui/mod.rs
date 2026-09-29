@@ -1,4 +1,5 @@
 pub mod canvas;
+pub mod recap;
 pub mod scene;
 pub mod state;
 pub mod theme;
@@ -225,6 +226,19 @@ fn cycle_scope(scope: &mut Scope, table: &AgentTable) {
     }
 }
 
+fn cycle_recap_scope(scope: &mut Scope, table: &AgentTable) {
+    let options = table.recap().workspaces();
+    let index = (scope.id.is_some() || scope.label.is_some())
+        .then(|| options.iter().position(|w| w.id == scope.id))
+        .flatten();
+    if let Some(next) = options.get(index.map_or(0, |i| i + 1)) {
+        scope.id = next.id.clone();
+        scope.label = Some(next.label.clone());
+    } else {
+        select_all(scope);
+    }
+}
+
 fn select_all(scope: &mut Scope) {
     scope.id = None;
     scope.label = None;
@@ -260,7 +274,7 @@ pub(super) const HELP_LINES: [&str; 8] = [
     KEY_SELECT,
     KEY_BLOCKED,
     KEY_FREEZER,
-    KEY_SCOPE,
+    "w scope · R recap",
     KEY_ALL,
     "Esc close / leave / quit",
     KEY_QUIT,
@@ -438,7 +452,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut events = EventStream::new();
     let (mut receiver, snapshot) = feed.subscribe_snapshot().await;
     let mut table = AgentTable::default();
-    table.apply(snapshot);
+    table.apply_at(snapshot, Utc::now().timestamp_millis());
     guard.set_board_len(table.board().len());
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
@@ -449,13 +463,30 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut help_open = false;
     let mut help_scroll = 0_u16;
     let mut scope = Scope::default();
+    let mut recap_scope = Scope::default();
+    let mut recap_open = false;
+    let mut recap_offset = 0_usize;
     let mut hit_regions = Vec::new();
     loop {
         retain_selection(&mut selected_id, &table, &scope);
         retain_board_selection(&mut freezer_selected_id, &table);
         reconcile_scope(&mut scope, &table);
+        if (recap_scope.id.is_some() || recap_scope.label.is_some())
+            && !table
+                .recap()
+                .workspaces()
+                .iter()
+                .any(|w| w.id == recap_scope.id)
+        {
+            select_all(&mut recap_scope);
+        }
         let now = Utc::now();
         terminal.draw(|frame| {
+            if recap_open {
+                scene::draw_recap(frame, &table, &recap_scope, now, recap_offset);
+                hit_regions.clear();
+                return;
+            }
             let active_selected = match view {
                 SceneView::Kitchen => selected_id.as_deref(),
                 SceneView::Freezer => freezer_selected_id.as_deref(),
@@ -490,19 +521,37 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
             _ = interval.tick() => tick = tick.wrapping_add(1),
             event = receiver.recv() => match decide_feed_event(&mut receiver, event) {
                 FeedDecision::Apply(event) => {
-                    table.apply(event);
+                    table.apply_at(event, Utc::now().timestamp_millis());
                     guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Resnapshot => {
+                    table.gap_at(Utc::now().timestamp_millis());
                     let (cursor, snapshot) = feed.subscribe_snapshot().await;
                     receiver = cursor;
-                    table.apply(snapshot);
+                    table.apply_at(snapshot, Utc::now().timestamp_millis());
                     guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Closed => break,
             },
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
+                    if matches!(key.code, KeyCode::Char('r' | 'R')) && !help_open {
+                        if !recap_open { recap_scope = scope.clone(); if recap_scope.id.as_ref().is_some_and(|id| !table.recap().workspaces().iter().any(|w| w.id.as_ref() == Some(id))) { select_all(&mut recap_scope); } }
+                        recap_open = !recap_open;
+                        continue;
+                    }
+                    if recap_open {
+                        match key.code {
+                            KeyCode::Char('q') => { shutdown.cancel(); break; }
+                            KeyCode::Esc => recap_open = false,
+                            KeyCode::Char('w') => { cycle_recap_scope(&mut recap_scope, &table); recap_offset = 0; },
+                            KeyCode::Char('a') => { select_all(&mut recap_scope); recap_offset = 0; },
+                            KeyCode::Down | KeyCode::PageDown => recap_offset = recap_offset.saturating_add(if key.code == KeyCode::Down { 1 } else { 8 }),
+                            KeyCode::Up | KeyCode::PageUp => recap_offset = recap_offset.saturating_sub(if key.code == KeyCode::Up { 1 } else { 8 }),
+                            _ => {}
+                        }
+                        continue;
+                    }
                     if help_open {
                         scroll_help(key.code, &mut help_scroll);
                     }
@@ -529,6 +578,87 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn service_recap_navigates_retained_departed_workspaces() {
+        use crate::protocol::{
+            AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SessionStats,
+            SourceStatus,
+        };
+        let mut table = AgentTable::default();
+        let agent = |id: String, state: AgentState, workspace_id: String| AgentRecord {
+            id: id.clone(),
+            name: id,
+            state,
+            state_known: None,
+            state_entered_at: "2026-01-01T00:00:00Z".into(),
+            workspace_id: Some(workspace_id),
+            workspace: "old".into(),
+            pane_id: None,
+            agent_kind: None,
+            progress: None,
+            accent_index: 0,
+            model: "".into(),
+            session: SessionStats {
+                runtime_ms: 0,
+                tickets: 0,
+                tickets_available: None,
+            },
+        };
+        table.apply_at(
+            AgentStateEvent::Snapshot {
+                version: 1,
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                source_diagnostic: None,
+                agents: vec![agent("departed".into(), AgentState::Working, "old".into())],
+                workspaces: None,
+            },
+            100,
+        );
+        table.apply_at(
+            AgentStateEvent::Snapshot {
+                version: 1,
+                mode: AppMode::Live,
+                source_status: SourceStatus::Connected,
+                source_diagnostic: None,
+                agents: Vec::new(),
+                workspaces: None,
+            },
+            200,
+        );
+        let mut scope = Scope::default();
+        cycle_recap_scope(&mut scope, &table);
+        assert_eq!(scope.id.as_deref(), Some("old"));
+        assert_eq!(
+            table.recap().rows(scope.id.as_deref(), 200)[0].id,
+            "departed"
+        );
+        for index in 0..=crate::tui::recap::RECAP_CAP {
+            table.apply_at(
+                AgentStateEvent::Delta {
+                    version: 1,
+                    mode: AppMode::Live,
+                    operation: DeltaOperation::Upsert,
+                    agent: Some(agent(
+                        format!("new-{index}"),
+                        AgentState::Ended,
+                        format!("new-{index}"),
+                    )),
+                    agent_id: None,
+                },
+                300 + index as i64,
+            );
+        }
+        if !table
+            .recap()
+            .workspaces()
+            .iter()
+            .any(|w| w.id.as_deref() == scope.id.as_deref())
+        {
+            select_all(&mut scope);
+        }
+        assert_eq!(scope.id, None);
+    }
     #[test]
     fn startup_capability_detection_is_injectable_and_non_interactive() {
         assert_eq!(

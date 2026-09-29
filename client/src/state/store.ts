@@ -8,6 +8,7 @@ import type {
 } from "../../../protocol/generated/agent-state-event";
 import type { ThemeChoice } from "../theme/theme";
 import { loadSettings, saveSettings } from "./settings-storage";
+import { ServiceRecap } from "./recap";
 
 export type AppMode = FeedMode | "empty" | "disconnected" | "connecting";
 export type ClientDisconnectReason = "incompatibleFeed" | null;
@@ -117,6 +118,10 @@ export const defaultSettings: Settings = {
 };
 
 export class AgentStore {
+  private recap = new ServiceRecap();
+  recapSummary(scope: string | null | undefined, now = this.scheduler.now()) {
+    return this.recap.summary(scope, now);
+  }
   private agents = new Map<string, AgentMachine>();
   private board: BoardEntry[] = [];
   private mode: AppMode = "connecting";
@@ -281,6 +286,7 @@ export class AgentStore {
     lastValidFrameAt = this.scheduler.now(),
     reason: ClientDisconnectReason = null,
   ) {
+    this.recap.gap();
     const nextReason = reason ?? this.disconnectReason;
     let historyChanged = false;
     for (const [id, agent] of this.agents) {
@@ -313,6 +319,7 @@ export class AgentStore {
   apply(event: AgentStateEvent) {
     if (event.type === "heartbeat") return;
     const before = this.coarse();
+    const recapRevision = this.recap.revision;
     const modeChanged =
       event.type === "snapshot" && event.mode !== this.feedMode;
     if (modeChanged) {
@@ -324,6 +331,7 @@ export class AgentStore {
     }
     this.feedMode = event.mode;
     this.lastUpdateAt = this.scheduler.now();
+    this.recap.apply(event, this.lastUpdateAt);
     if (event.type === "snapshot") {
       this.disconnectReason = null;
       this.sourceStatus = event.sourceStatus;
@@ -345,7 +353,11 @@ export class AgentStore {
         ? "empty"
         : event.mode;
     this.emitChange();
-    if (!sameCoarse(before, this.coarse())) this.emitCoarse();
+    if (
+      recapRevision !== this.recap.revision ||
+      !sameCoarse(before, this.coarse())
+    )
+      this.emitCoarse();
   }
   reconcileRendered(now = this.scheduler.now(), force = false) {
     for (const machine of this.agents.values())

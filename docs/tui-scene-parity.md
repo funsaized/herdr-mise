@@ -146,3 +146,11 @@ undocumented.
   `docs/assets/herdr-mise-tui-demo-poster.png`,
   `docs/assets/herdr-mise-tui-{live,blocked,compact}.png`,
   `scripts/tui-demo.capture.json`, and `scripts/tui-states.capture.json`.
+
+## Service recap
+
+Press R for the renderer-local service recap and R or Esc to return; q still
+quits. w cycles retained workspace scopes, a selects All, and Up/Down or
+PageUp/PageDown scroll agent rows. The kitchen's live workspace scope remains
+independent. Compact headings and rows sanitize external labels and show only
+the last workspace path component.

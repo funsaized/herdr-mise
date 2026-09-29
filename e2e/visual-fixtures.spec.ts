@@ -2833,3 +2833,209 @@ test("rejected state update resynchronizes through a fresh snapshot", async ({
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("real Herdr observations drive the service recap without counting recovery gaps", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+        ),
+        "utf8",
+      ),
+    ) as {
+      workspaces: Array<{ workspace_id: string; label: string }>;
+      agents: Array<{
+        terminal_id: string;
+        pane_id: string;
+        workspace_id: string;
+        display_agent: string;
+        agent_status: string;
+        state_change_seq: number;
+        agent_session: { value: string };
+      }>;
+    },
+    blockedSnapshot = structuredClone(source),
+    workingSnapshot = structuredClone(source),
+    emptySnapshot = structuredClone(source);
+  blockedSnapshot.agents[0]!.agent_status = "blocked";
+  workingSnapshot.agents[0]!.agent_status = "working";
+  workingSnapshot.agents[0]!.state_change_seq = 43;
+  emptySnapshot.agents = [];
+  const blockedSeconds = (text: string) => {
+    const match = text.match(
+      /Observed time blocked: (?:(\d+)h )?(?:(\d+)m )?(\d+)s/,
+    );
+    if (!match) throw new Error(`unparseable blocked duration: ${text}`);
+    return (
+      Number(match[1] ?? 0) * 3_600 +
+      Number(match[2] ?? 0) * 60 +
+      Number(match[3])
+    );
+  };
+  const app = await startFixtureApp({
+    prefix: "herdr-mise-recap-gap-",
+    snapshot: blockedSnapshot,
+  });
+  try {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${app.appUrl}/?stats`);
+    await expect(
+      page.getByRole("button", { name: /example-cook, Blocked/ }),
+    ).toBeAttached({ timeout: 15_000 });
+
+    const recap = page.locator(".serviceRecap"),
+      blockedLine = recap.locator("p", { hasText: "Observed time blocked" }),
+      countsLine = recap.locator("p", { hasText: "Blocked occurrences" }),
+      statusLine = recap.locator("p", { hasText: "Observation started" }),
+      workspaceSelect = recap.getByRole("combobox", {
+        name: "Recap workspace",
+      }),
+      agentRow = recap.locator("tbody tr").filter({ hasText: "example-cook" });
+    await recap.locator("summary").click();
+    await expect(
+      recap.getByRole("table", { name: "Retained agent observations" }),
+    ).toBeVisible();
+    await expect(countsLine).toContainText("Blocked occurrences: 1");
+    await expect(countsLine).toContainText("86’d: 0");
+    await expect(
+      workspaceSelect.getByRole("option", { name: "Example Kitchen" }),
+    ).toBeAttached();
+    await expect
+      .poll(async () => blockedSeconds((await blockedLine.textContent()) ?? ""))
+      .toBeGreaterThan(0);
+    const beforeGap = blockedSeconds((await blockedLine.textContent()) ?? "");
+
+    // A source/transport gap must be surfaced and must not accrue blocked time.
+    await app.stopSource();
+    await expect(statusLine).toContainText(
+      "Interrupted by source/transport gap",
+      { timeout: 20_000 },
+    );
+    await expect(statusLine).toContainText("Partial/provisional observations");
+    const duringGap = blockedSeconds((await blockedLine.textContent()) ?? "");
+    expect(duringGap).toBeLessThanOrEqual(beforeGap + 1);
+    await page.waitForTimeout(4_000);
+
+    app.setSnapshot(workingSnapshot);
+    await app.startSource();
+    await expect(
+      page.getByRole("button", { name: /^example-cook, Working/ }),
+    ).toBeAttached({ timeout: 20_000 });
+    const afterGap = blockedSeconds((await blockedLine.textContent()) ?? "");
+    expect(afterGap - beforeGap).toBeLessThanOrEqual(1);
+    await expect(countsLine).toContainText("Blocked occurrences: 1");
+
+    // Ended observations keep their retained workspace and outcomes.
+    app.setSnapshot(emptySnapshot);
+    await expect(
+      page
+        .getByRole("navigation", { name: "Agent stations" })
+        .getByRole("button", { name: /example-cook, Ended/i }),
+    ).toBeAttached({ timeout: 20_000 });
+    await expect(countsLine).toContainText("86’d: 1", { timeout: 20_000 });
+    await expect(agentRow).toContainText("example-cook");
+    await workspaceSelect.selectOption({ label: "Example Kitchen" });
+    await expect(agentRow).toBeAttached();
+    await page.setViewportSize({ width: 320, height: 700 });
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
+    await expect(workspaceSelect).toBeVisible();
+    await workspaceSelect.press("Escape");
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(
+      page.getByRole("complementary", { name: "Settings" }),
+    ).toBeVisible();
+    await recap.locator("summary").click();
+    await workspaceSelect.focus();
+    await expect(workspaceSelect).toBeFocused();
+    const panelBox = await recap.locator(":scope > div").boundingBox();
+    const settingsBox = await page
+      .getByRole("complementary", { name: "Settings" })
+      .boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(settingsBox).not.toBeNull();
+    expect(boxesIntersect(panelBox!, settingsBox!)).toBe(false);
+    expect(panelBox!.y).toBeGreaterThanOrEqual(0);
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(700);
+    const selectBox = await workspaceSelect.boundingBox();
+    expect(selectBox).not.toBeNull();
+    expect(selectBox!.y).toBeGreaterThanOrEqual(0);
+    expect(selectBox!.y + selectBox!.height).toBeLessThanOrEqual(700);
+    await workspaceSelect.press("Escape");
+    await expect(recap).not.toHaveAttribute("open");
+    await expect(recap.locator("summary")).toBeFocused();
+
+    const collision = structuredClone(source);
+    collision.workspaces = [
+      { workspace_id: "__missing__", label: "Real missing" },
+      { workspace_id: "pantry-a", label: "/a/pantry" },
+      { workspace_id: "pantry-b", label: "/b/pantry" },
+    ];
+    collision.agents = [
+      {
+        ...source.agents[0]!,
+        terminal_id: "absent-agent",
+        pane_id: "absent-pane",
+        display_agent: "absent-cook",
+        workspace_id: "",
+        state_change_seq: 51,
+      },
+      {
+        ...source.agents[0]!,
+        terminal_id: "real-agent",
+        pane_id: "real-pane",
+        display_agent: "real-cook",
+        workspace_id: "__missing__",
+        state_change_seq: 52,
+      },
+      {
+        ...source.agents[0]!,
+        terminal_id: "pantry-agent-a",
+        pane_id: "pantry-pane-a",
+        display_agent: "pantry-cook-a",
+        workspace_id: "pantry-a",
+        state_change_seq: 53,
+      },
+      {
+        ...source.agents[0]!,
+        terminal_id: "pantry-agent-b",
+        pane_id: "pantry-pane-b",
+        display_agent: "pantry-cook-b",
+        workspace_id: "pantry-b",
+        state_change_seq: 54,
+      },
+    ];
+    app.setSnapshot(collision);
+    await recap.locator("summary").click();
+    await expect(
+      workspaceSelect.getByRole("option", { name: "Unavailable identity" }),
+    ).toBeAttached({ timeout: 20_000 });
+    await expect(
+      workspaceSelect.getByRole("option", { name: "Real missing" }),
+    ).toBeAttached();
+    await workspaceSelect.selectOption({ label: "Unavailable identity" });
+    await expect(recap.locator("tbody")).toContainText("absent-cook");
+    await expect(recap.locator("tbody")).not.toContainText("real-cook");
+    await workspaceSelect.selectOption({ label: "Real missing" });
+    await expect(recap.locator("tbody")).toContainText("real-cook");
+    await expect(recap.locator("tbody")).not.toContainText("absent-cook");
+    await expect(
+      workspaceSelect.getByRole("option", { name: "pantry (pantry-a)" }),
+    ).toBeAttached();
+    await expect(
+      workspaceSelect.getByRole("option", { name: "pantry (pantry-b)" }),
+    ).toBeAttached();
+    await workspaceSelect.selectOption({ label: "pantry (pantry-a)" });
+    await expect(recap.locator("tbody")).toContainText("pantry-cook-a");
+    await expect(recap.locator("tbody")).not.toContainText("pantry-cook-b");
+  } finally {
+    await app.close();
+  }
+});
