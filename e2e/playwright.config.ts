@@ -49,7 +49,9 @@ export default defineConfig({
         cwd: "..",
         url: visualOrigin,
         reuseExistingServer: false,
-        timeout: 120_000,
+        // Startup includes a cold `cargo build` (~100s on hosted runners)
+        // plus two client builds.
+        timeout: 300_000,
       },
   reporter: [["line"]],
   outputDir: "artifacts/results",
