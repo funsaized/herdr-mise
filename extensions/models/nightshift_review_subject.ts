@@ -131,6 +131,7 @@ export async function reviewFingerprint(
     "agent-constraints/review.md",
     "workflows/workflow-nightshift-review.yaml",
     "extensions/models/nightshift_review.ts",
+    "extensions/models/nightshift_review_routing.mjs",
     "extensions/models/nightshift_review_subject.ts",
   ];
   const skills = Object.values(LANE_SKILLS)

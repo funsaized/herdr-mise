@@ -185,32 +185,47 @@ Deno.test("adjudication uses stored disputed findings from distinct cycles witho
     throw new Error("Fixed defect still requested adjudication");
 });
 
-Deno.test("routing keeps mandatory lanes and adds UI only for UI changes not yet passed", () => {
-  const same = (actual: string[], expected: string[]) => {
+Deno.test("routing keeps mandatory lanes and reviews every UI code round regardless of prior verdict", () => {
+  const same = (actual: unknown, expected: unknown) => {
     if (JSON.stringify(actual) !== JSON.stringify(expected))
       throw new Error(`${actual} !== ${expected}`);
   };
-  same(routeLanes("plan", ["client/src/App.tsx"], []).lanes, MANDATORY_LANES);
-  same(routeLanes("code", ["server/src/feed.rs"], []).lanes, MANDATORY_LANES);
-  for (const file of [
-    "client/src/App.tsx",
-    "server/src/tui/view.rs",
-    "e2e/x.spec.ts",
-  ])
-    same(routeLanes("code", [file], []).lanes, [...ReviewLane.options]);
-  const passed = [{ id: "LANE:ui", description: "pass: clean" }];
-  same(routeLanes("code", ["client/a.ts"], passed).lanes, MANDATORY_LANES);
-  // A routed-out lane records not-applicable and must not count as a pass.
-  const routedOut = [
-    { id: "LANE:ui", description: "not-applicable: Routed out" },
-  ];
-  same(routeLanes("code", ["client/a.ts"], routedOut).lanes, [
-    ...ReviewLane.options,
-  ]);
-  const failed = [{ id: "LANE:ui", description: "fail: overlap" }];
-  same(routeLanes("code", ["client/a.ts"], failed).lanes, [
-    ...ReviewLane.options,
-  ]);
+  for (const previous of [
+    [],
+    ...[
+      "pass: clean",
+      "fail: overlap",
+      "warn: concern",
+      "not-applicable: Routed out",
+      undefined,
+      42,
+      "malformed",
+    ].map((description) => [{ id: "LANE:ui", description }]),
+    [{ id: null, description: "pass: clean" }],
+  ]) {
+    for (const files of [["client/src/App.tsx"], []])
+      same(routeLanes("plan", files, previous), {
+        lanes: MANDATORY_LANES,
+        reason: "Plans are reviewed by the mandatory lanes",
+      });
+    for (const files of [["server/src/feed.rs"], []])
+      same(routeLanes("code", files, previous), {
+        lanes: MANDATORY_LANES,
+        reason: "No client, TUI, e2e, or asset paths changed",
+      });
+    for (const file of [
+      "client/src/App.tsx",
+      "server/src/tui/view.rs",
+      "e2e/x.spec.ts",
+      "perf/x.spec.ts",
+      "server/static/index.html",
+      "server/tests/goldens/scene-blocked.txt",
+    ])
+      same(routeLanes("code", [file], previous), {
+        lanes: [...ReviewLane.options],
+        reason: "UI paths changed",
+      });
+  }
 });
 
 Deno.test("routed-out lanes are recorded as not-applicable and executed lanes stay exact", () => {

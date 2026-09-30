@@ -18,6 +18,7 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
       "agent-constraints/review.md",
       "workflows/workflow-nightshift-review.yaml",
       "extensions/models/nightshift_review.ts",
+      "extensions/models/nightshift_review_routing.mjs",
       "extensions/models/nightshift_review_subject.ts",
       ...Object.values(LANE_SKILLS)
         .flat()
@@ -30,10 +31,23 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
       await Deno.writeTextFile(`${control}/${path}`, "trusted policy\n");
     }
     await Deno.writeTextFile(`${subject}/docs/user-guide.md`, "original\n");
+    const uiPath = "server/tests/goldens/scene-blocked.txt";
+    await Deno.mkdir(`${subject}/server/tests/goldens`, { recursive: true });
+    await Deno.copyFile(
+      new URL(`../../${uiPath}`, import.meta.url),
+      `${subject}/${uiPath}`,
+    );
+    const fixture = await Deno.readTextFile(`${subject}/${uiPath}`);
     const git = async (...args: string[]) => {
       const result = await new Deno.Command("git", {
         args,
         cwd: subject,
+        clearEnv: true,
+        env: {
+          PATH: Deno.env.get("PATH") ?? "",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_NOSYSTEM: "1",
+        },
         stdout: "piped",
         stderr: "piped",
       }).output();
@@ -65,7 +79,7 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
       phase: "code" as const,
       subjectRoot: subject,
       subject: { baseCommit, summary: "docs" },
-      previousFindings: [],
+      previousFindings: [] as Array<{ id: string; description: string }>,
     };
     const first = await reviewFingerprint(args, { repoDir: control });
     const same = await reviewFingerprint(
@@ -180,6 +194,60 @@ Deno.test("review identity detects source, head, policy and skill drift and reco
     await verify(args, context);
     await commit("--allow-empty", "-m", "new head same bytes");
     await rejects();
+    await Deno.writeTextFile(`${subject}/docs/user-guide.md`, "original\n");
+    args.previousFindings = [{ id: "LANE:ui", description: "pass: clean" }];
+    for (const rework of [1, 2]) {
+      await Deno.writeTextFile(
+        `${subject}/${uiPath}`,
+        `${fixture}\nRework ${rework}\n`,
+      );
+      const ui = await reviewFingerprint(args, { repoDir: control });
+      if (
+        ui.files.join() !== uiPath ||
+        ui.routing.lanes.join() !== "test-coverage,security,quality,ui" ||
+        ui.routing.reason !== "UI paths changed"
+      )
+        throw new Error(
+          "Prior UI pass suppressed cumulative UI candidate routing",
+        );
+      await capture(args, context);
+      const capturedUi = records.get("review-subject-245-review-fixture") as {
+        files: string[];
+        routing: { lanes: string[]; reason: string };
+        lanePlan: Array<{ lane: string; skills: string }>;
+      };
+      if (
+        capturedUi.files.join() !== uiPath ||
+        capturedUi.routing.lanes.join() !==
+          "test-coverage,security,quality,ui" ||
+        capturedUi.routing.reason !== "UI paths changed" ||
+        capturedUi.lanePlan.map((plan) => plan.lane).join() !==
+          "test-coverage,security,quality,ui" ||
+        capturedUi.lanePlan[3].skills !==
+          ["frontend", "accessibility"]
+            .map(
+              (skill) =>
+                `${ui.controlRoot}/.agents/skills/nightshift-${skill}/SKILL.md`,
+            )
+            .join(", ")
+      )
+        throw new Error(
+          "Captured UI subject lost paths, routing, or specialist skills",
+        );
+      await verify(args, context);
+      for (const path of [
+        "extensions/models/nightshift_review.ts",
+        "extensions/models/nightshift_review_routing.mjs",
+        ".agents/skills/nightshift-frontend/SKILL.md",
+        ".agents/skills/nightshift-accessibility/SKILL.md",
+      ]) {
+        await Deno.writeTextFile(`${control}/${path}`, "changed\n");
+        await rejects();
+        await Deno.writeTextFile(`${control}/${path}`, "trusted policy\n");
+      }
+      await capture(args, context);
+      await verify(args, context);
+    }
   } finally {
     await Deno.remove(parent, { recursive: true });
   }

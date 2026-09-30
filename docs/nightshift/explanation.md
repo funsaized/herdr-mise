@@ -41,11 +41,13 @@ behavioral relevance and actual impact.
 Four review lanes share typed findings, stable identities, severity rules, and
 policy/source fingerprints: test-coverage, security, quality (clean code, domain
 design, observability, and general correctness), and UI (frontend and
-accessibility). Security is never routed out. UI runs only for client, TUI,
-e2e, or asset changes that it has not already passed; routed-out lanes are
-recorded as not-applicable with the reason. Review stops after four rounds per
-stage and parks for a human. Repeated high-impact disputes go to a human rather
-than cycling or silently lowering severity.
+accessibility). Security is never routed out. Plans and code without client, TUI,
+e2e, or asset changes run only the mandatory lanes—test-coverage, security, and
+quality; UI runs on every code round with those changes, regardless of any
+earlier verdict. Routed-out lanes are recorded as not-applicable with the reason.
+Review stops after four rounds per stage and parks for a human. Repeated
+high-impact disputes go to a human rather than cycling or silently lowering
+severity.
 
 Managed verification runs trusted controls from `main` against a separate exact
 PR subject. A trusted gate validates the result and issues a receipt. Shipping
