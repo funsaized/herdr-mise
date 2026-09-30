@@ -227,6 +227,8 @@ client side. Source: `client/src/main.tsx`,
 The visual build exposes a compact introduction, **Install for Herdr**, and
 **Replay demo** above a collapsed **Preview explorer** in the browser chrome.
 The introduction explains the local, read-only tool and deterministic playground.
+At desktop sizes it fits beside the demo placard; smaller viewports scroll to it
+below the kitchen, keeping the scene and its stations unobscured.
 Its native scene and cook selectors update the existing query contract while
 preserving unrelated parameters, then reload the page and reset ephemeral demo
 state. **Replay demo** reloads the current URL without changing its parameters.

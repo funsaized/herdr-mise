@@ -388,6 +388,11 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
     { width: 320, height: 640 },
     { width: 640, height: 720 },
     { width: 1280, height: 720 },
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+    { width: 640, height: 480 },
+    { width: 375, height: 667 },
   ]) {
     await page.setViewportSize(viewport);
     await explorer.locator("p").scrollIntoViewIfNeeded();
@@ -445,6 +450,7 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
         if (await other.isVisible())
           expect(
             boxesIntersect(explorerBox, (await other.boundingBox())!),
+            `${viewport.width}×${viewport.height}: ${await other.getAttribute("class")}`,
           ).toBe(false);
       }
       expect(

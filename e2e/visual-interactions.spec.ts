@@ -349,6 +349,7 @@ test("working cooks drive continuous scene motion", async ({ page }) => {
 test("playground introduction exposes install and replay without expanding the explorer", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const sockets: string[] = [],
     escapedRequests: string[] = [];
   page.on("websocket", (socket) => sockets.push(socket.url()));
@@ -378,6 +379,98 @@ test("playground introduction exposes install and replay without expanding the e
   await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
   for (const name of ["Scene", "Cooks"])
     await expect(explorer.getByRole("combobox", { name })).toBeHidden();
+  for (const viewport of [
+    { width: 320, height: 320 },
+    { width: 320, height: 640 },
+    { width: 640, height: 720 },
+    { width: 1280, height: 720 },
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+    { width: 640, height: 480 },
+    { width: 375, height: 667 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const count of [1, 6, 12]) {
+      await page.evaluate(() => localStorage.removeItem("mise-bell-hint"));
+      await page.goto(`/?preset=blocked&agents=${count}&stats`);
+      await expect
+        .poll(
+          async () =>
+            Object.keys((await sceneMetrics(page))?.stationCells ?? {}).length,
+        )
+        .toBeGreaterThan(0);
+      for (const dismissed of [false, true]) {
+        if (dismissed)
+          await page.getByRole("button", { name: "Got it" }).click();
+        for (const expanded of [false, true]) {
+          if (expanded)
+            await explorer
+              .getByText("Preview explorer", { exact: true })
+              .click();
+          await explorer.scrollIntoViewIfNeeded();
+          const surface = (await explorer.boundingBox())!,
+            canvas = (await page.locator(".canvasHost").boundingBox())!,
+            layout = computeLayout(
+              canvas.width,
+              canvas.height,
+              Array.from({ length: count }, (_, index) => String(index)),
+            ),
+            boardWidth = Math.min(92 * layout.unit, canvas.width * 0.36),
+            board = {
+              x: (canvas.width - boardWidth) / 2 - 2 * layout.unit,
+              y: 2 * layout.unit,
+              width: boardWidth + 4 * layout.unit,
+              height:
+                Math.max(
+                  22 * layout.unit,
+                  layout.wall.height - 15 * layout.unit,
+                ) +
+                4 * layout.unit,
+            },
+            metrics = (await sceneMetrics(page))!;
+          for (const rect of [
+            board,
+            layout.pass,
+            ...Object.values(metrics.stationCells),
+            ...Object.values(metrics.blockedPlacements).map(({ bell }) => bell),
+          ])
+            expect(
+              boxesIntersect(surface, {
+                ...rect,
+                x: canvas.x + rect.x,
+                y: canvas.y + rect.y,
+              }),
+              `${viewport.width}×${viewport.height}: explorer must clear kitchen controls`,
+            ).toBe(false);
+          for (const other of [
+            placard(page),
+            page.locator(".serviceStrip"),
+            page.getByRole("button", { name: "Open settings" }),
+            page.getByRole("button", { name: "Freezer" }),
+            page.locator(".kitchenPager"),
+            page.locator(".visualTuiFigure"),
+            page.locator(".firstHint"),
+          ]) {
+            if (await other.isVisible())
+              expect(
+                boxesIntersect(surface, (await other.boundingBox())!),
+                `${viewport.width}×${viewport.height}: explorer must clear ${await other.getAttribute("class")}`,
+              ).toBe(false);
+          }
+          await install.click({ trial: true });
+          await replay.click({ trial: true });
+          expect(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          ).toBe(true);
+        }
+        await explorer.getByText("Preview explorer", { exact: true }).click();
+      }
+    }
+  }
+  await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
   await expect(
     page.getByRole("button", { name: /^Codex, Blocked — .*open details$/ }),
   ).toHaveCount(1, { timeout: 7_000 });

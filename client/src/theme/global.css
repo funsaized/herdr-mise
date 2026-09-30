@@ -654,9 +654,9 @@ summary:focus-visible {
   position: absolute;
   z-index: 8;
   top: 20px;
-  left: 236px;
-  width: min(390px, calc(100vw - 516px));
-  max-height: calc(100vh - 40px);
+  left: 224px;
+  width: 216px;
+  max-height: 204px;
   overflow: auto;
   padding: 7px 9px;
   color: var(--textMuted);
@@ -1017,42 +1017,28 @@ summary:focus-visible {
   .visualTuiFigure {
     display: none;
   }
-  .visualExplorer {
-    right: 20px;
-    left: auto;
-    width: min(390px, calc(100vw - 40px));
-  }
 }
-:where(.appShell[data-pager-layout="narrow"]) .visualExplorer {
-  top: 182px;
-  right: 8px;
-  left: 8px;
-  width: auto;
-  max-height: calc(100vh - 346px);
-  transform: none;
-}
-:where(.appShell[data-pager-layout="narrow"])
-  .visualExplorer:has(details[open]) {
-  z-index: 13;
-  width: auto;
-}
-@media (max-height: 600px) {
-  /* The playground needs vertical reflow, not smaller text or overlapping controls. */
-  .appShell[data-pager-layout="narrow"]:has(.visualExplorer) {
+@media (max-width: 1439px), (max-height: 719px) {
+  /* Leave room for the board even when a taller scene increases its pixel unit. */
+  .appShell:has(.visualExplorer) {
     position: relative;
     overflow-y: auto;
   }
-  .appShell[data-pager-layout="narrow"]:has(.visualExplorer) .chromeLayer {
+  .appShell:has(.visualExplorer) .chromeLayer {
     position: absolute;
     bottom: auto;
-    height: 640px;
+    height: max(640px, 100dvh);
   }
-  .appShell[data-pager-layout="narrow"]:has(.visualExplorer) .kitchenPager {
+  .appShell:has(.visualExplorer) .kitchenPager {
     position: absolute;
-    top: 576px;
+    top: calc(max(640px, 100dvh) - 64px);
     bottom: auto;
   }
-  .appShell[data-pager-layout="narrow"]:has(.visualExplorer) .visualExplorer {
+  .visualExplorer {
+    top: calc(max(640px, 100dvh) + 80px);
+    right: 8px;
+    left: 8px;
+    width: auto;
     max-height: 280px;
   }
 }
