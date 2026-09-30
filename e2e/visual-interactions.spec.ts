@@ -346,6 +346,54 @@ test("working cooks drive continuous scene motion", async ({ page }) => {
     .toBe(true);
 });
 
+test("playground introduction exposes install and replay without expanding the explorer", async ({
+  page,
+}) => {
+  const sockets: string[] = [],
+    escapedRequests: string[] = [];
+  page.on("websocket", (socket) => sockets.push(socket.url()));
+  page.on("request", (request) => {
+    if (new URL(request.url()).origin !== visualOrigin)
+      escapedRequests.push(request.url());
+  });
+  await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
+  const explorer = page.getByRole("complementary", {
+      name: "Preview explorer",
+    }),
+    install = explorer.getByRole("link", { name: "Install for Herdr" }),
+    replay = explorer.getByRole("button", { name: "Replay demo" });
+  await expect(
+    explorer.getByText("AI coding agents, at a glance"),
+  ).toBeVisible();
+  await expect(explorer.locator("p")).toContainText(
+    "a pixel-art kitchen for Herdr. Runs locally and read-only; it never controls agents. This playground uses deterministic demo data.",
+  );
+  await expect(install).toBeVisible();
+  await expect(install).toHaveAttribute(
+    "href",
+    "https://github.com/funsaized/herdr-mise#quick-start",
+  );
+  await install.click({ trial: true });
+  await expect(replay).toBeVisible();
+  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
+  for (const name of ["Scene", "Cooks"])
+    await expect(explorer.getByRole("combobox", { name })).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: /^Codex, Blocked — .*open details$/ }),
+  ).toHaveCount(1, { timeout: 7_000 });
+  const url = page.url();
+  await Promise.all([page.waitForNavigation(), replay.click()]);
+  expect(page.url()).toBe(url);
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toHaveCount(1);
+  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
+  expect(sockets).toEqual([]);
+  expect(escapedRequests).toEqual([]);
+});
+
 test("preview explorer reloads shareable scenes and preserves larger URL rosters", async ({
   page,
 }) => {
@@ -422,7 +470,7 @@ test("preview explorer reloads shareable scenes and preserves larger URL rosters
   const currentUrl = page.url();
   await Promise.all([
     page.waitForNavigation(),
-    explorer.getByRole("button", { name: "Replay" }).click(),
+    explorer.getByRole("button", { name: "Replay demo" }).click(),
   ]);
   expect(page.url()).toBe(currentUrl);
   await expect(

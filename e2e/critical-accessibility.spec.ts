@@ -5,7 +5,7 @@ import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startFixtureApp, type FixtureApp } from "./fixture-app";
-import { sceneMetrics } from "./visual-helpers";
+import { boxesIntersect, placard, sceneMetrics } from "./visual-helpers";
 
 async function availablePort() {
   const server = createServer();
@@ -247,12 +247,56 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 320 });
-  await page.goto("/?preset=mixed&agents=6");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?preset=mixed&agents=6&stats");
   const explorer = page.getByRole("complementary", {
       name: "Preview explorer",
     }),
     details = explorer.locator("details"),
     summary = explorer.getByText("Preview explorer", { exact: true });
+  await expect(
+    explorer.getByText("AI coding agents, at a glance"),
+  ).toBeVisible();
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toBeHidden();
+  await expect(explorer.getByRole("combobox", { name: "Cooks" })).toBeHidden();
+  const install = explorer.getByRole("link", { name: "Install for Herdr" }),
+    replay = explorer.getByRole("button", { name: "Replay demo" });
+  await install.focus();
+  await expect(install).toBeFocused();
+  expect(
+    await install.evaluate((element) => getComputedStyle(element).outlineStyle),
+  ).not.toBe("none");
+  await install.click({ trial: true });
+  // Observe native keyboard activation without leaving the isolated playground.
+  await install.evaluate((element) => {
+    element.addEventListener(
+      "click",
+      (event) => {
+        event.preventDefault();
+        element.setAttribute("data-activated", "true");
+      },
+      { once: true },
+    );
+  });
+  await install.press("Enter");
+  await expect(install).toHaveAttribute("data-activated", "true");
+  await replay.focus();
+  await expect(replay).toBeFocused();
+  expect(
+    await replay.evaluate((element) => getComputedStyle(element).outlineStyle),
+  ).not.toBe("none");
+  const url = page.url();
+  await Promise.all([page.waitForNavigation(), replay.press("Enter")]);
+  expect(page.url()).toBe(url);
+  await expect
+    .poll(async () => (await sceneMetrics(page))?.motion)
+    .toMatchObject({ reduced: true, continuous: false });
+  for (const control of [install, replay, summary]) {
+    await control.scrollIntoViewIfNeeded();
+    const target = (await control.boundingBox())!;
+    expect(target.width).toBeGreaterThanOrEqual(44);
+    expect(target.height).toBeGreaterThanOrEqual(44);
+  }
   const pagerNext = page.getByRole("button", { name: "Next", exact: true }),
     summaryBox = (await summary.boundingBox())!;
   if (await pagerNext.count()) {
@@ -282,7 +326,22 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   await cooks.focus();
   await page.keyboard.press("0");
   await expect(cooks).toHaveValue("0");
-  await expect(explorer.getByRole("button", { name: "Replay" })).toBeVisible();
+  for (const control of await explorer
+    .locator("summary, select, button, a")
+    .all()) {
+    await control.scrollIntoViewIfNeeded();
+    const target = (await control.boundingBox())!;
+    expect(target.width).toBeGreaterThanOrEqual(44);
+    expect(target.height).toBeGreaterThanOrEqual(44);
+  }
+  expect(
+    await explorer.evaluate(
+      (element) => element.scrollHeight > element.clientHeight,
+    ),
+  ).toBe(true);
+  await expect(
+    explorer.getByRole("button", { name: "Replay demo" }),
+  ).toBeVisible();
   const links = explorer.getByRole("link");
   await expect(links).toHaveCount(2);
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -298,6 +357,11 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   await page.setViewportSize({ width: 640, height: 720 });
   expect((await explorer.boundingBox())!.width).toBeGreaterThanOrEqual(320);
   await page.setViewportSize({ width: 320, height: 320 });
+  await explorer.scrollIntoViewIfNeeded();
+  await explorer.evaluate((element) => {
+    document.querySelector(".appShell")!.scrollTop =
+      (element as HTMLElement).offsetTop - 20;
+  });
   const box = (await explorer.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(320);
@@ -316,6 +380,86 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   await expect(explorer).toHaveCount(0);
   await page.getByRole("button", { name: "Close settings" }).click();
   await expect(explorer).toBeVisible();
+  for (const viewport of [
+    { width: 320, height: 320 },
+    { width: 375, height: 320 },
+    { width: 480, height: 340 },
+    { width: 639, height: 400 },
+    { width: 320, height: 640 },
+    { width: 640, height: 720 },
+    { width: 1280, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await explorer.locator("p").scrollIntoViewIfNeeded();
+    const introductionBox = (await explorer.locator("p").boundingBox())!,
+      surfaceBox = (await explorer.boundingBox())!;
+    expect(introductionBox.y).toBeGreaterThanOrEqual(Math.max(0, surfaceBox.y));
+    expect(introductionBox.y + introductionBox.height).toBeLessThanOrEqual(
+      Math.min(viewport.height, surfaceBox.y + surfaceBox.height),
+    );
+    for (const action of [install, replay]) {
+      await action.scrollIntoViewIfNeeded();
+      const target = (await action.boundingBox())!,
+        surface = (await explorer.boundingBox())!;
+      expect(target.width).toBeGreaterThanOrEqual(44);
+      expect(target.height).toBeGreaterThanOrEqual(44);
+      expect(target.y).toBeGreaterThanOrEqual(Math.max(0, surface.y));
+      expect(target.y + target.height).toBeLessThanOrEqual(
+        Math.min(viewport.height, surface.y + surface.height),
+      );
+      await action.click({ trial: true });
+      await action.focus();
+      await expect(action).toBeFocused();
+    }
+    await install.evaluate((element) => {
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        element.setAttribute("data-activated", "true");
+      });
+    });
+    await install.press("Enter");
+    await expect(install).toHaveAttribute("data-activated", "true");
+    const previewUrl = page.url();
+    await Promise.all([page.waitForNavigation(), replay.press("Enter")]);
+    await Promise.all([page.waitForNavigation(), replay.click()]);
+    expect(page.url()).toBe(previewUrl);
+    await expect
+      .poll(async () => (await sceneMetrics(page))?.motion)
+      .toMatchObject({ reduced: true, continuous: false });
+    for (const expanded of [false, true]) {
+      if (expanded) await summary.click();
+      await explorer.scrollIntoViewIfNeeded();
+      const explorerBox = (await explorer.boundingBox())!;
+      expect(explorerBox.x).toBeGreaterThanOrEqual(0);
+      expect(explorerBox.x + explorerBox.width).toBeLessThanOrEqual(
+        viewport.width,
+      );
+      for (const other of [
+        placard(page),
+        page.locator(".serviceStrip"),
+        page.getByRole("button", { name: "Open settings" }),
+        page.getByRole("button", { name: "Freezer" }),
+        page.locator(".kitchenPager"),
+        page.locator(".visualTuiFigure"),
+      ]) {
+        if (await other.isVisible())
+          expect(
+            boxesIntersect(explorerBox, (await other.boundingBox())!),
+          ).toBe(false);
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+    await summary.click();
+    if (await pagerNext.count()) {
+      await pagerNext.click();
+      await expect(page.getByText(/Page 2 of/)).toBeVisible();
+    }
+  }
+  await page.setViewportSize({ width: 320, height: 640 });
   await page.locator("body").click({ position: { x: 1, y: 1 } });
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("Enter");

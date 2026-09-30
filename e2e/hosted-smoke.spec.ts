@@ -27,6 +27,16 @@ test("hosted visual demo serves static assets without localhost sockets", async 
     name: "Preview explorer",
   });
   await expect(explorer).toBeVisible();
+  await expect(
+    explorer.getByText("AI coding agents, at a glance"),
+  ).toBeVisible();
+  await expect(
+    explorer.getByRole("link", { name: "Install for Herdr" }),
+  ).toBeVisible();
+  await expect(
+    explorer.getByRole("button", { name: "Replay demo" }),
+  ).toBeVisible();
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toBeHidden();
   await explorer.getByText("Preview explorer", { exact: true }).click();
   await expect(explorer.getByRole("link", { name: "Source" })).toHaveAttribute(
     "href",
@@ -72,7 +82,7 @@ test("hosted visual demo serves static assets without localhost sockets", async 
   const currentUrl = page.url();
   await Promise.all([
     page.waitForNavigation(),
-    explorer.getByRole("button", { name: "Replay" }).click(),
+    explorer.getByRole("button", { name: "Replay demo" }).click(),
   ]);
   expect(page.url()).toBe(currentUrl);
   await expect(

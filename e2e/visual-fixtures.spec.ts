@@ -916,6 +916,12 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
       page.getByRole("link", { name: /Install for Herdr|Source/ }),
     ).toHaveCount(0);
     expect(escapedRequests).toEqual([]);
+    await expect(page.getByText("AI coding agents, at a glance")).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("button", { name: "Replay demo" })).toHaveCount(
+      0,
+    );
     const sequenceStation = page.getByRole("button", {
       name: "example-cook, Working — on the fire, open details",
     });
