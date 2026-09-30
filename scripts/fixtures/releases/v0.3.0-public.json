@@ -1,0 +1,43 @@
+{
+  "id": 396655343,
+  "tag_name": "v0.3.0",
+  "name": "v0.3.0",
+  "draft": false,
+  "prerelease": false,
+  "published_at": "2026-09-25T13:59:27Z",
+  "updated_at": "2026-09-25T13:59:27Z",
+  "html_url": "https://github.com/funsaized/herdr-mise/releases/tag/v0.3.0",
+  "body": "# Herdr Mise v0.3.0\n\n## Purpose\n\nThis release adds fixture-backed Herdr snapshot protocol 21 and 22 support, a TUI agent statistics table that preserves workspace identity across scopes, and browser control, focus, and locator improvements. Browser settings and agent panels restore focus; the keyboard-accessible pane locator remains copyable when the canvas renderer is unavailable.\n\n## Install\n\nOnce the stable release is published, download the archive for your platform and its matching `.sha256` sidecar from the `v0.3.0` GitHub release. Verify the checksum before extraction or launch (replace `<target>` with a supported target):\n\n```sh\nshasum -a 256 -c herdr-mise-v0.3.0-<target>.tar.gz.sha256 \\\n  && tar -xzf herdr-mise-v0.3.0-<target>.tar.gz \\\n  && ./herdr-mise\n```\n\nOn Linux, use `sha256sum -c` instead of `shasum -a 256 -c`. Run `./herdr-mise --tui` for the terminal interface. No stable archive or checksum is claimed before publication.\n\n## Herdr compatibility\n\nThe checked-in compatibility matrix and sanitized fixtures cover Herdr 0.7.5 (snapshot protocol 17), 0.8.0 (19), 0.8.2 (20), a 0.8.2 development commit (21), and 0.9.0 (22). Protocol 21 is pinned to a development commit, not a general 0.8.2 stable-release claim. Other releases on supported protocols are outside this tested matrix. Missing or incompatible local sources show a labeled demo feed rather than live data.\n\n## Limitations\n\n- Herdr Mise is read-only and local: it cannot control agents or expose a remote dashboard. Its browser server binds to loopback by default.\n- Release targets are macOS arm64, macOS x86_64, and Linux x86_64 glibc (Ubuntu 24.04 / glibc 2.39 baseline). Older glibc, musl, Windows, and Linux ARM are not claimed supported.\n- The TUI requires a UTF-8-capable terminal with space for its compact or tiled layout. Screen-reader speech listening is not a release gate; automated accessibility and keyboard, focus, and announcement checks remain required.\n\n## Checksums\n\nc3634bcfdf6df0215f1dd4719a706810684cb201f3a49f6bf31baa079e7798f4  herdr-mise-v0.3.0-aarch64-apple-darwin.tar.gz\n797fab376445429630c086dd24d417d4be82f102cf7eea46bdee408bcaf67fe6  herdr-mise-v0.3.0-x86_64-apple-darwin.tar.gz\ndd77d1c364e8f6e46c469f56c40c6bcad912aed04fea2c0a3fd65bb10a0d73b6  herdr-mise-v0.3.0-x86_64-unknown-linux-gnu.tar.gz\n",
+  "assets": [
+    {
+      "id": 588479531,
+      "name": "herdr-mise-v0.3.0-aarch64-apple-darwin.tar.gz",
+      "state": "uploaded"
+    },
+    {
+      "id": 588479545,
+      "name": "herdr-mise-v0.3.0-aarch64-apple-darwin.tar.gz.sha256",
+      "state": "uploaded"
+    },
+    {
+      "id": 588479556,
+      "name": "herdr-mise-v0.3.0-x86_64-apple-darwin.tar.gz",
+      "state": "uploaded"
+    },
+    {
+      "id": 588479569,
+      "name": "herdr-mise-v0.3.0-x86_64-apple-darwin.tar.gz.sha256",
+      "state": "uploaded"
+    },
+    {
+      "id": 588479578,
+      "name": "herdr-mise-v0.3.0-x86_64-unknown-linux-gnu.tar.gz",
+      "state": "uploaded"
+    },
+    {
+      "id": 588479601,
+      "name": "herdr-mise-v0.3.0-x86_64-unknown-linux-gnu.tar.gz.sha256",
+      "state": "uploaded"
+    }
+  ]
+}

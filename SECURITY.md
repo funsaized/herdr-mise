@@ -51,6 +51,6 @@ verification on the current head of a same-repository pull request authored by
 
 ## Supported versions
 
-Only the newest stable release, currently `v0.2.0`, is supported. Prereleases
+Only the newest stable release, identified by [GitHub Latest](https://github.com/funsaized/herdr-mise/releases/latest), is supported. Prereleases
 are evaluation builds and receive fixes only when explicitly identified as
 supported in their release notes.

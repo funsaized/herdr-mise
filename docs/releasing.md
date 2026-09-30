@@ -142,6 +142,46 @@ Confirm the release class and Latest status, then confirm exactly six assets:
 three platform archives and their three `.sha256` sidecars. Finally, download an
 asset anonymously and rerun its checksum and archive verifier.
 
+### Current-checkout guidance after publication
+
+The stable `verify-public-release` job runs the offline consistency checker
+against its fetched `release.json` and `latest.json`. It compares current Cargo,
+plugin, and installer pins, current installation guidance, supported platforms,
+security support policy, and the release-note template with public metadata.
+Ordinary PR tests use captured fixtures: preparing an unpublished next version
+does not require network access or `acceptance/releases/<version>.json`.
+
+After publication or a documentation-only correction, use a checkout containing
+the corrected current guidance and fresh anonymous API responses:
+
+```sh
+TAG=v0.3.0 # current checkout's stable Cargo version, not a historical tag
+curl -q --fail --silent --show-error \
+  "https://api.github.com/repos/funsaized/herdr-mise/releases/tags/$TAG" -o release.json
+curl -q --fail --silent --show-error \
+  https://api.github.com/repos/funsaized/herdr-mise/releases/latest -o latest.json
+node scripts/check-release-consistency.mjs release.json latest.json
+```
+
+This is a current-checkout/public-copy check, not verification of historical
+tag contents or artifact bytes. Keep the existing anonymous archive, checksum,
+and signature verification too. Latest must identify the checkout's release.
+
+For issue #314, the captured public v0.3.0 body still contains prospective
+publication wording. An explicitly authorized maintainer must make a
+metadata-only correction: replace only the prose before `## Checksums` with
+the corrected `docs/releases/v0.3.0.md`, retaining the existing Checksums section
+byte-for-byte. Do not rebuild, replace assets, move the tag, or rerun publication
+from the immutable old tag. That rerun intentionally rejects the corrected body
+because its old template differs; do not weaken the rerun comparison.
+The public-copy correction remains pending until fresh metadata passes the
+command above. The fixtures preserve the stale response as regression evidence.
+
+Release scripts are managed-verification trust-boundary paths. Hand off the
+tested change through a same-repository, `@funsaized`-authored pull request and
+require managed verification on its current head; no full local verification
+run is needed for this documentation/release-contract change.
+
 ### Tagged workflow contract
 
 - `macos-15` builds `aarch64-apple-darwin`, `macos-15-intel` builds

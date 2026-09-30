@@ -34,6 +34,21 @@ const targets = [
   "x86_64-unknown-linux-gnu",
 ];
 
+test("stable public verification checks fetched release consistency", () => {
+  const publicJob = workflow.slice(
+    workflow.indexOf("  verify-public-release:"),
+  );
+  assert.match(publicJob, /"\$api" -o release\.json/);
+  assert.match(
+    publicJob,
+    /if test "\$RELEASE_CLASS" = stable; then\n[\s\S]*?"\$latest_api" -o latest\.json\n\s+test "\$\(jq -r '\.tag_name' latest\.json\)" = "\$GITHUB_REF_NAME"\n\s+node scripts\/check-release-consistency\.mjs release\.json latest\.json\n\s+elif/,
+  );
+  assert.equal(
+    publicJob.match(/node scripts\/check-release-consistency\.mjs/g)?.length,
+    1,
+  );
+});
+
 // Only the GitHub transport is substituted; release-policy, shell tools, and artifact bytes are real.
 const ghTransport = `#!/usr/bin/env node
 const fs = require('node:fs');
