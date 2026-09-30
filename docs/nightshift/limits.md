@@ -81,6 +81,9 @@ and escaped severity together. Ten items are an operational checkpoint, not
 statistical proof. Stop or revert if a material blocker would be missed or source
 identity cannot be established.
 
-Routing only skips the UI lane; no receipt or prior verdict is reused. Historical
-snapshots without structured test selections retain their original proof path;
-no receipts or human approvals are synthesized from prose.
+Routing only skips the UI lane for plans and code without UI paths; the UI lane
+reruns whenever UI paths change, so no prior verdict, receipt, or fingerprint is
+reused across rounds. Each round's fingerprint binds that round's subject, base,
+source, policy, and skills alone. Historical snapshots without structured test
+selections retain their original proof path; no receipts or human approvals are
+synthesized from prose.

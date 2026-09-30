@@ -1,12 +1,10 @@
 /** Validate review results once and retain both findings and applicability. */
 import { z } from "npm:zod@4.4.3";
 
-export const ReviewLane = z.enum([
-  "test-coverage",
-  "security",
-  "quality",
-  "ui",
-]);
+import { REVIEW_LANES } from "./nightshift_review_routing.mjs";
+export { MANDATORY_LANES, routeLanes } from "./nightshift_review_routing.mjs";
+
+export const ReviewLane = z.enum(REVIEW_LANES);
 export type Lane = z.infer<typeof ReviewLane>;
 /** Each lane loads one or more trusted skills; lanes, not skills, are routed. */
 export const LANE_SKILLS: Record<Lane, string[]> = {
@@ -15,40 +13,6 @@ export const LANE_SKILLS: Record<Lane, string[]> = {
   quality: ["clean-code", "ddd", "observability"],
   ui: ["frontend", "accessibility"],
 };
-/** Lanes that run on every round; quality doubles as the generalist lane. */
-export const MANDATORY_LANES: Lane[] = ["test-coverage", "security", "quality"];
-const UI_PATH =
-  /^(client|e2e|perf)\/|^server\/src\/tui\/|^server\/static\/|^server\/tests\/goldens\//;
-
-/**
- * Route lanes for one round. Plans get the mandatory lanes. Code adds the UI
- * lane when UI paths changed, unless it already passed in the prior round.
- */
-export function routeLanes(
-  phase: "plan" | "code",
-  files: string[],
-  previousFindings: Array<{ id?: unknown; description?: unknown }>,
-): { lanes: Lane[]; reason: string } {
-  if (phase === "plan")
-    return {
-      lanes: [...MANDATORY_LANES],
-      reason: "Plans are reviewed by the mandatory lanes",
-    };
-  if (!files.some((file) => UI_PATH.test(file)))
-    return {
-      lanes: [...MANDATORY_LANES],
-      reason: "No client, TUI, e2e, or asset paths changed",
-    };
-  // Lane observations are "<verdict>: <summary>"; a routed-out lane records
-  // not-applicable, so only a UI lane that actually ran and passed counts.
-  const priorUi = previousFindings.find((finding) => finding.id === "LANE:ui");
-  if (String(priorUi?.description ?? "").startsWith("pass:"))
-    return {
-      lanes: [...MANDATORY_LANES],
-      reason: "UI lane passed in the prior round; quality covers the rework",
-    };
-  return { lanes: [...ReviewLane.options], reason: "UI paths changed" };
-}
 const Finding = z
   .object({
     id: z.string().min(1).max(160),
