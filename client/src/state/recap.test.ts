@@ -87,6 +87,45 @@ it("service recap excludes gaps and preserves retained outcomes", () => {
   );
   expect(scoped.summary("two", 300).startedAt).toBe(200);
 });
+it("recap catalog lookup preserves renamed and removed workspace labels", () => {
+  const recap = new ServiceRecap();
+  let reads = 0;
+  const catalog = Array.from({ length: RECAP_LIMIT }, (_, i) => ({
+    id: `w${i}`,
+    get label() {
+      reads++;
+      return `/kitchen/${i}/shared`;
+    },
+  }));
+  const agents = catalog.map((w, i) =>
+    agent(`a${i}`, "working", cases.transitions[0].generation, w.id),
+  );
+  recap.apply({ ...snap(agents), workspaces: catalog } as AgentStateEvent, 0);
+  expect(reads).toBe(RECAP_LIMIT);
+  expect(recap.summary(null, 1000).workspaces).toHaveLength(RECAP_LIMIT);
+  expect(reads).toBe(RECAP_LIMIT);
+  recap.apply(
+    {
+      ...snap([]),
+      workspaces: [{ id: "w0", label: "/renamed/unique" }],
+    } as AgentStateEvent,
+    1000,
+  );
+  expect(recap.summary(null, 2000).workspaces.slice(0, 2)).toEqual([
+    { id: "w0", label: "/renamed/unique" },
+    { id: "w1", label: "/kitchen/1/shared" },
+  ]);
+  recap.apply(snap([]), 2000);
+  expect(recap.summary(null, 2000).workspaces[0].label).toBe(
+    "/kitchen/0/shared",
+  );
+  recap.apply(
+    { ...snap([], "connected", "demo"), workspaces: [] } as AgentStateEvent,
+    3000,
+  );
+  expect(recap.summary(null, 3000).workspaces).toEqual([]);
+  expect(reads).toBe(RECAP_LIMIT);
+});
 it("service recap bounds retention across agent and workspace churn", () => {
   const recap = new ServiceRecap();
   recap.apply(snap([]), 0);

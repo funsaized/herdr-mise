@@ -2,7 +2,6 @@ import type {
   AgentRecord,
   AgentStateEvent,
   AppMode,
-  WorkspaceRecord,
 } from "../../../protocol/generated/agent-state-event";
 
 export const RECAP_LIMIT = 4096;
@@ -67,7 +66,7 @@ export class ServiceRecap {
   private mode: AppMode | null = null;
   private truncated = false;
   private startedAt: number | null = null;
-  private catalog: WorkspaceRecord[] = [];
+  private catalog = new Map<string, string>();
 
   private push(item: Item) {
     this.revision++;
@@ -100,8 +99,9 @@ export class ServiceRecap {
   }
   private label(agent: AgentRecord) {
     return (
-      this.catalog.find((w) => w.id === agent.workspaceId)?.label ??
-      agent.workspace
+      (agent.workspaceId === undefined
+        ? undefined
+        : this.catalog.get(agent.workspaceId)) ?? agent.workspace
     );
   }
   private record(agent: AgentRecord, at: number) {
@@ -253,7 +253,9 @@ export class ServiceRecap {
         this.gap();
         return;
       }
-      this.catalog = event.workspaces ?? [];
+      this.catalog = new Map(
+        (event.workspaces ?? []).map((w) => [w.id, w.label]),
+      );
       const ids = new Set(event.agents.map((agent) => agent.id));
       for (const id of this.current.keys())
         if (!ids.has(id)) this.close(id, now, true);
@@ -297,8 +299,9 @@ export class ServiceRecap {
       }
       workspaces.set(
         item.workspaceId,
-        this.catalog.find((w) => w.id === item.workspaceId)?.label ??
-          item.label,
+        (item.workspaceId === null
+          ? undefined
+          : this.catalog.get(item.workspaceId)) ?? item.label,
       );
       if (
         scope !== null &&

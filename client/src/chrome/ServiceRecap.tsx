@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { AgentStore, CoarseSlice } from "../state/store";
 import { workspaceDisplayName } from "../scene/geometry";
 import { formatDuration } from "./duration";
@@ -49,24 +49,36 @@ function RecapContents({
     coarse.mode !== "disconnected" &&
       (coarse.mode === "demo" || coarse.sourceStatus === "connected"),
   );
-  const recap = store.recapSummary(scope, now);
-  const options = store.recapSummary(null, now).workspaces;
-  const optionLabel = (option: (typeof options)[number]) =>
-    workspaceDisplayName(
-      coarse.workspaces.find((w) => w.id === option.id)?.label ?? option.label,
-    );
-  const selected =
-    scope !== null &&
-    (scope === undefined
-      ? options.some((w) => w.id === null)
-      : options.some((w) => w.id === scope))
-      ? scope
-      : null;
-  const selectedRecap =
-    selected === scope ? recap : store.recapSummary(null, now);
-  const rows = selectedRecap.agents.sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const { options, labelCounts, selected, selectedRecap, rows } =
+    useMemo(() => {
+      const all = store.recapSummary(null, now);
+      const options = all.workspaces.map((option) => ({
+        ...option,
+        displayLabel: workspaceDisplayName(option.label),
+      }));
+      const labelCounts = new Map<string, number>();
+      for (const option of options)
+        if (option.id !== null)
+          labelCounts.set(
+            option.displayLabel,
+            (labelCounts.get(option.displayLabel) ?? 0) + 1,
+          );
+      const selected =
+        scope !== null &&
+        (scope === undefined
+          ? options.some((w) => w.id === null)
+          : options.some((w) => w.id === scope))
+          ? scope
+          : null;
+      const selectedRecap =
+        selected === null ? all : store.recapSummary(selected, now);
+      const rows = selectedRecap.agents.sort(
+        (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+      );
+      return { options, labelCounts, selected, selectedRecap, rows };
+      // Coarse notifications invalidate observations held by the mutable store.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [store, coarse, scope, now]);
   const pages = Math.max(1, Math.ceil(rows.length / 20));
   const currentPage = Math.min(page, pages - 1);
   const duration = (ms: number | null) =>
@@ -99,7 +111,7 @@ function RecapContents({
             <option key={index} value={index + 1}>
               {option.id === null
                 ? "Unavailable identity"
-                : `${optionLabel(option)}${options.filter((other) => other.id !== null && optionLabel(other) === optionLabel(option)).length > 1 ? ` (${option.id})` : ""}`}
+                : `${option.displayLabel}${(labelCounts.get(option.displayLabel) ?? 0) > 1 ? ` (${option.id})` : ""}`}
             </option>
           ))}
         </select>
@@ -145,7 +157,9 @@ function RecapContents({
           <tbody>
             {rows.slice(currentPage * 20, (currentPage + 1) * 20).map((row) => (
               <tr key={row.id}>
-                <th scope="row">{row.name}</th>
+                <th scope="row">
+                  {row.name} ({row.id})
+                </th>
                 <td>{duration(row.workingMs)}</td>
                 <td>{duration(row.blockedMs)}</td>
                 <td>{duration(row.medianWaitMs)}</td>
