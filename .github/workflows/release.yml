@@ -11,6 +11,8 @@ on:
       - scripts/install.test.mjs
       - scripts/package-release.sh
       - scripts/release-policy.mjs
+      - scripts/check-release-consistency.mjs
+      - scripts/release-consistency.test.mjs
       - scripts/verify-release-artifact.sh
       - scripts/release-contract.test.mjs
       - docs/releases/**
@@ -301,6 +303,7 @@ jobs:
             curl -q --retry 3 --retry-all-errors --retry-delay 1 \
               --fail --silent --show-error "$latest_api" -o latest.json
             test "$(jq -r '.tag_name' latest.json)" = "$GITHUB_REF_NAME"
+            node scripts/check-release-consistency.mjs release.json latest.json
           elif curl -q --retry 3 --retry-all-errors --retry-delay 1 \
             --fail --silent --show-error "$latest_api" -o latest.json 2>/dev/null; then
             test "$(jq -r '.tag_name' latest.json)" != "$GITHUB_REF_NAME"

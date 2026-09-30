@@ -63,6 +63,8 @@ not need Node, npm, Cargo, or Rust. Herdr may require Git to clone community
 plugins. See [Operations](docs/operations.md#installation) for logs, updates,
 uninstall, standalone installation, and manual archive verification.
 
+The current pinned stable release is [v0.3.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.3.0).
+
 ### Standalone
 
 ```sh
@@ -206,7 +208,10 @@ The browser service continues alongside the TUI when its loopback port is free
 - The binary sends no telemetry and performs no outbound product network
   requests. Live mode reads only the local Herdr Unix socket.
 - Release archives and the installer support macOS arm64, macOS x86_64, and
-  Linux x86_64 glibc. There is no background service or auto-update.
+  Linux x86_64 glibc: `aarch64-apple-darwin`, `x86_64-apple-darwin`, and
+  `x86_64-unknown-linux-gnu`. Linux uses the Ubuntu 24.04 / glibc 2.39 baseline;
+  older glibc, musl, Windows, and Linux ARM are not claimed supported.
+  There is no background service or auto-update.
 - Browser settings are local site data. Reduced motion is honored. The
   is recorded separately; the broader manual listening pass remains
   post-release work.

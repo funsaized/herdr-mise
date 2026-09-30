@@ -30,7 +30,8 @@ herdr plugin action invoke open --plugin mise.kitchen
 
 The plugin installer needs Herdr, Git, curl, tar, and either `shasum` or
 `sha256sum`; it does not need Node or Rust. It supports macOS arm64, macOS
-x86_64, and Linux x86_64 glibc. Other systems, including Windows, Linux ARM,
+x86_64, and Linux x86_64 glibc (Ubuntu 24.04 / glibc 2.39 baseline). Older
+glibc is not claimed supported. Other systems, including Windows, Linux ARM,
 and musl-only Linux, fail without selecting a substitute artifact.
 
 Inspect command logs with `herdr plugin log list`. Herdr v1 updates community
@@ -137,9 +138,9 @@ continues to write `client/dist/`, which remains the only rust-embed input.
 
 ### Run the release archive
 
-The latest public stable distribution is the GitHub release `v0.2.0`;
-`v0.3.0-rc.1` is a public prerelease. The installer in this checkout targets
-`v0.3.0`, which is unavailable until the stable release is published.
+The current pinned public stable distribution is the GitHub release
+[v0.3.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.3.0).
+The plugin and standalone installers in this checkout both target `v0.3.0`.
 Matching `v*` tags are classified as prerelease or stable under the fail-closed
 process in [Release operations](releasing.md). Each asset pair is:
 
@@ -156,10 +157,13 @@ Targets:
 | macOS Intel         | `x86_64-apple-darwin`      |
 | Linux x86_64        | `x86_64-unknown-linux-gnu` |
 
+Linux uses the Ubuntu 24.04 / glibc 2.39 baseline. Older glibc, musl, Windows,
+and Linux ARM are not claimed supported.
+
 Download, verify, extract, and run from the upstream release:
 
 ```sh
-TAG=v0.2.0
+TAG=v0.3.0
 TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
@@ -691,10 +695,10 @@ From the directory that holds both files:
 
 ```sh
 # macOS
-shasum -a 256 -c herdr-mise-v0.2.0-aarch64-apple-darwin.tar.gz.sha256
+shasum -a 256 -c herdr-mise-v0.3.0-aarch64-apple-darwin.tar.gz.sha256
 
 # Linux
-sha256sum -c herdr-mise-v0.2.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+sha256sum -c herdr-mise-v0.3.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
 The sidecar is written next to the archive and names the archive basename
@@ -702,7 +706,7 @@ only. The release workflow verifies checksums before upload and again after
 public download. End-to-end local verification of a packaged archive:
 
 ```sh
-sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.2.0-aarch64-apple-darwin.tar.gz
+sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.3.0-aarch64-apple-darwin.tar.gz
 # optional on a signed macOS binary after extract:
 # VERIFY_CODESIGN=1 sh scripts/verify-release-artifact.sh path/to/archive.tar.gz
 ```
