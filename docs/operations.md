@@ -168,9 +168,14 @@ continues to write `client/dist/`, which remains the only rust-embed input.
 
 ### Run the release archive
 
-The current pinned public stable distribution is the GitHub release
+The currently published stable distribution is the GitHub release
 [v0.3.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.3.0).
-The plugin and standalone installers in this checkout both target `v0.3.0`.
+This checkout prepares the unpublished `v0.4.0` candidate; its plugin and
+standalone installers both target `v0.4.0`, so do not use these candidate pins
+against public downloads before publication. The download example below stays
+on published `v0.3.0` until candidate public verification succeeds. Coordinate
+merge, tag, and publication so main is not left pinned to an unavailable release;
+see [Release operations](releasing.md) for maintainer authorization and recovery.
 Matching `v*` tags are classified as prerelease or stable under the fail-closed
 process in [Release operations](releasing.md). Each asset pair is:
 
@@ -740,7 +745,7 @@ only. The release workflow verifies checksums before upload and again after
 public download. End-to-end local verification of a packaged archive:
 
 ```sh
-sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.3.0-aarch64-apple-darwin.tar.gz
+sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.4.0-aarch64-apple-darwin.tar.gz
 # optional on a signed macOS binary after extract:
 # VERIFY_CODESIGN=1 sh scripts/verify-release-artifact.sh path/to/archive.tar.gz
 ```
