@@ -87,3 +87,16 @@ makes the tree dirty. Relocate **only the printed directory** outside this check
 to retain evidence, or delete only that candidate after review. Never clean/reset
 unrelated work or weaken the clean-source guard. Re-run the entire capture; do
 not manually publish a partial package. No new README links are added by capture.
+
+## README hero GIF
+
+`npm run capture:hero` (scripts/capture-hero-media.mjs) records a single
+30-second, captioned tour for the README hero: mixed kitchen states, a blocked
+cook ringing the bell, details with the pane locator, workspace scope, the
+freezer, the service recap, the prerecorded TUI, and installation. It reuses the
+product scene actions and the same clean-committed-source guard, and needs
+Chromium, `ffmpeg`, `ffprobe`, and `gifsicle`. Outputs are
+`docs/assets/herdr-mise-hero.{gif,mp4,webm}` and `herdr-mise-hero-poster.png`,
+with provenance in `scripts/hero-demo.capture.json`. The GIF is 800px wide at
+10 fps (about 1.5 MB); MP4 and WebM keep the 960px, 20 fps capture. As with the
+product media, capture from a clean checkout of `main` after the source merges.

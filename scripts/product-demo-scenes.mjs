@@ -38,7 +38,15 @@ export const PRODUCT_SCENE_QUERY = Object.freeze({
   comparison: "preset=working&agents=6&theme=light",
   recap: "preset=mixed&agents=6&theme=light",
   installation: "preset=working&agents=6&theme=light",
+  // Hero-only scenes (scripts/capture-hero-media.mjs); not part of the
+  // 75-second storyboard's approved PRODUCT_SCENES order.
+  states: "preset=mixed&agents=6&theme=dinner",
+  freezer: "preset=ended&agents=12&theme=dinner",
+  usage: "preset=mixed&agents=6&theme=light",
 });
+
+// Enough demo time for the recap to show non-zero observed durations.
+export const PRODUCT_USAGE_WARMUP_MS = 30_000;
 
 // README quick start, shown verbatim in the installation segment and listed
 // in transcripts. Never executed by capture.
@@ -184,6 +192,35 @@ export async function prepareProductScene(page, baseUrl, scene, label) {
     case "installation":
       await page.clock.runFor(PRODUCT_SETTLE_MS);
       await renderProductInstallCard(page, label);
+      break;
+    case "states":
+      await page.clock.runFor(PRODUCT_SETTLE_MS);
+      await requireVisible(
+        page.getByRole("button", { name: /Blocked/ }),
+        label,
+        "a blocked station",
+      );
+      break;
+    case "freezer":
+      await page.clock.runFor(PRODUCT_SETTLE_MS);
+      await page.getByRole("button", { name: "Freezer", exact: true }).click();
+      await page.clock.runFor(PRODUCT_SETTLE_MS);
+      await requireVisible(
+        page
+          .getByRole("button", { name: "Freezer", exact: true })
+          .and(page.locator('[aria-pressed="true"]')),
+        label,
+        "freezer view",
+      );
+      break;
+    case "usage":
+      await page.clock.runFor(PRODUCT_USAGE_WARMUP_MS);
+      await page.locator("details.serviceRecap > summary").click();
+      await requireVisible(
+        page.locator("details.serviceRecap[open]"),
+        label,
+        "service recap",
+      );
       break;
     default:
       throw new Error(`${label}: unknown product scene ${scene}`);

@@ -31,6 +31,7 @@
     "capture:tui": "bash scripts/capture-demo.sh tui",
     "capture:web": "bash scripts/capture-demo.sh web",
     "capture:product": "node scripts/capture-readme-media.mjs --profile product",
+    "capture:hero": "node scripts/capture-hero-media.mjs",
     "perf": "playwright test --config perf/playwright.config.ts",
     "perf:endurance": "npm run bundle && HERDR_MISE_ENDURANCE=1 playwright test --config perf/playwright.config.ts --grep \"eight-hour production-boundary endurance matrix\"",
     "test:visual": "playwright test --config e2e/playwright.config.ts",
