@@ -113,6 +113,9 @@ function agent(
       ? `/service/${identity[2]}${mixedSuffix}`
       : `/visual/station-${index + 1}`,
     workspaceId: `visual-workspace-${index + 1}`,
+    // Fictional, stable demo locator so the capture can show a real rendered
+    // detail-card field instead of an editorial imitation. Demo data only.
+    paneId: `visual-pane-${index + 1}`,
     session: { runtimeMs: (index + 1) * 60_000, tickets: index + 1 },
   };
 }
