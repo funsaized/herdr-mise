@@ -1,5 +1,5 @@
 {
-  "observedAt": "2026-10-01T08:59:52.591Z",
+  "observedAt": "2026-10-01T09:32:00.048Z",
   "extension": "@funsaized/cli-agent",
   "version": "2026.09.30.1",
   "sourceCommit": "e13178c4ae5a7ec7ed1684031c7b5bbb9d63f4e7",
@@ -13,7 +13,7 @@
     "deno": "2.9.6"
   },
   "launcherAndProfiles": {
-    "launcher": "acc0c4bd01621a38abaf17555a98856a3af8139899d27032f8b038034f0df81a",
+    "launcher": "e04819a2812b3bc5bd6406987a60a1b6bb49471e4970cc222401171184769e68",
     "readonly": "1fb628654ba5a6aead34e1d5a7957c0b42521514d19c1431d0c1d57e2348ed69",
     "actor": "e8c9e105e1694b871bf4990aeb221ba71d5fa77f0dbe04b8679f2d466bfb0c8c"
   },
@@ -24,14 +24,14 @@
       "scenario": "normal",
       "passed": true,
       "samePortRebound": true,
-      "elapsedMs": 1031
+      "elapsedMs": 1032
     },
     {
       "role": "readonly",
       "scenario": "wall-timeout",
       "passed": true,
       "samePortRebound": true,
-      "elapsedMs": 5694
+      "elapsedMs": 5606
     },
     {
       "role": "readonly",
@@ -45,21 +45,21 @@
       "scenario": "normal",
       "passed": true,
       "samePortRebound": true,
-      "elapsedMs": 1038
+      "elapsedMs": 1020
     },
     {
       "role": "actor",
       "scenario": "wall-timeout",
       "passed": true,
       "samePortRebound": true,
-      "elapsedMs": 5672
+      "elapsedMs": 5628
     },
     {
       "role": "actor",
       "scenario": "caller-cancellation",
       "passed": true,
       "samePortRebound": true,
-      "elapsedMs": 1021
+      "elapsedMs": 1022
     }
   ],
   "limits": [

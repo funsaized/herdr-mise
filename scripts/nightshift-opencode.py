@@ -50,6 +50,11 @@ class Processes:
     def inspect(self, pid):
         try:
             if sys.platform != 'darwin':
+                # Like the macOS path, only this user's processes can carry the
+                # invocation identity; others (e.g. root's /proc/1) are skipped
+                # rather than failing cleanup on an unreadable environ.
+                if os.stat(f'/proc/{pid}').st_uid != os.getuid():
+                    return None
                 with open(f'/proc/{pid}/stat', 'rb') as stream:
                     fields = stream.read().rsplit(b')', 1)[1].split()
                 if fields[0] == b'Z':

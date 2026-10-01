@@ -168,7 +168,7 @@ The launcher and profile SHA-256s for that run are:
 
 | File                                       | SHA-256                                                            |
 | ------------------------------------------ | ------------------------------------------------------------------ |
-| `scripts/nightshift-opencode.py`           | `acc0c4bd01621a38abaf17555a98856a3af8139899d27032f8b038034f0df81a` |
+| `scripts/nightshift-opencode.py`           | `e04819a2812b3bc5bd6406987a60a1b6bb49471e4970cc222401171184769e68` |
 | `agent-constraints/nightshift-readonly.sb` | `1fb628654ba5a6aead34e1d5a7957c0b42521514d19c1431d0c1d57e2348ed69` |
 | `agent-constraints/nightshift-actor.sb`    | `e8c9e105e1694b871bf4990aeb221ba71d5fa77f0dbe04b8679f2d466bfb0c8c` |
 
