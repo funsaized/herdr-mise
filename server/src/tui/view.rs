@@ -27,7 +27,7 @@ pub(crate) fn draw_service_recap(
     scope: &Scope,
     now_ms: i64,
     offset: usize,
-) {
+) -> usize {
     let summary = if scope.id.is_none() && scope.label.is_some() {
         table.recap().summary_missing(now_ms)
     } else {
@@ -120,38 +120,51 @@ pub(crate) fn draw_service_recap(
     } else {
         table.recap().rows(scope.id.as_deref(), now_ms)
     };
-    let available = frame.area().height.saturating_sub(lines.len() as u16 + 2) as usize;
-    for row in rows
+    let area = frame.area();
+    let inner_width = area.width.saturating_sub(2).max(1) as usize;
+    let available = area.height.saturating_sub(lines.len() as u16 + 2) as usize;
+    let rendered_rows = rows
         .iter()
-        .skip(offset.min(rows.len().saturating_sub(available)))
-        .take(available)
-    {
-        let stats = &row.summary;
-        let name = sanitize_external(&row.name);
-        if frame.area().width < 80 {
-            lines.push(format!(
-                "{}{} · Blocked {}",
-                if stats.partial { "Partial " } else { "" },
-                compact_text(&name, 10),
-                format_duration(stats.blocked_ms)
-            ));
-            continue;
-        }
-        lines.push(format!(
-            "{} · {} · {} · {} / {} · {} / {} / {}{}",
-            name,
-            format_duration(stats.working_ms),
-            format_duration(stats.blocked_ms),
-            wait(stats.median_wait_ms),
-            stats
-                .worst_wait_ms
-                .map_or_else(|| "Unavailable".into(), format_duration),
-            stats.blocked_occurrences,
-            stats.plated_count,
-            stats.ended_count,
-            if stats.partial { " · partial" } else { "" }
-        ));
-    }
+        .flat_map(|row| {
+            let name = sanitize_external(&row.name);
+            let id = sanitize_external(&row.id);
+            let stats = &row.summary;
+            if area.width < 80 {
+                let name = compact_text(&name, (inner_width / 2).max(1));
+                let mut rendered = wrap_text(&format!("{name} · {id}"), inner_width);
+                rendered.push(format!(
+                    "{}Blocked {}",
+                    if stats.partial { "Partial · " } else { "" },
+                    format_duration(stats.blocked_ms)
+                ));
+                rendered
+            } else {
+                let detail = format!(
+                    "{} · {} · {} · {} / {} · {} / {} / {}{}",
+                    id,
+                    format_duration(stats.working_ms),
+                    format_duration(stats.blocked_ms),
+                    wait(stats.median_wait_ms),
+                    stats
+                        .worst_wait_ms
+                        .map_or_else(|| "Unavailable".into(), format_duration),
+                    stats.blocked_occurrences,
+                    stats.plated_count,
+                    stats.ended_count,
+                    if stats.partial { " · partial" } else { "" }
+                );
+                let budget = inner_width.saturating_sub(display_width(&detail) + 3);
+                let budget = if budget == 0 { inner_width / 2 } else { budget };
+                wrap_text(
+                    &format!("{} · {detail}", compact_text(&name, budget)),
+                    inner_width,
+                )
+            }
+        })
+        .collect::<Vec<_>>();
+    // Scroll rendered lines, not agents: a single identity can exceed the viewport.
+    let offset = offset.min(rendered_rows.len().saturating_sub(available.max(1)));
+    lines.extend(rendered_rows.into_iter().skip(offset).take(available));
     let text = lines.into_iter().map(Line::from).collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(text).block(
@@ -161,6 +174,7 @@ pub(crate) fn draw_service_recap(
         ),
         frame.area(),
     );
+    offset
 }
 
 #[cfg(test)]
@@ -213,7 +227,9 @@ mod recap_view_tests {
         for width in [36, 100] {
             let mut terminal = Terminal::new(TestBackend::new(width, 18)).unwrap();
             terminal
-                .draw(|frame| draw_service_recap(frame, &table, &scope, 2000, 0))
+                .draw(|frame| {
+                    draw_service_recap(frame, &table, &scope, 2000, 0);
+                })
                 .unwrap();
             let buffer = terminal.backend().buffer();
             let text = buffer
@@ -231,7 +247,9 @@ mod recap_view_tests {
         table.gap_at(3000);
         let mut narrow = Terminal::new(TestBackend::new(36, 18)).unwrap();
         narrow
-            .draw(|frame| draw_service_recap(frame, &table, &scope, 4000, 0))
+            .draw(|frame| {
+                draw_service_recap(frame, &table, &scope, 4000, 0);
+            })
             .unwrap();
         let text = narrow
             .backend()
@@ -306,7 +324,7 @@ mod recap_view_tests {
                         },
                         3000,
                         0,
-                    )
+                    );
                 })
                 .unwrap();
             let text = terminal
@@ -347,7 +365,9 @@ mod recap_view_tests {
             );
             let mut terminal = Terminal::new(TestBackend::new(width, 18)).unwrap();
             terminal
-                .draw(|frame| draw_service_recap(frame, &table, &Scope::default(), 2000, 0))
+                .draw(|frame| {
+                    draw_service_recap(frame, &table, &Scope::default(), 2000, 0);
+                })
                 .unwrap();
             terminal
                 .backend()
@@ -386,6 +406,208 @@ mod recap_view_tests {
             assert!(
                 unsupported.contains(expected),
                 "missing {expected}: {unsupported}"
+            );
+        }
+    }
+
+    #[test]
+    fn recap_agent_identity_survives_churn_and_scrolling() {
+        let record = |id: &str, state: AgentState| AgentRecord {
+            id: id.into(),
+            name: "shared\u{1b}name-that-wraps-across-lines".into(),
+            state,
+            state_known: Some(true),
+            state_entered_at: "2026-01-01T00:00:00Z".into(),
+            workspace_id: Some("ws".into()),
+            workspace: "/private/kitchen".into(),
+            pane_id: None,
+            agent_kind: None,
+            progress: None,
+            accent_index: 0,
+            model: String::new(),
+            session: SessionStats {
+                runtime_ms: 0,
+                tickets: 0,
+                tickets_available: None,
+            },
+        };
+        let snapshot = |agents: Vec<AgentRecord>| AgentStateEvent::Snapshot {
+            version: 1,
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents,
+            workspaces: Some(vec![crate::protocol::WorkspaceRecord {
+                id: "ws".into(),
+                label: "Kitchen".into(),
+            }]),
+        };
+        let mut table = AgentTable::default();
+        table.apply_at(
+            snapshot(vec![
+                record("dup\u{1b}00", AgentState::Blocked),
+                record("dup\u{1b}01", AgentState::Working),
+                record("dup\u{1b}02", AgentState::Blocked),
+            ]),
+            1_000,
+        );
+        table.apply_at(
+            snapshot(vec![
+                record("dup\u{1b}01", AgentState::Working),
+                record("dup\u{1b}02", AgentState::Blocked),
+                record("dup\u{1b}03", AgentState::Blocked),
+            ]),
+            1_100,
+        );
+        table.apply_at(
+            snapshot(vec![
+                record("dup\u{1b}01", AgentState::Working),
+                record("dup\u{1b}02", AgentState::Blocked),
+                record("dup\u{1b}03", AgentState::Blocked),
+                record("dup\u{1b}04", AgentState::Blocked),
+            ]),
+            1_200,
+        );
+        let render_rows = |table: &AgentTable, width: u16, height: u16, offset: usize| {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal
+                .draw(|frame| {
+                    draw_service_recap(frame, table, &Scope::default(), 2_000, offset);
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let content = buffer
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            content
+                .chars()
+                .collect::<Vec<_>>()
+                .chunks(width as usize)
+                .map(|row| {
+                    let inner = row.get(1..row.len().saturating_sub(1)).unwrap_or_default();
+                    inner.iter().collect::<String>().trim_end().to_string()
+                })
+                .collect::<Vec<_>>()
+        };
+        let flatten = |rows: &[String]| {
+            rows.join("")
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect::<String>()
+        };
+        let sanitized_name = "sharedname-that-wraps-across-lines";
+        let wide = flatten(&render_rows(&table, 100, 18, 0));
+        for id in ["dup00", "dup01", "dup02", "dup03"] {
+            assert!(wide.contains(id), "missing {id}: {wide}");
+        }
+        assert!(!wide.contains("dup04"), "{wide}");
+        assert!(wide.contains(sanitized_name), "{wide}");
+        let wide_scrolled = flatten(&render_rows(&table, 100, 18, 2));
+        assert!(!wide_scrolled.contains("dup00"), "{wide_scrolled}");
+        assert!(wide_scrolled.contains("dup04"), "{wide_scrolled}");
+        let narrow = flatten(&render_rows(&table, 40, 18, 0));
+        assert!(narrow.contains("dup00"), "{narrow}");
+        assert!(narrow.contains("dup01"), "{narrow}");
+        assert!(!narrow.contains("dup02"), "{narrow}");
+        let narrow_scrolled = flatten(&render_rows(&table, 40, 18, 1));
+        assert!(narrow_scrolled.contains("dup01"), "{narrow_scrolled}");
+        assert!(!narrow_scrolled.contains("dup00"), "{narrow_scrolled}");
+
+        // A stable id wider than the layout must survive wrapping, narrow and wide.
+        let long_id = format!("stable\u{1b}identity-{}", "x".repeat(120));
+        let sanitized_long_id = format!("stableidentity-{}", "x".repeat(120));
+        let mut long_table = AgentTable::default();
+        long_table.apply_at(snapshot(vec![record(&long_id, AgentState::Blocked)]), 1_000);
+        for width in [40_u16, 100] {
+            let rendered = flatten(&render_rows(&long_table, width, 30, 0));
+            assert!(
+                rendered.contains(&sanitized_long_id),
+                "width {width}: {rendered}"
+            );
+            assert!(!rendered.contains('\u{1b}'), "width {width}: {rendered}");
+        }
+        // A row taller than the viewport still shows its head instead of vanishing.
+        let cramped = flatten(&render_rows(&long_table, 40, 18, 0));
+        assert!(cramped.contains(&sanitized_long_id[..24]), "{cramped}");
+        let full_rows = render_rows(&long_table, 40, 30, 0);
+        let observation_start = full_rows
+            .iter()
+            .position(|row| row.contains("stableidentity"))
+            .unwrap();
+        let expected_lines = &full_rows[observation_start..]
+            .iter()
+            .take_while(|row| !row.is_empty() && !row.contains('└'))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut inspected = Vec::new();
+        let last_offset = expected_lines.len().saturating_sub(4);
+        for offset in 0..=8 {
+            let rows = render_rows(&long_table, 40, 18, offset);
+            let visible = &rows[observation_start..rows.len() - 1];
+            assert!(
+                visible.iter().any(|line| !line.is_empty()),
+                "offset {offset}: {rows:?}"
+            );
+            let start = offset.min(last_offset);
+            assert_eq!(visible, &expected_lines[start..start + 4]);
+            for line in visible {
+                assert!(!line.chars().any(char::is_control), "{line}");
+            }
+            if offset < last_offset {
+                inspected.push(visible[0].clone());
+            }
+            if offset == last_offset {
+                inspected.extend_from_slice(visible);
+            }
+        }
+        assert!(
+            flatten(&inspected).contains(&sanitized_long_id),
+            "{inspected:?}"
+        );
+        assert!(
+            inspected.iter().any(|line| line.contains("Blocked")),
+            "{inspected:?}"
+        );
+        assert_eq!(
+            render_rows(&long_table, 40, 18, 8),
+            render_rows(&long_table, 40, 18, usize::MAX)
+        );
+        let mut terminal = Terminal::new(TestBackend::new(40, 18)).unwrap();
+        let mut offset = usize::MAX;
+        terminal
+            .draw(|frame| {
+                offset = draw_service_recap(frame, &long_table, &Scope::default(), 2_000, offset);
+            })
+            .unwrap();
+        assert_eq!(offset, last_offset);
+        terminal
+            .draw(|frame| {
+                offset = draw_service_recap(
+                    frame,
+                    &long_table,
+                    &Scope::default(),
+                    2_000,
+                    offset.saturating_sub(1),
+                );
+            })
+            .unwrap();
+        assert_eq!(offset, last_offset.saturating_sub(1));
+        for rows in [
+            render_rows(&table, 100, 18, 0),
+            render_rows(&table, 100, 18, 2),
+            render_rows(&table, 40, 18, 0),
+            render_rows(&table, 40, 18, 1),
+            render_rows(&long_table, 100, 30, 0),
+            render_rows(&long_table, 40, 30, 0),
+        ] {
+            assert!(
+                !rows
+                    .iter()
+                    .flat_map(|row| row.chars())
+                    .any(char::is_control),
+                "{rows:?}"
             );
         }
     }
@@ -473,6 +695,24 @@ fn compact_text(value: &str, max_width: usize) -> String {
         take_width(value, head_width, false),
         take_width(value, content_width - head_width, true)
     )
+}
+
+fn wrap_text(value: &str, width: usize) -> Vec<String> {
+    let width = width.max(1);
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    let mut used = 0_usize;
+    for character in value.chars() {
+        let character_width = display_width(&character.to_string());
+        if used > 0 && used.saturating_add(character_width) > width {
+            lines.push(std::mem::take(&mut current));
+            used = 0;
+        }
+        current.push(character);
+        used = used.saturating_add(character_width);
+    }
+    lines.push(current);
+    lines
 }
 
 fn station_suffix(agent: &AgentRecord, agents: &[&AgentRecord], max_width: usize) -> String {

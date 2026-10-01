@@ -3039,3 +3039,173 @@ test("real Herdr observations drive the service recap without counting recovery 
     await app.close();
   }
 });
+
+test("real Herdr observations keep recap identities stable through paging and churn", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const source = JSON.parse(
+      await readFile(
+        join(
+          process.cwd(),
+          "server/tests/fixtures/snapshot-herdr-0.8.2-p20.json",
+        ),
+        "utf8",
+      ),
+    ) as {
+      workspaces: Array<{ workspace_id: string; label: string }>;
+      agents: Array<{
+        terminal_id: string;
+        pane_id: string;
+        workspace_id: string;
+        display_agent: string;
+        agent_status: string;
+        state_change_seq: number;
+        agent_session: { value: string };
+      }>;
+    },
+    template = source.agents[0]!,
+    kitchen = "fictional-kitchen",
+    pantry = "fictional-pantry",
+    rosterSize = 24,
+    // Duplicate display names must stay distinguishable by their full row id.
+    label = (ordinal: number) =>
+      `example-cook (fictional-terminal-${String(ordinal).padStart(2, "0")})`,
+    cook = (ordinal: number) => ({
+      ...template,
+      terminal_id: `fictional-terminal-${String(ordinal).padStart(2, "0")}`,
+      pane_id: `fictional-pane-${String(ordinal).padStart(2, "0")}`,
+      workspace_id: ordinal <= 3 ? pantry : kitchen,
+      display_agent: "example-cook",
+      agent_status: "working",
+      state_change_seq: 100 + ordinal,
+      agent_session: { value: `fictional-session-${ordinal}` },
+    }),
+    initial = structuredClone(source),
+    churned = structuredClone(source),
+    ordinals = Array.from({ length: rosterSize }, (_, index) => index + 1);
+  initial.workspaces = [
+    { workspace_id: kitchen, label: "Example Kitchen" },
+    { workspace_id: pantry, label: "Example Pantry" },
+  ];
+  initial.agents = ordinals.map(cook);
+  churned.workspaces = initial.workspaces;
+  churned.agents = [
+    ...ordinals.filter((ordinal) => ordinal !== 21 && ordinal !== 24).map(cook),
+    cook(95),
+    cook(96),
+  ];
+  const app = await startFixtureApp({
+    prefix: "herdr-mise-recap-churn-",
+    snapshot: initial,
+  });
+  try {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${app.appUrl}/?stats`);
+    const recap = page.locator(".serviceRecap"),
+      table = recap.getByRole("table", {
+        name: "Retained agent observations",
+      }),
+      pages = recap.getByRole("navigation", { name: "Recap pages" }),
+      workspaceSelect = recap.getByRole("combobox", {
+        name: "Recap workspace",
+      }),
+      next = recap.getByRole("button", { name: "Next" }),
+      previous = recap.getByRole("button", { name: "Previous" }),
+      rows = () => table.locator("tbody th[scope='row']").allTextContents();
+    await expect(recap.locator("summary")).toBeVisible({ timeout: 15_000 });
+    await recap.locator("summary").click();
+    await expect(table).toBeVisible();
+    await expect(pages).toContainText("Page 1 of 2");
+    await expect
+      .poll(rows, { timeout: 20_000 })
+      .toEqual(ordinals.slice(0, 20).map(label));
+    const firstPage = await rows();
+    expect(new Set(firstPage).size).toBe(firstPage.length);
+
+    await next.click();
+    await expect(pages).toContainText("Page 2 of 2");
+    await expect
+      .poll(rows, { timeout: 20_000 })
+      .toEqual(ordinals.slice(20).map(label));
+    await expect(next).toBeDisabled();
+
+    // Peers joining and leaving must not shift or drop retained identities.
+    app.setSnapshot(churned);
+    await expect
+      .poll(rows, { timeout: 20_000 })
+      .toEqual([21, 22, 23, 24, 95, 96].map(label));
+    for (const ordinal of [21, 24])
+      await expect(
+        table
+          .locator("tbody tr")
+          .filter({ hasText: label(ordinal) })
+          .locator("td")
+          .last(),
+      ).toContainText("1");
+
+    await previous.click();
+    await expect(pages).toContainText("Page 1 of 2");
+    await expect
+      .poll(rows, { timeout: 20_000 })
+      .toEqual(ordinals.slice(0, 20).map(label));
+
+    // Scope switches keep the same stable labels.
+    await workspaceSelect.selectOption({ label: "Example Pantry" });
+    await expect(pages).toContainText("Page 1 of 1");
+    await expect.poll(rows, { timeout: 20_000 }).toEqual([1, 2, 3].map(label));
+
+    await workspaceSelect.selectOption({ label: "Example Kitchen" });
+    await expect(pages).toContainText("Page 1 of 2");
+    await expect
+      .poll(rows, { timeout: 20_000 })
+      .toEqual(Array.from({ length: 20 }, (_, index) => label(index + 4)));
+
+    await workspaceSelect.selectOption({ label: "All" });
+    await expect
+      .poll(rows, { timeout: 20_000 })
+      .toEqual(ordinals.slice(0, 20).map(label));
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 1280, height: 800 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+      { width: 640, height: 480 },
+      { width: 375, height: 667 },
+      { width: 320, height: 320 },
+    ]) {
+      await page.setViewportSize(viewport);
+      for (const scope of ["All", "Example Pantry"]) {
+        await workspaceSelect.selectOption({ label: scope });
+        await expect(previous).toBeDisabled();
+        await expect(pages).toContainText(
+          scope === "All" ? "Page 1 of 2" : "Page 1 of 1",
+        );
+        expectInside((await recap.locator(":scope > div").boundingBox())!, {
+          x: 0,
+          y: 0,
+          ...viewport,
+        });
+        await workspaceSelect.focus();
+        await page.keyboard.press("Escape");
+        await expect(recap).not.toHaveAttribute("open");
+        await expect(recap.locator("summary")).toBeFocused();
+        await expect(recap.locator("summary")).toBeInViewport({ ratio: 1 });
+        await recap.locator("summary").click();
+        await expect(table).toBeVisible();
+        await recap.locator("summary").click();
+        await expect(recap).not.toHaveAttribute("open");
+        await recap.locator("summary").click();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          )
+          .toBe(true);
+      }
+    }
+  } finally {
+    await app.close();
+  }
+});
