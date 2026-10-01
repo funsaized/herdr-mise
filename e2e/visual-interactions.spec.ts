@@ -349,7 +349,8 @@ test("working cooks drive continuous scene motion", async ({ page }) => {
 test("playground introduction exposes install and replay without expanding the explorer", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  // Walks many viewports and rosters; CI runners take over 2 minutes.
+  test.setTimeout(240_000);
   const sockets: string[] = [],
     escapedRequests: string[] = [];
   page.on("websocket", (socket) => sockets.push(socket.url()));
