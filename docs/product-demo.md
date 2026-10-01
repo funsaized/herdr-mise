@@ -30,6 +30,12 @@ its names, provenance, and default `capture:web` behavior are unchanged.
 
 ## Ship preparation (driver only)
 
+This repository squash-merges pull requests, so a commit captured on a feature
+branch disappears from `main` and `check-product-media.mjs` would later reject
+its `sourceCommit`. Merge the source change first, then capture from a clean
+checkout of that `main` commit and add the media in a follow-up pull request,
+as the README demo does.
+
 First commit the source change and ensure the checkout is clean. Capture refuses
 tracked changes, untracked source, or an unavailable HEAD before creating any
 output or starting capture dependencies. No override is provided. Chromium,
