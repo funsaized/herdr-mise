@@ -1,0 +1,70 @@
+{
+  "observedAt": "2026-10-01T09:50:58.635Z",
+  "extension": "@funsaized/cli-agent",
+  "version": "2026.09.30.1",
+  "sourceCommit": "e13178c4ae5a7ec7ed1684031c7b5bbb9d63f4e7",
+  "installedSourceSha256": "7855e7c770a1b01ef0f99251b705cfe850302245d750812e5e07b42fd83d4fbd",
+  "declared": {
+    "version": "2026.09.30.1",
+    "checksum": "0636590fbf94f804d551a9c621f30c89ca408d8f69300f91edb530dd95fa4c1b",
+    "filesChecksum": "db840180c01550c65be47a69a31817feea663e0ddbd090095079ba1cbee2d1b4"
+  },
+  "runtime": {
+    "deno": "2.9.6"
+  },
+  "launcherAndProfiles": {
+    "launcher": "ff7b03a23afcf711b0b0da4d89c9095f77b5039fdd02c94f359166d782181d92",
+    "readonly": "1fb628654ba5a6aead34e1d5a7957c0b42521514d19c1431d0c1d57e2348ed69",
+    "actor": "e8c9e105e1694b871bf4990aeb221ba71d5fa77f0dbe04b8679f2d466bfb0c8c"
+  },
+  "scope": "Installed runCli executor through both Nightshift Seatbelt roles on a trusted macOS control host, driving the checked-in detached-listener provider (ordinary, detached, and SIGTERM-resistant descendants with loopback listeners).",
+  "results": [
+    {
+      "role": "readonly",
+      "scenario": "normal",
+      "passed": true,
+      "samePortRebound": true,
+      "elapsedMs": 1032
+    },
+    {
+      "role": "readonly",
+      "scenario": "wall-timeout",
+      "passed": true,
+      "samePortRebound": true,
+      "elapsedMs": 5666
+    },
+    {
+      "role": "readonly",
+      "scenario": "caller-cancellation",
+      "passed": true,
+      "samePortRebound": true,
+      "elapsedMs": 1022
+    },
+    {
+      "role": "actor",
+      "scenario": "normal",
+      "passed": true,
+      "samePortRebound": true,
+      "elapsedMs": 1023
+    },
+    {
+      "role": "actor",
+      "scenario": "wall-timeout",
+      "passed": true,
+      "samePortRebound": true,
+      "elapsedMs": 5640
+    },
+    {
+      "role": "actor",
+      "scenario": "caller-cancellation",
+      "passed": true,
+      "samePortRebound": true,
+      "elapsedMs": 1022
+    }
+  ],
+  "limits": [
+    "Covers descendants that keep the inherited invocation identity; a descendant that erases it is out of scope",
+    "No claim for SIGKILL of the supervisor, host failure, or shared-server death",
+    "No credential-broker or full host-isolation claim"
+  ]
+}

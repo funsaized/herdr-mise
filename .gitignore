@@ -35,3 +35,4 @@
 
 # Checksum-pinned project tools; provisioned through Swamp
 /.tools/
+__pycache__/

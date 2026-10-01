@@ -39,8 +39,17 @@ service and accurate diagnostics.
   including the repository toolchain, inherited descriptors, known-path Unix
   credential sockets, and a dummy-keychain read. Arbitrary brokers and complete
   host isolation remain outside this local-mode guarantee.
-- Ordinary POSIX descendants in the owned process group are cleaned. Descendants
-  creating another group/session remain outside that guarantee.
+- Historical executor evidence covers ordinary POSIX descendants in the owned
+  process group only. The macOS launcher now supervises inherited-identity
+  descendants across setsid/reparenting, bounded below the released executor's
+  five-second grace. Both-role Seatbelt lifecycle acceptance passed on the
+  control host with executor 2026.09.30.1; see the [lifecycle observations](worker-isolation.md#invocation-lifecycle-304).
+- Arbitrary supervisor SIGKILL, host/shared-server death, descendants erasing
+  invocation identity, and non-dumpable descendants whose environment cannot be
+  read (for example after a setuid exec on Linux) remain outside the cleanup
+  claim. If an ordinary supported
+  executor path bypasses supervisor cleanup, require surviving executor-owned
+  cleanup upstream; do not weaken acceptance or hide a leaked port with reuse.
 - Complete home isolation, exclusive scratch, and provider-only network egress
   are not implemented.
 - The newer global CLI's template-provenance rejection remains upstream; use the
