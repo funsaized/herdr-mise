@@ -1,0 +1,376 @@
+{
+  "schema": "product-demo-capture-v1",
+  "capturedAt": "2026-10-01T16:35:28.430Z",
+  "sourceCommit": "f1ebab8eae3ecc4c4e39d2a4531a79d3faeff4f5",
+  "provenance": "deterministic client visual harness product demo",
+  "version": "0.4.0",
+  "versionLabel": "herdr-mise 0.4.0 · source f1ebab8",
+  "frameRate": 20,
+  "sourceDimensions": {
+    "width": 1280,
+    "height": 720
+  },
+  "outputDimensions": {
+    "width": 960,
+    "height": 540
+  },
+  "storyboard": [
+    {
+      "start": 0,
+      "end": 10,
+      "scene": "busy",
+      "caption": "Six cooks working the lunch service."
+    },
+    {
+      "start": 10,
+      "end": 20,
+      "scene": "blocked",
+      "caption": "Codex is blocked on checkout-api, waiting for a human."
+    },
+    {
+      "start": 20,
+      "end": 32,
+      "scene": "details",
+      "caption": "Open details to read the exact pane locator."
+    },
+    {
+      "start": 32,
+      "end": 44,
+      "scene": "workspace",
+      "caption": "Scope the kitchen to one local workspace."
+    },
+    {
+      "start": 44,
+      "end": 56,
+      "scene": "comparison",
+      "caption": "Prerecorded TUI demo, not a live terminal."
+    },
+    {
+      "start": 56,
+      "end": 66,
+      "scene": "recap",
+      "caption": "Observed time blocked, computed locally."
+    },
+    {
+      "start": 66,
+      "end": 75,
+      "scene": "installation",
+      "caption": "herdr-mise 0.4.0 · source f1ebab8"
+    }
+  ],
+  "inputs": {
+    "tuiDemo": {
+      "path": "docs/assets/herdr-mise-tui-demo.gif",
+      "capturePath": "scripts/tui-demo.capture.json",
+      "bytes": 559490,
+      "sha256": "05e5d1956bab16f0027cb14638d24c60168fc933ac07c113392efce15f3806dd",
+      "captureSha256": "b5b29427f10e3727ae2143f0d8e28db0fcf5fedc2a893d99aa824363b53bb1e2",
+      "sourceSha256": "063f0074a798b46c2c08567dd7a686007a2a6625ce2c51207ba78b4df2c4236b",
+      "releaseBinarySha256": "a08324b7d24c349e299df7498ec2d07e5ed47aa116a4361ed1c96d5560a631d5",
+      "posterSha256": "80bc1ccf5ca2f67e19bfdc3f1ecb57e9e43b70fb53692fa192ffd45456c4c210",
+      "provenance": "prerecorded demo footage",
+      "originalCapture": {
+        "automated": true,
+        "captured_at": "2026-09-04T11:30:51.779837+00:00",
+        "mode": "tui-demo",
+        "output": {
+          "bytes": 559490,
+          "duration_seconds": 15.34,
+          "fps": 15,
+          "frames": 230,
+          "height": 480,
+          "media_budget_bytes": 1572864,
+          "path": "docs/assets/herdr-mise-tui-demo.gif",
+          "poster": "docs/assets/herdr-mise-tui-demo-poster.png",
+          "poster_sha256": "80bc1ccf5ca2f67e19bfdc3f1ecb57e9e43b70fb53692fa192ffd45456c4c210",
+          "scheduled_views": [
+            "kitchen",
+            "freezer"
+          ],
+          "sha256": "05e5d1956bab16f0027cb14638d24c60168fc933ac07c113392efce15f3806dd",
+          "total_media_bytes": 632769,
+          "width": 620
+        },
+        "release_binary_sha256": "a08324b7d24c349e299df7498ec2d07e5ed47aa116a4361ed1c96d5560a631d5",
+        "schema": "demo-capture-v1",
+        "source_sha256": "063f0074a798b46c2c08567dd7a686007a2a6625ce2c51207ba78b4df2c4236b"
+      }
+    }
+  },
+  "outputs": {
+    "herdr-mise-product-demo": {
+      "kind": "main",
+      "durationSeconds": 75,
+      "posterSeconds": 21,
+      "cues": [
+        {
+          "index": 1,
+          "start": 0,
+          "end": 10,
+          "scene": "busy",
+          "text": "Six cooks working the lunch service."
+        },
+        {
+          "index": 2,
+          "start": 10,
+          "end": 20,
+          "scene": "blocked",
+          "text": "Codex is blocked on checkout-api, waiting for a human."
+        },
+        {
+          "index": 3,
+          "start": 20,
+          "end": 32,
+          "scene": "details",
+          "text": "Open details to read the exact pane locator."
+        },
+        {
+          "index": 4,
+          "start": 32,
+          "end": 44,
+          "scene": "workspace",
+          "text": "Scope the kitchen to one local workspace."
+        },
+        {
+          "index": 5,
+          "start": 44,
+          "end": 56,
+          "scene": "comparison",
+          "text": "Prerecorded TUI demo, not a live terminal."
+        },
+        {
+          "index": 6,
+          "start": 56,
+          "end": 66,
+          "scene": "recap",
+          "text": "Observed time blocked, computed locally."
+        },
+        {
+          "index": 7,
+          "start": 66,
+          "end": 75,
+          "scene": "installation",
+          "text": "herdr-mise 0.4.0 · source f1ebab8"
+        }
+      ],
+      "assets": {
+        "mp4": {
+          "path": "docs/assets/herdr-mise-product-demo.mp4",
+          "codec": "h264",
+          "bytes": 739031,
+          "sha256": "23168882e3e6246b36f4b44e840ff73e55dbcb31b524aba81f874e85c60235d9",
+          "durationSeconds": 75
+        },
+        "webm": {
+          "path": "docs/assets/herdr-mise-product-demo.webm",
+          "codec": "vp9",
+          "bytes": 2277756,
+          "sha256": "1d0d4140e55cb8f1a83eeaafe51441d5d5cd21306214c96aff4cb7730ce5221b",
+          "durationSeconds": 75
+        },
+        "poster": {
+          "path": "docs/assets/herdr-mise-product-demo-poster.png",
+          "codec": "png",
+          "bytes": 188649,
+          "sha256": "ff1c300f4e3af3eda2ade0aa0389549e4b230e86a6ead3825fb000a8ed7eda39",
+          "durationSeconds": null
+        },
+        "vtt": {
+          "path": "docs/assets/herdr-mise-product-demo.vtt",
+          "codec": "webvtt",
+          "bytes": 536,
+          "sha256": "3c08de36d1f8e869d0db55139444bcc800605b5b372ce52003fa48d5559a7eae",
+          "durationSeconds": null
+        },
+        "txt": {
+          "path": "docs/assets/herdr-mise-product-demo.txt",
+          "codec": "text",
+          "bytes": 635,
+          "sha256": "716d81f18575b0435eda78a39af883ddb341fb3203f5d554286473915a67d3a7",
+          "durationSeconds": null
+        }
+      }
+    },
+    "feature-attention": {
+      "kind": "loop",
+      "durationSeconds": 22,
+      "posterSeconds": 11,
+      "cues": [
+        {
+          "index": 1,
+          "start": 0,
+          "end": 10,
+          "scene": "blocked",
+          "text": "Codex is blocked on checkout-api, waiting for a human."
+        },
+        {
+          "index": 2,
+          "start": 10,
+          "end": 22,
+          "scene": "details",
+          "text": "Open details to read the exact pane locator."
+        }
+      ],
+      "assets": {
+        "mp4": {
+          "path": "docs/assets/herdr-mise-feature-attention.mp4",
+          "codec": "h264",
+          "bytes": 175836,
+          "sha256": "7c499f4fa573ad364511009851bafe84f1cd903d19801bd59eab59a7ba79e396",
+          "durationSeconds": 22
+        },
+        "webm": {
+          "path": "docs/assets/herdr-mise-feature-attention.webm",
+          "codec": "vp9",
+          "bytes": 654075,
+          "sha256": "db074f9b1c050c18fbb66ace85f2922e3e59feecc0b1bb0b11ac4d1bdd24d4f6",
+          "durationSeconds": 22
+        },
+        "poster": {
+          "path": "docs/assets/herdr-mise-feature-attention-poster.png",
+          "codec": "png",
+          "bytes": 188649,
+          "sha256": "ff1c300f4e3af3eda2ade0aa0389549e4b230e86a6ead3825fb000a8ed7eda39",
+          "durationSeconds": null
+        },
+        "vtt": {
+          "path": "docs/assets/herdr-mise-feature-attention.vtt",
+          "codec": "webvtt",
+          "bytes": 173,
+          "sha256": "662bea8fc88b4f611470996c77de6c3e77ddcfbbac6569cf0a9603274658bc02",
+          "durationSeconds": null
+        },
+        "txt": {
+          "path": "docs/assets/herdr-mise-feature-attention.txt",
+          "codec": "text",
+          "bytes": 215,
+          "sha256": "d7d051974ade3e6d03e6193aed3bf88f2184fc1de9f1b56c5ca4d0c29229808b",
+          "durationSeconds": null
+        },
+        "gif": {
+          "path": "docs/assets/herdr-mise-feature-attention.gif",
+          "codec": "gif",
+          "bytes": 529856,
+          "sha256": "f52fd59f01e4c5dbd4a2b9f07e169ab306e778fa5441e774876e5f25efe6b001",
+          "durationSeconds": 22
+        }
+      }
+    },
+    "feature-workspace": {
+      "kind": "loop",
+      "durationSeconds": 12,
+      "posterSeconds": 2,
+      "cues": [
+        {
+          "index": 1,
+          "start": 0,
+          "end": 12,
+          "scene": "workspace",
+          "text": "Scope the kitchen to one local workspace."
+        }
+      ],
+      "assets": {
+        "mp4": {
+          "path": "docs/assets/herdr-mise-feature-workspace.mp4",
+          "codec": "h264",
+          "bytes": 88199,
+          "sha256": "8573e095516364870a7dd10ed0f1fa8485f5c9cdc2521c31f2dcb631c001a36f",
+          "durationSeconds": 12
+        },
+        "webm": {
+          "path": "docs/assets/herdr-mise-feature-workspace.webm",
+          "codec": "vp9",
+          "bytes": 296015,
+          "sha256": "937f87ec97f694696428fdee46be75e011726a4f4a5e44d09b4705a10f466021",
+          "durationSeconds": 12
+        },
+        "poster": {
+          "path": "docs/assets/herdr-mise-feature-workspace-poster.png",
+          "codec": "png",
+          "bytes": 141863,
+          "sha256": "8ff9d0e737bf4694afe0da9ee5863e2a28a28c993fb5f8cde0367905c9494250",
+          "durationSeconds": null
+        },
+        "vtt": {
+          "path": "docs/assets/herdr-mise-feature-workspace.vtt",
+          "codec": "webvtt",
+          "bytes": 82,
+          "sha256": "f8de598dfd78da5e0eb01a4ba26a2e859c44c56cf59a96f2c95bc53e262d439e",
+          "durationSeconds": null
+        },
+        "txt": {
+          "path": "docs/assets/herdr-mise-feature-workspace.txt",
+          "codec": "text",
+          "bytes": 142,
+          "sha256": "c4a82bc0815207ba9d601a06685cffcbf49834241aeb315592747b0e4a4c8477",
+          "durationSeconds": null
+        },
+        "gif": {
+          "path": "docs/assets/herdr-mise-feature-workspace.gif",
+          "codec": "gif",
+          "bytes": 291605,
+          "sha256": "d405b9175dacf88c0b938e6320832e50e68f7b5b751cb6d04ee8a7d4cbb54e25",
+          "durationSeconds": 12
+        }
+      }
+    },
+    "feature-presentation": {
+      "kind": "loop",
+      "durationSeconds": 12,
+      "posterSeconds": 2,
+      "cues": [
+        {
+          "index": 1,
+          "start": 0,
+          "end": 12,
+          "scene": "comparison",
+          "text": "Prerecorded TUI demo, not a live terminal."
+        }
+      ],
+      "assets": {
+        "mp4": {
+          "path": "docs/assets/herdr-mise-feature-presentation.mp4",
+          "codec": "h264",
+          "bytes": 116619,
+          "sha256": "e1508e1251caf04fd4c54969678cc8afef4d420ed3996d3b969793c6ec73a4f5",
+          "durationSeconds": 12
+        },
+        "webm": {
+          "path": "docs/assets/herdr-mise-feature-presentation.webm",
+          "codec": "vp9",
+          "bytes": 292580,
+          "sha256": "3acbb5bcbab87d0b171d1c127a8a6e56447fbe20cb8d2812bdae35e1ebdb858c",
+          "durationSeconds": 12
+        },
+        "poster": {
+          "path": "docs/assets/herdr-mise-feature-presentation-poster.png",
+          "codec": "png",
+          "bytes": 331821,
+          "sha256": "0cb3fc5e85027d8bec266a4945f16cd6368f849c1ea4b5d1f836b60503e72c78",
+          "durationSeconds": null
+        },
+        "vtt": {
+          "path": "docs/assets/herdr-mise-feature-presentation.vtt",
+          "codec": "webvtt",
+          "bytes": 83,
+          "sha256": "ff0f1b425feb52193e4f8c6be4c2e00e77499507bc6d9b492a29539f7425923b",
+          "durationSeconds": null
+        },
+        "txt": {
+          "path": "docs/assets/herdr-mise-feature-presentation.txt",
+          "codec": "text",
+          "bytes": 143,
+          "sha256": "bc35f281a64f2cfacb371e36c0a9d58753c8e7a3617a38043a010589425a18d4",
+          "durationSeconds": null
+        },
+        "gif": {
+          "path": "docs/assets/herdr-mise-feature-presentation.gif",
+          "codec": "gif",
+          "bytes": 548657,
+          "sha256": "65ffdbb417d8e4d446243bb6ee585bce2a1b6ec426b4f2ac89d0117be07100a8",
+          "durationSeconds": 12
+        }
+      }
+    }
+  }
+}

@@ -5,22 +5,23 @@ a single restaurant kitchen. Agent state, the
 ticket rail, the pass, the 86 board, and the kitchen lights are a glanceable
 skin over a small, versioned JSON feed.
 
+![herdr-mise in 30 seconds: a demo kitchen of AI coding agents working, idling, and getting blocked; a cook ringing the bell; station details with the exact pane; workspace scope; the freezer of ended sessions; the observed-time recap; the terminal UI; and installation](docs/assets/herdr-mise-hero.gif)
+
+A 30-second tour of the demo kitchen: mixed states, a blocked cook ringing the
+bell, station details, workspace scope, the freezer, the service recap, the
+terminal UI, and installation.
+[MP4](docs/assets/herdr-mise-hero.mp4) ·
+[WebM](docs/assets/herdr-mise-hero.webm) ·
+[75-second walkthrough](docs/assets/herdr-mise-product-demo.mp4) ·
+[feature loops](docs/product-demo.md) ·
+[capture provenance](scripts/hero-demo.capture.json)
+
 > IT's RAW!
 
 _Gordon Ramsey_
 
 herdr-mise does not control agents, render their output, or aggregate remote
 servers. It is a window, not an office.
-
-![Codex blocked on the checkout-api workspace in the demo kitchen](docs/assets/herdr-mise-demo-poster.png)
-
-Six cooks begin working. Codex then becomes blocked on `checkout-api`, its
-details open, and Codex resumes work before the 12-second story ends.
-[MP4](docs/assets/herdr-mise-demo.mp4) ·
-[WebM](docs/assets/herdr-mise-demo.webm) ·
-[GIF](docs/assets/herdr-mise-demo.gif) ·
-[poster](docs/assets/herdr-mise-demo-poster.png) ·
-[capture provenance](scripts/web-demo.capture.json)
 
 [Visual playground](https://herdr-mise.s11a.com/) — choose a deterministic
 scene and roster in the preview explorer, then load it as a shareable URL. See

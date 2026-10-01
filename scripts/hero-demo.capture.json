@@ -1,0 +1,90 @@
+{
+  "schema": "hero-demo-capture-v1",
+  "capturedAt": "2026-10-01T17:39:09.394Z",
+  "sourceCommit": "64bc82e715625789c53107b18e15b8c160c2717c",
+  "provenance": "deterministic client visual harness hero demo",
+  "version": "0.4.0",
+  "versionLabel": "herdr-mise 0.4.0 · source 64bc82e",
+  "frameRate": 20,
+  "sourceDimensions": {
+    "width": 1280,
+    "height": 720
+  },
+  "outputDimensions": {
+    "width": 960,
+    "height": 540
+  },
+  "durationSeconds": 30,
+  "storyboard": [
+    {
+      "start": 0,
+      "end": 5,
+      "scene": "states",
+      "caption": "Every coding agent is a cook: working, idle, blocked, plated."
+    },
+    {
+      "start": 5,
+      "end": 9,
+      "scene": "blocked",
+      "caption": "When an agent needs you, its cook rings the bell."
+    },
+    {
+      "start": 9,
+      "end": 13,
+      "scene": "details",
+      "caption": "Open a station for the exact pane to jump to."
+    },
+    {
+      "start": 13,
+      "end": 16,
+      "scene": "workspace",
+      "caption": "Focus one workspace; blocked work elsewhere stays visible."
+    },
+    {
+      "start": 16,
+      "end": 20,
+      "scene": "freezer",
+      "caption": "Ended sessions rest in the freezer."
+    },
+    {
+      "start": 20,
+      "end": 24,
+      "scene": "usage",
+      "caption": "Recap: observed time blocked, computed locally."
+    },
+    {
+      "start": 24,
+      "end": 27,
+      "scene": "comparison",
+      "caption": "Prefer the terminal? The same kitchen runs as a TUI."
+    },
+    {
+      "start": 27,
+      "end": 30,
+      "scene": "installation",
+      "caption": "herdr-mise 0.4.0 · source 64bc82e · local and read-only"
+    }
+  ],
+  "outputs": {
+    "gif": {
+      "path": "docs/assets/herdr-mise-hero.gif",
+      "bytes": 1401053,
+      "sha256": "ac4a295f09f276fb029ef9f1df825deea983874a85b7c3d80e5fbe004f5e6591"
+    },
+    "mp4": {
+      "path": "docs/assets/herdr-mise-hero.mp4",
+      "bytes": 435598,
+      "sha256": "c79c469cdd31ef03dd611c5181887eff6e5674a6f54ecbbeca028abd7b161609"
+    },
+    "webm": {
+      "path": "docs/assets/herdr-mise-hero.webm",
+      "bytes": 961289,
+      "sha256": "e6e9398bf471b0d9e23acd65502fceb9f3b9a10c7103c963a50770def39994cf"
+    },
+    "poster": {
+      "path": "docs/assets/herdr-mise-hero-poster.png",
+      "bytes": 151711,
+      "sha256": "2cc71fd216959af1ee935d2aac688a3003bb116c32d98376a60d91b4892a823f"
+    }
+  }
+}
