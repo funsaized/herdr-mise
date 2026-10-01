@@ -102,7 +102,7 @@ jobs:
               Return exactly one JSON object with lane, verdict
               (pass|warn|fail|not-applicable), summary, and findings. Each finding
               must contain id, severity (low|medium|high|critical), description,
-              requirement, evidence (path:line or exact command), impact,
+              requirement, evidence (path:line or exact command; a string, or a list of strings for several locations), impact,
               regressionProof, and disposition (open|fixed|disputed). Follow
               the trusted review contract at
               ${{ data.latest(inputs.factory, "review-subject-" + inputs.workItem + "-" + run.id).attributes.controlRoot }}/agent-constraints/review.md. A pass
