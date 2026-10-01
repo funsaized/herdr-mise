@@ -3049,7 +3049,8 @@ test("real Herdr observations drive the service recap without counting recovery 
 test("real Herdr observations keep recap identities stable through paging and churn", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  // About 5s locally, but over 120s on the managed CI runner's software canvas.
+  test.setTimeout(240_000);
   const source = JSON.parse(
       await readFile(
         join(
