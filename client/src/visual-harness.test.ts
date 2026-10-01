@@ -194,6 +194,9 @@ describe("visual harness configuration", () => {
     expect(new Set(event.agents.map((agent) => agent.accentIndex)).size).toBe(
       6,
     );
+    expect(event.agents.map((agent) => agent.paneId)).toEqual(
+      Array.from({ length: 6 }, (_, index) => `visual-pane-${index + 1}`),
+    );
     expect(
       event.agents.some(
         (agent) =>
