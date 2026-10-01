@@ -9,6 +9,8 @@
 /e2e/artifacts/
 /docs/assets/.capture-demo.*/
 /docs/assets/.capture-web-*/
+/docs/assets/.capture-product-*/
+/docs/assets/.capture-hero-*/
 /.hermes/
 /.claude/
 /.stable-acceptance-evidence.json
