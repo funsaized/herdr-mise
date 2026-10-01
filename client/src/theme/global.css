@@ -669,7 +669,7 @@ summary:focus-visible {
 }
 .visualExplorer p {
   margin: 0 0 6px;
-  line-height: 1.3;
+  line-height: 16px;
 }
 .visualExplorer strong {
   color: var(--text);
