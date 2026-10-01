@@ -159,16 +159,53 @@ for (const [title, skipInitialSource] of [
       }
       await expect(nextBlocked).toBeEnabled();
       await nextBlocked.click();
-      const viewports = [
-        { width: 1280, height: 720 },
-        { width: 1280, height: 800 },
-        { width: 1440, height: 900 },
-        { width: 1920, height: 1080 },
-        { width: 640, height: 480 },
-        { width: 375, height: 667 },
-        { width: 320, height: 640 },
-        { width: 320, height: 320 },
-      ];
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      expect(navigations).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+// Clearance of the first-run hint and the dense layout run per viewport, so
+// each has its own budget on the slower managed CI runner.
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+  { width: 640, height: 480 },
+  { width: 375, height: 667 },
+  { width: 320, height: 640 },
+  { width: 320, height: 320 },
+] as const) {
+  test(`first live connection layout keeps blocked work and controls clear at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const snapshot = await panelFixture();
+    const blocked = structuredClone(snapshot);
+    blocked.agents[0].agent_status = "blocked";
+    blocked.agents[0].state_change_seq = 43;
+    const app = await startFixtureApp({
+      prefix: "mise-first-connection-layout-",
+      snapshot: blocked,
+    });
+    try {
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(`${app.appUrl}/?stats`);
+      await expect(
+        page.getByRole("button", { name: /^example-cook, Blocked/ }),
+      ).toBeAttached({ timeout: 15_000 });
+      const hint = page.getByRole("note").filter({ hasText: "Blocked cooks" });
+      const pager = page.getByRole("navigation", { name: "Kitchen pages" });
+      const nextBlocked = page.getByRole("button", { name: /^Next blocked:/ });
+      await expect(hint).toBeVisible();
       let rosterVersion = 0;
       for (const hintVisible of [true, false]) {
         if (!hintVisible) {
@@ -189,7 +226,8 @@ for (const [title, skipInitialSource] of [
             .poll(async () => (await sceneMetrics(page))?.page.totalCount)
             .toBe(count);
           await expect(page.getByRole("alert")).toHaveCount(0);
-          for (const size of viewports) {
+          {
+            const size = viewport;
             await page.setViewportSize(size);
             const expectedLayout = computeLayout(
               size.width,
@@ -277,12 +315,12 @@ for (const [title, skipInitialSource] of [
           }
         }
       }
+
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       ).toBe(true);
-      expect(navigations).toBe(1);
     } finally {
       await app.close();
     }
