@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import {
   PRODUCT_MAIN_DURATION_SECONDS,
+  PRODUCT_INSTALL_COMMANDS,
   PRODUCT_SCENES,
 } from "./product-demo-scenes.mjs";
 
@@ -222,14 +223,6 @@ export function webVtt(clip, source = storyboard) {
     .join("\n\n");
   return `WEBVTT\n\n${body}\n`;
 }
-
-// README quick start, shown verbatim in the installation segment and listed
-// in transcripts. Never executed by capture.
-export const PRODUCT_INSTALL_COMMANDS = Object.freeze([
-  "brew install herdr",
-  "herdr plugin install funsaized/herdr-mise",
-  "herdr plugin action invoke open --plugin mise.kitchen",
-]);
 
 export function transcript(clip, label, source = storyboard) {
   if (typeof label !== "string" || label.trim() === "")

@@ -309,7 +309,7 @@ async function publishingGuards() {
     [
       "--input-type=module",
       "-e",
-      `import child from 'node:child_process'; import fs from 'node:fs'; import promises from 'node:fs/promises'; import {syncBuiltinESMExports} from 'node:module'; const fail=()=>{throw new Error('import side effect')}; for(const key of ['spawn','spawnSync','exec','execSync']) child[key]=fail; for(const key of ['writeFileSync','mkdirSync','readFileSync']) fs[key]=fail; for(const key of ['mkdir','mkdtemp','writeFile','readFile']) promises[key]=fail; syncBuiltinESMExports(); await import(${JSON.stringify(helper)});`,
+      `import child from 'node:child_process'; import fs from 'node:fs'; import promises from 'node:fs/promises'; import {syncBuiltinESMExports} from 'node:module'; const fail=()=>{throw new Error('import side effect')}; for(const key of ['spawn','spawnSync','exec','execSync']) child[key]=fail; for(const key of ['writeFileSync','mkdirSync','mkdtempSync','rmSync','renameSync']) fs[key]=fail; for(const key of ['mkdir','mkdtemp','writeFile','rm','rename']) promises[key]=fail; syncBuiltinESMExports(); await import(${JSON.stringify(helper)});`,
     ],
     { encoding: "utf8" },
   );
