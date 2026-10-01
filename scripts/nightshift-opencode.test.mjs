@@ -5,6 +5,7 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -44,14 +45,16 @@ function isAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    throw error;
   }
 }
 
 /**
- * Kernel start stamp for a pid. `ps` covers macOS and Linux; `/proc` is the
- * Linux fallback when process inspection is restricted.
+ * Kernel start identity for a pid, tagged with its source. `ps` covers macOS
+ * and Linux; `/proc` is the Linux fallback when process inspection is
+ * restricted. Identities from different sources are never comparable.
  */
 function currentIdentity(pid) {
   const viaPs = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], {
@@ -60,7 +63,7 @@ function currentIdentity(pid) {
   });
   if (viaPs.status === 0) {
     const value = (viaPs.stdout ?? "").trim();
-    if (value) return value;
+    if (value) return { source: "ps", value };
   }
   if (process.platform === "linux") {
     try {
@@ -69,7 +72,8 @@ function currentIdentity(pid) {
         .slice(stat.lastIndexOf(")") + 2)
         .trim()
         .split(/\s+/);
-      return after[19] ?? null; // field 22: starttime
+      const value = after[19] ?? null; // field 22: starttime
+      return value === null ? null : { source: "proc", value };
     } catch {
       return null;
     }
@@ -77,18 +81,31 @@ function currentIdentity(pid) {
   return null;
 }
 
-/** Revalidates a pid against its recorded start stamp before signalling it. */
-function identityMatches(pid, startId) {
+/**
+ * Fixtures record `startId` from `ps -o lstart=`, so a recorded identity is
+ * always a `ps` timestamp. A successful match requires a live pid and the same
+ * source; proc ticks never compare equal to a ps timestamp.
+ */
+function identityMatches(pid, startId, inspect = currentIdentity) {
   if (!startId || !isAlive(pid)) return false;
-  return currentIdentity(pid) === startId;
+  const current = inspect(pid);
+  return Boolean(
+    current && current.source === "ps" && current.value === startId,
+  );
 }
 
-/** A descendant is reaped once it is gone or its pid was reused. */
-function reaped(entry) {
-  if (!entry || !Number.isInteger(entry.pid)) return true;
+/**
+ * A descendant is reaped only on confirmed disappearance or a successfully
+ * inspected, same-source identity showing pid reuse. While the pid is alive,
+ * an unavailable or incomparable identity fails closed (not reaped).
+ */
+function reaped(entry, inspect = currentIdentity) {
+  if (!entry || !Number.isInteger(entry.pid)) return false;
   if (!isAlive(entry.pid)) return true;
   if (!entry.startId) return false;
-  return !identityMatches(entry.pid, entry.startId);
+  const current = inspect(entry.pid);
+  if (!current || current.source !== "ps") return false;
+  return current.value !== entry.startId;
 }
 
 function fixtureEntries(readiness) {
@@ -96,9 +113,9 @@ function fixtureEntries(readiness) {
   return [readiness.provider, ...(readiness.listeners ?? [])].filter(Boolean);
 }
 
-function emergencyKill(readiness) {
-  for (const entry of fixtureEntries(readiness)) {
-    if (identityMatches(entry.pid, entry.startId)) {
+function emergencyKillEntries(entries) {
+  for (const entry of entries) {
+    if (entry && identityMatches(entry.pid, entry.startId)) {
       try {
         process.kill(entry.pid, "SIGKILL");
       } catch {
@@ -106,6 +123,10 @@ function emergencyKill(readiness) {
       }
     }
   }
+}
+
+function emergencyKill(readiness) {
+  emergencyKillEntries(fixtureEntries(readiness));
 }
 
 async function waitFor(check, options = {}) {
@@ -143,14 +164,98 @@ async function awaitReadiness(path, run, timeout = 25_000) {
   return readiness;
 }
 
-async function assertReaped(readiness, timeout = 15_000) {
-  const entries = fixtureEntries(readiness);
+async function assertEntriesReaped(entries, timeout = 15_000) {
   await waitFor(() => entries.every((entry) => reaped(entry)), {
     timeout,
     label: `all fixture descendants reaped: ${entries
       .map((entry) => `${entry.role ?? "provider"}:${entry.pid}`)
       .join(", ")}`,
   });
+}
+
+async function assertReaped(readiness, timeout = 15_000) {
+  return assertEntriesReaped(fixtureEntries(readiness), timeout);
+}
+
+/**
+ * Readiness identities available from a harness directory. The aggregate file
+ * is written last, so a failed readiness handshake leaves only per-child
+ * `ready-*.json` identities; retaining them keeps failure cleanup exact.
+ */
+async function partialEntries(harness) {
+  const entries = [];
+  for (const name of await readdir(harness.directory)) {
+    if (!name.startsWith("ready-") || !name.endsWith(".json")) continue;
+    const entry = await readReadiness(join(harness.directory, name));
+    if (entry && Number.isInteger(entry.pid)) entries.push(entry);
+  }
+  return entries;
+}
+
+/**
+ * Bounded teardown of supervised launchers: SIGTERM first so the launcher can
+ * reap its own descendants, a fixed grace, then SIGKILL escalation.
+ */
+async function terminateLaunchers(runs, grace = 8_000) {
+  for (const run of runs) {
+    if (run.child.exitCode === null && run.child.signalCode === null) {
+      try {
+        run.child.kill("SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+  const deadline = Date.now() + grace;
+  for (const run of runs) {
+    while (
+      run.child.exitCode === null &&
+      run.child.signalCode === null &&
+      Date.now() < deadline
+    )
+      await delay(25);
+  }
+  for (const run of runs) {
+    if (run.child.exitCode === null && run.child.signalCode === null) {
+      try {
+        run.child.kill("SIGKILL");
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+  await waitFor(
+    () =>
+      runs.every(
+        (run) => run.child.exitCode !== null || run.child.signalCode !== null,
+      ),
+    {
+      timeout: 2000,
+      label: "launcher termination after escalation",
+    },
+  );
+}
+
+/** Best-effort reap wait, then exact-identity emergency kill of leftovers. */
+async function emergencyReap(entries, timeout = 5_000) {
+  try {
+    await assertEntriesReaped(entries, timeout);
+  } catch {
+    // Escalate below instead of masking the reaping failure.
+  }
+  emergencyKillEntries(entries);
+  await assertEntriesReaped(entries, timeout);
+}
+
+async function cleanupHarness(harness, launched, readiness) {
+  await terminateLaunchers(launched);
+  const entries = [
+    ...fixtureEntries(readiness),
+    ...(await partialEntries(harness)),
+    ...fixtureEntries(await readReadiness(harness.readyPath)),
+  ];
+  await emergencyReap(entries);
+  await rm(harness.directory, { recursive: true, force: true });
 }
 
 async function reservePort() {
@@ -270,11 +375,6 @@ async function awaitExit(run, timeout = 20_000) {
       run.exit,
       new Promise((_resolve, reject) => {
         timer = setTimeout(() => {
-          try {
-            run.child.kill("SIGKILL");
-          } catch {
-            // Already gone.
-          }
           reject(
             new Error(
               `launcher did not exit within ${timeout}ms\n${formatOutput(
@@ -302,6 +402,7 @@ test(
       return;
     }
     const harness = await createHarness();
+    const launched = [];
     let readiness;
     try {
       const port = await reservePort();
@@ -314,6 +415,7 @@ test(
         const { mode, code: expectedCode } = scenario;
         await reset(harness);
         const run = launch(harness, { mode, port, echoStdin: true });
+        launched.push(run);
         run.child.stdin.end("stdin-probe\n");
         readiness = await awaitReadiness(harness.readyPath, run);
         assert.equal(readiness.mode, mode);
@@ -345,9 +447,69 @@ test(
         emergencyKill(readiness);
         readiness = undefined;
       }
+
+      // Fail-closed identity regression: unavailable or incomparable
+      // inspection must never be accepted as proof that a live process was
+      // reaped, while confirmed disappearance and same-source reuse still are.
+      await t.test("live identity inspection fails closed", async () => {
+        const probe = spawn(python, ["-c", "import time; time.sleep(60)"], {
+          stdio: "ignore",
+        });
+        try {
+          await waitFor(() => isAlive(probe.pid), {
+            timeout: 10_000,
+            label: "identity probe process",
+          });
+          const real = currentIdentity(probe.pid);
+          assert.ok(
+            real && real.source === "ps",
+            "probe identity must be readable",
+          );
+          const recorded = { pid: probe.pid, startId: real.value };
+          assert.equal(
+            reaped(recorded),
+            false,
+            "live same-identity pid is not reaped",
+          );
+          assert.equal(
+            reaped(recorded, () => null),
+            false,
+            "unavailable inspection must not count as reaped",
+          );
+          assert.equal(
+            reaped(recorded, () => ({ source: "proc", value: "0" })),
+            false,
+            "ps timestamp must not be compared to proc ticks",
+          );
+          assert.equal(
+            identityMatches(recorded.pid, recorded.startId, () => null),
+            false,
+          );
+          assert.equal(
+            reaped(recorded, () => ({ source: "ps", value: "reused" })),
+            true,
+            "same-source identity mismatch proves pid reuse",
+          );
+          probe.kill("SIGKILL");
+          await waitFor(() => !isAlive(probe.pid), {
+            timeout: 10_000,
+            label: "identity probe disappearance",
+          });
+          assert.equal(
+            reaped(recorded),
+            true,
+            "confirmed disappearance counts as reaped",
+          );
+        } finally {
+          try {
+            probe.kill("SIGKILL");
+          } catch {
+            // Already gone.
+          }
+        }
+      });
     } finally {
-      emergencyKill(readiness);
-      await rm(harness.directory, { recursive: true, force: true });
+      await cleanupHarness(harness, launched, readiness);
     }
   },
 );
@@ -361,12 +523,14 @@ test(
       return;
     }
     const harness = await createHarness();
+    const launched = [];
     let readiness;
     try {
       const port = await reservePort();
 
       await reset(harness);
       let run = launch(harness, { mode: "hold", port });
+      launched.push(run);
       run.child.stdin.end();
       readiness = await awaitReadiness(harness.readyPath, run);
       assert.equal(readiness.mode, "hold");
@@ -389,6 +553,7 @@ test(
 
       await reset(harness);
       run = launch(harness, { mode: "resistant", port });
+      launched.push(run);
       run.child.stdin.end();
       readiness = await awaitReadiness(harness.readyPath, run);
       assert.equal(readiness.mode, "resistant");
@@ -413,9 +578,52 @@ test(
       );
       emergencyKill(readiness);
       readiness = undefined;
+
+      // Failure-path regression: a listener binds and records its identity, but
+      // aggregate readiness never arrives. The harness must fail, then still
+      // reap every recorded process and release the bound port.
+      await t.test("withheld aggregate readiness is cleaned up", async () => {
+        const failureHarness = await createHarness();
+        const failureRun = launch(failureHarness, {
+          mode: "incomplete",
+          port: await reservePort(),
+        });
+        failureRun.child.stdin.end();
+        let partial = [];
+        try {
+          await waitFor(
+            async () => {
+              partial = await partialEntries(failureHarness);
+              return partial.some((entry) => entry.socketBound === true);
+            },
+            { timeout: 20_000, label: "partial listener readiness" },
+          );
+          assert.equal(
+            await readReadiness(failureHarness.readyPath),
+            null,
+            "aggregate readiness must stay withheld",
+          );
+          await assert.rejects(
+            awaitReadiness(failureHarness.readyPath, failureRun, 2_000),
+            /readiness/,
+          );
+        } finally {
+          await terminateLaunchers([failureRun]);
+          partial = await partialEntries(failureHarness);
+          await emergencyReap(partial);
+          await rm(failureHarness.directory, { recursive: true, force: true });
+        }
+        await assertEntriesReaped(partial);
+        for (const listener of partial) {
+          if (!listener.port) continue;
+          await assertPortFree(
+            listener.port,
+            `incomplete/${listener.role ?? "listener"}`,
+          );
+        }
+      });
     } finally {
-      emergencyKill(readiness);
-      await rm(harness.directory, { recursive: true, force: true });
+      await cleanupHarness(harness, launched, readiness);
     }
   },
 );
@@ -437,12 +645,14 @@ test(
     const unrelatedPort =
       typeof address === "object" && address ? address.port : 0;
     const harness = await createHarness();
+    const launched = [];
     const invocationIds = [];
     let readiness;
     try {
       for (const mode of ["success", "failure"]) {
         await reset(harness);
         const run = launch(harness, { mode, port: await reservePort() });
+        launched.push(run);
         run.child.stdin.end();
         readiness = await awaitReadiness(harness.readyPath, run);
         if (
@@ -479,11 +689,13 @@ test(
         );
       }
     } finally {
-      emergencyKill(readiness);
-      if (unrelated.listening) {
-        await new Promise((resolve) => unrelated.close(resolve));
+      try {
+        await cleanupHarness(harness, launched, readiness);
+      } finally {
+        if (unrelated.listening) {
+          await new Promise((resolve) => unrelated.close(resolve));
+        }
       }
-      await rm(harness.directory, { recursive: true, force: true });
     }
   },
 );

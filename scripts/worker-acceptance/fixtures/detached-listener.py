@@ -7,7 +7,7 @@ run it as an opaque child and, when the launcher exits (normally or on
 termination), leave none of these descendants alive.
 
 Provider mode (default) env contract:
-  NS_FIXTURE_MODE    success | failure | immediate | hold | resistant | ordinary
+  NS_FIXTURE_MODE    success | failure | immediate | hold | resistant | ordinary | incomplete
   NS_FIXTURE_READY   path where the readiness JSON is written after every
                      listener is bound and listening
   NS_FIXTURE_PORT    optional fixed TCP port for the primary `detached` listener
@@ -35,6 +35,8 @@ Scenario matrix:
   immediate  same children as success; provider exits 0 immediately
   hold       same children as success; provider blocks until signalled
   resistant  same children as hold; listeners ignore SIGTERM (need SIGKILL)
+  incomplete same children as success; aggregate readiness is withheld and the
+             provider blocks, exercising the harness failure-path cleanup
 
 Emergency cleanup is the test's job: it revalidates each recorded pid against
 its recorded startId before signalling, so a reused pid is never killed.
@@ -51,12 +53,42 @@ import threading
 import time
 from pathlib import Path
 
-MODES = ("success", "failure", "immediate", "hold", "resistant", "ordinary")
+MODES = ("success", "failure", "immediate", "hold", "resistant", "ordinary", "incomplete")
 PARENT_ROLES = ("ordinary", "detached")
+
+
+def _libproc_start_id(pid: int) -> str | None:
+    """`ps -o lstart=`-formatted start stamp read through libproc.
+
+    Seatbelt denies `ps` to the sandboxed provider, so on macOS the fixture
+    reads proc_bsdinfo's start timeval directly (the launcher's own method)
+    and renders it the way `ps -o lstart=` does for the harness to compare.
+    """
+    import ctypes
+    import struct
+
+    try:
+        lib = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        lib.proc_pidinfo.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        info = ctypes.create_string_buffer(136)
+        if lib.proc_pidinfo(pid, 3, 0, info, 136) != 136:
+            return None
+        seconds = struct.unpack_from("Q", info.raw, 120)[0]
+    except OSError:
+        return None
+    return time.strftime("%a %b %e %H:%M:%S %Y", time.localtime(seconds))
 
 
 def process_start_id(pid: int) -> str | None:
     """Kernel start stamp (`ps -o lstart=`) used to detect pid reuse."""
+    if sys.platform == "darwin":
+        return _libproc_start_id(pid)
     try:
         output = subprocess.check_output(
             ["ps", "-o", "lstart=", "-p", str(pid)],
@@ -203,6 +235,7 @@ def run_provider() -> int:
 
     roles = ["ordinary"] if mode == "ordinary" else list(PARENT_ROLES)
     ready_dir = ready_path.parent
+    write_json_atomic(ready_dir / 'ready-provider.json', process_ids())
     children = []
     for role in roles:
         child_ready = ready_dir / f"ready-{role}.json"
@@ -239,6 +272,18 @@ def run_provider() -> int:
             if time.monotonic() >= deadline:
                 raise RuntimeError(f"owned listener not live: {listener['role']}")
             time.sleep(0.02)
+
+    if mode == "incomplete":
+        # Listeners are bound and their identities are recorded in the per-child
+        # files, but the aggregate readiness handshake is deliberately withheld
+        # so the harness exercises its failure-path cleanup.
+        def on_term(_signum, _frame):
+            os._exit(0)
+
+        signal.signal(signal.SIGTERM, on_term)
+        signal.signal(signal.SIGINT, on_term)
+        while True:
+            signal.pause()
 
     write_json_atomic(
         ready_path,

@@ -67,12 +67,26 @@ class Processes:
                 return None
             start = info.raw[120:136]
             buf = ctypes.create_string_buffer(1048576)
-            size = ctypes.c_size_t(len(buf))
             mib = (ctypes.c_int * 3)(1, 49, pid)  # CTL_KERN, KERN_PROCARGS2
-            if self.libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0:
+            for attempt in range(4):
+                size = ctypes.c_size_t(len(buf))
+                if self.libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) == 0:
+                    break
                 error = ctypes.get_errno()
                 if error in (errno.ESRCH, errno.EINVAL):
                     return None
+                # EIO is transient while a process exits or execs. A process
+                # that is gone or a zombie needs no cleanup; a live one is
+                # retried briefly, then inspection fails closed.
+                if error == errno.EIO:
+                    again = ctypes.create_string_buffer(136)
+                    if self.lib.proc_pidinfo(pid, 3, 0, again, 136) != 136:
+                        return None
+                    if struct.unpack_from('I', again.raw, 4)[0] == 5:
+                        return None
+                    if attempt < 3:
+                        time.sleep(0.01)
+                        continue
                 raise OSError(error, 'invocation environment inspection failed')
             raw = buf.raw[:size.value]
             argc = struct.unpack_from('i', raw)[0]
@@ -119,6 +133,7 @@ def main():
     entry = f'{IDENTITY}={os.environ[IDENTITY]}'.encode()
     processes = Processes()
     child = None
+    cleanup_failed = False
     code = 1
     try:
         if not requested:
@@ -144,7 +159,9 @@ def main():
                 child.wait(timeout=max(0.001, deadline - time.monotonic()))
         except Exception as error:
             print(f'nightshift launcher: cleanup not established: {error}', file=sys.stderr)
-            return 1
+            cleanup_failed = True
+    if cleanup_failed:
+        return 1
     if requested:
         signal.signal(requested[0], signal.SIG_DFL)
         os.kill(os.getpid(), requested[0])

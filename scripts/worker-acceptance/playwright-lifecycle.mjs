@@ -58,12 +58,17 @@ function isAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    throw error;
   }
 }
 
-/** Kernel start stamp for a pid, used to detect pid reuse before signalling. */
+/**
+ * Kernel start identity for a pid, tagged with its source. `ps` covers macOS
+ * and Linux; `/proc` is the Linux fallback when process inspection is
+ * restricted. Identities from different sources are never comparable.
+ */
 function currentIdentity(pid) {
   const viaPs = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], {
     encoding: "utf8",
@@ -71,7 +76,7 @@ function currentIdentity(pid) {
   });
   if (viaPs.status === 0) {
     const value = (viaPs.stdout ?? "").trim();
-    if (value) return value;
+    if (value) return { source: "ps", value };
   }
   if (process.platform === "linux") {
     try {
@@ -80,7 +85,8 @@ function currentIdentity(pid) {
         .slice(stat.lastIndexOf(")") + 2)
         .trim()
         .split(/\s+/);
-      return after[19] ?? null; // field 22: starttime
+      const value = after[19] ?? null; // field 22: starttime
+      return value === null ? null : { source: "proc", value };
     } catch {
       return null;
     }
@@ -88,17 +94,31 @@ function currentIdentity(pid) {
   return null;
 }
 
-function identityMatches(pid, startId) {
+/**
+ * Fixtures record `startId` from `ps -o lstart=`, so a recorded identity is
+ * always a `ps` timestamp. A successful match requires a live pid and the same
+ * source; proc ticks never compare equal to a ps timestamp.
+ */
+function identityMatches(pid, startId, inspect = currentIdentity) {
   if (!startId || !isAlive(pid)) return false;
-  return currentIdentity(pid) === startId;
+  const current = inspect(pid);
+  return Boolean(
+    current && current.source === "ps" && current.value === startId,
+  );
 }
 
-/** A recorded descendant is reaped once it is gone or its pid was reused. */
-function reaped(entry) {
-  if (!entry || !Number.isInteger(entry.pid)) return true;
+/**
+ * A recorded descendant is reaped only on confirmed disappearance or a
+ * successfully inspected, same-source identity showing pid reuse. While the
+ * pid is alive, an unavailable or incomparable identity fails closed.
+ */
+function reaped(entry, inspect = currentIdentity) {
+  if (!entry || !Number.isInteger(entry.pid)) return false;
   if (!isAlive(entry.pid)) return true;
   if (!entry.startId) return false;
-  return !identityMatches(entry.pid, entry.startId);
+  const current = inspect(entry.pid);
+  if (!current || current.source !== "ps") return false;
+  return current.value !== entry.startId;
 }
 
 /** Emergency cleanup: only signal pids whose recorded identity still matches. */
@@ -112,6 +132,90 @@ function emergencyKill(entries) {
       }
     }
   }
+}
+
+/**
+ * Readiness identities available from a harness directory. A failed
+ * server-ready/provider-ready handshake leaves only the files that were
+ * written; retaining them keeps failure cleanup exact.
+ */
+async function readinessEntries(harness) {
+  const entries = [];
+  for (const path of [harness.serverReady, harness.providerReady]) {
+    const entry = await readJson(path);
+    if (entry && Number.isInteger(entry.pid)) entries.push(entry);
+  }
+  return entries;
+}
+
+async function assertEntriesReaped(entries, timeout = 5_000) {
+  await waitFor(() => entries.every((entry) => reaped(entry)), {
+    timeout,
+    label: `recorded fixture identities reaped: ${entries
+      .map((entry) => `${entry.pid}`)
+      .join(", ")}`,
+  });
+}
+
+/**
+ * Bounded teardown of supervised launchers: SIGTERM first so the launcher can
+ * reap its own descendants, a fixed grace, then SIGKILL escalation. Readiness
+ * files are read before the harness directory is removed so partial identities
+ * recorded by a failed run remain available.
+ */
+async function terminateLaunchers(runs, grace = 15_000) {
+  for (const run of runs) {
+    if (run.child.exitCode === null && run.child.signalCode === null) {
+      try {
+        run.child.kill("SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+  const deadline = Date.now() + grace;
+  for (const run of runs) {
+    while (
+      run.child.exitCode === null &&
+      run.child.signalCode === null &&
+      Date.now() < deadline
+    )
+      await delay(50);
+  }
+  for (const run of runs) {
+    if (run.child.exitCode === null && run.child.signalCode === null) {
+      try {
+        run.child.kill("SIGKILL");
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+  await waitFor(
+    () =>
+      runs.every(
+        (run) => run.child.exitCode !== null || run.child.signalCode !== null,
+      ),
+    {
+      timeout: 2000,
+      label: "launcher termination after escalation",
+    },
+  );
+}
+
+async function cleanupHarness(harness, launched, recorded) {
+  await terminateLaunchers(launched);
+  const entries = [...recorded, ...(await readinessEntries(harness))].filter(
+    Boolean,
+  );
+  try {
+    await assertEntriesReaped(entries);
+  } catch {
+    // Fall through to the identity-checked emergency kill.
+  }
+  emergencyKill(entries);
+  await assertEntriesReaped(entries);
+  await rm(harness.directory, { recursive: true, force: true });
 }
 
 async function waitFor(check, options = {}) {
@@ -212,7 +316,7 @@ async function createHarness() {
   };
 }
 
-function launch(harness, port, hold) {
+function launch(harness, port, hold, withholdProviderReady = false) {
   const child = spawn(python, [launcher], {
     cwd: root,
     env: {
@@ -225,6 +329,7 @@ function launch(harness, port, hold) {
       NS_PW_PROVIDER_READY: harness.providerReady,
       NS_PW_MARKER: harness.marker,
       NS_PW_HOLD: hold ? "1" : "0",
+      ...(withholdProviderReady ? { NS_PW_WITHHOLD_PROVIDER_READY: "1" } : {}),
       NS_PW_OUTPUT_DIR: join(harness.directory, "results"),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -256,11 +361,6 @@ async function awaitExit(run, timeout, label) {
       run.exit,
       new Promise((_resolve, reject) => {
         timer = setTimeout(() => {
-          try {
-            run.child.kill("SIGKILL");
-          } catch {
-            // Already gone.
-          }
           reject(
             new Error(
               `${label} did not exit within ${timeout}ms\n${formatOutput(run.output)}`,
@@ -287,6 +387,56 @@ async function resetHarness(harness) {
 }
 
 async function main() {
+  // Deterministic inspection failures against a genuinely live PID; these
+  // seams never signal the process or claim an actual observed PID replacement.
+  const recorded = { pid: process.pid, startId: "recorded ps timestamp" };
+  assert.equal(
+    reaped(recorded, () => null),
+    false,
+  );
+  assert.equal(
+    reaped(recorded, () => ({ source: "proc", value: "123" })),
+    false,
+  );
+  assert.equal(
+    reaped(recorded, () => ({ source: "ps", value: recorded.startId })),
+    false,
+  );
+  assert.equal(
+    reaped(recorded, () => ({ source: "ps", value: "different timestamp" })),
+    true,
+  );
+  // A bound server alone must not satisfy aggregate readiness. Cleanup must
+  // still retain its identity when the provider handshake never arrives.
+  const failureHarness = await createHarness();
+  const failurePort = await reservePort();
+  const failureRun = launch(failureHarness, failurePort, true, true);
+  let partial = [];
+  try {
+    await waitFor(
+      async () => {
+        partial = await readinessEntries(failureHarness);
+        return partial.some((entry) => entry.port === failurePort);
+      },
+      { timeout: READY_MS, label: "partial webServer readiness" },
+    );
+    await assert.rejects(
+      waitFor(
+        async () => {
+          const providerEntry = await readJson(failureHarness.providerReady);
+          return providerEntry?.ready === true;
+        },
+        { timeout: 1000, label: "withheld provider readiness" },
+      ),
+      /readiness/,
+    );
+  } finally {
+    await cleanupHarness(failureHarness, [failureRun], partial);
+  }
+  assert.ok(partial.length > 0);
+  await assertEntriesReaped(partial);
+  await assertPortFree(failurePort, "partial-readiness failure cleanup");
+  console.log("server-ready/provider-not-ready failure cleanup passed");
   assert.ok(existsSync(launcher), `production launcher missing: ${launcher}`);
   assert.ok(
     existsSync(playwrightCli),
@@ -310,6 +460,7 @@ async function main() {
       async () => {
         serverEntry = await readJson(harness.serverReady);
         providerEntry = await readJson(harness.providerReady);
+        emergency = [serverEntry, providerEntry].filter(Boolean);
         return serverEntry?.ready === true && providerEntry?.ready === true;
       },
       { timeout: READY_MS, label: "fixture provider and webServer readiness" },
@@ -353,18 +504,7 @@ async function main() {
     assert.equal(secondExit.signal, null, "second run must exit normally");
     console.log("second same-port run succeeded");
   } finally {
-    // Direct children are ours, so no identity check is needed to kill them.
-    for (const run of launched) {
-      if (isAlive(run.child.pid)) {
-        try {
-          run.child.kill("SIGKILL");
-        } catch {
-          // Already gone.
-        }
-      }
-    }
-    emergencyKill(emergency);
-    await rm(harness.directory, { recursive: true, force: true });
+    await cleanupHarness(harness, launched, emergency);
   }
 }
 

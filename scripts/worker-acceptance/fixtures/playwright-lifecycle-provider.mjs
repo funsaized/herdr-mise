@@ -9,6 +9,7 @@ import { join } from "node:path";
 const repoRoot = process.env.NS_PW_REPO_ROOT;
 const config = process.env.NS_PW_CONFIG;
 const readyPath = process.env.NS_PW_PROVIDER_READY;
+const withholdProviderReady = process.env.NS_PW_WITHHOLD_PROVIDER_READY === "1";
 if (!repoRoot || !config) {
   throw new Error("NS_PW_REPO_ROOT and NS_PW_CONFIG are required");
 }
@@ -25,7 +26,7 @@ function startId(pid) {
   }
 }
 
-if (readyPath) {
+if (readyPath && !withholdProviderReady) {
   const temporary = `${readyPath}.${process.pid}.tmp`;
   writeFileSync(
     temporary,
