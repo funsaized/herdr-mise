@@ -180,17 +180,32 @@ export async function captureProduct(root, expectedCommit) {
             "1",
             path,
           ]);
-        else if (format === "gif")
+        else if (format === "gif") {
+          // Two passes: a one-pass split/palettegen graph drops the frames it
+          // buffers while the palette is computed (every loop came out 9s).
+          const palette = `${path}.palette.png`;
           tools.encode([
             ...input,
             ...limit,
             "-vf",
-            `${scale},split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3`,
+            `${scale},palettegen=max_colors=128`,
+            "-update",
+            "1",
+            palette,
+          ]);
+          tools.encode([
+            ...input,
+            "-i",
+            palette,
+            ...limit,
+            "-lavfi",
+            `${scale}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3`,
             "-loop",
             "0",
             path,
           ]);
-        else
+          await rm(palette, { force: true });
+        } else
           tools.encode([
             ...input,
             ...limit,
