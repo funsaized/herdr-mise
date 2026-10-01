@@ -483,7 +483,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
         let now = Utc::now();
         terminal.draw(|frame| {
             if recap_open {
-                scene::draw_recap(frame, &table, &recap_scope, now, recap_offset);
+                recap_offset = scene::draw_recap(frame, &table, &recap_scope, now, recap_offset);
                 hit_regions.clear();
                 return;
             }

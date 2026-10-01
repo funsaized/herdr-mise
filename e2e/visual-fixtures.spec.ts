@@ -3165,6 +3165,46 @@ test("real Herdr observations keep recap identities stable through paging and ch
     await expect
       .poll(rows, { timeout: 20_000 })
       .toEqual(ordinals.slice(0, 20).map(label));
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 1280, height: 800 },
+      { width: 1440, height: 900 },
+      { width: 1920, height: 1080 },
+      { width: 640, height: 480 },
+      { width: 375, height: 667 },
+      { width: 320, height: 320 },
+    ]) {
+      await page.setViewportSize(viewport);
+      for (const scope of ["All", "Example Pantry"]) {
+        await workspaceSelect.selectOption({ label: scope });
+        await expect(previous).toBeDisabled();
+        await expect(pages).toContainText(
+          scope === "All" ? "Page 1 of 2" : "Page 1 of 1",
+        );
+        expectInside((await recap.locator(":scope > div").boundingBox())!, {
+          x: 0,
+          y: 0,
+          ...viewport,
+        });
+        await workspaceSelect.focus();
+        await page.keyboard.press("Escape");
+        await expect(recap).not.toHaveAttribute("open");
+        await expect(recap.locator("summary")).toBeFocused();
+        await expect(recap.locator("summary")).toBeInViewport({ ratio: 1 });
+        await recap.locator("summary").click();
+        await expect(table).toBeVisible();
+        await recap.locator("summary").click();
+        await expect(recap).not.toHaveAttribute("open");
+        await recap.locator("summary").click();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          )
+          .toBe(true);
+      }
+    }
   } finally {
     await app.close();
   }

@@ -655,8 +655,8 @@ pub(crate) fn draw_recap(
     scope: &super::Scope,
     now: DateTime<Utc>,
     offset: usize,
-) {
-    view::draw_service_recap(frame, table, scope, now.timestamp_millis(), offset);
+) -> usize {
+    view::draw_service_recap(frame, table, scope, now.timestamp_millis(), offset)
 }
 
 #[cfg(test)]

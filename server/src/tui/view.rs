@@ -27,7 +27,7 @@ pub(crate) fn draw_service_recap(
     scope: &Scope,
     now_ms: i64,
     offset: usize,
-) {
+) -> usize {
     let summary = if scope.id.is_none() && scope.label.is_some() {
         table.recap().summary_missing(now_ms)
     } else {
@@ -125,7 +125,7 @@ pub(crate) fn draw_service_recap(
     let available = area.height.saturating_sub(lines.len() as u16 + 2) as usize;
     let rendered_rows = rows
         .iter()
-        .map(|row| {
+        .flat_map(|row| {
             let name = sanitize_external(&row.name);
             let id = sanitize_external(&row.id);
             let stats = &row.summary;
@@ -162,27 +162,9 @@ pub(crate) fn draw_service_recap(
             }
         })
         .collect::<Vec<_>>();
-    let mut tail = 0_usize;
-    let mut last_page_start = rendered_rows.len();
-    while last_page_start > 0 {
-        let height = rendered_rows[last_page_start - 1].len();
-        if tail.saturating_add(height) > available {
-            break;
-        }
-        tail += height;
-        last_page_start -= 1;
-    }
-    let mut occupied = 0_usize;
-    for rendered in rendered_rows.into_iter().skip(offset.min(last_page_start)) {
-        if occupied.saturating_add(rendered.len()) > available {
-            if occupied == 0 {
-                lines.extend(rendered.into_iter().take(available));
-            }
-            break;
-        }
-        occupied += rendered.len();
-        lines.extend(rendered);
-    }
+    // Scroll rendered lines, not agents: a single identity can exceed the viewport.
+    let offset = offset.min(rendered_rows.len().saturating_sub(available.max(1)));
+    lines.extend(rendered_rows.into_iter().skip(offset).take(available));
     let text = lines.into_iter().map(Line::from).collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(text).block(
@@ -192,6 +174,7 @@ pub(crate) fn draw_service_recap(
         ),
         frame.area(),
     );
+    offset
 }
 
 #[cfg(test)]
@@ -244,7 +227,9 @@ mod recap_view_tests {
         for width in [36, 100] {
             let mut terminal = Terminal::new(TestBackend::new(width, 18)).unwrap();
             terminal
-                .draw(|frame| draw_service_recap(frame, &table, &scope, 2000, 0))
+                .draw(|frame| {
+                    draw_service_recap(frame, &table, &scope, 2000, 0);
+                })
                 .unwrap();
             let buffer = terminal.backend().buffer();
             let text = buffer
@@ -262,7 +247,9 @@ mod recap_view_tests {
         table.gap_at(3000);
         let mut narrow = Terminal::new(TestBackend::new(36, 18)).unwrap();
         narrow
-            .draw(|frame| draw_service_recap(frame, &table, &scope, 4000, 0))
+            .draw(|frame| {
+                draw_service_recap(frame, &table, &scope, 4000, 0);
+            })
             .unwrap();
         let text = narrow
             .backend()
@@ -337,7 +324,7 @@ mod recap_view_tests {
                         },
                         3000,
                         0,
-                    )
+                    );
                 })
                 .unwrap();
             let text = terminal
@@ -378,7 +365,9 @@ mod recap_view_tests {
             );
             let mut terminal = Terminal::new(TestBackend::new(width, 18)).unwrap();
             terminal
-                .draw(|frame| draw_service_recap(frame, &table, &Scope::default(), 2000, 0))
+                .draw(|frame| {
+                    draw_service_recap(frame, &table, &Scope::default(), 2000, 0);
+                })
                 .unwrap();
             terminal
                 .backend()
@@ -482,7 +471,9 @@ mod recap_view_tests {
         let render_rows = |table: &AgentTable, width: u16, height: u16, offset: usize| {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal
-                .draw(|frame| draw_service_recap(frame, table, &Scope::default(), 2_000, offset))
+                .draw(|frame| {
+                    draw_service_recap(frame, table, &Scope::default(), 2_000, offset);
+                })
                 .unwrap();
             let buffer = terminal.backend().buffer();
             let content = buffer
@@ -540,6 +531,69 @@ mod recap_view_tests {
         // A row taller than the viewport still shows its head instead of vanishing.
         let cramped = flatten(&render_rows(&long_table, 40, 18, 0));
         assert!(cramped.contains(&sanitized_long_id[..24]), "{cramped}");
+        let full_rows = render_rows(&long_table, 40, 30, 0);
+        let observation_start = full_rows
+            .iter()
+            .position(|row| row.contains("stableidentity"))
+            .unwrap();
+        let expected_lines = &full_rows[observation_start..]
+            .iter()
+            .take_while(|row| !row.is_empty() && !row.contains('└'))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut inspected = Vec::new();
+        let last_offset = expected_lines.len().saturating_sub(4);
+        for offset in 0..=8 {
+            let rows = render_rows(&long_table, 40, 18, offset);
+            let visible = &rows[observation_start..rows.len() - 1];
+            assert!(
+                visible.iter().any(|line| !line.is_empty()),
+                "offset {offset}: {rows:?}"
+            );
+            let start = offset.min(last_offset);
+            assert_eq!(visible, &expected_lines[start..start + 4]);
+            for line in visible {
+                assert!(!line.chars().any(char::is_control), "{line}");
+            }
+            if offset < last_offset {
+                inspected.push(visible[0].clone());
+            }
+            if offset == last_offset {
+                inspected.extend_from_slice(visible);
+            }
+        }
+        assert!(
+            flatten(&inspected).contains(&sanitized_long_id),
+            "{inspected:?}"
+        );
+        assert!(
+            inspected.iter().any(|line| line.contains("Blocked")),
+            "{inspected:?}"
+        );
+        assert_eq!(
+            render_rows(&long_table, 40, 18, 8),
+            render_rows(&long_table, 40, 18, usize::MAX)
+        );
+        let mut terminal = Terminal::new(TestBackend::new(40, 18)).unwrap();
+        let mut offset = usize::MAX;
+        terminal
+            .draw(|frame| {
+                offset = draw_service_recap(frame, &long_table, &Scope::default(), 2_000, offset);
+            })
+            .unwrap();
+        assert_eq!(offset, last_offset);
+        terminal
+            .draw(|frame| {
+                offset = draw_service_recap(
+                    frame,
+                    &long_table,
+                    &Scope::default(),
+                    2_000,
+                    offset.saturating_sub(1),
+                );
+            })
+            .unwrap();
+        assert_eq!(offset, last_offset.saturating_sub(1));
         for rows in [
             render_rows(&table, 100, 18, 0),
             render_rows(&table, 100, 18, 2),
