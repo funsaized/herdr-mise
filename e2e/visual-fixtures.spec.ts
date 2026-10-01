@@ -3348,6 +3348,9 @@ test("real Herdr observations keep recap identities stable through paging and ch
 }) => {
   // About 5s locally, but over 120s on the managed CI runner's software canvas.
   test.setTimeout(240_000);
+  // Recap behavior does not depend on motion. With 24 animated cooks, the CI
+  // software canvas can starve Playwright's stability checks on clicks.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const source = JSON.parse(
       await readFile(
         join(
