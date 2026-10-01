@@ -5,7 +5,10 @@ a single restaurant kitchen. Agent state, the
 ticket rail, the pass, the 86 board, and the kitchen lights are a glanceable
 skin over a small, versioned JSON feed.
 
-![herdr-mise in 30 seconds: a demo kitchen of AI coding agents working, idling, and getting blocked; a cook ringing the bell; station details with the exact pane; workspace scope; the freezer of ended sessions; the observed-time recap; the terminal UI; and installation](docs/assets/herdr-mise-hero.gif)
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/herdr-mise-hero-poster.png">
+  <img alt="herdr-mise in 30 seconds: a demo kitchen of AI coding agents working, idling, and getting blocked; a cook ringing the bell; station details with the exact pane; workspace scope; the freezer of ended sessions; the observed-time recap; the terminal UI; and installation" src="docs/assets/herdr-mise-hero.gif">
+</picture>
 
 A 30-second tour of the demo kitchen: mixed states, a blocked cook ringing the
 bell, station details, workspace scope, the freezer, the service recap, the

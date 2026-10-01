@@ -117,3 +117,18 @@ test("README embeds no animated GIF", async () => {
   const readme = await readFile("README.md", "utf8");
   assert.doesNotMatch(readme, /!\[[^\]]*\]\([^)]*\.gif(?:\?[^)]*)?\)/i);
 });
+
+test("README animated hero falls back to a still image for reduced motion", async () => {
+  const readme = await readFile("README.md", "utf8");
+  const pictures = [...readme.matchAll(/<picture>([\s\S]*?)<\/picture>/gi)];
+  const gifs = [...readme.matchAll(/<img[^>]*src="[^"]*\.gif"[^>]*>/gi)];
+  for (const [image] of gifs) {
+    const picture = pictures.find(([, body]) => body.includes(image));
+    assert.ok(picture, `${image} must sit inside a <picture>`);
+    assert.match(
+      picture[1],
+      /<source[^>]*media="\(prefers-reduced-motion: reduce\)"[^>]*srcset="[^"]*\.png"/,
+    );
+    assert.match(image, /alt="[^"]{40,}"/);
+  }
+});
