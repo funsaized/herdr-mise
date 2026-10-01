@@ -9,6 +9,7 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -197,6 +198,66 @@ test("standalone mode is idempotent and installs an atomic launcher", () => {
     join(value.root, "data", "herdr-mise", "current", "bin", "herdr-mise"),
   );
   assert.match(second.result.stdout, new RegExp(`herdr-mise ${version}`));
+});
+
+test("plugin and standalone upgrades preserve the previous install on verification failure", () => {
+  for (const mode of ["--plugin", ""]) {
+    const value = fixture();
+    const base = join(value.root, mode ? "plugin-root" : "data", "herdr-mise");
+    const previous = join(base, "0.3.0", "bin", "herdr-mise");
+    mkdirSync(join(base, "0.3.0", "bin"), { recursive: true });
+    writeFileSync(previous, "#!/bin/sh\necho previous\n");
+    chmodSync(previous, 0o755);
+    symlinkSync("0.3.0", join(base, "current"));
+    const launcher = join(value.root, "bin", "herdr-mise");
+    const launcherTarget = join(base, "current", "bin", "herdr-mise");
+    if (!mode) {
+      mkdirSync(join(value.root, "bin"));
+      symlinkSync(launcherTarget, launcher);
+    }
+
+    writeFileSync(
+      `${value.archive}.sha256`,
+      `${"0".repeat(64)}  ${basename(value.archive)}\n`,
+    );
+    const failed = install(value, mode);
+    assert.notEqual(failed.result.status, 0);
+    assert.match(failed.result.stderr, /checksum mismatch/);
+    assert.deepEqual(readdirSync(base).sort(), ["0.3.0", "current"]);
+    assert.equal(readlinkSync(join(base, "current")), "0.3.0");
+    assert.equal(readFileSync(previous, "utf8"), "#!/bin/sh\necho previous\n");
+    assert.equal(
+      readFileSync(launcherTarget, "utf8"),
+      "#!/bin/sh\necho previous\n",
+    );
+    if (!mode) assert.equal(readlinkSync(launcher), launcherTarget);
+    assert.deepEqual(readdirSync(failed.temp), []);
+
+    writeFileSync(
+      `${value.archive}.sha256`,
+      `${value.digest}  ${basename(value.archive)}\n`,
+    );
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const installed = install(value, mode);
+      assert.equal(installed.result.status, 0, installed.result.stderr);
+      assert.equal(readlinkSync(join(base, "current")), version);
+      assert.deepEqual(readdirSync(base).sort(), ["0.3.0", version, "current"]);
+      assert.equal(
+        readFileSync(previous, "utf8"),
+        "#!/bin/sh\necho previous\n",
+      );
+      assert.equal(
+        readFileSync(launcherTarget, "utf8"),
+        "#!/bin/sh\necho installed\n",
+      );
+      if (!mode) {
+        assert.equal(readlinkSync(launcher), launcherTarget);
+        assert.deepEqual(readdirSync(join(value.root, "bin")), ["herdr-mise"]);
+      }
+      assert.deepEqual(readdirSync(installed.temp), []);
+      assert.equal(existsSync(join(value.root, "forbidden-commands")), false);
+    }
+  }
 });
 
 test("standalone mode refuses a non-symlink launcher", () => {

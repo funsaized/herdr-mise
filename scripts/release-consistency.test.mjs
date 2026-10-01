@@ -39,6 +39,48 @@ function fixture(t, corrected = true) {
   }
   const release = structuredClone(captured);
   const latest = structuredClone(capturedLatest);
+  // Captured publication evidence must not inherit the next release's pins.
+  const tag = release.tag_name;
+  const version = tag.slice(1);
+  for (const [file, pattern, replacement] of [
+    ["server/Cargo.toml", /^version\s*=\s*"[^"]+"/m, `version = "${version}"`],
+    ["herdr-plugin.toml", /^version\s*=\s*"[^"]+"/m, `version = "${version}"`],
+    [
+      "install.sh",
+      /^HERDR_MISE_VERSION=\S+$/m,
+      `HERDR_MISE_VERSION=${version}`,
+    ],
+    [
+      "docs/operations.md",
+      /(### Run the release archive\n\n)[\s\S]*?(Matching `v\*` tags)/,
+      `$1The current pinned public stable distribution is the GitHub release\n[${tag}](https://github.com/funsaized/herdr-mise/releases/tag/${tag}).\n$2`,
+    ],
+  ]) {
+    const path = join(root, file);
+    const text = readFileSync(path, "utf8");
+    assert.match(text, pattern, `fixture must pin ${file}`);
+    writeFileSync(path, text.replace(pattern, replacement));
+  }
+  for (const [file, headings] of [
+    ["README.md", ["## Quick start"]],
+    [
+      "docs/operations.md",
+      ["### Run the release archive", "### Verifying an archive"],
+    ],
+  ]) {
+    const path = join(root, file);
+    let text = readFileSync(path, "utf8");
+    for (const heading of headings) {
+      const pattern = new RegExp(
+        `(${heading}\\n)[\\s\\S]*?(?=\\n#{2,${heading.indexOf(" ")}} |$)`,
+      );
+      assert.match(text, pattern, `fixture must pin ${file}: ${heading}`);
+      text = text.replace(pattern, (section) =>
+        section.replace(/\bv\d+\.\d+\.\d+/g, tag),
+      );
+    }
+    writeFileSync(path, text);
+  }
   if (corrected) {
     const template = readFileSync(
       join(root, "docs/releases/v0.3.0.md"),
