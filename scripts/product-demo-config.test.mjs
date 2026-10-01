@@ -304,13 +304,13 @@ async function publishingGuards() {
       }
     }
   const helper = new URL("./capture-media.mjs", import.meta.url).href;
+  // Fixed program text; the helper URL is passed as data (process.argv[1]),
+  // never spliced into the evaluated code.
+  const importGuard =
+    "import child from 'node:child_process'; import fs from 'node:fs'; import promises from 'node:fs/promises'; import {syncBuiltinESMExports} from 'node:module'; const fail=()=>{throw new Error('import side effect')}; for(const key of ['spawn','spawnSync','exec','execSync']) child[key]=fail; for(const key of ['writeFileSync','mkdirSync','mkdtempSync','rmSync','renameSync']) fs[key]=fail; for(const key of ['mkdir','mkdtemp','writeFile','rm','rename']) promises[key]=fail; syncBuiltinESMExports(); await import(process.argv[1]);";
   const imported = spawnSync(
     process.execPath,
-    [
-      "--input-type=module",
-      "-e",
-      `import child from 'node:child_process'; import fs from 'node:fs'; import promises from 'node:fs/promises'; import {syncBuiltinESMExports} from 'node:module'; const fail=()=>{throw new Error('import side effect')}; for(const key of ['spawn','spawnSync','exec','execSync']) child[key]=fail; for(const key of ['writeFileSync','mkdirSync','mkdtempSync','rmSync','renameSync']) fs[key]=fail; for(const key of ['mkdir','mkdtemp','writeFile','rm','rename']) promises[key]=fail; syncBuiltinESMExports(); await import(${JSON.stringify(helper)});`,
-    ],
+    ["--input-type=module", "-e", importGuard, helper],
     { encoding: "utf8" },
   );
   assert.equal(imported.status, 0, imported.stderr);
