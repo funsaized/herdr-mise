@@ -19,7 +19,10 @@ const Finding = z
     severity: z.enum(["low", "medium", "high", "critical"]),
     description: z.string().min(1),
     requirement: z.string().min(1),
-    evidence: z.string().min(1),
+    // Lanes often cite several locations; keep one recorded shape.
+    evidence: z
+      .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
+      .transform((value) => (Array.isArray(value) ? value.join("\n") : value)),
     impact: z.string().min(1),
     regressionProof: z.string().min(1),
     disposition: z.enum(["open", "fixed", "disputed"]),

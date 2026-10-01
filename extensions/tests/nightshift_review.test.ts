@@ -3,7 +3,7 @@ import {
   normalizeReviews,
   ReviewLane,
   routeLanes,
-  type LaneReview,
+  LaneReview,
 } from "../models/nightshift_review.ts";
 import type { z } from "npm:zod@4.4.3";
 
@@ -32,6 +32,31 @@ function reject(input: z.infer<typeof LaneReview>[]) {
   }
   throw new Error("Invalid review accepted");
 }
+
+Deno.test("evidence lists normalize to one string while empty or non-string evidence fails closed", () => {
+  const lane = (evidence: unknown) => ({
+    lane: "security",
+    verdict: "warn",
+    summary: "One defect.",
+    findings: [{ ...defect, severity: "medium", evidence }],
+  });
+  const parsed = LaneReview.parse(
+    lane(["scripts/a.ts:10", "node --test scripts/a.test.mjs"]),
+  );
+  if (
+    parsed.findings[0].evidence !==
+    "scripts/a.ts:10\nnode --test scripts/a.test.mjs"
+  )
+    throw new Error(`unexpected evidence ${parsed.findings[0].evidence}`);
+  if (
+    LaneReview.parse(lane("scripts/a.ts:10")).findings[0].evidence !==
+    "scripts/a.ts:10"
+  )
+    throw new Error("string evidence changed");
+  for (const bad of [[], "", [""], [1], null])
+    if (LaneReview.safeParse(lane(bad)).success)
+      throw new Error(`accepted evidence ${JSON.stringify(bad)}`);
+});
 
 Deno.test("clean lanes need no invented defect or catchphrase", () => {
   const input = reviews();
