@@ -168,14 +168,12 @@ continues to write `client/dist/`, which remains the only rust-embed input.
 
 ### Run the release archive
 
-The currently published stable distribution is the GitHub release
-[v0.3.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.3.0).
-This checkout prepares the unpublished `v0.4.0` candidate; its plugin and
-standalone installers both target `v0.4.0`, so do not use these candidate pins
-against public downloads before publication. The download example below stays
-on published `v0.3.0` until candidate public verification succeeds. Coordinate
-merge, tag, and publication so main is not left pinned to an unavailable release;
-see [Release operations](releasing.md) for maintainer authorization and recovery.
+The current pinned public stable distribution is the GitHub release
+[v0.4.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.4.0).
+The plugin and standalone installers in this checkout both target `v0.4.0`.
+When preparing a later release, coordinate merge, tag, and publication so main
+is not left pinned to an unavailable release; see
+[Release operations](releasing.md).
 Matching `v*` tags are classified as prerelease or stable under the fail-closed
 process in [Release operations](releasing.md). Each asset pair is:
 
@@ -198,7 +196,7 @@ and Linux ARM are not claimed supported.
 Download, verify, extract, and run from the upstream release:
 
 ```sh
-TAG=v0.3.0
+TAG=v0.4.0
 TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
@@ -734,10 +732,10 @@ From the directory that holds both files:
 
 ```sh
 # macOS
-shasum -a 256 -c herdr-mise-v0.3.0-aarch64-apple-darwin.tar.gz.sha256
+shasum -a 256 -c herdr-mise-v0.4.0-aarch64-apple-darwin.tar.gz.sha256
 
 # Linux
-sha256sum -c herdr-mise-v0.3.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+sha256sum -c herdr-mise-v0.4.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
 The sidecar is written next to the archive and names the archive basename

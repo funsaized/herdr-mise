@@ -63,7 +63,7 @@ not need Node, npm, Cargo, or Rust. Herdr may require Git to clone community
 plugins. See [Operations](docs/operations.md#installation) for logs, updates,
 uninstall, standalone installation, and manual archive verification.
 
-The current pinned stable release is [v0.3.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.3.0).
+The current pinned stable release is [v0.4.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.4.0).
 
 ### Standalone
 
