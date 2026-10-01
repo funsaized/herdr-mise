@@ -7,7 +7,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
@@ -454,14 +454,14 @@ fn footer_connection(table: &AgentTable, warning: Option<&str>, width: u16) -> S
 
 fn draw_help(
     frame: &mut Frame<'_>,
+    table: &AgentTable,
     color_mode: ColorMode,
     selected: Option<&AgentRecord>,
     scroll: u16,
 ) {
     let area = frame.area();
-    let mut lines = Vec::new();
+    let mut lines = vec![Line::from("↑/↓ scroll details · Esc close")];
     if let Some(agent) = selected {
-        lines.push(Line::from("↑/↓ scroll details · Esc close"));
         lines.push(Line::from(format!(
             "Pane locator: {}",
             agent
@@ -475,6 +475,14 @@ fn draw_help(
             view::sanitize_external(&agent.workspace)
         )));
     }
+    lines.extend(
+        view::source_help_lines(table.source_status(), table.source_diagnostic())
+            .into_iter()
+            .map(Line::from),
+    );
+    lines.push(Line::from(
+        "First connection: start Herdr, then run herdr-mise --tui",
+    ));
     lines.extend(HELP_LINES.map(Line::from));
     let width = lines
         .iter()
@@ -499,6 +507,7 @@ fn draw_help(
         width,
         height,
     );
+    frame.render_widget(Clear, overlay);
     frame.render_widget(
         paragraph.scroll((
             scroll.min(content_height.saturating_sub(height.saturating_sub(2))),
@@ -584,7 +593,7 @@ pub(crate) fn draw_view_scoped_with_help_scroll(
             }
         };
         if help_open {
-            draw_help(frame, color_mode, selected, help_scroll);
+            draw_help(frame, table, color_mode, selected, help_scroll);
             hits.clear();
         }
         return hits;
@@ -643,7 +652,7 @@ pub(crate) fn draw_view_scoped_with_help_scroll(
         }
     };
     if help_open {
-        draw_help(frame, color_mode, selected, help_scroll);
+        draw_help(frame, table, color_mode, selected, help_scroll);
         hits.clear();
     }
     hits

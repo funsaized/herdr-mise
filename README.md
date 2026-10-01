@@ -85,13 +85,27 @@ The formula installs Homebrew Core's `herdr` dependency but does not register a
 Herdr plugin. Prefer `herdr plugin install funsaized/herdr-mise` for
 Herdr-managed pane registration.
 
-### live vs. demo
+### First live connection
+
+Start Herdr (`herdr`), then open Mise using the plugin pane above or the
+[standalone instructions](docs/operations.md#installation). For the standalone
+browser, run `herdr-mise` and open <http://127.0.0.1:8686>; `herdr-mise --tui`
+opens the terminal kitchen too.
+
+If you see demo instead of live state, run `herdr-mise --diagnostic` from the
+same environment as Mise. Plugin installs may not put the executable on PATH;
+use `./target/herdr-plugin/herdr-mise/current/bin/herdr-mise --diagnostic`
+from its installed plugin directory. This bounded source probe does **not**
+prove that the browser service is listening. See
+[first-connection details](docs/operations.md#first-live-connection).
 
 - **Live:** the `DEMO SERVICE` placard is absent and the WebSocket payload
   carries `mode: "live"`.
 - **Demo:** a persistent `DEMO SERVICE` placard identifies deterministic mock
   data and names the source condition. Demo is not a successful live
   connection.
+- **Connected but empty:** `Waiting for agents — start one in herdr` means the
+  source is live, but has no agents. Start an agent in Herdr, not another Mise.
 
 Troubleshooting: [Herdr socket unavailable](docs/operations.md#herdr-socket-unavailable),
 [Herdr protocol not supported](docs/operations.md#herdr-protocol-not-supported).

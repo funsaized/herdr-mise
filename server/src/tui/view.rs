@@ -64,15 +64,14 @@ pub(crate) fn draw_service_recap(
             |ms| format_duration(ms.max(0.0) as u64),
         )
     };
-    let (title, status) = status_lines(
-        table.mode(),
-        table.source_status(),
-        table.source_diagnostic(),
-        table.agents().count(),
-    );
     let mut lines = vec![
-        title,
-        status,
+        status_title(&table.mode()).into(),
+        source_condition(
+            table.mode(),
+            table.source_status(),
+            table.source_diagnostic(),
+            table.agents().count(),
+        ),
         format!("Scope: {label}"),
         format!(
             "Observed time blocked: {}",
@@ -887,22 +886,50 @@ fn source_status_text(status: &SourceStatus) -> &'static str {
     }
 }
 
+fn status_title(mode: &AppMode) -> &'static str {
+    if *mode == AppMode::Live {
+        "MISE — LIVE"
+    } else {
+        "MISE — DEMO SERVICE"
+    }
+}
+
 pub(crate) fn status_lines(
+    mode: AppMode,
+    source_status: &SourceStatus,
+    _diagnostic: Option<&SourceDiagnostic>,
+    agent_count: usize,
+) -> (String, String) {
+    let title = status_title(&mode);
+    if mode == AppMode::Live && source_status == &SourceStatus::Connected && agent_count == 0 {
+        return (
+            title.into(),
+            "Waiting for agents — start one in herdr · ? help".into(),
+        );
+    }
+    let condition = source_status_text(source_status);
+    let status = if mode == AppMode::Demo {
+        format!("Mock feed — Nothing here is real. {condition}")
+    } else {
+        condition.into()
+    };
+    let status = match recovery_step(source_status) {
+        Some(step) => format!("{status} · {step} · ? help"),
+        None => status,
+    };
+    (title.into(), status)
+}
+
+/// Full factual source condition for surfaces without a help overlay (the
+/// service recap). The concise status line drops detail that help carries.
+fn source_condition(
     mode: AppMode,
     source_status: &SourceStatus,
     diagnostic: Option<&SourceDiagnostic>,
     agent_count: usize,
-) -> (String, String) {
-    let title = if mode == AppMode::Live {
-        "MISE — LIVE"
-    } else {
-        "MISE — DEMO SERVICE"
-    };
+) -> String {
     if mode == AppMode::Live && source_status == &SourceStatus::Connected && agent_count == 0 {
-        return (
-            title.into(),
-            "Waiting for agents — start one in herdr".into(),
-        );
+        return "Waiting for agents — start one in herdr".into();
     }
     let detail = match (source_status, diagnostic) {
         (SourceStatus::UnsupportedProtocol, Some(diagnostic)) => format!(
@@ -922,12 +949,77 @@ pub(crate) fn status_lines(
         _ => String::new(),
     };
     let condition = format!("{}{}", source_status_text(source_status), detail);
-    let status = if mode == AppMode::Demo {
+    if mode == AppMode::Demo {
         format!("Mock feed — Nothing here is real. {condition}")
     } else {
         condition
-    };
-    (title.into(), status)
+    }
+}
+
+/// The concrete next step shown with a concise source status. The full
+/// source-specific advice lives in `source_help_lines` behind `?`, and the
+/// step reuses the shipped `--diagnostic` command instead of a new entry point.
+fn recovery_step(source_status: &SourceStatus) -> Option<&'static str> {
+    match source_status {
+        SourceStatus::UnavailableSocket => Some("start Herdr"),
+        SourceStatus::Timeout => Some("retry"),
+        SourceStatus::UnsupportedProtocol | SourceStatus::IncompatibleResponse => {
+            Some("run herdr-mise --diagnostic")
+        }
+        SourceStatus::Connected => None,
+    }
+}
+
+const DIAGNOSTIC_ADVICE: &str = "Run herdr-mise --diagnostic for a bounded local probe.";
+
+/// Full source-specific advice for the help overlay: the paths, fallbacks, and
+/// observed/supported detail that would crowd the status line.
+pub(crate) fn source_help_lines(
+    source_status: &SourceStatus,
+    diagnostic: Option<&SourceDiagnostic>,
+) -> Vec<String> {
+    match source_status {
+        SourceStatus::Connected => vec!["Source: Connected to Herdr".into()],
+        SourceStatus::UnavailableSocket => vec![
+            "Source: Herdr socket unavailable".into(),
+            "Start Herdr. If you set HERDR_SOCKET_PATH, unset it or point it at the running socket."
+                .into(),
+            DIAGNOSTIC_ADVICE.into(),
+        ],
+        SourceStatus::Timeout => vec![
+            "Source: Herdr did not respond in time".into(),
+            "Confirm Herdr is running and responding, then retry.".into(),
+            DIAGNOSTIC_ADVICE.into(),
+        ],
+        SourceStatus::UnsupportedProtocol => {
+            let mut lines = vec!["Source: Herdr protocol is unsupported".into()];
+            lines.push(match diagnostic {
+                Some(diagnostic) => format!(
+                    "observed {}; supported: {}; {}.",
+                    diagnostic.observed_protocol,
+                    diagnostic
+                        .supported_protocols
+                        .iter()
+                        .map(u64::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    sanitize_external(&diagnostic.next_action)
+                ),
+                None => "Upgrade or downgrade Herdr to a supported release, then retry.".into(),
+            });
+            lines.push(DIAGNOSTIC_ADVICE.into());
+            lines
+        }
+        SourceStatus::IncompatibleResponse => {
+            let mut lines = vec!["Source: Herdr returned an incompatible response".into()];
+            lines.push(match diagnostic {
+                Some(diagnostic) => format!("{}.", sanitize_external(&diagnostic.next_action)),
+                None => "Check terminal identities and Herdr configuration, then retry.".into(),
+            });
+            lines.push(DIAGNOSTIC_ADVICE.into());
+            lines
+        }
+    }
 }
 
 pub(crate) fn scope_summary(table: &AgentTable, scope: &Scope) -> String {
@@ -2489,7 +2581,12 @@ mod tests {
         let compact = render_scene(&table, 79, 23, None, scene_view, help_open);
         let narrow = render_scene(&table, 20, 12, None, scene_view, help_open);
         assert!(!narrow.contains(HELP_LINES[1]));
-        for wrapped in ["Shift+Tab", "select", "leave", "q quit"] {
+        for wrapped in [
+            "scroll details",
+            "Esc close",
+            "First connection",
+            "start Herdr",
+        ] {
             assert!(
                 narrow.contains(wrapped),
                 "missing wrapped help text {wrapped:?} in {narrow:?}"
@@ -2679,14 +2776,15 @@ mod tests {
             status_lines(AppMode::Live, &SourceStatus::Connected, None, 0),
             (
                 "MISE — LIVE".into(),
-                "Waiting for agents — start one in herdr".into()
+                "Waiting for agents — start one in herdr · ? help".into()
             )
         );
         assert_eq!(
             status_lines(AppMode::Demo, &SourceStatus::Timeout, None, 2),
             (
                 "MISE — DEMO SERVICE".into(),
-                "Mock feed — Nothing here is real. Herdr did not respond in time".into()
+                "Mock feed — Nothing here is real. Herdr did not respond in time · retry · ? help"
+                    .into()
             )
         );
         let diagnostic = SourceDiagnostic {
@@ -2703,9 +2801,19 @@ mod tests {
             ),
             (
                 "MISE — DEMO SERVICE".into(),
-                "Mock feed — Nothing here is real. Herdr protocol is unsupported — observed 23; supported: 17, 19, 20, 21, 22; upgrade Herdr, then retry".into()
+                "Mock feed — Nothing here is real. Herdr protocol is unsupported · run herdr-mise --diagnostic · ? help".into()
             )
         );
+        let unsupported_help =
+            source_help_lines(&SourceStatus::UnsupportedProtocol, Some(&diagnostic)).join(" ");
+        for expected in [
+            "observed 23",
+            "supported: 17, 19, 20, 21, 22",
+            "upgrade Herdr, then retry",
+            "herdr-mise --diagnostic",
+        ] {
+            assert!(unsupported_help.contains(expected), "missing {expected}");
+        }
         let incompatible = SourceDiagnostic {
             observed_protocol: 20,
             supported_protocols: vec![17, 19, 20, 21, 22],
@@ -2720,9 +2828,16 @@ mod tests {
             ),
             (
                 "MISE — LIVE".into(),
-                "Herdr returned an incompatible response — ensure terminal identities are unique, then retry".into()
+                "Herdr returned an incompatible response · run herdr-mise --diagnostic · ? help"
+                    .into()
             )
         );
+        let incompatible_help =
+            source_help_lines(&SourceStatus::IncompatibleResponse, Some(&incompatible)).join(" ");
+        assert!(incompatible_help.contains("ensure terminal identities are unique"));
+        let fallback_help = source_help_lines(&SourceStatus::UnsupportedProtocol, None).join(" ");
+        assert!(fallback_help.contains("Upgrade or downgrade Herdr"));
+        assert!(fallback_help.contains("herdr-mise --diagnostic"));
     }
 
     #[test]
@@ -3085,15 +3200,23 @@ mod tests {
                 "MISE — DEMO SERVICE",
                 "Mock feed",
                 "unsupported",
-                "observed 23",
-                "supported: 17, 19, 20, 21, 22",
-                "upgrade or downgrade Herdr to a tested release, then retry",
+                "run herdr-mise --diagnostic",
                 "Nothing here is real",
                 "q / Esc quit",
             ] {
                 assert!(
                     rendered.contains(expected),
                     "{width}x{height} missing {expected:?} in {rendered:?}"
+                );
+            }
+            for moved in [
+                "observed 23",
+                "supported: 17, 19, 20, 21, 22",
+                "upgrade or downgrade Herdr to a tested release, then retry",
+            ] {
+                assert!(
+                    !rendered.contains(moved),
+                    "{width}x{height} status kept help text {moved:?} in {rendered:?}"
                 );
             }
 
@@ -3113,9 +3236,8 @@ mod tests {
                 .join(" ");
             for expected in [
                 "Mock feed",
-                "observed 23",
-                "supported: 17, 19, 20, 21, 22",
-                "upgrade or downgrade Herdr to a tested release, then retry",
+                "herdr-mise",
+                "--diagnostic",
                 "Nothing here is real",
                 KEY_ESC_KITCHEN,
             ] {
@@ -3124,6 +3246,20 @@ mod tests {
                     "freezer {width}x{height} missing {expected:?} in {freezer:?}"
                 );
             }
+        }
+
+        let advice = source_help_lines(
+            &SourceStatus::UnsupportedProtocol,
+            table.source_diagnostic(),
+        )
+        .join(" ");
+        for expected in [
+            "observed 23",
+            "supported: 17, 19, 20, 21, 22",
+            "upgrade or downgrade Herdr to a tested release, then retry",
+            "herdr-mise --diagnostic",
+        ] {
+            assert!(advice.contains(expected), "advice missing {expected:?}");
         }
     }
 

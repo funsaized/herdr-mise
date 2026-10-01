@@ -31,10 +31,12 @@ export async function startFixtureApp({
   prefix,
   snapshot: initialSnapshot,
   binary = "target/debug/herdr-mise",
+  skipInitialSource = false,
 }: {
   prefix: string;
   snapshot: unknown;
   binary?: string;
+  skipInitialSource?: boolean;
 }): Promise<FixtureApp> {
   const directory = await mkdtemp(join(tmpdir(), prefix)),
     socketPath = join(directory, "herdr.sock"),
@@ -95,7 +97,7 @@ export async function startFixtureApp({
     };
 
   try {
-    await startSource();
+    if (!skipInitialSource) await startSource();
     app = spawn(binary, [], {
       env: {
         ...process.env,

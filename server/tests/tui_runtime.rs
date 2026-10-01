@@ -266,6 +266,106 @@ async fn wait_for_event(
 }
 
 #[tokio::test]
+async fn fixture_feed_connection_help_recovers_to_live() {
+    let base: serde_json::Value = serde_json::from_str(HERDR_SNAPSHOT).unwrap();
+    let mut unsupported = base.clone();
+    unsupported["protocol"] = serde_json::json!(23);
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("connection-help.sock");
+    assert!(!path.exists());
+    let shutdown = CancellationToken::new();
+    let _shutdown_guard = shutdown.clone().drop_guard();
+    let feed = Feed::start(path.clone(), Duration::from_secs(1), shutdown.clone()).await;
+    wait_for_feed(&feed, |event| {
+        matches!(
+            event,
+            AgentStateEvent::Snapshot {
+                mode: AppMode::Demo,
+                source_status: SourceStatus::UnavailableSocket,
+                source_diagnostic: None,
+                ..
+            }
+        )
+    })
+    .await;
+
+    let (mut events, initial) = feed.subscribe_snapshot().await;
+    let mut table = AgentTable::default();
+    table.apply_at(initial, 1_000);
+    assert_eq!(table.mode(), AppMode::Demo);
+    assert_eq!(table.source_status(), &SourceStatus::UnavailableSocket);
+    assert_eq!(table.source_diagnostic(), None);
+    assert!(table
+        .agents()
+        .all(|agent| agent.id != "fictional-terminal-20"));
+
+    let source = Arc::new(RecapSource::new());
+    source.publish(unsupported);
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(serve_recap_source(listener, Arc::clone(&source)));
+    let failure = wait_for_event(&mut events, |event| {
+        matches!(
+            event,
+            AgentStateEvent::Snapshot {
+                mode: AppMode::Demo,
+                source_status: SourceStatus::UnsupportedProtocol,
+                source_diagnostic: Some(_),
+                ..
+            }
+        )
+    })
+    .await;
+    table.apply_at(failure, 2_000);
+    assert_eq!(table.mode(), AppMode::Demo);
+    assert_eq!(table.source_status(), &SourceStatus::UnsupportedProtocol);
+    let diagnostic = table
+        .source_diagnostic()
+        .expect("unsupported protocol advice");
+    assert_eq!(diagnostic.observed_protocol, 23);
+    assert_eq!(
+        diagnostic.supported_protocols,
+        herdr_mise_server::adapter::supported_protocols()
+    );
+    assert!(diagnostic.next_action.contains("tested release"));
+    assert!(table
+        .agents()
+        .all(|agent| agent.id != "fictional-terminal-20"));
+
+    source.publish(base);
+    source.notify();
+    let recovery = wait_for_event(&mut events, |event| {
+        matches!(event, AgentStateEvent::Snapshot {
+            mode: AppMode::Live,
+            source_status: SourceStatus::Connected,
+            source_diagnostic: None,
+            agents,
+            ..
+        } if agents.len() == 1 && agents[0].id == "fictional-terminal-20")
+    })
+    .await;
+    table.apply_at(recovery, 3_000);
+    assert_eq!(table.mode(), AppMode::Live);
+    assert_eq!(table.source_status(), &SourceStatus::Connected);
+    assert_eq!(table.source_diagnostic(), None);
+    assert!(table.board().is_empty());
+    let roster = table.agents().collect::<Vec<_>>();
+    assert_eq!(roster.len(), 1);
+    assert_eq!(roster[0].id, "fictional-terminal-20");
+    assert_eq!(roster[0].name, "example-cook");
+    assert_eq!(roster[0].state, AgentState::Working);
+    assert_eq!(roster[0].pane_id.as_deref(), Some("fictional-pane-20"));
+    assert_eq!(roster[0].workspace_id.as_deref(), Some("fictional-kitchen"));
+    assert_eq!(table.workspaces().len(), 1);
+    assert_eq!(table.workspaces()[0].label, "Example Kitchen");
+
+    shutdown.cancel();
+    server.abort();
+    let _ = server.await;
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[tokio::test]
 async fn fixture_feed_service_recap_preserves_observed_waits() {
     let base: serde_json::Value = serde_json::from_str(HERDR_SNAPSHOT).unwrap();
     let blocked = with_status(&base, "blocked");

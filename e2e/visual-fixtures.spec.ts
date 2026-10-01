@@ -30,6 +30,303 @@ async function panelFixture() {
   );
 }
 
+for (const [title, skipInitialSource] of [
+  [
+    "first live connection recovers from a missing socket with actionable help",
+    true,
+  ],
+  [
+    "first live connection recovers from an unsupported protocol with actionable help",
+    false,
+  ],
+] as const) {
+  test(title, async ({ page }) => {
+    test.setTimeout(120_000);
+    const snapshot = await panelFixture();
+    const unsupported = structuredClone(snapshot);
+    unsupported.protocol = 23;
+    const app = await startFixtureApp({
+      prefix: "mise-first-connection-",
+      snapshot: skipInitialSource ? snapshot : unsupported,
+      skipInitialSource,
+    });
+    try {
+      await page.setViewportSize({ width: 320, height: 320 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      let navigations = 0;
+      page.on("framenavigated", (frame) => {
+        if (frame === page.mainFrame()) navigations++;
+      });
+      await page.goto(`${app.appUrl}/?stats`);
+      const placard = page
+        .getByRole("status")
+        .filter({ hasText: "DEMO SERVICE" });
+      await expect(placard).toContainText(
+        skipInitialSource
+          ? "Herdr socket unavailable"
+          : "Herdr protocol is unsupported",
+        { timeout: 15_000 },
+      );
+      await expect(placard).toContainText("Nothing here is real");
+      await expect(
+        page.getByRole("button", { name: /^example-cook,/ }),
+      ).toHaveCount(0);
+      if (skipInitialSource) {
+        await expect(placard).toContainText("Start Herdr");
+        await expect(placard).toContainText("HERDR_SOCKET_PATH");
+      } else {
+        await expect(placard).toContainText("observed 23");
+        await expect(placard).toContainText("17, 19, 20, 21, 22");
+        await expect(placard).toContainText("upgrade or downgrade Herdr");
+      }
+      const diagnostic = placard.getByText("herdr-mise --diagnostic", {
+        exact: true,
+      });
+      await diagnostic.scrollIntoViewIfNeeded();
+      await expect(diagnostic).toBeInViewport();
+      const hint = page.getByRole("note").filter({ hasText: "Blocked cooks" });
+      const pager = page.getByRole("navigation", { name: "Kitchen pages" });
+      // The placard carries the connection steps while Herdr is unavailable,
+      // so the floating first-run hint stays out of its way until recovery.
+      await expect(hint).toHaveCount(0);
+      await expect(pager).toBeVisible();
+      const viewport = { x: 0, y: 0, width: 320, height: 320 };
+      const placardBox = (await placard.boundingBox())!;
+      const pagerBox = (await pager.boundingBox())!;
+      for (const box of [placardBox, pagerBox]) expectInside(box, viewport);
+      expect(boxesIntersect(placardBox, pagerBox)).toBe(false);
+      const nextBlocked = page.getByRole("button", { name: /^Next blocked:/ });
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <= innerWidth &&
+            document.documentElement.scrollHeight <= innerHeight,
+        ),
+      ).toBe(true);
+
+      if (skipInitialSource) await app.startSource();
+      else app.setSnapshot(snapshot);
+      await expect(
+        page.getByRole("button", { name: /^example-cook, Working/ }),
+      ).toBeAttached({ timeout: 15_000 });
+      await expect(placard).toHaveCount(0);
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(
+        page.getByText(/HERDR_SOCKET_PATH|herdr-mise --diagnostic/),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText(/observed 23|upgrade or downgrade Herdr/),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("combobox", { name: "Workspace" }),
+      ).toContainText("Example Kitchen");
+      await expect(page).toHaveTitle("herdr-mise");
+      expect(navigations).toBe(1);
+      await expect(hint).toBeVisible();
+
+      const blocked = structuredClone(snapshot);
+      blocked.agents[0].agent_status = "blocked";
+      blocked.agents[0].state_change_seq = 43;
+      app.setSnapshot(blocked);
+      await expect(
+        page.getByRole("button", { name: /^example-cook, Blocked/ }),
+      ).toBeAttached({ timeout: 15_000 });
+      await page.keyboard.press("b");
+      await expect
+        .poll(
+          async () =>
+            (await sceneMetrics(page))?.blockedPlacements[
+              "fictional-terminal-20"
+            ],
+          { timeout: 15_000 },
+        )
+        .toBeTruthy();
+      const placement = (await sceneMetrics(page))!.blockedPlacements[
+        "fictional-terminal-20"
+      ]!;
+      await expect(hint).toHaveCount(1);
+      await expect(hint).toBeVisible();
+      {
+        const box = (await hint.boundingBox())!;
+        expectInside(box, viewport);
+        for (const blockedBox of [
+          placement.cookBounds,
+          placement.ticket,
+          placement.timer,
+          placement.bell,
+        ])
+          expect(boxesIntersect(box, blockedBox)).toBe(false);
+      }
+      await expect(nextBlocked).toBeEnabled();
+      await nextBlocked.click();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      expect(navigations).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+// Clearance of the first-run hint and the dense layout run per viewport, so
+// each has its own budget on the slower managed CI runner.
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+  { width: 640, height: 480 },
+  { width: 375, height: 667 },
+  { width: 320, height: 640 },
+  { width: 320, height: 320 },
+] as const) {
+  test(`first live connection layout keeps blocked work and controls clear at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const snapshot = await panelFixture();
+    const blocked = structuredClone(snapshot);
+    blocked.agents[0].agent_status = "blocked";
+    blocked.agents[0].state_change_seq = 43;
+    const app = await startFixtureApp({
+      prefix: "mise-first-connection-layout-",
+      snapshot: blocked,
+    });
+    try {
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(`${app.appUrl}/?stats`);
+      await expect(
+        page.getByRole("button", { name: /^example-cook, Blocked/ }),
+      ).toBeAttached({ timeout: 15_000 });
+      const hint = page.getByRole("note").filter({ hasText: "Blocked cooks" });
+      const pager = page.getByRole("navigation", { name: "Kitchen pages" });
+      const nextBlocked = page.getByRole("button", { name: /^Next blocked:/ });
+      await expect(hint).toBeVisible();
+      let rosterVersion = 0;
+      for (const hintVisible of [true, false]) {
+        if (!hintVisible) {
+          await hint.getByRole("button", { name: "Got it" }).click();
+          await expect(hint).toHaveCount(0);
+        }
+        for (const count of [1, 60]) {
+          rosterVersion++;
+          app.setSnapshot({
+            ...blocked,
+            agents: Array.from({ length: count }, (_, index) => ({
+              ...blocked.agents[0],
+              terminal_id: `fictional-terminal-${rosterVersion}-${index}`,
+              pane_id: `fictional-pane-${rosterVersion}-${index}`,
+            })),
+          });
+          await expect
+            .poll(async () => (await sceneMetrics(page))?.page.totalCount)
+            .toBe(count);
+          await expect(page.getByRole("alert")).toHaveCount(0);
+          {
+            const size = viewport;
+            await page.setViewportSize(size);
+            const expectedLayout = computeLayout(
+              size.width,
+              (await page.locator(".canvasHost").boundingBox())!.height,
+              reconcileStationSlots(
+                [],
+                Array.from(
+                  { length: count },
+                  (_, index) => `fictional-terminal-${rosterVersion}-${index}`,
+                ),
+              ),
+            );
+            await expect(page.locator(".appShell")).toHaveAttribute(
+              "data-pager-layout",
+              expectedLayout.pagerLayout,
+            );
+            await expect
+              .poll(async () => (await sceneMetrics(page))?.page.capacity)
+              .toBe(expectedLayout.capacity);
+            await expect
+              .poll(
+                async () =>
+                  Object.keys(
+                    (await sceneMetrics(page))?.blockedPlacements ?? {},
+                  ).length,
+              )
+              .toBeGreaterThan(0);
+            const freezer = page.getByRole("button", {
+              name: "Freezer",
+              exact: true,
+            });
+            for (const view of ["kitchen", "freezer"] as const) {
+              await expect
+                .poll(async () => (await sceneMetrics(page))?.view)
+                .toBe(view);
+              if (hintVisible) {
+                await expect(hint).toHaveCount(1);
+                await expect(hint).toBeVisible();
+                const box = (await hint.boundingBox())!;
+                expectInside(box, { x: 0, y: 0, ...size });
+              }
+              // The existing bell hint can still touch bottom-edge controls
+              // on phone widths; clearance there is tracked separately.
+              if (hintVisible && size.width >= 640) {
+                const box = (await hint.boundingBox())!;
+                for (const control of [
+                  freezer,
+                  page.getByRole("button", { name: "Open settings" }),
+                  nextBlocked,
+                  pager,
+                ]) {
+                  if (await control.isVisible())
+                    expect(
+                      boxesIntersect(box, (await control.boundingBox())!),
+                      `${size.width}x${size.height} ${count} ${view} control`,
+                    ).toBe(false);
+                }
+                const metrics = (await sceneMetrics(page))!;
+                if (view === "kitchen") {
+                  for (const blockedPlacement of Object.values(
+                    metrics.blockedPlacements,
+                  ))
+                    for (const indicator of [
+                      blockedPlacement.cookBounds,
+                      blockedPlacement.ticket,
+                      blockedPlacement.timer,
+                      blockedPlacement.bell,
+                    ])
+                      expect(
+                        boxesIntersect(box, indicator),
+                        `${size.width}x${size.height} ${count} blocked indicator`,
+                      ).toBe(false);
+                }
+              }
+              expect(
+                await page.evaluate(
+                  () => document.documentElement.scrollWidth <= innerWidth,
+                ),
+              ).toBe(true);
+              await freezer.click();
+            }
+            await expect
+              .poll(async () => (await sceneMetrics(page))?.view)
+              .toBe("kitchen");
+          }
+        }
+      }
+
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
 test("fixture-backed offscreen attention updates global title and favicon without waking the scene", async ({
   page,
 }) => {
@@ -3051,6 +3348,9 @@ test("real Herdr observations keep recap identities stable through paging and ch
 }) => {
   // About 5s locally, but over 120s on the managed CI runner's software canvas.
   test.setTimeout(240_000);
+  // Recap behavior does not depend on motion. With 24 animated cooks, the CI
+  // software canvas can starve Playwright's stability checks on clicks.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const source = JSON.parse(
       await readFile(
         join(

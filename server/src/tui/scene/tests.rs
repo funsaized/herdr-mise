@@ -4,8 +4,9 @@ use crate::protocol::{
     AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic, WorkspaceRecord,
 };
 use chrono::TimeZone;
-use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
+use tokio_util::sync::CancellationToken;
 
 fn record(id: &str, state: AgentState) -> AgentRecord {
     AgentRecord {
@@ -138,6 +139,37 @@ fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supporte
                 false,
                 &super::super::Scope::default(),
             )
+        })
+        .unwrap();
+    terminal.backend().buffer().clone()
+}
+
+fn render_help(
+    table: &AgentTable,
+    width: u16,
+    height: u16,
+    scroll: u16,
+    selected: Option<&str>,
+) -> Buffer {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal
+        .draw(|frame| {
+            draw_view_scoped_with_help_scroll(
+                frame,
+                table,
+                None,
+                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                0,
+                ColorMode::Xterm256,
+                true,
+                selected,
+                0,
+                SceneView::Kitchen,
+                true,
+                scroll,
+                false,
+                &super::super::Scope::default(),
+            );
         })
         .unwrap();
     terminal.backend().buffer().clone()
@@ -431,10 +463,10 @@ fn freezer_scene_golden_keeps_locker_landmarks_and_spirits() {
     for expected in [
         "MISE — DEMO SERVICE",
         "Mock feed",
-        "observed",
-        "23; supported: 17, 19, 20, 21, 22",
-        "upgrade or downgrade Herdr",
-        "release, then retry",
+        "Herdr protocol is unsupported",
+        "herdr-mise",
+        "--diagnostic",
+        "? help",
         "Nothing here",
         "FREEZER EMPTY · NO ENDED SESSIONS · LIMIT 64",
     ] {
@@ -1033,6 +1065,287 @@ fn real_herdr_help_scroll_exposes_complete_locators_at_20x12() {
 }
 
 #[test]
+fn demo_and_error_states_render_concrete_next_step() {
+    // Real protocol-20 fixture through the Normalizer, rendered by TestBackend.
+    let value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+    ))
+    .unwrap();
+    let normalized = Normalizer::default()
+        .normalize_snapshot_value(value, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let live = snapshot(
+        AppMode::Live,
+        SourceStatus::Connected,
+        None,
+        normalized.agents,
+    );
+
+    let connected = text(&render(&live, 120, 40, 0));
+    assert!(connected.contains("Connected to Herdr"), "{connected}");
+    let connected_help = text(&render_help(&live, 120, 40, 0, None));
+    assert!(
+        connected_help.contains("Source: Connected to Herdr"),
+        "{connected_help}"
+    );
+    // The generic first-connection guide remains after recovery.
+    assert!(
+        connected_help.contains("First connection: start Herdr"),
+        "{connected_help}"
+    );
+    // ...while the stale source-specific recovery copy is gone.
+    for stale in [
+        "HERDR_SOCKET_PATH",
+        "herdr-mise --diagnostic",
+        "observed 23",
+    ] {
+        assert!(
+            !connected_help.contains(stale),
+            "stale {stale:?} after recovery: {connected_help}"
+        );
+    }
+
+    let mut unsupported = AgentTable::default();
+    unsupported.apply(
+        serde_json::from_str::<AgentStateEvent>(include_str!(
+            "../../../../protocol/fixtures/snapshot-demo-unsupported.v1.json"
+        ))
+        .unwrap(),
+    );
+    let status = text(&render(&unsupported, 120, 40, 0));
+    assert!(status.contains("Herdr protocol is unsupported"), "{status}");
+    assert!(status.contains("run herdr-mise --diagnostic"), "{status}");
+    assert!(status.contains("? help"), "{status}");
+    for moved in ["observed 23", "supported: 17, 19, 20, 21, 22"] {
+        assert!(
+            !status.contains(moved),
+            "status kept help text {moved:?}: {status}"
+        );
+    }
+    let help = text(&render_help(&unsupported, 140, 48, 0, None));
+    for expected in [
+        "observed 23",
+        "supported: 17, 19, 20, 21, 22",
+        "upgrade or downgrade Herdr to a tested release, then retry",
+        "herdr-mise --diagnostic",
+    ] {
+        assert!(help.contains(expected), "help missing {expected:?}: {help}");
+    }
+    let malformed = snapshot(
+        AppMode::Demo,
+        SourceStatus::IncompatibleResponse,
+        Some(SourceDiagnostic {
+            observed_protocol: 20,
+            supported_protocols: vec![20],
+            next_action: "ensure terminal identities are unique\u{1b}, then retry".into(),
+        }),
+        vec![],
+    );
+    let help = text(&render_help(&malformed, 140, 48, 0, None));
+    assert!(
+        help.contains("ensure terminal identities are unique, then retry"),
+        "{help}"
+    );
+    assert!(
+        !help.contains('\u{1b}') && !help.contains("observed 20"),
+        "{help}"
+    );
+
+    // Every source status pairs its condition with a concrete next step.
+    for (source_status, step) in [
+        (SourceStatus::UnavailableSocket, "start Herdr"),
+        (SourceStatus::Timeout, "retry"),
+        (
+            SourceStatus::UnsupportedProtocol,
+            "run herdr-mise --diagnostic",
+        ),
+        (
+            SourceStatus::IncompatibleResponse,
+            "run herdr-mise --diagnostic",
+        ),
+    ] {
+        let table = snapshot(AppMode::Demo, source_status.clone(), None, vec![]);
+        let status = text(&render(&table, 120, 40, 0));
+        assert!(
+            status.contains(step),
+            "{source_status:?} missing {step:?}: {status}"
+        );
+        assert!(
+            status.contains("? help"),
+            "{source_status:?} missing help key: {status}"
+        );
+        assert!(status.contains("DEMO SERVICE"), "{status}");
+        assert!(status.contains("Nothing here is real"), "{status}");
+        let help = text(&render_help(&table, 140, 48, 0, None));
+        assert!(help.contains("herdr-mise --diagnostic"), "{help}");
+        let advice = match source_status {
+            SourceStatus::UnavailableSocket => "HERDR_SOCKET_PATH",
+            SourceStatus::Timeout => "running and responding",
+            SourceStatus::UnsupportedProtocol => "supported release",
+            SourceStatus::IncompatibleResponse => "incompatible response",
+            SourceStatus::Connected => unreachable!(),
+        };
+        assert!(help.contains(advice), "{help}");
+        if source_status == SourceStatus::IncompatibleResponse {
+            assert!(!help.contains("did not respond in time"), "{help}");
+        }
+    }
+
+    unsupported.apply(AgentStateEvent::Snapshot {
+        version: 1,
+        mode: AppMode::Live,
+        source_status: SourceStatus::Connected,
+        source_diagnostic: None,
+        agents: live.agents().cloned().collect(),
+        workspaces: None,
+    });
+    let recovered = text(&render_help(&unsupported, 140, 48, 0, None));
+    for stale in [
+        "observed 23",
+        "supported:",
+        "unsupported",
+        "herdr-mise --diagnostic",
+        "upgrade or downgrade",
+    ] {
+        assert!(!recovered.contains(stale), "{recovered}");
+    }
+
+    // Empty live recovery drops the stale source copy and keeps the guide.
+    let empty = snapshot(AppMode::Live, SourceStatus::Connected, None, vec![]);
+    let status = text(&render(&empty, 120, 40, 0));
+    assert!(
+        status.contains("Waiting for agents — start one in herdr · ? help"),
+        "{status}"
+    );
+    let help = text(&render_help(&empty, 120, 40, 0, None));
+    assert!(help.contains("First connection: start Herdr"), "{help}");
+    for stale in [
+        "HERDR_SOCKET_PATH",
+        "herdr-mise --diagnostic",
+        "Herdr socket unavailable",
+    ] {
+        assert!(
+            !help.contains(stale),
+            "stale {stale:?} after recovery: {help}"
+        );
+    }
+}
+
+#[test]
+fn compact_help_scroll_retains_locators_and_guides_recovery() {
+    let value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/snapshot-herdr-0.8.2-p20.json"
+    ))
+    .unwrap();
+    let mut normalized = Normalizer::default()
+        .normalize_snapshot_value(value, "2026-08-13T12:00:00Z")
+        .unwrap();
+    let pane = format!("pane{}", "abcdefghijklmnop".repeat(5));
+    let workspace = format!("/work/{}", "qrstuvwxyzabcdef".repeat(5));
+    normalized.agents[0].pane_id = Some(pane.clone());
+    normalized.agents[0].workspace = workspace.clone();
+    normalized.agents[0].state = AgentState::Blocked;
+    let selected = normalized.agents[0].id.clone();
+    let mut table = snapshot(
+        AppMode::Demo,
+        SourceStatus::UnavailableSocket,
+        None,
+        normalized.agents,
+    );
+
+    let mut scroll = 0_u16;
+    let mut visible = String::new();
+    for _ in 0..80 {
+        let buffer = render_help(&table, 20, 12, scroll, Some(&selected));
+        let top_line = (1..19)
+            .map(|x| buffer.cell((x, 1)).unwrap().symbol())
+            .collect::<String>();
+        visible.push_str(top_line.trim_end());
+        super::super::scroll_help(KeyCode::Down, &mut scroll);
+    }
+    let flat = visible.replace(' ', "");
+    assert!(flat.contains(&pane), "pane locator was clipped: {visible}");
+    assert!(
+        flat.contains(&workspace),
+        "workspace locator was clipped: {visible}"
+    );
+    // The recovery command wraps at 20 columns; its tokens stay reachable.
+    assert!(
+        flat.contains("herdr-mise--diagnostic")
+            && flat.contains("HERDR_SOCKET_PATH")
+            && flat.contains("StartHerdr"),
+        "recovery command was not reachable: {visible}"
+    );
+    let wide = text(&render_help(&table, 120, 24, 0, Some(&selected)));
+    assert!(
+        wide.contains("herdr-mise --diagnostic"),
+        "help lost the recovery command: {wide}"
+    );
+
+    // Keyboard close returns to the blocked station status.
+    let mut help_open = true;
+    let mut selected_id = Some(selected.clone());
+    let mut scene_view = SceneView::Kitchen;
+    let mut scope = super::super::Scope::default();
+    let shutdown = CancellationToken::new();
+    assert!(!super::super::handle_key_with_scope(
+        KeyCode::Esc,
+        &table,
+        &mut selected_id,
+        &mut scene_view,
+        &mut help_open,
+        &mut scope,
+        &shutdown,
+    ));
+    assert!(!help_open);
+    let closed = text(&render(&table, 20, 12, 0));
+    // The blocked roster state and the source status return once help closes
+    // (the 20-column state cell truncates "BLOCKED" to "BLO").
+    assert!(closed.contains("BLO"), "{closed}");
+    assert!(closed.contains("Herdr socket unavailable"), "{closed}");
+
+    table.apply(AgentStateEvent::Snapshot {
+        version: 1,
+        mode: AppMode::Live,
+        source_status: SourceStatus::Connected,
+        source_diagnostic: None,
+        agents: table.agents().cloned().collect(),
+        workspaces: None,
+    });
+    let mut recovered = String::new();
+    scroll = 0;
+    for _ in 0..80 {
+        let buffer = render_help(&table, 20, 12, scroll, Some(&selected));
+        let row = (1..19)
+            .map(|x| buffer.cell((x, 1)).unwrap().symbol())
+            .collect::<String>();
+        recovered.push_str(row.trim_end());
+        super::super::scroll_help(KeyCode::Down, &mut scroll);
+    }
+    let recovered = recovered.replace(' ', "");
+    assert!(
+        recovered.contains(&pane) && recovered.contains(&workspace),
+        "{recovered}"
+    );
+    assert!(
+        recovered.contains("Firstconnection:startHerdr"),
+        "{recovered}"
+    );
+    for stale in [
+        "HERDR_SOCKET_PATH",
+        "herdr-mise--diagnostic",
+        "socketunavailable",
+    ] {
+        assert!(!recovered.contains(stale), "{recovered}");
+    }
+    let closed = text(&render(&table, 20, 12, 0));
+    assert!(
+        closed.contains("BLO") && closed.contains("Connected to Herdr"),
+        "{closed}"
+    );
+}
+
+#[test]
 fn responsive_boundaries_and_compact_fallback_are_rendered() {
     let three = live_table(
         (0..3)
@@ -1387,6 +1700,10 @@ fn tui_sanitizes_external_strings_without_obscuring_status() {
         let output = text(&buffer);
         assert!(output.contains("MISE — DEMO SERVICE"), "{output}");
         assert!(output.contains("Herdr protocol is unsupported"), "{output}");
-        assert!(output.contains("upgrade now"), "{output}");
+
+        assert!(
+            output.contains("herdr-mise") && output.contains("--diagnostic"),
+            "{output}"
+        );
     }
 }
