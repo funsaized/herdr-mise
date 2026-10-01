@@ -9,6 +9,7 @@
 // must never advance past `productClockCeiling(scene)` while a blocked frame
 // must stay blocked, or the 3s blocked / 8s resume timers race the editorial
 // timeline.
+import { PRODUCT_INSTALL_COMMANDS } from "./product-demo-config.mjs";
 
 export const PRODUCT_SCENES = Object.freeze([
   "busy",
@@ -40,12 +41,7 @@ export const PRODUCT_SCENE_QUERY = Object.freeze({
   installation: "preset=working&agents=6&theme=light",
 });
 
-// README quick start, shown verbatim. Never executed by this module.
-export const PRODUCT_INSTALL_COMMANDS = Object.freeze([
-  "brew install herdr",
-  "herdr plugin install funsaized/herdr-mise",
-  "herdr plugin action invoke open --plugin mise.kitchen",
-]);
+export { PRODUCT_INSTALL_COMMANDS };
 
 export const PRODUCT_CAPTION_ID = "capture-caption";
 export const PRODUCT_INSTALL_CARD_ID = "product-install-card";

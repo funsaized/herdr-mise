@@ -74,7 +74,7 @@ export const storyboard = Object.freeze([
     start: 66,
     end: 75,
     scene: "installation",
-    caption: "herdr-mise · install from source, then open the kitchen.",
+    caption: "herdr-mise · install the Herdr plugin, then open the kitchen.",
   },
 ]);
 
@@ -223,6 +223,14 @@ export function webVtt(clip, source = storyboard) {
   return `WEBVTT\n\n${body}\n`;
 }
 
+// README quick start, shown verbatim in the installation segment and listed
+// in transcripts. Never executed by capture.
+export const PRODUCT_INSTALL_COMMANDS = Object.freeze([
+  "brew install herdr",
+  "herdr plugin install funsaized/herdr-mise",
+  "herdr plugin action invoke open --plugin mise.kitchen",
+]);
+
 export function transcript(clip, label, source = storyboard) {
   if (typeof label !== "string" || label.trim() === "")
     throw new Error("transcript: a provenance label is required");
@@ -233,8 +241,12 @@ export function transcript(clip, label, source = storyboard) {
     `${deliverable.durationSeconds}s · ${frameRate} fps · ${outputDimensions.width}×${outputDimensions.height}`,
     "",
   ];
-  for (const cue of cuesFor(deliverable, source))
+  for (const cue of cuesFor(deliverable, source)) {
     lines.push(`${clock(cue.start)}–${clock(cue.end)}  ${cue.text}`);
+    if (cue.scene === "installation")
+      for (const command of PRODUCT_INSTALL_COMMANDS)
+        lines.push(`             $ ${command}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 
