@@ -349,8 +349,6 @@ test("working cooks drive continuous scene motion", async ({ page }) => {
 test("playground introduction exposes install and replay without expanding the explorer", async ({
   page,
 }) => {
-  // Walks many viewports and rosters; CI runners take over 2 minutes.
-  test.setTimeout(240_000);
   const sockets: string[] = [],
     escapedRequests: string[] = [];
   page.on("websocket", (socket) => sockets.push(socket.url()));
@@ -380,18 +378,45 @@ test("playground introduction exposes install and replay without expanding the e
   await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
   for (const name of ["Scene", "Cooks"])
     await expect(explorer.getByRole("combobox", { name })).toBeHidden();
-  for (const viewport of [
-    { width: 320, height: 320 },
-    { width: 320, height: 640 },
-    { width: 640, height: 720 },
-    { width: 1280, height: 720 },
-    { width: 1280, height: 800 },
-    { width: 1440, height: 900 },
-    { width: 1920, height: 1080 },
-    { width: 640, height: 480 },
-    { width: 375, height: 667 },
-  ]) {
+  await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
+  await expect(
+    page.getByRole("button", { name: /^Codex, Blocked — .*open details$/ }),
+  ).toHaveCount(1, { timeout: 7_000 });
+  const url = page.url();
+  await Promise.all([page.waitForNavigation(), replay.click()]);
+  expect(page.url()).toBe(url);
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toHaveCount(1);
+  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
+  expect(sockets).toEqual([]);
+  expect(escapedRequests).toEqual([]);
+});
+
+for (const viewport of [
+  { width: 320, height: 320 },
+  { width: 320, height: 640 },
+  { width: 640, height: 720 },
+  { width: 1280, height: 720 },
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+  { width: 640, height: 480 },
+  { width: 375, height: 667 },
+] as const) {
+  test(`playground introduction stays clear of the kitchen at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const explorer = page.getByRole("complementary", {
+        name: "Preview explorer",
+      }),
+      install = explorer.getByRole("link", { name: "Install for Herdr" }),
+      replay = explorer.getByRole("button", { name: "Replay demo" });
     await page.setViewportSize(viewport);
+    await page.goto("/?preset=blocked&agents=1&stats");
     for (const count of [1, 6, 12]) {
       await page.evaluate(() => localStorage.removeItem("mise-bell-hint"));
       await page.goto(`/?preset=blocked&agents=${count}&stats`);
@@ -470,23 +495,8 @@ test("playground introduction exposes install and replay without expanding the e
         await explorer.getByText("Preview explorer", { exact: true }).click();
       }
     }
-  }
-  await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
-  await expect(
-    page.getByRole("button", { name: /^Codex, Blocked — .*open details$/ }),
-  ).toHaveCount(1, { timeout: 7_000 });
-  const url = page.url();
-  await Promise.all([page.waitForNavigation(), replay.click()]);
-  expect(page.url()).toBe(url);
-  await expect(
-    page.getByRole("button", {
-      name: "Codex, Working — on the fire, open details",
-    }),
-  ).toHaveCount(1);
-  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
-  expect(sockets).toEqual([]);
-  expect(escapedRequests).toEqual([]);
-});
+  });
+}
 
 test("preview explorer reloads shareable scenes and preserves larger URL rosters", async ({
   page,
