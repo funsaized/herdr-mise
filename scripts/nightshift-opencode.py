@@ -59,8 +59,14 @@ class Processes:
                     fields = stream.read().rsplit(b')', 1)[1].split()
                 if fields[0] == b'Z':
                     return None
-                with open(f'/proc/{pid}/environ', 'rb') as stream:
-                    entries = stream.read(1048576).split(b'\0')
+                try:
+                    with open(f'/proc/{pid}/environ', 'rb') as stream:
+                        entries = stream.read(1048576).split(b'\0')
+                except PermissionError:
+                    # Non-dumpable processes (e.g. after a setuid exec) hide
+                    # their environment even from their owner; they cannot
+                    # be attributed to this invocation and are skipped.
+                    return None
                 return fields[19], entries
             # proc_bsdinfo has a stable 136-byte ABI, including start timeval.
             info = ctypes.create_string_buffer(136)

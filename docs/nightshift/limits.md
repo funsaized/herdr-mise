@@ -44,8 +44,10 @@ service and accurate diagnostics.
   descendants across setsid/reparenting, bounded below the released executor's
   five-second grace. Both-role Seatbelt lifecycle acceptance passed on the
   control host with executor 2026.09.30.1; see the [lifecycle observations](worker-isolation.md#invocation-lifecycle-304).
-- Arbitrary supervisor SIGKILL, host/shared-server death and descendants erasing
-  invocation identity remain outside the cleanup claim. If an ordinary supported
+- Arbitrary supervisor SIGKILL, host/shared-server death, descendants erasing
+  invocation identity, and non-dumpable descendants whose environment cannot be
+  read (for example after a setuid exec on Linux) remain outside the cleanup
+  claim. If an ordinary supported
   executor path bypasses supervisor cleanup, require surviving executor-owned
   cleanup upstream; do not weaken acceptance or hide a leaked port with reuse.
 - Complete home isolation, exclusive scratch, and provider-only network egress
