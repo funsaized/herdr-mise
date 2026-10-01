@@ -40,6 +40,19 @@ function VisualExplorer({ search }: { search: string }) {
   }
   return (
     <aside className="visualExplorer" aria-label="Preview explorer">
+      <p>
+        <strong>AI coding agents, at a glance</strong> — a pixel-art kitchen for
+        Herdr. Runs locally and read-only; it never controls agents. This
+        playground uses deterministic demo data.
+      </p>
+      <div className="visualExplorerActions">
+        <a href="https://github.com/funsaized/herdr-mise#quick-start">
+          Install for Herdr
+        </a>
+        <button type="button" onClick={() => location.reload()}>
+          Replay demo
+        </button>
+      </div>
       <details>
         <summary>Preview explorer</summary>
         <div>
@@ -74,15 +87,9 @@ function VisualExplorer({ search }: { search: string }) {
               </select>
             </label>
             <button type="submit">Load preview</button>
-            <button type="button" onClick={() => location.reload()}>
-              Replay
-            </button>
           </form>
           <span>Loading a scene resets this preview.</span>
           <nav aria-label="Project links">
-            <a href="https://github.com/funsaized/herdr-mise#quick-start">
-              Install for Herdr
-            </a>
             <a href="https://github.com/funsaized/herdr-mise">Source</a>
           </nav>
         </div>

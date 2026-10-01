@@ -916,6 +916,12 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
       page.getByRole("link", { name: /Install for Herdr|Source/ }),
     ).toHaveCount(0);
     expect(escapedRequests).toEqual([]);
+    await expect(page.getByText("AI coding agents, at a glance")).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("button", { name: "Replay demo" })).toHaveCount(
+      0,
+    );
     const sequenceStation = page.getByRole("button", {
       name: "example-cook, Working — on the fire, open details",
     });
@@ -3043,7 +3049,8 @@ test("real Herdr observations drive the service recap without counting recovery 
 test("real Herdr observations keep recap identities stable through paging and churn", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  // About 5s locally, but over 120s on the managed CI runner's software canvas.
+  test.setTimeout(240_000);
   const source = JSON.parse(
       await readFile(
         join(

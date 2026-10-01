@@ -346,6 +346,158 @@ test("working cooks drive continuous scene motion", async ({ page }) => {
     .toBe(true);
 });
 
+test("playground introduction exposes install and replay without expanding the explorer", async ({
+  page,
+}) => {
+  const sockets: string[] = [],
+    escapedRequests: string[] = [];
+  page.on("websocket", (socket) => sockets.push(socket.url()));
+  page.on("request", (request) => {
+    if (new URL(request.url()).origin !== visualOrigin)
+      escapedRequests.push(request.url());
+  });
+  await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
+  const explorer = page.getByRole("complementary", {
+      name: "Preview explorer",
+    }),
+    install = explorer.getByRole("link", { name: "Install for Herdr" }),
+    replay = explorer.getByRole("button", { name: "Replay demo" });
+  await expect(
+    explorer.getByText("AI coding agents, at a glance"),
+  ).toBeVisible();
+  await expect(explorer.locator("p")).toContainText(
+    "a pixel-art kitchen for Herdr. Runs locally and read-only; it never controls agents. This playground uses deterministic demo data.",
+  );
+  await expect(install).toBeVisible();
+  await expect(install).toHaveAttribute(
+    "href",
+    "https://github.com/funsaized/herdr-mise#quick-start",
+  );
+  await install.click({ trial: true });
+  await expect(replay).toBeVisible();
+  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
+  for (const name of ["Scene", "Cooks"])
+    await expect(explorer.getByRole("combobox", { name })).toBeHidden();
+  await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
+  await expect(
+    page.getByRole("button", { name: /^Codex, Blocked — .*open details$/ }),
+  ).toHaveCount(1, { timeout: 7_000 });
+  const url = page.url();
+  await Promise.all([page.waitForNavigation(), replay.click()]);
+  expect(page.url()).toBe(url);
+  await expect(
+    page.getByRole("button", {
+      name: "Codex, Working — on the fire, open details",
+    }),
+  ).toHaveCount(1);
+  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
+  expect(sockets).toEqual([]);
+  expect(escapedRequests).toEqual([]);
+});
+
+for (const viewport of [
+  { width: 320, height: 320 },
+  { width: 320, height: 640 },
+  { width: 640, height: 720 },
+  { width: 1280, height: 720 },
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+  { width: 640, height: 480 },
+  { width: 375, height: 667 },
+] as const) {
+  test(`playground introduction stays clear of the kitchen at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const explorer = page.getByRole("complementary", {
+        name: "Preview explorer",
+      }),
+      install = explorer.getByRole("link", { name: "Install for Herdr" }),
+      replay = explorer.getByRole("button", { name: "Replay demo" });
+    await page.setViewportSize(viewport);
+    await page.goto("/?preset=blocked&agents=1&stats");
+    for (const count of [1, 6, 12]) {
+      await page.evaluate(() => localStorage.removeItem("mise-bell-hint"));
+      await page.goto(`/?preset=blocked&agents=${count}&stats`);
+      await expect
+        .poll(
+          async () =>
+            Object.keys((await sceneMetrics(page))?.stationCells ?? {}).length,
+        )
+        .toBeGreaterThan(0);
+      for (const dismissed of [false, true]) {
+        if (dismissed)
+          await page.getByRole("button", { name: "Got it" }).click();
+        for (const expanded of [false, true]) {
+          if (expanded)
+            await explorer
+              .getByText("Preview explorer", { exact: true })
+              .click();
+          await explorer.scrollIntoViewIfNeeded();
+          const surface = (await explorer.boundingBox())!,
+            canvas = (await page.locator(".canvasHost").boundingBox())!,
+            layout = computeLayout(
+              canvas.width,
+              canvas.height,
+              Array.from({ length: count }, (_, index) => String(index)),
+            ),
+            boardWidth = Math.min(92 * layout.unit, canvas.width * 0.36),
+            board = {
+              x: (canvas.width - boardWidth) / 2 - 2 * layout.unit,
+              y: 2 * layout.unit,
+              width: boardWidth + 4 * layout.unit,
+              height:
+                Math.max(
+                  22 * layout.unit,
+                  layout.wall.height - 15 * layout.unit,
+                ) +
+                4 * layout.unit,
+            },
+            metrics = (await sceneMetrics(page))!;
+          for (const rect of [
+            board,
+            layout.pass,
+            ...Object.values(metrics.stationCells),
+            ...Object.values(metrics.blockedPlacements).map(({ bell }) => bell),
+          ])
+            expect(
+              boxesIntersect(surface, {
+                ...rect,
+                x: canvas.x + rect.x,
+                y: canvas.y + rect.y,
+              }),
+              `${viewport.width}×${viewport.height}: explorer must clear kitchen controls`,
+            ).toBe(false);
+          for (const other of [
+            placard(page),
+            page.locator(".serviceStrip"),
+            page.getByRole("button", { name: "Open settings" }),
+            page.getByRole("button", { name: "Freezer" }),
+            page.locator(".kitchenPager"),
+            page.locator(".visualTuiFigure"),
+            page.locator(".firstHint"),
+          ]) {
+            if (await other.isVisible())
+              expect(
+                boxesIntersect(surface, (await other.boundingBox())!),
+                `${viewport.width}×${viewport.height}: explorer must clear ${await other.getAttribute("class")}`,
+              ).toBe(false);
+          }
+          await install.click({ trial: true });
+          await replay.click({ trial: true });
+          expect(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          ).toBe(true);
+        }
+        await explorer.getByText("Preview explorer", { exact: true }).click();
+      }
+    }
+  });
+}
+
 test("preview explorer reloads shareable scenes and preserves larger URL rosters", async ({
   page,
 }) => {
@@ -422,7 +574,7 @@ test("preview explorer reloads shareable scenes and preserves larger URL rosters
   const currentUrl = page.url();
   await Promise.all([
     page.waitForNavigation(),
-    explorer.getByRole("button", { name: "Replay" }).click(),
+    explorer.getByRole("button", { name: "Replay demo" }).click(),
   ]);
   expect(page.url()).toBe(currentUrl);
   await expect(
