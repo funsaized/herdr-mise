@@ -435,12 +435,20 @@ export function Chrome(props: ChromeProps) {
           </figure>
         </>
       )}
-      {props.hintVisible && (
-        <div className="firstHint" role="note">
-          Blocked cooks ring the service bell.{" "}
-          <button onClick={props.onDismissHint}>Got it</button>
-        </div>
-      )}
+      {/* While Herdr is unreachable or incompatible, the demo placard
+          carries the connection steps; the floating hint would repeat them
+          and crowd the placard on small screens. */}
+      {props.hintVisible &&
+        !(
+          props.coarse.mode === "demo" &&
+          props.coarse.sourceStatus !== "connected" &&
+          import.meta.env.MODE !== "visual"
+        ) && (
+          <div className="firstHint" role="note">
+            Blocked cooks ring the service bell.{" "}
+            <button onClick={props.onDismissHint}>Got it</button>
+          </div>
+        )}
       {props.statsOpen && <StatsOverlay metrics={props.metrics} />}
     </>
   );

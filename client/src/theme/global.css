@@ -1141,6 +1141,10 @@ summary:focus-visible {
   }
   .workspaceControls > .demoPlacard {
     top: 110px;
+    /* Connection guidance can outgrow short viewports; scroll it rather
+       than letting it run under the kitchen pager. */
+    max-height: calc(100vh - 110px - var(--pagerReservedHeight) - 8px);
+    overflow-y: auto;
   }
   .demoPlacard h2 {
     font-size: 13px;

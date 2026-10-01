@@ -90,6 +90,36 @@ Herdr-managed pane registration.
 
 ## Local run
 
+### First live connection
+
+Start Herdr with `herdr`, then use the [installed plugin action](#installation)
+to open Mise. Standalone users can run `herdr-mise --tui` for the terminal or
+`herdr-mise` and open <http://127.0.0.1:8686> for the browser (use the configured
+port if overridden). Installation is separate from starting Herdr.
+
+Live state replaces the deterministic `DEMO SERVICE` roster automatically when
+a compatible source becomes available. Demo is not a successful live connection.
+`Waiting for agents — start one in herdr` is a connected, empty source: start
+an agent in Herdr. The hosted playground is an intentional preview, not a probe
+of your local installation.
+
+For troubleshooting, run `herdr-mise --diagnostic` in the same environment as
+Mise, including its `HERDR_SOCKET_PATH`, HOME, and XDG settings. The plugin
+binary need not be on PATH: from the installed plugin directory, run
+`./target/herdr-plugin/herdr-mise/current/bin/herdr-mise --diagnostic`.
+Standalone users whose launcher is not on PATH can use
+`${XDG_BIN_HOME:-$HOME/.local/bin}/herdr-mise --diagnostic` (or their configured
+install location). See [CLI diagnostic](#cli-diagnostic): this is a two-second
+source probe, not proof that the HTTP/WebSocket service is listening.
+
+For missing sockets, [check discovery and overrides](#herdr-socket-unavailable);
+check or unset an incorrect `HERDR_SOCKET_PATH`. For timeout, check that Herdr
+responds and run the probe. For unsupported protocols, follow the observed and
+supported protocol advice and [compatibility troubleshooting](#herdr-protocol-not-supported).
+An incompatible response is a distinct source problem; use the probe without
+sharing raw payloads. Browser-to-Mise incompatible-feed messages instead call
+for updating or restarting Mise, not changing Herdr's socket.
+
 ### Browser attention
 
 An open browser page shows the global known blocked count in its tab title and a

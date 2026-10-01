@@ -44,6 +44,16 @@ export function ModeTreatment({
         ? ` — ${sourceDiagnostic.nextAction}`
         : ""
     : "";
+  const sourceHelp = {
+    unavailableSocket:
+      "Start Herdr. Check or unset an incorrect HERDR_SOCKET_PATH.",
+    timeout: "Check that Herdr responds, then retry.",
+    unsupportedProtocol: sourceDiagnostic
+      ? "Check the tested Herdr releases before changing versions."
+      : "Check Herdr compatibility and use a tested release.",
+    incompatibleResponse: "Check Herdr's response compatibility, then retry.",
+    connected: "",
+  }[sourceStatus];
   if (mode === "connecting")
     return (
       <div className="emptyPill" role="status">
@@ -60,6 +70,12 @@ export function ModeTreatment({
             ? "Intentional preview — deterministic mock feed. Nothing here is real."
             : `Mock feed — ${sourceStatusText[sourceStatus]}${detail}. Nothing here is real.`}
         </p>
+        {!intentionalPreview && sourceHelp && (
+          <p>
+            {sourceHelp} Run <code>herdr-mise --diagnostic</code> from the same
+            environment. Mise reconnects automatically.
+          </p>
+        )}
         <small>POSTED PER ORDINANCE 86.86</small>
       </div>
     );
@@ -82,7 +98,7 @@ export function ModeTreatment({
           <small>
             {disconnectReason === "incompatibleFeed"
               ? "The browser rejected repeated state updates from Mise. Update or restart Mise; no malformed state was applied."
-              : `${sourceStatus !== "connected" ? `${sourceStatusText[sourceStatus]}${detail}. ` : ""}The kitchen will reopen on its own. Check that Mise is running; Mise will reconnect to Herdr when its local source is available.`}
+              : `${!intentionalPreview && sourceStatus !== "connected" ? `${sourceStatusText[sourceStatus]}${detail}. ${sourceHelp} Run herdr-mise --diagnostic from the same environment. ` : ""}The kitchen will reopen on its own. Check that Mise is running; Mise will reconnect to Herdr when its local source is available.`}
           </small>
         </div>
       </div>

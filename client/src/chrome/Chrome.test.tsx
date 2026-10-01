@@ -241,68 +241,91 @@ describe("chrome interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     expect(close).toHaveBeenCalledOnce();
   });
-  it("integrates hover, detail selection, close, and first-run dismissal", () => {
-    const store = new AgentStore();
-    store.apply({
-      version: 1,
-      type: "snapshot",
-      mode: "live",
-      sourceStatus: "connected",
-      agents: [record],
-    });
-    store.select("a");
-    const dismiss = vi.fn(),
-      props = {
-        store,
-        coarse: store.coarse(),
-        hoveredId: "a",
-        focusedId: null,
-        hits: [
-          {
-            kind: "station" as const,
-            id: "a",
-            rect: { x: 10, y: 100, width: 80, height: 50 },
-          },
-        ],
-        settingsOpen: false,
-        statsOpen: false,
-        lastUpdateSeconds: 0,
-        metrics: { drawCalls: 0, socketBytesPerSecond: 0 },
-        onCloseSettings: () => {},
-        onOpenSettings: () => {},
-        hintVisible: true,
-        onDismissHint: dismiss,
-        view: "kitchen" as const,
-        onToggleFreezer: () => {},
-        onNextBlocked: () => {},
-        onRevealCleared: () => {},
-      },
-      { rerender } = render(<Chrome {...props} />);
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    expect(screen.getByLabelText("refactor-auth details")).toBeTruthy();
-    expect(store.coarse().selectedId).toBe("a");
-    fireEvent.click(screen.getByText("Got it"));
-    expect(dismiss).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
-    expect(store.coarse().selectedId).toBeNull();
-    rerender(<Chrome {...props} coarse={store.coarse()} hintVisible={false} />);
-    expect(screen.getByRole("tooltip").textContent).toContain(
-      "Working — on the fire",
-    );
-    store.select("a");
-    rerender(
-      <Chrome
-        {...props}
-        coarse={store.coarse()}
-        settingsOpen
-        hintVisible={false}
-      />,
-    );
-    expect(screen.getByLabelText("Settings")).toBeTruthy();
-    expect(screen.queryByLabelText("refactor-auth details")).toBeNull();
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    expect(document.querySelectorAll("aside.panel")).toHaveLength(1);
+});
+it("guides the first live connection and preserves hint dismissal", () => {
+  const store = new AgentStore();
+  store.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [record],
   });
+  store.select("a");
+  const dismiss = vi.fn(),
+    props = {
+      store,
+      coarse: store.coarse(),
+      hoveredId: "a",
+      focusedId: null,
+      hits: [
+        {
+          kind: "station" as const,
+          id: "a",
+          rect: { x: 10, y: 100, width: 80, height: 50 },
+        },
+      ],
+      settingsOpen: false,
+      statsOpen: false,
+      lastUpdateSeconds: 0,
+      metrics: { drawCalls: 0, socketBytesPerSecond: 0 },
+      onCloseSettings: () => {},
+      onOpenSettings: () => {},
+      hintVisible: true,
+      onDismissHint: dismiss,
+      view: "kitchen" as const,
+      onToggleFreezer: () => {},
+      onNextBlocked: () => {},
+      onRevealCleared: () => {},
+    },
+    { rerender } = render(<Chrome {...props} />);
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  expect(screen.getByLabelText("refactor-auth details")).toBeTruthy();
+  expect(store.coarse().selectedId).toBe("a");
+  expect(screen.getByRole("note").textContent).toContain(
+    "Blocked cooks ring the service bell",
+  );
+  fireEvent.click(screen.getByText("Got it"));
+  expect(dismiss).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
+  expect(store.coarse().selectedId).toBeNull();
+  rerender(<Chrome {...props} coarse={store.coarse()} hintVisible={false} />);
+  expect(screen.queryByRole("note")).toBeNull();
+  expect(screen.getByRole("tooltip").textContent).toContain(
+    "Working — on the fire",
+  );
+  store.select("a");
+  rerender(
+    <Chrome
+      {...props}
+      coarse={store.coarse()}
+      settingsOpen
+      hintVisible={false}
+    />,
+  );
+  expect(screen.getByLabelText("Settings")).toBeTruthy();
+  expect(screen.queryByLabelText("refactor-auth details")).toBeNull();
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  expect(document.querySelectorAll("aside.panel")).toHaveLength(1);
+  store.select(null);
+  store.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "demo",
+    sourceStatus: "unavailableSocket",
+    agents: [],
+  });
+  // While Herdr is unavailable the placard carries the connection steps, so
+  // the undismissed first-run hint stays hidden until the source recovers.
+  rerender(<Chrome {...props} coarse={store.coarse()} hintVisible />);
+  expect(screen.queryByRole("note")).toBeNull();
+  expect(screen.getByRole("status").textContent).toContain("HERDR_SOCKET_PATH");
+  expect(screen.getByRole("status").textContent).toContain(
+    "herdr-mise --diagnostic",
+  );
+  store.destroy();
+});
+describe("chrome interactions", () => {
   it("exposes a native boolean freezer toggle", () => {
     const store = new AgentStore(),
       toggle = vi.fn();
@@ -756,6 +779,94 @@ it("copies the exact pane locator and announces clipboard failure", async () => 
   expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
 });
 
+it("shows contextual first live connection steps without misdiagnosing preview or browser errors", () => {
+  const store = new AgentStore(),
+    socket = new FakeSocket(),
+    client = new AgentWebSocketClient("ws://test", store, () => socket);
+  client.start();
+  socket.open();
+  socket.message(unsupported);
+  const treatment = (extra = {}) => {
+    const coarse = store.coarse();
+    return (
+      <ModeTreatment
+        mode={coarse.mode}
+        sourceStatus={coarse.sourceStatus}
+        sourceDiagnostic={coarse.sourceDiagnostic}
+        lastUpdateSeconds={0}
+        {...extra}
+      />
+    );
+  };
+  const { rerender } = render(treatment());
+  expect(screen.getByRole("status").textContent).toContain("observed 23");
+  expect(screen.getByRole("status").textContent).toContain(
+    "supported: 17, 19, 20, 21, 22",
+  );
+  expect(screen.getByRole("status").textContent).toContain(
+    unsupported.sourceDiagnostic.nextAction,
+  );
+  expect(screen.getByRole("status").textContent).toContain(
+    "herdr-mise --diagnostic",
+  );
+  rerender(treatment({ sourceDiagnostic: null }));
+  expect(screen.getByRole("status").textContent).toContain(
+    "use a tested release",
+  );
+  expect(screen.getByRole("status").textContent).not.toContain("observed 23");
+  for (const [sourceStatus, copy] of [
+    [
+      "unavailableSocket",
+      "Start Herdr. Check or unset an incorrect HERDR_SOCKET_PATH",
+    ],
+    ["timeout", "Check that Herdr responds"],
+    ["incompatibleResponse", "Herdr returned an incompatible response"],
+  ] as const) {
+    socket.message({
+      ...unsupported,
+      sourceStatus,
+      sourceDiagnostic: undefined,
+    });
+    rerender(treatment());
+    expect(screen.getByRole("status").textContent).toContain(copy);
+    expect(screen.getByRole("status").textContent).toContain(
+      "herdr-mise --diagnostic",
+    );
+    expect(screen.getByRole("status").textContent).not.toContain("observed 23");
+    if (sourceStatus === "incompatibleResponse")
+      expect(screen.getByRole("status").textContent).not.toContain(
+        "did not respond in time",
+      );
+  }
+  rerender(treatment({ intentionalPreview: true }));
+  expect(screen.getByRole("status").textContent).toContain(
+    "Intentional preview",
+  );
+  expect(screen.getByRole("status").textContent).not.toContain(
+    "herdr-mise --diagnostic",
+  );
+  rerender(
+    treatment({ mode: "disconnected", disconnectReason: "incompatibleFeed" }),
+  );
+  expect(screen.getByRole("alert").textContent).toContain(
+    "Update or restart Mise",
+  );
+  expect(screen.getByRole("alert").textContent).not.toContain(
+    "herdr-mise --diagnostic",
+  );
+  expect(screen.getByRole("alert").textContent).not.toContain("Herdr returned");
+  socket.message(snapshot);
+  rerender(treatment());
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  socket.message({ ...snapshot, agents: [] });
+  rerender(treatment());
+  expect(screen.getByRole("status").textContent).toBe(
+    "Waiting for agents — start one in herdr",
+  );
+  client.stop();
+  store.destroy();
+});
 describe("chrome interactions", () => {
   it("renders fixture-decoded unknown provenance without an idle history label", () => {
     const store = new AgentStore(),

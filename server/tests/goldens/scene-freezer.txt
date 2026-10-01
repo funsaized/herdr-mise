@@ -72,7 +72,7 @@ CELL 01 075..077 symbol="▀" fg=Indexed(253) bg=Indexed(253) mod=NONE diff=None
 CELL 01 077..078 symbol="▀" fg=Indexed(245) bg=Indexed(245) mod=NONE diff=None
 CELL 01 078..079 symbol="▀" fg=Indexed(240) bg=Indexed(240) mod=NONE diff=None
 CELL 01 079..080 symbol="│" fg=Indexed(245) bg=Indexed(240) mod=NONE diff=None
-TEXT 02 "│▀Waiting for agents — start one in herdr · Workspace: All▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│"
+TEXT 02 "│▀Waiting for agents — start one in herdr · ? help · Workspace: All▀▀▀▀▀▀▀▀▀▀▀▀│"
 CELL 02 000..001 symbol="│" fg=Indexed(245) bg=Indexed(240) mod=NONE diff=None
 CELL 02 001..002 symbol="▀" fg=Indexed(240) bg=Indexed(240) mod=NONE diff=None
 CELL 02 002..003 symbol="W" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
@@ -117,22 +117,28 @@ CELL 02 040..041 symbol="r" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
 CELL 02 041..042 symbol=" " fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
 CELL 02 042..043 symbol="·" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
 CELL 02 043..044 symbol=" " fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
-CELL 02 044..045 symbol="W" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
-CELL 02 045..046 symbol="o" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
-CELL 02 046..047 symbol="r" fg=Indexed(246) bg=Indexed(159) mod=NONE diff=None
-CELL 02 047..048 symbol="k" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
-CELL 02 048..049 symbol="s" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
+CELL 02 044..045 symbol="?" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
+CELL 02 045..046 symbol=" " fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
+CELL 02 046..047 symbol="h" fg=Indexed(246) bg=Indexed(159) mod=NONE diff=None
+CELL 02 047..048 symbol="e" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
+CELL 02 048..049 symbol="l" fg=Indexed(246) bg=Indexed(240) mod=NONE diff=None
 CELL 02 049..050 symbol="p" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
-CELL 02 050..051 symbol="a" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
-CELL 02 051..052 symbol="c" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
-CELL 02 052..053 symbol="e" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
-CELL 02 053..054 symbol=":" fg=Indexed(246) bg=Indexed(159) mod=NONE diff=None
-CELL 02 054..055 symbol=" " fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
-CELL 02 055..056 symbol="A" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
-CELL 02 056..058 symbol="l" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
-CELL 02 058..060 symbol="▀" fg=Indexed(245) bg=Indexed(245) mod=NONE diff=None
-CELL 02 060..061 symbol="▀" fg=Indexed(159) bg=Indexed(245) mod=NONE diff=None
-CELL 02 061..067 symbol="▀" fg=Indexed(245) bg=Indexed(245) mod=NONE diff=None
+CELL 02 050..051 symbol=" " fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 051..052 symbol="·" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 052..053 symbol=" " fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 053..054 symbol="W" fg=Indexed(246) bg=Indexed(159) mod=NONE diff=None
+CELL 02 054..055 symbol="o" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 055..056 symbol="r" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 056..057 symbol="k" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 057..058 symbol="s" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 058..059 symbol="p" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 059..060 symbol="a" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 060..061 symbol="c" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 061..062 symbol="e" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 062..063 symbol=":" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 063..064 symbol=" " fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 064..065 symbol="A" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
+CELL 02 065..067 symbol="l" fg=Indexed(246) bg=Indexed(245) mod=NONE diff=None
 CELL 02 067..068 symbol="▀" fg=Indexed(159) bg=Indexed(159) mod=NONE diff=None
 CELL 02 068..074 symbol="▀" fg=Indexed(245) bg=Indexed(245) mod=NONE diff=None
 CELL 02 074..075 symbol="▀" fg=Indexed(159) bg=Indexed(159) mod=NONE diff=None
