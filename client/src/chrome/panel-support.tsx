@@ -100,24 +100,30 @@ export function FocusedPanel({
         height: 0,
       };
       const rect = node.getBoundingClientRect(),
-        rail = document.querySelector(".chromeFooter")?.getBoundingClientRect(),
-        strip = document
-          .querySelector(".serviceStrip")
-          ?.getBoundingClientRect(),
-        pager = document
-          .querySelector(".kitchenPager")
-          ?.getBoundingClientRect(),
-        top =
-          rail && rail.y < innerHeight / 2
-            ? rail.bottom + panelMargin
-            : (strip?.bottom ?? 0) + panelMargin,
-        bottom =
-          rail && rail.y >= innerHeight / 2
-            ? rail.top - panelMargin
-            : (pager?.top ?? innerHeight) - panelMargin,
+        // Only surfaces in the panel's own column constrain it: a placard or
+        // tools pill at the far edge must not cost a centred panel its room.
+        columnWidth = Math.min(
+          rect.width || defaultPanelWidth,
+          innerWidth - 2 * panelMargin,
+        ),
+        columnLeft = clamp(
+          target.x + target.width / 2 - columnWidth / 2,
+          panelMargin,
+          innerWidth - columnWidth - panelMargin,
+        ),
+        inColumn = (box: PanelAnchor) =>
+          box.width > 0 &&
+          box.height > 0 &&
+          box.x < columnLeft + columnWidth + panelMargin &&
+          box.x + box.width > columnLeft - panelMargin,
+        top = panelMargin,
+        bottom = innerHeight - panelMargin,
         obstacles = [
           typeof avoid === "function" ? avoid() : avoid,
           ...[
+            ".serviceStrip",
+            ".chromeFooter",
+            ".kitchenPager",
             ".freezerInspector",
             ".demoPlacard",
             ".emptyPill",
@@ -128,7 +134,9 @@ export function FocusedPanel({
           ].map((selector) =>
             document.querySelector(selector)?.getBoundingClientRect(),
           ),
-        ].filter((item): item is PanelAnchor => Boolean(item)),
+        ].filter(
+          (item): item is PanelAnchor => Boolean(item) && inColumn(item!),
+        ),
         bands = obstacles.reduce<{ top: number; bottom: number }[]>(
           (areas, obstacle) =>
             areas.flatMap((area) => {
@@ -152,7 +160,16 @@ export function FocusedPanel({
         )[0] ?? { top, bottom },
         next = computePanelPlacement(
           target,
-          { width: rect.width, height: rect.height },
+          // Place by the panel's natural height, not its current box: a
+          // panel squeezed into a small band would otherwise keep fitting
+          // there and never move to the roomier side of its opener.
+          {
+            width: rect.width,
+            height: Math.max(
+              rect.height,
+              node.scrollHeight + (node.offsetHeight - node.clientHeight),
+            ),
+          },
           { width: innerWidth, height: innerHeight, ...area },
         );
       setPlacement(next.placement);

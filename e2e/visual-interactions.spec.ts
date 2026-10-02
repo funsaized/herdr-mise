@@ -1023,3 +1023,28 @@ test("chrome surfaces honor reduced transparency without obscuring attention", a
   await expect(summary).toContainText("Blocked");
   expect(errors).toEqual([]);
 });
+
+test("station details open on the roomier side with the pane locator in view", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/?preset=attention&agents=6");
+  const station = page.getByRole("button", { name: /^Codex, Blocked/ });
+  await expect(station).toHaveCount(1, { timeout: 10_000 });
+  await station.evaluate((element: HTMLElement) => element.click());
+  const details = page.getByRole("complementary", { name: "Codex details" });
+  await expect(details).toBeVisible();
+  // The card opens on the roomier side of the station (above it here) so the
+  // pane locator and its Copy control are in view without scrolling the card.
+  await expect(details).toHaveAttribute("data-placement", "above");
+  const locator = details.getByRole("button", { name: "Copy locator" }),
+    locatorBox = (await locator.boundingBox())!,
+    detailsBox = (await details.boundingBox())!;
+  expect(await details.evaluate((element) => element.scrollTop)).toBe(0);
+  expect(locatorBox.y).toBeGreaterThanOrEqual(detailsBox.y);
+  expect(locatorBox.y + locatorBox.height).toBeLessThanOrEqual(
+    detailsBox.y + detailsBox.height,
+  );
+  expect(detailsBox.y).toBeGreaterThanOrEqual(0);
+  expect(detailsBox.y + detailsBox.height).toBeLessThanOrEqual(720);
+});
