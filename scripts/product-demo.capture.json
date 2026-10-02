@@ -1,10 +1,10 @@
 {
   "schema": "product-demo-capture-v1",
-  "capturedAt": "2026-10-01T16:35:28.430Z",
-  "sourceCommit": "f1ebab8eae3ecc4c4e39d2a4531a79d3faeff4f5",
+  "capturedAt": "2026-10-02T23:11:39.305Z",
+  "sourceCommit": "b361d613f40115b8e5830a4acb41e5747baa77a1",
   "provenance": "deterministic client visual harness product demo",
   "version": "0.4.0",
-  "versionLabel": "herdr-mise 0.4.0 · source f1ebab8",
+  "versionLabel": "herdr-mise 0.4.0 · source b361d61",
   "frameRate": 20,
   "sourceDimensions": {
     "width": 1280,
@@ -55,7 +55,7 @@
       "start": 66,
       "end": 75,
       "scene": "installation",
-      "caption": "herdr-mise 0.4.0 · source f1ebab8"
+      "caption": "herdr-mise 0.4.0 · source b361d61"
     }
   ],
   "inputs": {
@@ -147,43 +147,43 @@
           "start": 66,
           "end": 75,
           "scene": "installation",
-          "text": "herdr-mise 0.4.0 · source f1ebab8"
+          "text": "herdr-mise 0.4.0 · source b361d61"
         }
       ],
       "assets": {
         "mp4": {
           "path": "docs/assets/herdr-mise-product-demo.mp4",
           "codec": "h264",
-          "bytes": 739031,
-          "sha256": "23168882e3e6246b36f4b44e840ff73e55dbcb31b524aba81f874e85c60235d9",
+          "bytes": 745974,
+          "sha256": "1856660082198550d7b26099507565005f08cfbf7618895c51057cad54f3990d",
           "durationSeconds": 75
         },
         "webm": {
           "path": "docs/assets/herdr-mise-product-demo.webm",
           "codec": "vp9",
-          "bytes": 2277756,
-          "sha256": "1d0d4140e55cb8f1a83eeaafe51441d5d5cd21306214c96aff4cb7730ce5221b",
+          "bytes": 2400944,
+          "sha256": "d236a2d0ea1960f368f2d17b226f989ec2e99776cd5965895bdf2dbb798019a6",
           "durationSeconds": 75
         },
         "poster": {
           "path": "docs/assets/herdr-mise-product-demo-poster.png",
           "codec": "png",
-          "bytes": 188649,
-          "sha256": "ff1c300f4e3af3eda2ade0aa0389549e4b230e86a6ead3825fb000a8ed7eda39",
+          "bytes": 150243,
+          "sha256": "4ba7022e4451d7aa7a0f7067c67b85271010b44ec6efc8ea9ed3142c3ee2fecf",
           "durationSeconds": null
         },
         "vtt": {
           "path": "docs/assets/herdr-mise-product-demo.vtt",
           "codec": "webvtt",
           "bytes": 536,
-          "sha256": "3c08de36d1f8e869d0db55139444bcc800605b5b372ce52003fa48d5559a7eae",
+          "sha256": "310ce8110a4900ad41ddc8dc4a206d225743b9abb65912ad6475f03678cee838",
           "durationSeconds": null
         },
         "txt": {
           "path": "docs/assets/herdr-mise-product-demo.txt",
           "codec": "text",
           "bytes": 635,
-          "sha256": "716d81f18575b0435eda78a39af883ddb341fb3203f5d554286473915a67d3a7",
+          "sha256": "96a7461f946fb0d8019780de8e37f790c25daf1cde05f824995dcb54ec7d8911",
           "durationSeconds": null
         }
       }
@@ -212,22 +212,22 @@
         "mp4": {
           "path": "docs/assets/herdr-mise-feature-attention.mp4",
           "codec": "h264",
-          "bytes": 175836,
-          "sha256": "7c499f4fa573ad364511009851bafe84f1cd903d19801bd59eab59a7ba79e396",
+          "bytes": 158829,
+          "sha256": "35fdccbbc891624b50d58ed581a55659a955fd49ef79189abd9edb271a328c52",
           "durationSeconds": 22
         },
         "webm": {
           "path": "docs/assets/herdr-mise-feature-attention.webm",
           "codec": "vp9",
-          "bytes": 654075,
-          "sha256": "db074f9b1c050c18fbb66ace85f2922e3e59feecc0b1bb0b11ac4d1bdd24d4f6",
+          "bytes": 607086,
+          "sha256": "94aed2b2551192744627f36547bb98d32d156955566a0cc022d38fe3d3c684bc",
           "durationSeconds": 22
         },
         "poster": {
           "path": "docs/assets/herdr-mise-feature-attention-poster.png",
           "codec": "png",
-          "bytes": 188649,
-          "sha256": "ff1c300f4e3af3eda2ade0aa0389549e4b230e86a6ead3825fb000a8ed7eda39",
+          "bytes": 150243,
+          "sha256": "4ba7022e4451d7aa7a0f7067c67b85271010b44ec6efc8ea9ed3142c3ee2fecf",
           "durationSeconds": null
         },
         "vtt": {
@@ -241,14 +241,14 @@
           "path": "docs/assets/herdr-mise-feature-attention.txt",
           "codec": "text",
           "bytes": 215,
-          "sha256": "d7d051974ade3e6d03e6193aed3bf88f2184fc1de9f1b56c5ca4d0c29229808b",
+          "sha256": "b5f54c071f472a0d21c24c03a64e79c743d82e8413c3f96aeb7f25c7747a51c1",
           "durationSeconds": null
         },
         "gif": {
           "path": "docs/assets/herdr-mise-feature-attention.gif",
           "codec": "gif",
-          "bytes": 529856,
-          "sha256": "f52fd59f01e4c5dbd4a2b9f07e169ab306e778fa5441e774876e5f25efe6b001",
+          "bytes": 504779,
+          "sha256": "900d4609c5103f7b7019befbfa0658d774f69d875f9ccf29f5faf802648ac05b",
           "durationSeconds": 22
         }
       }
@@ -270,22 +270,22 @@
         "mp4": {
           "path": "docs/assets/herdr-mise-feature-workspace.mp4",
           "codec": "h264",
-          "bytes": 88199,
-          "sha256": "8573e095516364870a7dd10ed0f1fa8485f5c9cdc2521c31f2dcb631c001a36f",
+          "bytes": 90872,
+          "sha256": "2896c139a21fef5cdd75881d55c7d95bc8de32e439b86645cc1b4d538ce7766a",
           "durationSeconds": 12
         },
         "webm": {
           "path": "docs/assets/herdr-mise-feature-workspace.webm",
           "codec": "vp9",
-          "bytes": 296015,
-          "sha256": "937f87ec97f694696428fdee46be75e011726a4f4a5e44d09b4705a10f466021",
+          "bytes": 313295,
+          "sha256": "530d7fd3dd078bf6a8697a86aeb974f2b2eb6e952128ad166bbeb57e5a79a39d",
           "durationSeconds": 12
         },
         "poster": {
           "path": "docs/assets/herdr-mise-feature-workspace-poster.png",
           "codec": "png",
-          "bytes": 141863,
-          "sha256": "8ff9d0e737bf4694afe0da9ee5863e2a28a28c993fb5f8cde0367905c9494250",
+          "bytes": 143502,
+          "sha256": "27900a2d620170d8714c344df1f230e8b94b95fd4563e31aede13e04edfa5772",
           "durationSeconds": null
         },
         "vtt": {
@@ -299,14 +299,14 @@
           "path": "docs/assets/herdr-mise-feature-workspace.txt",
           "codec": "text",
           "bytes": 142,
-          "sha256": "c4a82bc0815207ba9d601a06685cffcbf49834241aeb315592747b0e4a4c8477",
+          "sha256": "6650bebeb82e72a7d0466227ab01b9c499b7ce4067e433ae83ec844374963e2c",
           "durationSeconds": null
         },
         "gif": {
           "path": "docs/assets/herdr-mise-feature-workspace.gif",
           "codec": "gif",
-          "bytes": 291605,
-          "sha256": "d405b9175dacf88c0b938e6320832e50e68f7b5b751cb6d04ee8a7d4cbb54e25",
+          "bytes": 274813,
+          "sha256": "d6684f8d3ec20e8f0b21afc2bcf14b008313d419126cbaef07153cea6d24493a",
           "durationSeconds": 12
         }
       }
@@ -328,22 +328,22 @@
         "mp4": {
           "path": "docs/assets/herdr-mise-feature-presentation.mp4",
           "codec": "h264",
-          "bytes": 116619,
-          "sha256": "e1508e1251caf04fd4c54969678cc8afef4d420ed3996d3b969793c6ec73a4f5",
+          "bytes": 123410,
+          "sha256": "16d0b5864977fa777c9a68f9fb01951be18b27cbd1b9dfbda585a996e28d70d1",
           "durationSeconds": 12
         },
         "webm": {
           "path": "docs/assets/herdr-mise-feature-presentation.webm",
           "codec": "vp9",
-          "bytes": 292580,
-          "sha256": "3acbb5bcbab87d0b171d1c127a8a6e56447fbe20cb8d2812bdae35e1ebdb858c",
+          "bytes": 424369,
+          "sha256": "be94941ed11a0a00abc6c1383aa94920188255b202afd6f5a10d963bf8cb9048",
           "durationSeconds": 12
         },
         "poster": {
           "path": "docs/assets/herdr-mise-feature-presentation-poster.png",
           "codec": "png",
-          "bytes": 331821,
-          "sha256": "0cb3fc5e85027d8bec266a4945f16cd6368f849c1ea4b5d1f836b60503e72c78",
+          "bytes": 298888,
+          "sha256": "6b6146114bf949509a7d3fcff96cc27950dde6cc2b86148ee784dfb7cd83177f",
           "durationSeconds": null
         },
         "vtt": {
@@ -357,14 +357,14 @@
           "path": "docs/assets/herdr-mise-feature-presentation.txt",
           "codec": "text",
           "bytes": 143,
-          "sha256": "bc35f281a64f2cfacb371e36c0a9d58753c8e7a3617a38043a010589425a18d4",
+          "sha256": "94ba74de97f30ef2148aceabde52a700a917774df1b5ac1a5a510da22c8e91ec",
           "durationSeconds": null
         },
         "gif": {
           "path": "docs/assets/herdr-mise-feature-presentation.gif",
           "codec": "gif",
-          "bytes": 548657,
-          "sha256": "65ffdbb417d8e4d446243bb6ee585bce2a1b6ec426b4f2ac89d0117be07100a8",
+          "bytes": 805615,
+          "sha256": "b55fefe0aa85d6a5ba288d6989cc044561d7178e2f5f6927e29f6d431e241b8a",
           "durationSeconds": 12
         }
       }

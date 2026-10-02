@@ -1,5 +1,5 @@
 Feature: blocked attention
-herdr-mise 0.4.0 · source f1ebab8
+herdr-mise 0.4.0 · source b361d61
 22s · 20 fps · 960×540
 
 0:00–0:10  Codex is blocked on checkout-api, waiting for a human.
