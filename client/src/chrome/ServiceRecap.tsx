@@ -144,14 +144,9 @@ function RecapContents({
           <caption>Retained agent observations</caption>
           <thead>
             <tr>
-              <th scope="col">Agent</th>
-              <th scope="col">Working</th>
-              <th scope="col">Blocked time</th>
-              <th scope="col">Median wait</th>
-              <th scope="col">Worst wait</th>
-              <th scope="col">Blocked occurrences</th>
-              <th scope="col">Plated</th>
-              <th scope="col">86’d</th>
+              <th scope="col">Identity</th>
+              <th scope="col">Waits</th>
+              <th scope="col">Service</th>
             </tr>
           </thead>
           <tbody>
@@ -160,15 +155,48 @@ function RecapContents({
                 <th scope="row">
                   {row.name} ({row.id})
                 </th>
-                <td>{duration(row.workingMs)}</td>
-                <td>{duration(row.blockedMs)}</td>
-                <td>{duration(row.medianWaitMs)}</td>
-                <td>{duration(row.worstWaitMs)}</td>
-                <td>{row.blockedOccurrences}</td>
-                <td>{row.plated}</td>
                 <td>
-                  {row.ended}
-                  {row.partial ? " · partial" : ""}
+                  <dl className="recapGroup">
+                    <div>
+                      <dt>Blocked time</dt>
+                      <dd>{duration(row.blockedMs)}</dd>
+                    </div>
+                    <div>
+                      <dt>Median wait</dt>
+                      <dd>
+                        <strong>{duration(row.medianWaitMs)}</strong>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Worst wait</dt>
+                      <dd>
+                        <strong>{duration(row.worstWaitMs)}</strong>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Blocked occurrences</dt>
+                      <dd>{row.blockedOccurrences}</dd>
+                    </div>
+                  </dl>
+                </td>
+                <td>
+                  <dl className="recapGroup">
+                    <div>
+                      <dt>Working</dt>
+                      <dd>{duration(row.workingMs)}</dd>
+                    </div>
+                    <div>
+                      <dt>Plated</dt>
+                      <dd>{row.plated}</dd>
+                    </div>
+                    <div>
+                      <dt>86’d</dt>
+                      <dd>
+                        {row.ended}
+                        {row.partial ? " · partial" : ""}
+                      </dd>
+                    </div>
+                  </dl>
                 </td>
               </tr>
             ))}

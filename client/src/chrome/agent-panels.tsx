@@ -1,4 +1,9 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { workspaceDisplayName } from "../scene/geometry";
 import type { SceneHit } from "../scene/kitchen-scene";
 import {
@@ -15,7 +20,7 @@ import {
 } from "../state/store";
 import { tokens } from "../theme/tokens";
 import { formatDuration } from "./duration";
-import { FocusedPanel } from "./panel-support";
+import { FocusedPanel, type PanelAnchor } from "./panel-support";
 import { useClock } from "./use-clock";
 
 const stateLabels = {
@@ -224,7 +229,7 @@ export function DetailCard({
     }
   };
   return (
-    <FocusedPanel label={`${agent.name} details`}>
+    <FocusedPanel label={`${agent.name} details`} anchor={hit?.rect}>
       <PanelHeader
         name={agent.name}
         label={
@@ -296,9 +301,11 @@ export function DetailCard({
 
 export function SessionSummary({
   entry,
+  hit,
   onClose,
 }: {
   entry: BoardEntry;
+  hit?: SceneHit;
   onClose(): void;
 }) {
   const ended = new Date(entry.endedAt),
@@ -310,8 +317,15 @@ export function SessionSummary({
           : entry.finalState === "done"
             ? tokens.semantic.done
             : tokens.scene.muted;
+  const resolveAnchor = useCallback(
+    () => boardPanelAnchor(entry.id, hit?.rect),
+    [entry.id, hit?.rect],
+  );
   return (
-    <FocusedPanel label={`${entry.name} session summary`}>
+    <FocusedPanel
+      label={`${entry.name} session summary`}
+      anchor={resolveAnchor}
+    >
       <PanelHeader
         name={entry.name}
         label="86'D — SESSION ENDED"
@@ -332,6 +346,29 @@ export function SessionSummary({
       </div>
     </FocusedPanel>
   );
+}
+
+function elementAnchor(element: HTMLElement): PanelAnchor {
+  const rect = element.getBoundingClientRect();
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+}
+
+// Prefer the freezer row that opened this summary, then its scene spirit hit,
+// then the freezer toggle as a last anchor so the panel never free-floats.
+function boardPanelAnchor(
+  id: string,
+  hitRect?: SceneHit["rect"],
+): PanelAnchor | null {
+  if (typeof document === "undefined") return hitRect ?? null;
+  const row = [
+    ...document.querySelectorAll<HTMLElement>(
+      ".freezerInspector [data-agent-id]",
+    ),
+  ].find((element) => element.dataset.agentId === id);
+  if (row) return elementAnchor(row);
+  if (hitRect) return hitRect;
+  const trigger = document.querySelector<HTMLElement>(".freezerTrigger");
+  return trigger ? elementAnchor(trigger) : null;
 }
 
 function placementStateWords(agent: AgentMachine, hit?: SceneHit) {

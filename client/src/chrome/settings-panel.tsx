@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { resumeBellAudio } from "../sound/bell";
 import type { Settings } from "../state/store";
-import { FocusedPanel } from "./panel-support";
+import { FocusedPanel, type PanelAnchorSource } from "./panel-support";
 
 function Toggle({
   on,
@@ -30,11 +30,13 @@ export function SettingsPanel({
   notificationDeliveryFailed = false,
   onChange,
   onClose,
+  avoid,
 }: {
   settings: Settings;
   notificationDeliveryFailed?: boolean;
   onChange(patch: Partial<Settings>): void;
   onClose(): void;
+  avoid?: PanelAnchorSource;
 }) {
   const toggleSound = () => {
     if (!settings.sound) void resumeBellAudio();
@@ -101,7 +103,16 @@ export function SettingsPanel({
     }
   };
   return (
-    <FocusedPanel className="panel settingsPanel" label="Settings">
+    <FocusedPanel
+      className="panel settingsPanel"
+      label="Settings"
+      avoid={avoid}
+      anchor={() =>
+        document
+          .querySelector(".settingsTrigger:not(.freezerTrigger)")
+          ?.getBoundingClientRect() ?? null
+      }
+    >
       <header className="settingsHeader">
         <h2>Settings</h2>
         <button onClick={onClose} aria-label="Close settings">
