@@ -96,7 +96,7 @@ summary:focus-visible {
 .captureCaption {
   position: fixed;
   z-index: 30;
-  top: 24px;
+  top: 64px;
   left: 50%;
   width: min(460px, calc(100vw - 32px));
   transform: translateX(-50%);
@@ -160,17 +160,18 @@ summary:focus-visible {
   font-variant-numeric: var(--fontNumericVariant);
 }
 .panel {
-  position: absolute;
+  position: fixed;
   z-index: 20;
-  top: 16px;
-  right: 16px;
-  width: 320px;
+  top: 64px;
+  right: 8px;
+  --panelWidth: min(320px, calc(100vw - 16px));
+  width: var(--panelWidth);
+  max-height: calc(100dvh - 160px);
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radiusPanel);
-  box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow-y: auto;
 }
 .panelHeader,
 .settingsHeader {
@@ -355,8 +356,11 @@ summary:focus-visible {
   border-bottom: 0;
 }
 .settingsPanel {
-  width: 340px;
-  max-height: calc(100dvh - 32px);
+  top: auto;
+  bottom: calc(68px + var(--chromePagerSpace, 0px));
+  --panelWidth: min(340px, calc(100vw - 16px));
+  width: var(--panelWidth);
+  max-height: calc(100dvh - 160px - var(--chromePagerSpace, 0px));
   overflow-y: auto;
 }
 .settingsHeader {
@@ -461,7 +465,7 @@ summary:focus-visible {
   font-weight: 600;
 }
 .settingsTrigger {
-  position: absolute;
+  position: static;
   z-index: 8;
   right: 14px;
   bottom: 12px;
@@ -489,17 +493,19 @@ summary:focus-visible {
   font-weight: var(--fontRowLabelWeight);
 }
 .serviceStrip {
-  position: absolute;
+  position: fixed;
   z-index: 8;
-  left: 14px;
-  bottom: 68px;
+  left: 8px;
+  right: 8px;
+  top: 8px;
   display: flex;
   align-items: center;
   gap: var(--spaceRow);
-  max-width: calc(100vw - 220px);
+  flex-wrap: wrap;
+  min-height: 44px;
   padding: 7px 10px;
   color: var(--textMuted);
-  background: var(--panelSoft);
+  background: var(--panel);
   border: 1px solid var(--borderSoft);
   border-radius: var(--radiusSmall);
   font-size: var(--fontSecondarySize);
@@ -526,7 +532,7 @@ summary:focus-visible {
   cursor: default;
 }
 .workspaceScope {
-  position: absolute;
+  position: static;
   z-index: 8;
   left: 14px;
   bottom: 12px;
@@ -534,7 +540,7 @@ summary:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  max-width: calc(100% - 180px);
+  max-width: 100%;
 }
 .workspaceControls {
   display: contents;
@@ -543,7 +549,7 @@ summary:focus-visible {
   position: absolute;
   z-index: 8;
   left: 14px;
-  bottom: 12px;
+  bottom: calc(68px + var(--chromePagerSpace, 0px));
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -596,20 +602,20 @@ summary:focus-visible {
 .demoPlacard {
   position: absolute;
   z-index: 8;
-  left: 20px;
-  top: 20px;
+  left: 8px;
+  top: 64px;
   width: 196px;
-  padding: 12px 16px 11px;
-  transform: rotate(-2deg);
+  max-height: calc(100dvh - 240px);
+  overflow-y: auto;
+  padding: 8px 10px;
   color: var(--text);
   background: var(--buttonText);
-  border: 3px solid var(--text);
+  border: 1px solid var(--borderSoft);
   border-radius: var(--radiusSmall);
-  box-shadow: var(--shadowPlacard);
 }
 .demoPlacard h2 {
   margin: 0;
-  font: 700 16px var(--fontWorld);
+  font: 700 12px var(--fontWorld);
   letter-spacing: 1px;
 }
 .demoPlacard hr {
@@ -653,17 +659,16 @@ summary:focus-visible {
 .visualExplorer {
   position: absolute;
   z-index: 8;
-  top: 20px;
-  left: 224px;
-  width: 216px;
-  max-height: 204px;
+  top: 64px;
+  left: 212px;
+  width: min(440px, calc(100vw - 228px));
+  max-height: calc(100dvh - 240px);
   overflow: auto;
   padding: 7px 9px;
   color: var(--textMuted);
   background: var(--panelSoft);
   border: 1px solid var(--borderSoft);
   border-radius: var(--radiusSmall);
-  box-shadow: var(--shadowSmall);
   font-size: var(--fontSecondarySize);
   pointer-events: auto;
 }
@@ -772,9 +777,9 @@ summary:focus-visible {
 .visualTuiFigure[data-expanded="true"] {
   position: fixed;
   z-index: 20;
-  inset: 20px 20px 48px 240px;
-  width: auto;
-  max-height: none;
+  inset: auto 8px calc(68px + var(--chromePagerSpace, 0px)) auto;
+  width: min(560px, calc(100vw - 16px));
+  max-height: calc(100dvh - 140px - var(--chromePagerSpace, 0px));
   background: var(--panel);
 }
 .visualTuiFigure[data-expanded="true"] picture {
@@ -839,7 +844,10 @@ summary:focus-visible {
   position: absolute;
   z-index: 9;
   left: 50%;
-  bottom: 14px;
+  top: 64px;
+  bottom: auto;
+  max-width: calc(100vw - 16px);
+  width: max-content;
   transform: translateX(-50%);
   padding: 7px 10px;
   color: var(--textWarm);
@@ -856,7 +864,7 @@ summary:focus-visible {
   cursor: pointer;
 }
 .appShell:has(.kitchenPager) .firstHint {
-  bottom: calc(var(--pagerReservedHeight) + 8px);
+  bottom: auto;
 }
 .statsOverlay {
   position: absolute;
@@ -906,7 +914,7 @@ summary:focus-visible {
   position: absolute;
   z-index: 12;
   right: 14px;
-  bottom: 120px;
+  bottom: calc(68px + var(--chromePagerSpace, 0px));
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -920,7 +928,6 @@ summary:focus-visible {
   background: var(--panelSoft);
   border: 1px solid var(--borderSoft);
   border-radius: var(--radiusControl);
-  box-shadow: var(--shadowSmall);
 }
 .freezerInspector p {
   margin: 0;
@@ -1005,83 +1012,10 @@ summary:focus-visible {
     animation: none;
   }
 }
-@media (max-width: 1279px), (max-height: 719px) {
-  .visualTuiFigure {
-    width: 200px;
-  }
-  .visualTuiFigure[data-expanded="true"] {
-    width: auto;
-  }
-}
-@media (max-width: 900px), (max-height: 640px) {
-  .visualTuiFigure {
-    display: none;
-  }
-}
-@media (max-width: 1439px), (max-height: 719px) {
-  /* Leave room for the board even when a taller scene increases its pixel unit. */
-  .appShell:has(.visualExplorer) {
-    position: relative;
-    overflow-y: auto;
-  }
-  .appShell:has(.visualExplorer) .chromeLayer {
-    position: absolute;
-    bottom: auto;
-    height: max(640px, 100dvh);
-  }
-  .appShell:has(.visualExplorer) .kitchenPager {
-    position: absolute;
-    top: calc(max(640px, 100dvh) - 64px);
-    bottom: auto;
-  }
-  .visualExplorer {
-    top: calc(max(640px, 100dvh) + 80px);
-    right: 8px;
-    left: 8px;
-    width: auto;
-    max-height: 280px;
-  }
-}
-@media (max-width: 480px) {
-  .serviceStrip {
-    right: 8px;
-    bottom: 92px;
-    left: 8px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    max-width: none;
-    align-items: stretch;
-    gap: 3px 6px;
-    padding: 5px 7px;
-    font-size: 10px;
-  }
-  .serviceStrip div:first-child {
-    grid-column: 1 / -1;
-    flex-wrap: nowrap;
-    gap: 6px;
-  }
-  .serviceStrip div:nth-child(2) {
-    min-width: 0;
-    gap: 2px 6px;
-  }
-  .serviceStrip div:nth-child(2) span:last-child {
-    width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .serviceStrip button {
-    align-self: end;
-  }
-  .panel ~ .serviceStrip {
-    top: 112px;
-    bottom: auto;
-  }
-}
 :where(.appShell[data-pager-layout="narrow"]) {
   .kitchenPager {
     left: 8px;
-    right: 104px;
+    right: 8px;
     bottom: 8px;
     gap: 2px;
     width: auto;
@@ -1098,39 +1032,12 @@ summary:focus-visible {
   .kitchenPager span {
     white-space: normal;
   }
-  .freezerTrigger {
-    right: 14px;
-    bottom: 64px;
-  }
   .freezerInspector {
     right: 8px;
-    bottom: 156px;
+    bottom: calc(148px + var(--chromePagerSpace, 0px));
     left: 8px;
     width: auto;
     max-height: 28vh;
-  }
-  &:has(.panel) .freezerInspector {
-    bottom: calc(22vh + 60px);
-  }
-  .panel {
-    inset: auto 8px 52px;
-    width: auto;
-    max-height: 22vh;
-    overflow-y: auto;
-  }
-  .panel ~ .workspaceControls > .emptyPill {
-    bottom: calc(22vh + 60px);
-  }
-  .workspaceScope {
-    top: 8px;
-    right: 8px;
-    bottom: auto;
-    left: 8px;
-    max-width: none;
-  }
-  .workspaceControls:has(> .revealCleared) {
-    inset: 8px 8px auto;
-    max-width: none;
   }
   .demoPlacard {
     inset: 8px 8px auto;
@@ -1138,13 +1045,6 @@ summary:focus-visible {
     padding: 7px 10px;
     transform: none;
     border-width: 2px;
-  }
-  .workspaceControls > .demoPlacard {
-    top: 110px;
-    /* Connection guidance can outgrow short viewports; scroll it rather
-       than letting it run under the kitchen pager. */
-    max-height: calc(100vh - 110px - var(--pagerReservedHeight) - 8px);
-    overflow-y: auto;
   }
   .demoPlacard h2 {
     font-size: 13px;
@@ -1158,9 +1058,6 @@ summary:focus-visible {
   }
   .demoPlacard small {
     display: none;
-  }
-  .firstHint {
-    bottom: 52px;
   }
 }
 :where(.appShell[data-pager-layout="short"]) {
@@ -1178,12 +1075,7 @@ summary:focus-visible {
     padding: 3px 5px;
   }
   &:has(.kitchenPager) .firstHint {
-    bottom: calc(var(--compactPagerReservedHeight) + 8px);
-  }
-}
-@media (max-width: 340px) {
-  .panel {
-    max-height: 11vh;
+    bottom: auto;
   }
 }
 .rendererFallback {
@@ -1215,34 +1107,39 @@ summary:focus-visible {
   display: none;
 }
 .serviceRecap > div {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  width: min(440px, calc(100vw - 28px));
-  max-height: min(60vh, 32rem);
-  overflow: auto;
+  position: fixed;
+  z-index: 21;
+  bottom: calc(68px + var(--chromePagerSpace, 0px));
+  right: 356px;
+  width: min(560px, calc(100vw - 372px));
+  max-height: min(60vh, calc(100dvh - 150px - var(--chromePagerSpace, 0px)));
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
   padding: 0.75rem;
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radiusPanel);
 }
-@media (max-width: 480px) {
+@media (max-width: 960px) {
   .serviceRecap > div {
-    top: calc(100% + 6px);
-    right: 0;
-    bottom: auto;
-    width: auto;
+    right: 8px;
+    width: min(560px, calc(100vw - 16px));
   }
 }
 .serviceRecap p {
   margin: 0.5rem 0;
 }
 .serviceRecap .recapRows {
-  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 80px;
   max-width: 100%;
 }
 .serviceRecap table {
+  width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   text-align: left;
 }
@@ -1250,4 +1147,550 @@ summary:focus-visible {
 .serviceRecap td {
   padding: 0.35rem;
   border-bottom: 1px solid currentColor;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.recapGroup {
+  margin: 0;
+}
+.recapGroup div {
+  margin-bottom: 4px;
+}
+.recapGroup dt {
+  color: var(--secondary);
+}
+.recapGroup dd {
+  margin: 0;
+}
+.chromeRail {
+  position: fixed;
+  z-index: 8;
+  inset: 0;
+  pointer-events: none;
+}
+.chromeRail > * {
+  pointer-events: auto;
+}
+.chromeFooter {
+  position: absolute;
+  bottom: calc(8px + var(--chromePagerSpace, 0px));
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px;
+}
+.phoneLabel {
+  display: none;
+}
+.chromeTools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+}
+.chromeTools > button {
+  min-height: 44px;
+  padding: 5px 11px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusSmall);
+  font-size: var(--fontSecondarySize);
+  cursor: pointer;
+}
+.chromeCountEmpty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.workspaceScope > span {
+  font-size: var(--fontSecondarySize);
+}
+.workspaceScope > button {
+  border-color: var(--text);
+}
+.appShell:has(.kitchenPager) {
+  --chromePagerSpace: var(--pagerReservedHeight);
+}
+.appShell[data-pager-layout="short"]:has(.kitchenPager) {
+  --chromePagerSpace: var(--compactPagerReservedHeight);
+}
+.appShell:has(.kitchenPager) .firstHint {
+  bottom: auto;
+}
+:is(
+  .panel,
+  .serviceRecap > div,
+  .visualExplorer,
+  .visualTuiFigure,
+  .freezerInspector,
+  .demoPlacard,
+  .firstHint,
+  .kitchenPager
+) {
+  background: var(--panel);
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusSmall);
+  box-shadow: none;
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :is(
+    .panel,
+    .serviceRecap > div,
+    .visualExplorer,
+    .visualTuiFigure,
+    .freezerInspector,
+    .demoPlacard,
+    .firstHint,
+    .kitchenPager
+  ) {
+    background: var(--surface);
+    backdrop-filter: blur(var(--surfaceBlur));
+    -webkit-backdrop-filter: blur(var(--surfaceBlur));
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :is(
+    .panel,
+    .serviceRecap > div,
+    .visualExplorer,
+    .visualTuiFigure,
+    .freezerInspector,
+    .demoPlacard,
+    .firstHint,
+    .kitchenPager
+  ) {
+    background: var(--panel);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+@media (max-width: 600px) {
+  .chromeRail {
+    inset: 8px 8px auto;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--panel);
+    border-radius: var(--radiusSmall);
+    font-size: 11px;
+    pointer-events: auto;
+  }
+  .chromeFooter {
+    position: static;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 2px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    backdrop-filter: none;
+  }
+  .serviceStrip {
+    position: static;
+    flex: none;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 0;
+    min-height: 0;
+    font-size: 11px;
+    border: 0;
+    background: transparent;
+    backdrop-filter: none;
+  }
+  .phoneLabel {
+    display: inline;
+  }
+  .desktopLabel {
+    display: none;
+  }
+  .oldestBlocked,
+  .chromeCount,
+  .scopeQualifier {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .blockedCount strong {
+    font-size: 0;
+  }
+  .blockedCount strong::after {
+    content: "!";
+    font-size: 11px;
+  }
+  .quietService {
+    max-width: 58px;
+    font-size: 10px;
+  }
+  .serviceStrip button {
+    min-height: 44px;
+    padding: 3px;
+  }
+  .workspaceScope {
+    flex-wrap: nowrap;
+    gap: 0;
+    border: 0;
+  }
+  .workspaceScope select {
+    width: 44px;
+    padding: 2px;
+    font-size: 10px;
+  }
+  .workspaceScope > button {
+    max-width: 44px;
+    padding: 2px;
+    font-size: 9px;
+  }
+  .chromeTools {
+    gap: 0;
+    padding: 0;
+    border: 0;
+  }
+  .chromeTools > button,
+  .serviceRecap > summary {
+    padding: 3px;
+    font-size: 10px;
+    border: 0;
+    background: transparent;
+  }
+  .settingsPanel,
+  .serviceRecap > div,
+  .visualTuiFigure[data-expanded="true"] {
+    top: 64px;
+    bottom: auto;
+    max-height: calc(100dvh - 136px - var(--chromePagerSpace, 0px));
+  }
+  .chromeLayer:has(.serviceRecap[open]) .settingsPanel {
+    --panelMaxHeight: calc((100dvh - 216px - var(--chromePagerSpace, 0px)) / 2);
+    max-height: var(--panelMaxHeight);
+  }
+  .chromeLayer:has(.settingsPanel) .serviceRecap > div {
+    top: calc(200px + (100dvh - 216px - var(--chromePagerSpace, 0px)) / 2);
+    max-height: calc((100dvh - 216px - var(--chromePagerSpace, 0px)) / 2);
+  }
+  .firstHint,
+  .appShell:has(.kitchenPager) .firstHint {
+    top: auto;
+    bottom: calc(var(--chromePagerSpace, 0px) + 24px);
+  }
+  .demoPlacard {
+    top: 64px;
+    max-height: 100px;
+  }
+  .freezerInspector {
+    top: 172px;
+    bottom: auto;
+    max-height: min(24vh, 150px);
+  }
+  .visualExplorer {
+    top: 248px;
+    left: 8px;
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 264px - var(--chromePagerSpace, 0px));
+  }
+}
+@media (max-width: 1439px), (max-height: 719px) {
+  .appShell:has(.visualExplorer) {
+    position: relative;
+    overflow-y: auto;
+  }
+  .appShell:has(.visualExplorer) .chromeLayer {
+    position: absolute;
+    bottom: auto;
+    height: max(640px, 100dvh);
+  }
+  .appShell:has(.visualExplorer) .chromeRail {
+    position: absolute;
+  }
+  .appShell:has(.visualExplorer) .serviceStrip {
+    position: absolute;
+  }
+  .appShell:has(.visualExplorer) .kitchenPager {
+    position: absolute;
+    top: calc(max(640px, 100dvh) - var(--chromePagerSpace));
+    bottom: auto;
+  }
+  .visualExplorer {
+    top: calc(max(640px, 100dvh) + 80px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-height: 280px;
+  }
+}
+@media (max-width: 600px) {
+  .appShell:has(.visualExplorer) .serviceStrip {
+    position: static;
+  }
+}
+/* Revealing hidden plated cooks qualifies the current scope, so it hangs
+   on the wall just under the top bar, clear of the stations below. */
+.modeControls:has(> .revealCleared) {
+  top: 64px;
+  right: 8px;
+  bottom: auto;
+  left: auto;
+  z-index: 9;
+  max-width: calc(100vw - 16px);
+}
+@media (min-width: 1440px) and (min-height: 720px) {
+  .visualExplorer {
+    left: auto;
+    right: 8px;
+    width: 300px;
+    max-height: 190px;
+  }
+}
+
+/* Minimal rails. The pixel kitchen is the interface; the rails are quiet
+   signage over it. Their frosted surface lives on ::before so the rails
+   themselves never carry a filter (a filtered ancestor would become the
+   containing block for the fixed Recap panel). */
+.serviceStrip,
+.chromeFooter {
+  isolation: isolate;
+  background: transparent;
+  border: 0;
+}
+.serviceStrip::before,
+.chromeFooter::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--panel);
+  border: 1px solid var(--borderSoft);
+  border-radius: var(--radiusControl);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .serviceStrip::before,
+  .chromeFooter::before {
+    background: var(--surface);
+    backdrop-filter: blur(var(--surfaceBlur));
+    -webkit-backdrop-filter: blur(var(--surfaceBlur));
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .serviceStrip::before,
+  .chromeFooter::before {
+    background: var(--panel);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+/* Literal labels stay for assistive tech; the eye gets kitchen shorthand. */
+.serviceStrip :is(.blockedCount, .oldestBlocked, .chromeCount) > strong {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.serviceStrip {
+  right: auto;
+  max-width: calc(100vw - 16px);
+  gap: 14px;
+  padding: 0 6px 0 12px;
+  color: var(--text);
+}
+.blockedCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--fontRowLabelWeight);
+  color: var(--text);
+}
+.blockedCount::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: var(--blocked);
+  border-radius: 1px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blocked) 22%, transparent);
+}
+.blockedCount::after {
+  content: "waiting at the pass" / "";
+}
+.oldestBlocked {
+  color: var(--secondary);
+}
+.oldestBlocked::before {
+  content: "longest " / "";
+}
+.chromeCount {
+  color: var(--secondary);
+}
+.chromeCount[data-count="working"]::after {
+  content: " cooking" / "";
+}
+.chromeCount[data-count="plated"]::after {
+  content: " plated" / "";
+}
+.chromeCount[data-count="unknown"]::after {
+  content: " unseen" / "";
+}
+.quietService {
+  color: var(--secondary);
+}
+.serviceStrip button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: var(--radiusSmall);
+}
+.chromeFooter {
+  left: auto;
+  right: 8px;
+  gap: 4px;
+  padding: 0 4px;
+  max-width: calc(100vw - 16px);
+}
+.chromeFooter .workspaceControls {
+  display: flex;
+}
+.chromeFooter .workspaceScope {
+  padding-right: 6px;
+  border-right: 1px solid var(--borderSoft);
+}
+.chromeFooter .workspaceScope select {
+  border-color: transparent;
+  background-color: transparent;
+}
+.chromeTools > button,
+.chromeTools .serviceRecap > summary {
+  border: 0;
+  background: transparent;
+}
+:is(.chromeTools > button, .chromeTools .serviceRecap > summary):hover {
+  background: var(--chip);
+}
+.chromeTools .serviceRecap[open] > summary {
+  background: var(--chip);
+}
+.chromeTools .freezerTrigger[aria-pressed="true"] {
+  color: var(--buttonText);
+  background: var(--text);
+}
+/* Text-heavy panels need a calmer surface than the rails to stay readable
+   over a busy kitchen. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :is(.panel, .serviceRecap > div, .freezerInspector, .visualExplorer) {
+    background: var(--panelSoft);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :is(.panel, .serviceRecap > div, .freezerInspector, .visualExplorer) {
+    background: var(--panel);
+  }
+}
+.serviceRecap > div {
+  right: 8px;
+  width: min(560px, calc(100vw - 16px));
+}
+@media (max-width: 600px) {
+  .serviceStrip::before,
+  .chromeFooter::before {
+    display: none;
+  }
+  .chromeRail {
+    isolation: isolate;
+    background: transparent;
+  }
+  .chromeRail::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: var(--panel);
+    border: 1px solid var(--borderSoft);
+    border-radius: var(--radiusControl);
+  }
+  .serviceStrip {
+    max-width: none;
+    padding: 0;
+  }
+  .blockedCount strong::after {
+    content: none;
+  }
+  .blockedCount::after {
+    content: none;
+  }
+  .chromeFooter {
+    max-width: none;
+  }
+  .chromeFooter .workspaceScope {
+    padding-right: 0;
+    border-right: 0;
+  }
+}
+.serviceRecap > div {
+  font-size: var(--fontSecondarySize);
+}
+.chromeTools > .freezerTrigger[aria-pressed="true"],
+.chromeTools > .freezerTrigger[aria-pressed="true"]:hover {
+  color: var(--buttonText);
+  background: var(--text);
+}
+.settingsPanel > small[role="status"] {
+  display: block;
+  margin-top: -6px;
+  padding: 0 var(--spacePanel) var(--spaceRowSmall);
+  color: var(--secondary);
+  font-size: var(--fontSecondarySize);
+}
+/* On phones "blocked elsewhere" collapses to a badge on the scope control;
+   its accessible name stays literal. */
+.scopeElsewhere .phoneLabel {
+  color: var(--buttonText);
+}
+@media (max-width: 600px) {
+  .workspaceScope > button.scopeElsewhere {
+    min-width: 32px;
+    max-width: none;
+    padding: 2px 6px;
+    color: var(--buttonText);
+    background: var(--blocked);
+    border-color: var(--blocked);
+    font-size: 11px;
+    font-weight: var(--fontRowLabelWeight);
+  }
+}
+/* In the freezer, the ended-chefs drawer owns the bottom-right corner, so an
+   opened Recap sits beside it on wide screens and above it otherwise. The
+   rail also paints above the drawer so nothing it opens is obscured. */
+.chromeRail {
+  z-index: 13;
+}
+.appShell:has(.freezerInspector) .serviceRecap > div {
+  right: calc(14px + min(280px, calc(100vw - 28px)) + 8px);
+  width: min(560px, calc(100vw - 316px));
+}
+@media (max-width: 960px) {
+  .appShell:has(.freezerInspector) .serviceRecap > div {
+    right: 8px;
+    width: min(560px, calc(100vw - 16px));
+    bottom: calc(68px + var(--chromePagerSpace, 0px) + min(40vh, 320px) + 8px);
+    max-height: calc(
+      100dvh - 150px - var(--chromePagerSpace, 0px) - min(40vh, 320px)
+    );
+  }
+}
+@media (max-width: 600px) {
+  .appShell:has(.freezerInspector) .serviceRecap > div {
+    top: calc(172px + min(24vh, 150px) + 8px);
+    bottom: auto;
+    max-height: calc(
+      100dvh - 188px - min(24vh, 150px) - var(--chromePagerSpace, 0px)
+    );
+  }
 }

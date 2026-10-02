@@ -177,9 +177,10 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
   });
   if (selectedBox) {
     const panelBox = (await panel.boundingBox())!;
-    expect(panelBox.y).toBeGreaterThanOrEqual(
-      selectedBox.y + selectedBox.height,
-    );
+    expect(
+      panelBox.y >= selectedBox.y + selectedBox.height ||
+        panelBox.y + panelBox.height <= selectedBox.y,
+    ).toBe(true);
   } else {
     await expect(
       page.getByRole("region", { name: "Agent status list" }),
@@ -200,11 +201,9 @@ test("blocked summary agents and settings remain keyboard-accessible at 320 CSS 
     movedSummaryBox.y + movedSummaryBox.height <= settingsBox.y ||
       settingsBox.y + settingsBox.height <= movedSummaryBox.y,
   ).toBe(true);
-  if (selectedBox) {
-    expect(settingsBox.y).toBeGreaterThanOrEqual(
-      selectedBox.y + selectedBox.height,
-    );
-  }
+  expect(settingsBox.y).toBeGreaterThanOrEqual(
+    movedSummaryBox.y + movedSummaryBox.height,
+  );
   await page.keyboard.press("Escape");
   await expect(settings).toBeFocused();
   expect(
@@ -252,13 +251,15 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   const explorer = page.getByRole("complementary", {
       name: "Preview explorer",
     }),
-    details = explorer.locator("details"),
-    summary = explorer.getByText("Preview explorer", { exact: true });
+    summary = explorer.getByRole("button", { name: "Minimize introduction" }),
+    introductionToggle = explorer.getByRole("button", {
+      name: /^(?:Minimize|Restore) introduction$/,
+    });
   await expect(
     explorer.getByText("AI coding agents, at a glance"),
   ).toBeVisible();
-  await expect(explorer.getByRole("combobox", { name: "Scene" })).toBeHidden();
-  await expect(explorer.getByRole("combobox", { name: "Cooks" })).toBeHidden();
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toBeVisible();
+  await expect(explorer.getByRole("combobox", { name: "Cooks" })).toBeVisible();
   const install = explorer.getByRole("link", { name: "Install for Herdr" }),
     replay = explorer.getByRole("button", { name: "Replay demo" });
   await install.focus();
@@ -313,7 +314,10 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
     await summary.evaluate((element) => getComputedStyle(element).outlineStyle),
   ).not.toBe("none");
   await page.keyboard.press("Enter");
-  await expect(details).toHaveAttribute("open", "");
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toHaveCount(
+    0,
+  );
+  await explorer.getByRole("button", { name: "Restore introduction" }).click();
   const scene = explorer.getByRole("combobox", { name: "Scene" });
   await scene.focus();
   await expect(scene).toBeFocused();
@@ -369,8 +373,15 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
   expect(box.y + box.height).toBeLessThanOrEqual(320);
   await summary.focus();
   await page.keyboard.press("Enter");
-  await expect(details).not.toHaveAttribute("open", "");
-  await expect(summary).toBeFocused();
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toHaveCount(
+    0,
+  );
+  const restore = explorer.getByRole("button", {
+    name: "Restore introduction",
+  });
+  await expect(restore).toBeFocused();
+  await restore.press("Enter");
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toBeVisible();
   if (await pagerNext.count()) {
     await pagerNext.click();
     await expect(page.getByText(/Page 2 of/)).toBeVisible();
@@ -432,7 +443,7 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
       .poll(async () => (await sceneMetrics(page))?.motion)
       .toMatchObject({ reduced: true, continuous: false });
     for (const expanded of [false, true]) {
-      if (expanded) await summary.click();
+      if (expanded) await introductionToggle.click();
       await explorer.scrollIntoViewIfNeeded();
       const explorerBox = (await explorer.boundingBox())!;
       expect(explorerBox.x).toBeGreaterThanOrEqual(0);
@@ -459,7 +470,8 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
         ),
       ).toBe(true);
     }
-    await summary.click();
+    await introductionToggle.click();
+    await expect(summary).toBeVisible();
     if (await pagerNext.count()) {
       await pagerNext.click();
       await expect(page.getByText(/Page 2 of/)).toBeVisible();

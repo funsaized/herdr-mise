@@ -375,9 +375,15 @@ test("playground introduction exposes install and replay without expanding the e
   );
   await install.click({ trial: true });
   await expect(replay).toBeVisible();
-  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
+  // The playground controls are in plain sight, not behind a collapsed details.
+  await expect(explorer.locator("details")).toHaveCount(0);
   for (const name of ["Scene", "Cooks"])
-    await expect(explorer.getByRole("combobox", { name })).toBeHidden();
+    await expect(explorer.getByRole("combobox", { name })).toBeVisible();
+  // The introduction can be minimized and restored without losing the install.
+  await explorer.getByRole("button", { name: "Minimize introduction" }).click();
+  await expect(explorer).toHaveAttribute("data-minimized", "true");
+  await explorer.getByRole("button", { name: "Restore introduction" }).click();
+  await expect(explorer).not.toHaveAttribute("data-minimized", "true");
   await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
   await expect(
     page.getByRole("button", { name: /^Codex, Blocked — .*open details$/ }),
@@ -390,7 +396,7 @@ test("playground introduction exposes install and replay without expanding the e
       name: "Codex, Working — on the fire, open details",
     }),
   ).toHaveCount(1);
-  await expect(explorer.locator("details")).not.toHaveAttribute("open", "");
+  await expect(explorer.locator("details")).toHaveCount(0);
   expect(sockets).toEqual([]);
   expect(escapedRequests).toEqual([]);
 });
@@ -429,11 +435,7 @@ for (const viewport of [
       for (const dismissed of [false, true]) {
         if (dismissed)
           await page.getByRole("button", { name: "Got it" }).click();
-        for (const expanded of [false, true]) {
-          if (expanded)
-            await explorer
-              .getByText("Preview explorer", { exact: true })
-              .click();
+        {
           await explorer.scrollIntoViewIfNeeded();
           const surface = (await explorer.boundingBox())!,
             canvas = (await page.locator(".canvasHost").boundingBox())!,
@@ -475,7 +477,7 @@ for (const viewport of [
             page.getByRole("button", { name: "Open settings" }),
             page.getByRole("button", { name: "Freezer" }),
             page.locator(".kitchenPager"),
-            page.locator(".visualTuiFigure"),
+            page.locator(".chromeTools"),
             page.locator(".firstHint"),
           ]) {
             if (await other.isVisible())
@@ -492,7 +494,6 @@ for (const viewport of [
             ),
           ).toBe(true);
         }
-        await explorer.getByText("Preview explorer", { exact: true }).click();
       }
     }
   });
@@ -515,7 +516,6 @@ test("preview explorer reloads shareable scenes and preserves larger URL rosters
     }),
     demoPlacard = placard(page);
   await expect(explorer).toBeVisible();
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await expect(demoPlacard).toContainText(
     "Intentional preview — deterministic mock feed. Nothing here is real.",
   );
@@ -529,21 +529,18 @@ test("preview explorer reloads shareable scenes and preserves larger URL rosters
   await expect(
     page.locator('.stationA11yMirror button[aria-label*="Blocked —"]'),
   ).toHaveCount(2);
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await explorer.getByRole("combobox", { name: "Cooks" }).selectOption("0");
   await explorer.getByRole("button", { name: "Load preview" }).click();
   await expect(page).toHaveURL(
     /\?preset=blocked&agents=0&theme=dinner&stats=?$/,
   );
   await expect(page.locator(".stationA11yMirror button")).toHaveCount(0);
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await explorer.getByRole("combobox", { name: "Cooks" }).selectOption("12");
   await explorer.getByRole("combobox", { name: "Scene" }).selectOption("mixed");
   await explorer.getByRole("button", { name: "Load preview" }).click();
   await expect(page).toHaveURL(
     /\?preset=mixed&agents=12&theme=dinner&stats=?$/,
   );
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await expect(explorer.getByRole("combobox", { name: "Scene" })).toHaveValue(
     "mixed",
   );
@@ -591,7 +588,6 @@ test("preview explorer reloads shareable scenes and preserves larger URL rosters
   expect(boxesIntersect(explorerBox!, placardBox!)).toBe(false);
   await page.goto("/?preset=mixed&agents=30");
   await expect(page.locator(".disconnectScrim")).toHaveCount(0);
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await expect(explorer.getByRole("combobox", { name: "Cooks" })).toHaveValue(
     "30",
   );
@@ -620,57 +616,51 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
   const figureBox = page.getByRole("figure", {
       name: "herdr-mise TUI demo recording",
     }),
-    settings = page.getByRole("button", { name: "Open settings" });
-  const figure = page.locator(".visualTuiFigure img");
-  const description =
-      "The herdr-mise terminal runs deterministic demo data, showing its kitchen status before visiting WALK-IN FREEZER.",
-    caption = page.getByText(
-      "Native Ghostty recording of herdr-mise using deterministic demo data.",
-    ),
-    stop = page.getByRole("button", { name: "Stop animation" }),
-    expand = page.getByRole("button", { name: "Expand recording" });
-  await expect(figure).toHaveCount(0);
+    settings = page.getByRole("button", { name: "Open settings" }),
+    trigger = page
+      .locator(".chromeTools")
+      .getByRole("button", { name: "Terminal view", exact: true }),
+    figure = page.locator(".visualTuiFigure img"),
+    description =
+      "The herdr-mise terminal runs deterministic demo data, showing its kitchen status before visiting WALK-IN FREEZER.";
+  // The recording is a persistent tools trigger until it is expanded.
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toContainText("Terminal view");
+  await expect(figureBox).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Stop animation" }),
+  ).toHaveCount(0);
+
+  await trigger.click();
+  await expect(figureBox).toBeVisible();
   await expect(figureBox).toHaveAttribute(
     "aria-describedby",
     "tui-demo-description",
   );
   await expect(page.locator("#tui-demo-description")).toHaveText(description);
-  await expect(caption).toBeVisible();
-  await expect(stop).toHaveCount(0);
-  await expect(expand).toBeVisible();
-  const defaultBox = await figureBox.boundingBox();
-  expect(defaultBox).not.toBeNull();
-  expect(defaultBox!.width).toBeGreaterThanOrEqual(259);
-  expect(defaultBox!.width).toBeLessThanOrEqual(261);
-  await figureBox.hover();
-  await expect
-    .poll(async () => (await figureBox.boundingBox())?.width)
-    .toBeGreaterThanOrEqual(259);
-  const hoverBox = await figureBox.boundingBox(),
-    settingsBox = await settings.boundingBox();
-  expect(hoverBox).not.toBeNull();
-  expect(hoverBox!.width).toBeLessThanOrEqual(261);
-  expect(settingsBox).not.toBeNull();
-  expect(boxesIntersect(hoverBox!, settingsBox!)).toBe(false);
-  await expand.click();
-  await expect(figureBox).toHaveAttribute("data-expanded", "true");
+  await expect(
+    page.getByText(
+      "Native Ghostty recording of herdr-mise using deterministic demo data.",
+    ),
+  ).toBeVisible();
   await expect(figure).toBeVisible();
   await expect(figure).toHaveAttribute(
     "alt",
     "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer.",
   );
   await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
+  const stop = page.getByRole("button", { name: "Stop animation" }),
+    collapse = figureBox.getByRole("button", { name: "Collapse recording" });
   await expect(stop).toBeVisible();
-  const mediaBox = await figure.boundingBox(),
-    stopBox = await stop.boundingBox(),
-    expandBox = await page
-      .getByRole("button", { name: "Collapse recording" })
-      .boundingBox();
-  expect(mediaBox).not.toBeNull();
-  expect(stopBox).not.toBeNull();
-  expect(expandBox).not.toBeNull();
-  expect(boxesIntersect(mediaBox!, stopBox!)).toBe(false);
-  expect(boxesIntersect(mediaBox!, expandBox!)).toBe(false);
+  const mediaBox = (await figure.boundingBox())!,
+    stopBox = (await stop.boundingBox())!,
+    expandedBox = (await figureBox.boundingBox())!;
+  expect(expandedBox.x).toBeGreaterThanOrEqual(0);
+  expect(expandedBox.y).toBeGreaterThanOrEqual(0);
+  expect(expandedBox.x + expandedBox.width).toBeLessThanOrEqual(1280);
+  expect(expandedBox.y + expandedBox.height).toBeLessThanOrEqual(720);
+  expect(boxesIntersect(mediaBox, stopBox)).toBe(false);
+  await expect(collapse).toBeVisible();
 
   await stop.click();
   await expect(figure).toHaveAttribute("src", "/tui-demo-poster.png");
@@ -678,47 +668,35 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
     "alt",
     "Still frame of the herdr-mise terminal demo kitchen.",
   );
-  const restart = page.getByRole("button", { name: "Restart animation" });
-  await restart.click();
+  await page.getByRole("button", { name: "Restart animation" }).click();
   await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
-  await expect(stop).toBeVisible();
-  await page.getByRole("button", { name: "Collapse recording" }).click();
-  await expect(figure).toHaveCount(0);
-  await expect(stop).toHaveCount(0);
+  await collapse.click();
+  await expect(figureBox).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 
+  // Escape collapses the recording but keeps the freezer, restoring the trigger.
   await page.getByRole("button", { name: "Freezer" }).click();
-  await expand.click();
-  await expect(figureBox).toHaveAttribute("data-expanded", "true");
-  const collapse = page.getByRole("button", { name: "Collapse recording" });
-  await expect(collapse).toHaveAttribute("aria-expanded", "true");
-  const expandedBox = await figureBox.boundingBox();
-  expect(expandedBox).not.toBeNull();
-  expect(expandedBox!.x).toBeGreaterThanOrEqual(0);
-  expect(expandedBox!.y).toBeGreaterThanOrEqual(0);
-  expect(expandedBox!.x + expandedBox!.width).toBeLessThanOrEqual(1280);
-  expect(expandedBox!.y + expandedBox!.height).toBeLessThanOrEqual(720);
+  await trigger.click();
+  await expect(figureBox).toBeVisible();
   await expect(figure).toHaveCSS("object-fit", "contain");
   const freezer = page.getByRole("button", { name: "Freezer" });
   await freezer.focus();
   await page.keyboard.press("Escape");
-  await expect(figureBox).toHaveAttribute("data-expanded", "false");
-  await expect(expand).toBeFocused();
+  await expect(figureBox).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   await expect(freezer).toHaveAttribute("aria-pressed", "true");
-  await page.keyboard.press("Escape");
-  await expect(freezer).toHaveAttribute("aria-pressed", "false");
-  await expand.click();
+
+  // Opening settings also collapses the recording and restores its trigger.
+  await trigger.click();
+  await expect(figureBox).toBeVisible();
   await settings.focus();
   await page.keyboard.press("Enter");
-  await expect(figureBox).toHaveAttribute("data-expanded", "false");
+  await expect(figureBox).toHaveCount(0);
   await expect(
     page.getByRole("complementary", { name: "Settings" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(settings).toBeFocused();
-  await page.mouse.move(400, 500);
-  await expect
-    .poll(async () => (await figureBox.boundingBox())?.width)
-    .toBeLessThanOrEqual(261);
 
   await page.waitForTimeout(6_500);
   await expect(page.getByRole("alert")).toHaveCount(0);
@@ -748,58 +726,45 @@ test("TUI recording respects viewport bounds and serves local assets", async ({
       name: "herdr-mise TUI demo recording",
     }),
     figure = page.locator(".visualTuiFigure img"),
-    expand = page.getByRole("button", { name: "Expand recording" }),
+    trigger = page
+      .locator(".chromeTools")
+      .getByRole("button", { name: "Terminal view", exact: true }),
     freezer = page.getByRole("button", { name: "Freezer" });
+  // The recording only exists once expanded; the trigger is the persistent node.
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toContainText("Terminal view");
+  await expect(figureBox).toHaveCount(0);
+  await trigger.click();
   await expect(figureBox).toBeVisible();
-  const boundaryDefaultBox = await figureBox.boundingBox();
-  expect(boundaryDefaultBox).not.toBeNull();
-  expect(boundaryDefaultBox!.width).toBeGreaterThanOrEqual(199);
-  expect(boundaryDefaultBox!.width).toBeLessThanOrEqual(201);
-  await figureBox.hover();
-  await expect
-    .poll(async () => (await figureBox.boundingBox())?.width)
-    .toBeLessThanOrEqual(201);
-  const boundaryFigureBox = await figureBox.boundingBox(),
-    placardBox = await placard(page).boundingBox();
-  expect(boundaryFigureBox).not.toBeNull();
-  expect(placardBox).not.toBeNull();
-  expect(boxesIntersect(boundaryFigureBox!, placardBox!)).toBe(false);
-  const kitchen = computeLayout(
+  const boundaryExpandedBox = (await figureBox.boundingBox())!;
+  expect(boundaryExpandedBox.x).toBeGreaterThanOrEqual(0);
+  expect(boundaryExpandedBox.y).toBeGreaterThanOrEqual(0);
+  expect(boundaryExpandedBox.x + boundaryExpandedBox.width).toBeLessThanOrEqual(
     901,
-    641,
-    Array.from({ length: 6 }, (_, index) => `working-${index}`),
   );
-  for (const hit of [kitchen.pass, ...kitchen.stations])
-    expect(boxesIntersect(boundaryFigureBox!, hit)).toBe(false);
-  await expand.click();
-  const boundaryExpandedBox = await figureBox.boundingBox();
-  expect(boundaryExpandedBox).not.toBeNull();
   expect(
-    boundaryExpandedBox!.x + boundaryExpandedBox!.width,
-  ).toBeLessThanOrEqual(901);
-  expect(
-    boundaryExpandedBox!.y + boundaryExpandedBox!.height,
+    boundaryExpandedBox.y + boundaryExpandedBox.height,
   ).toBeLessThanOrEqual(641);
-  const expandedPlacardBox = await placard(page).boundingBox(),
-    expandedControlsBox = await page
+  const placardBox = (await placard(page).boundingBox())!;
+  expect(boxesIntersect(boundaryExpandedBox, placardBox)).toBe(false);
+  expect(
+    boxesIntersect(boundaryExpandedBox, (await trigger.boundingBox())!),
+  ).toBe(false);
+  const expandedControlsBox = (await page
       .locator(".visualTuiControls")
-      .boundingBox(),
-    expandedMediaBox = await figure.boundingBox();
-  expect(expandedPlacardBox).not.toBeNull();
-  expect(expandedControlsBox).not.toBeNull();
-  expect(expandedMediaBox).not.toBeNull();
-  expect(boxesIntersect(boundaryExpandedBox!, expandedPlacardBox!)).toBe(false);
-  expect(boxesIntersect(expandedMediaBox!, expandedControlsBox!)).toBe(false);
+      .boundingBox())!,
+    expandedMediaBox = (await figure.boundingBox())!;
+  expect(boxesIntersect(expandedMediaBox, expandedControlsBox)).toBe(false);
   await page.getByRole("button", { name: "Collapse recording" }).click();
+  await expect(figureBox).toHaveCount(0);
 
   await freezer.click();
-  await expand.click();
+  await trigger.click();
+  await expect(figureBox).toBeVisible();
   await page.setViewportSize({ width: 900, height: 700 });
-  await expect(figureBox).toBeHidden();
-  await page.keyboard.press("Escape");
-  await expect(freezer).toHaveAttribute("aria-pressed", "false");
+  await expect(figureBox).toBeInViewport({ ratio: 1 });
   await page.setViewportSize({ width: 1000, height: 640 });
-  await expect(figureBox).toBeHidden();
+  await expect(figureBox).toBeInViewport({ ratio: 1 });
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
   expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
   expect((await request.get("/og.png")).status()).toBe(200);
@@ -834,7 +799,9 @@ test("reduced motion starts stopped and allows an explicit GIF restart", async (
   await page.goto("/?preset=blocked&agents=1");
   const figure = page.locator(".visualTuiFigure img");
   await expect(figure).toHaveCount(0);
-  await page.getByRole("button", { name: "Expand recording" }).click();
+  await page
+    .getByRole("button", { name: "Terminal view", exact: true })
+    .click();
   await expect(figure).toBeVisible();
   await expect(figure).toHaveAttribute(
     "alt",
@@ -903,9 +870,23 @@ test("narrow demo service recap stays clickable beside settings and placard", as
   // Playwright refuses the click if the placard or panel intercepts it.
   await recap.locator("summary").click();
   await expect(recap).toHaveAttribute("open");
-  const headers = await recap.locator("thead th").allTextContents();
-  expect(headers).toContain("Blocked time");
-  expect(headers).toContain("Blocked occurrences");
+  // The recap is three explicit groups; metric labels live in <dt> cells.
+  await expect(recap.locator("thead th")).toHaveText([
+    "Identity",
+    "Waits",
+    "Service",
+  ]);
+  expect(await recap.locator("tbody dt").allTextContents()).toEqual(
+    expect.arrayContaining([
+      "Blocked time",
+      "Median wait",
+      "Worst wait",
+      "Blocked occurrences",
+      "Working",
+      "Plated",
+      "86’d",
+    ]),
+  );
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto("/?preset=blocked&agents=30");
   await page.getByRole("button", { name: "Open settings" }).click();
@@ -927,4 +908,52 @@ test("narrow demo service recap stays clickable beside settings and placard", as
   await expect(
     recap.getByRole("navigation", { name: "Recap pages" }),
   ).toContainText("Page 2 of 2");
+});
+
+test("chrome surfaces honor reduced transparency without obscuring attention", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "CDP emulation is Chromium-only");
+  const errors = watchErrors(page);
+  // Playwright has no prefers-reduced-transparency option, so drive Chromium's
+  // media emulation directly through CDP.
+  const client = await page.context().newCDPSession(page);
+  await client.send("Emulation.setEmulatedMedia", {
+    media: "",
+    features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/?preset=blocked&agents=1&stats");
+  await expect(page.getByRole("button", { name: /Blocked — / })).toBeAttached({
+    timeout: 15_000,
+  });
+  // The media feature must actually be emulated, not merely requested.
+  expect(
+    await page.evaluate(
+      () => matchMedia("(prefers-reduced-transparency: reduce)").matches,
+    ),
+  ).toBe(true);
+
+  for (const selector of [".serviceStrip", ".chromeTools", ".visualExplorer"]) {
+    const surface = page.locator(selector).first();
+    await expect(surface).toBeVisible();
+    const styles = await surface.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        backdrop: computed.getPropertyValue("backdrop-filter"),
+        background: computed.backgroundColor,
+      };
+    });
+    // Persistent chrome falls back to an opaque, unblurred surface.
+    expect(["none", ""]).toContain(styles.backdrop);
+    expect(styles.background).not.toMatch(/rgba?\([^)]*,\s*0?\.\d+\s*\)/);
+  }
+  // The attention summary stays visible over the opaque fallback.
+  const summary = page.getByRole("region", {
+    name: "Observed service summary",
+  });
+  await expect(summary).toBeVisible();
+  await expect(summary).toContainText("Blocked");
+  expect(errors).toEqual([]);
 });

@@ -34,6 +34,8 @@ import { SemanticStationControls } from "./chrome/SemanticStationControls";
 
 const cssTokens = {
   "--panel": tokens.chrome.panel,
+  "--surface": tokens.chrome.surface,
+  "--surfaceBlur": tokens.chrome.surfaceBlur,
   "--panelSoft": tokens.chrome.panelSoft,
   "--border": tokens.chrome.border,
   "--borderSoft": tokens.chrome.borderSoft,
@@ -62,6 +64,7 @@ const cssTokens = {
   "--focus": tokens.chrome.text,
   "--ticketDone": tokens.scene.ticketDone,
   "--flame": tokens.semantic.flame,
+  "--blocked": tokens.semantic.blocked,
   "--done": tokens.semantic.done,
   "--tungsten": tokens.semantic.tungsten,
   "--spacePanel": `${tokens.spacing.panel}px`,

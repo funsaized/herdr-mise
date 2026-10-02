@@ -423,21 +423,23 @@ describe("chrome interactions", () => {
     });
     expect(summary.textContent).toContain("Working: 1");
     expect(summary.textContent).toContain("Blocked: 1");
-    expect(summary.textContent).toContain("Shown: 2 of 2");
     expect(summary.textContent).toContain("Oldest blocked: Oldest cook");
     expect(summary.textContent).not.toContain("Outside cook");
-    expect(
-      [...summary.querySelectorAll("strong")].map((label) => label.textContent),
-    ).toEqual([
-      "Observed -",
-      "Working:",
-      "Blocked:",
-      "Plated:",
-      "Unknown:",
-      "Shown:",
-      "Hidden plated:",
-      "Oldest blocked:",
-    ]);
+    // Secondary qualifiers stay out of the way when they restate the obvious.
+    expect(summary.textContent).not.toContain("Shown:");
+    expect(summary.textContent).not.toContain("Hidden plated:");
+    // Zero-valued counts are muted in CSS but remain readable to assistive tech.
+    const emptyCounts = [...summary.querySelectorAll(".chromeCountEmpty")];
+    expect(emptyCounts).toHaveLength(2);
+    for (const span of emptyCounts) expect(span.textContent).toMatch(/: 0$/);
+    // Attention leads: blocked before working, oldest before the next action.
+    const readingOrder = (summary.textContent ?? "").toLowerCase();
+    expect(readingOrder.indexOf("blocked")).toBeLessThan(
+      readingOrder.indexOf("working"),
+    );
+    expect(readingOrder.indexOf("oldest blocked")).toBeLessThan(
+      readingOrder.indexOf("next blocked"),
+    );
     const button = screen.getByRole("button", {
       name: "Next blocked: Oldest cook",
     });
@@ -445,6 +447,75 @@ describe("chrome interactions", () => {
     fireEvent.click(button);
     expect(next).toHaveBeenCalledOnce();
   });
+});
+it("orders attention first and hides uninformative chrome without losing accessible counts", () => {
+  const store = new AgentStore(),
+    props = {
+      store,
+      coarse: store.coarse(),
+      hoveredId: null,
+      focusedId: null,
+      hits: [],
+      settingsOpen: false,
+      statsOpen: false,
+      lastUpdateSeconds: 0,
+      metrics: { drawCalls: 0, socketBytesPerSecond: 0 },
+      onCloseSettings: () => {},
+      onOpenSettings: () => {},
+      hintVisible: false,
+      onDismissHint: () => {},
+      view: "kitchen" as const,
+      onToggleFreezer: () => {},
+      onNextBlocked: () => {},
+      onRevealCleared: () => {},
+    };
+  store.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [
+      {
+        ...record,
+        id: "blocked",
+        name: "Blocked cook",
+        state: "blocked",
+        stateEnteredAt: new Date(Date.now() - 30_000).toISOString(),
+      },
+      { ...record, id: "working", name: "Working cook" },
+    ],
+  });
+  const { rerender } = render(<Chrome {...props} coarse={store.coarse()} />),
+    strip = screen.getByRole("region", {
+      name: "Observed service summary",
+    });
+  // Blocked attention is first in the DOM, not merely first by CSS order.
+  expect(strip.firstElementChild?.textContent?.toLowerCase()).toContain(
+    "blocked",
+  );
+  // Zero-valued counts remain in the accessibility tree as muted spans.
+  const empty = [...strip.querySelectorAll(".chromeCountEmpty")];
+  expect(empty.length).toBeGreaterThan(0);
+  for (const span of empty) expect(span.textContent).toMatch(/0/);
+  // Nothing restates "all shown" or "nothing hidden".
+  expect(strip.textContent).not.toContain("Shown:");
+  expect(strip.textContent).not.toContain("Hidden plated:");
+
+  // With nothing blocked the attention action gives way to calm copy, not a
+  // disabled button.
+  store.apply({
+    version: 1,
+    type: "snapshot",
+    mode: "live",
+    sourceStatus: "connected",
+    agents: [{ ...record, id: "working", name: "Working cook" }],
+  });
+  rerender(<Chrome {...props} coarse={store.coarse()} />);
+  expect(screen.getByText("All quiet")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Next blocked:/ })).toBeNull();
+  store.destroy();
+});
+describe("chrome interactions", () => {
   it("reveals locally cleared plated cooks with a native live-only control", () => {
     const reveal = vi.fn(),
       { rerender } = render(

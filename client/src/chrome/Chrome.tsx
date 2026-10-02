@@ -30,6 +30,7 @@ export type { DebugMetrics } from "./status-panels";
 
 function VisualExplorer({ search }: { search: string }) {
   const config = parseVisualConfig(search);
+  const [minimized, setMinimized] = useState(false);
   function loadPreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget),
@@ -39,61 +40,67 @@ function VisualExplorer({ search }: { search: string }) {
     location.search = query.toString();
   }
   return (
-    <aside className="visualExplorer" aria-label="Preview explorer">
-      <p>
-        <strong>AI coding agents, at a glance</strong> — a pixel-art kitchen for
-        Herdr. Runs locally and read-only; it never controls agents. This
-        playground uses deterministic demo data.
-      </p>
-      <div className="visualExplorerActions">
-        <a href="https://github.com/funsaized/herdr-mise#quick-start">
-          Install for Herdr
-        </a>
-        <button type="button" onClick={() => location.reload()}>
-          Replay demo
-        </button>
-      </div>
-      <details>
-        <summary>Preview explorer</summary>
-        <div>
-          <form onSubmit={loadPreview}>
-            <label>
-              Scene
-              <select name="preset" defaultValue={config.preset}>
-                {visualPresets.map((preset) => (
-                  <option key={preset}>{preset}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Cooks
-              <select name="agents" defaultValue={config.agents}>
-                {!visualAgentCounts.some(
-                  (count) => count === config.agents,
-                ) && (
-                  <option value={config.agents}>
-                    {config.agents} — URL roster
-                  </option>
-                )}
-                {visualAgentCounts.map((count) => (
-                  <option key={count} value={count}>
-                    {count === 0
-                      ? "0 — Clear service"
-                      : count === 12
-                        ? "12 — Large herd"
-                        : count}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit">Load preview</button>
-          </form>
-          <span>Loading a scene resets this preview.</span>
-          <nav aria-label="Project links">
+    <aside
+      className="visualExplorer"
+      aria-label="Preview explorer"
+      data-minimized={minimized}
+    >
+      <button type="button" onClick={() => setMinimized(!minimized)}>
+        {minimized ? "Restore introduction" : "Minimize introduction"}
+      </button>
+      {!minimized && (
+        <>
+          <p>
+            <strong>AI coding agents, at a glance</strong> — a pixel-art kitchen
+            for Herdr. Runs locally and read-only; it never controls agents.
+            This playground uses deterministic demo data.
+          </p>
+          <div className="visualExplorerActions">
+            <a href="https://github.com/funsaized/herdr-mise#quick-start">
+              Install for Herdr
+            </a>
             <a href="https://github.com/funsaized/herdr-mise">Source</a>
-          </nav>
-        </div>
-      </details>
+            <button type="button" onClick={() => location.reload()}>
+              Replay demo
+            </button>
+          </div>
+          <div>
+            <form onSubmit={loadPreview}>
+              <label>
+                Scene
+                <select name="preset" defaultValue={config.preset}>
+                  {visualPresets.map((preset) => (
+                    <option key={preset}>{preset}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Cooks
+                <select name="agents" defaultValue={config.agents}>
+                  {!visualAgentCounts.some(
+                    (count) => count === config.agents,
+                  ) && (
+                    <option value={config.agents}>
+                      {config.agents} — URL roster
+                    </option>
+                  )}
+                  {visualAgentCounts.map((count) => (
+                    <option key={count} value={count}>
+                      {count === 0
+                        ? "0 — Clear service"
+                        : count === 12
+                          ? "12 — Large herd"
+                          : count}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit">Load preview</button>
+            </form>
+            <span>Loading a scene resets this preview.</span>
+          </div>
+        </>
+      )}
     </aside>
   );
 }
@@ -217,6 +224,10 @@ export function Chrome(props: ChromeProps) {
       props.settingsOpen || selectedAgent || selectedBoard,
     ),
     catalog = workspaceOptions(props.coarse);
+  const settingsStation = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedAgent) settingsStation.current = selectedAgent.id;
+  }, [selectedAgent]);
   useEffect(() => {
     if (!primaryPanelOpen || !tuiExpanded) return;
     const frame = requestAnimationFrame(() => setTuiExpanded(false));
@@ -239,121 +250,193 @@ export function Chrome(props: ChromeProps) {
         (props.view === "freezer" || !selectedAgent) && (
           <SessionSummary
             entry={selectedBoard}
+            hit={props.hits.find((hit) => hit.id === selectedBoard.id)}
             onClose={() => props.store.select(null)}
           />
         )}
       {props.settingsOpen && (
         <SettingsPanel
+          avoid={() =>
+            props.hits.find((hit) => hit.id === settingsStation.current)
+              ?.rect ?? null
+          }
           settings={props.coarse.settings}
           notificationDeliveryFailed={props.notificationDeliveryFailed}
           onChange={(patch) => props.store.setSettings(patch)}
           onClose={props.onCloseSettings}
         />
       )}
-      {!props.settingsOpen && (
-        <>
-          <button
-            className="settingsTrigger freezerTrigger"
-            onClick={props.onToggleFreezer}
-            aria-pressed={props.view === "freezer"}
+      <div className="chromeRail">
+        <section className="serviceStrip" aria-label="Observed service summary">
+          <span
+            className={
+              props.coarse.blocked === 0 ? "chromeCountEmpty" : "blockedCount"
+            }
           >
-            Freezer
-          </button>
-          <button
-            className="settingsTrigger"
-            onClick={props.onOpenSettings}
-            aria-label="Open settings"
-          >
-            Settings
-          </button>
-        </>
-      )}
-      <section className="serviceStrip" aria-label="Observed service summary">
-        <div>
-          <strong>Observed -</strong>
-          <span>
-            <strong>Working:</strong> {props.coarse.working}
-          </span>
-          <span>
             <strong>Blocked:</strong> {props.coarse.blocked}
           </span>
-          <span>
-            <strong>Plated:</strong> {props.coarse.plated}
-          </span>
-          <span>
-            <strong>Unknown:</strong> {props.coarse.unknown}
-          </span>
-        </div>
-        <div>
-          <span>
-            <strong>Shown:</strong> {props.coarse.visible} of{" "}
-            {props.coarse.count}
-          </span>
-          <span>
-            <strong>Hidden plated:</strong> {props.coarse.hiddenDone}
-          </span>
-          <span>
+          <span
+            className={oldestBlocked ? "oldestBlocked" : "chromeCountEmpty"}
+          >
             <strong>Oldest blocked:</strong> {oldestBlocked?.name ?? "None"}
             {oldestBlocked
               ? ` · ${formatDuration(now - Date.parse(oldestBlocked.stateEnteredAt))}`
               : ""}
           </span>
-        </div>
-        <button
-          type="button"
-          disabled={props.view === "freezer" || !nextBlocked}
-          aria-label={
-            nextBlocked
-              ? `Next blocked: ${nextBlocked.name}`
-              : "Next blocked: none"
-          }
-          title="Next blocked (B)"
-          onClick={props.onNextBlocked}
-        >
-          Next blocked
-        </button>
-      </section>
-      <div className="workspaceControls">
-        <div className="workspaceScope">
-          <select
-            ref={workspaceSelect}
-            aria-label="Workspace"
-            value={props.coarse.selectedWorkspaceId ?? ""}
-            onChange={(event) =>
-              props.store.selectWorkspace(event.target.value || null)
-            }
-            onKeyDown={(event) => {
-              if (
-                event.key === "Tab" &&
-                !event.shiftKey &&
-                workspaceShowAll.current
-              ) {
-                event.preventDefault();
-                workspaceShowAll.current.focus();
-              }
-            }}
-          >
-            <option value="">All</option>
-            {catalog.map((item) => (
-              <option key={item.id} value={item.id}>
-                {workspaceOptionLabel(item.id, item.label, catalog)}
-              </option>
-            ))}
-          </select>
-          {props.coarse.blockedElsewhere > 0 && (
+          {nextBlocked ? (
             <button
-              ref={workspaceShowAll}
               type="button"
-              onClick={() => {
-                props.store.selectWorkspace(null);
-                workspaceSelect.current?.focus();
-              }}
+              disabled={props.view === "freezer" || !nextBlocked}
+              aria-label={
+                nextBlocked
+                  ? `Next blocked: ${nextBlocked.name}`
+                  : "Next blocked: none"
+              }
+              title="Next blocked (B)"
+              onClick={props.onNextBlocked}
             >
-              {props.coarse.blockedElsewhere} blocked elsewhere — Show all
+              <span className="desktopLabel">Next blocked</span>
+              <span className="phoneLabel" aria-hidden="true">
+                Next
+              </span>
             </button>
+          ) : (
+            <span className="quietService">
+              All quiet
+              {props.coarse.blockedElsewhere > 0 && (
+                // Phones show the "+N" badge on the scope control instead.
+                <span className="desktopLabel">
+                  {" "}
+                  in this workspace — blocked work elsewhere
+                </span>
+              )}
+            </span>
           )}
-          <ServiceRecap store={props.store} coarse={props.coarse} />
+          {(
+            [
+              ["Working", props.coarse.working],
+              ["Plated", props.coarse.plated],
+              ["Unknown", props.coarse.unknown],
+            ] as const
+          ).map(([label, count]) => (
+            <span
+              key={label}
+              className={count === 0 ? "chromeCountEmpty" : "chromeCount"}
+              data-count={label.toLowerCase()}
+            >
+              <strong>{label}:</strong> {count}
+            </span>
+          ))}
+        </section>
+        <div className="chromeFooter">
+          <div className="workspaceControls">
+            <div className="workspaceScope">
+              <select
+                ref={workspaceSelect}
+                aria-label="Workspace"
+                value={props.coarse.selectedWorkspaceId ?? ""}
+                onChange={(event) =>
+                  props.store.selectWorkspace(event.target.value || null)
+                }
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Tab" &&
+                    !event.shiftKey &&
+                    workspaceShowAll.current
+                  ) {
+                    event.preventDefault();
+                    workspaceShowAll.current.focus();
+                  }
+                }}
+              >
+                <option value="">All</option>
+                {catalog.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {workspaceOptionLabel(item.id, item.label, catalog)}
+                  </option>
+                ))}
+              </select>
+              {props.coarse.blockedElsewhere > 0 && (
+                <button
+                  ref={workspaceShowAll}
+                  type="button"
+                  className="scopeElsewhere"
+                  aria-label={`${props.coarse.blockedElsewhere} blocked elsewhere — Show all`}
+                  onClick={() => {
+                    props.store.selectWorkspace(null);
+                    workspaceSelect.current?.focus();
+                  }}
+                >
+                  <span className="desktopLabel">
+                    {props.coarse.blockedElsewhere} blocked elsewhere — Show all
+                  </span>
+                  <span className="phoneLabel" aria-hidden="true">
+                    +{props.coarse.blockedElsewhere}
+                  </span>
+                </button>
+              )}
+              {props.coarse.visible < props.coarse.count && (
+                <span className="scopeQualifier">
+                  <strong>Shown:</strong> {props.coarse.visible} of{" "}
+                  {props.coarse.count}
+                </span>
+              )}
+              {props.coarse.hiddenDone > 0 && (
+                <span className="scopeQualifier">
+                  <strong>Hidden plated:</strong> {props.coarse.hiddenDone}
+                </span>
+              )}
+              {(props.coarse.visible < props.coarse.count ||
+                props.coarse.hiddenDone > 0) && (
+                <span
+                  className="phoneLabel scopeBadge"
+                  title={`Shown: ${props.coarse.visible} of ${props.coarse.count}; Hidden plated: ${props.coarse.hiddenDone}`}
+                  aria-hidden="true"
+                >
+                  ·
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="chromeTools">
+            <button
+              className="settingsTrigger freezerTrigger"
+              onClick={props.onToggleFreezer}
+              aria-pressed={props.view === "freezer"}
+            >
+              Freezer
+            </button>
+            <ServiceRecap store={props.store} coarse={props.coarse} />
+            <button
+              className="settingsTrigger"
+              onClick={props.onOpenSettings}
+              aria-label="Open settings"
+            >
+              <span className="desktopLabel">Settings</span>
+              <span className="phoneLabel" aria-hidden="true">
+                ⚙
+              </span>
+            </button>
+            {import.meta.env.MODE === "visual" && (
+              <button
+                ref={tuiExpandToggle}
+                type="button"
+                // Label in Name: the accessible name matches the visible
+                // "Terminal view" text (phones show only the >_ glyph).
+                aria-label="Terminal view"
+                aria-expanded={tuiExpanded}
+                onClick={() => setTuiExpanded(!tuiExpanded)}
+              >
+                <span className="desktopLabel">Terminal view</span>
+                <span className="phoneLabel" aria-hidden="true">
+                  &gt;_
+                </span>
+              </button>
+            )}
+          </div>
         </div>
+      </div>
+      <div className="workspaceControls modeControls">
         <ModeTreatment
           mode={props.coarse.mode}
           sourceStatus={props.coarse.sourceStatus}
@@ -382,57 +465,61 @@ export function Chrome(props: ChromeProps) {
       {import.meta.env.MODE === "visual" && (
         <>
           {!primaryPanelOpen && <VisualExplorer search={location.search} />}
-          <figure
-            className="visualTuiFigure"
-            data-expanded={tuiExpanded}
-            aria-label="herdr-mise TUI demo recording"
-            aria-describedby="tui-demo-description"
-          >
-            {tuiExpanded && (
-              <picture>
-                <img
-                  src={
-                    tuiStopped
-                      ? "/tui-demo-poster.png"
-                      : `/tui-demo.gif${tuiRestart ? `?restart=${tuiRestart}` : ""}`
-                  }
-                  alt={
-                    tuiStopped
-                      ? "Still frame of the herdr-mise terminal demo kitchen."
-                      : "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer."
-                  }
-                />
-              </picture>
-            )}
-            <figcaption>
-              Native Ghostty recording of herdr-mise using deterministic demo
-              data.
-            </figcaption>
-            <span id="tui-demo-description" className="visualTuiDescription">
-              {tuiDemoDescription}
-            </span>
-            <div className="visualTuiControls">
-              <button
-                ref={tuiExpandToggle}
-                type="button"
-                aria-expanded={tuiExpanded}
-                onClick={() => setTuiExpanded(!tuiExpanded)}
-              >
-                {tuiExpanded ? "Collapse recording" : "Expand recording"}
-              </button>
+          {tuiExpanded && (
+            <figure
+              className="visualTuiFigure"
+              data-expanded={tuiExpanded}
+              aria-label="herdr-mise TUI demo recording"
+              aria-describedby="tui-demo-description"
+            >
               {tuiExpanded && (
+                <picture>
+                  <img
+                    src={
+                      tuiStopped
+                        ? "/tui-demo-poster.png"
+                        : `/tui-demo.gif${tuiRestart ? `?restart=${tuiRestart}` : ""}`
+                    }
+                    alt={
+                      tuiStopped
+                        ? "Still frame of the herdr-mise terminal demo kitchen."
+                        : "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer."
+                    }
+                  />
+                </picture>
+              )}
+              <figcaption>
+                Native Ghostty recording of herdr-mise using deterministic demo
+                data.
+              </figcaption>
+              <span id="tui-demo-description" className="visualTuiDescription">
+                {tuiDemoDescription}
+              </span>
+              <div className="visualTuiControls">
                 <button
                   type="button"
+                  aria-expanded={tuiExpanded}
                   onClick={() => {
-                    if (tuiStopped) setTuiRestart((value) => value + 1);
-                    setTuiStopped(!tuiStopped);
+                    setTuiExpanded(false);
+                    tuiExpandToggle.current?.focus();
                   }}
                 >
-                  {tuiStopped ? "Restart animation" : "Stop animation"}
+                  {tuiExpanded ? "Collapse recording" : "Expand recording"}
                 </button>
-              )}
-            </div>
-          </figure>
+                {tuiExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (tuiStopped) setTuiRestart((value) => value + 1);
+                      setTuiStopped(!tuiStopped);
+                    }}
+                  >
+                    {tuiStopped ? "Restart animation" : "Stop animation"}
+                  </button>
+                )}
+              </div>
+            </figure>
+          )}
         </>
       )}
       {/* While Herdr is unreachable or incompatible, the demo placard

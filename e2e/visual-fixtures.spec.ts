@@ -327,6 +327,20 @@ for (const viewport of [
   });
 }
 
+/** Largest axis gap between two boxes; 0 when they touch or overlap. */
+function edgeGap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  return Math.max(
+    0,
+    a.x - (b.x + b.width),
+    b.x - (a.x + a.width),
+    a.y - (b.y + b.height),
+    b.y - (a.y + a.height),
+  );
+}
+
 test("fixture-backed offscreen attention updates global title and favicon without waking the scene", async ({
   page,
 }) => {
@@ -669,6 +683,8 @@ test("fixture-backed freezer and settings controls share sizing and focus treatm
         await expect(freezer).toBeFocused();
         const freezerStyle = await style(freezer);
         expect(freezerStyle[5]).not.toBe("none");
+        await page.keyboard.press("Tab");
+        await expect(page.locator(".serviceRecap > summary")).toBeFocused();
         await page.keyboard.press("Tab");
         await expect(settings).toBeFocused();
         expect(await style(settings)).toEqual(freezerStyle);
@@ -1428,7 +1444,12 @@ test("authoritative fixture drives rendered feed history accents poses prep and 
     const settingsBox = await settingsPanel.boundingBox();
     expect(settingsBox).not.toBeNull();
     expectInside(settingsBox!, { x: 0, y: 0, width: 390, height: 844 });
-    expect(boxesIntersect(selected, settingsBox!)).toBe(false);
+    expect(
+      boxesIntersect(
+        (await page.locator(".serviceStrip").boundingBox())!,
+        settingsBox!,
+      ),
+    ).toBe(false);
     await page.setViewportSize({ width: 320, height: 640 });
     const narrowSelected = (await sceneMetrics(page))!.stationCells[
         "fictional-terminal-19"
@@ -1662,19 +1683,22 @@ test("real fixture service summary cycles every blocked cook without moving stat
       await expect(summary).toContainText(`Blocked: ${blockedCount}`, {
         timeout: 10_000,
       });
-      await expect(summary).toContainText(`Shown: ${count} of ${count}`);
-      await expect(summary).toContainText("Hidden plated: 0");
       await expect(summary).toContainText("Oldest blocked: Cook00");
-      expect(await summary.locator("strong").allTextContents()).toEqual([
-        "Observed -",
-        "Working:",
-        "Blocked:",
-        "Plated:",
-        "Unknown:",
-        "Shown:",
-        "Hidden plated:",
-        "Oldest blocked:",
-      ]);
+      // Secondary qualifiers are omitted when they just restate the obvious.
+      await expect(summary).not.toContainText("Shown:");
+      await expect(summary).not.toContainText("Hidden plated:");
+      // Zero-valued counts stay available to assistive tech while muted.
+      expect(
+        await summary.locator(".chromeCountEmpty").count(),
+      ).toBeGreaterThan(0);
+      // Blocked attention leads the strip in DOM and reading order.
+      const summaryHtml = (await summary.innerHTML()).toLowerCase();
+      expect(summaryHtml.indexOf("blocked")).toBeLessThan(
+        summaryHtml.indexOf("working"),
+      );
+      expect(summaryHtml.indexOf("oldest blocked")).toBeLessThan(
+        summaryHtml.indexOf("next blocked"),
+      );
       const initialMetrics = (await sceneMetrics(page))!;
       const summaryBox = (await summary.boundingBox())!,
         canvasBox = (await page.locator(".canvasHost").boundingBox())!;
@@ -3202,6 +3226,21 @@ test("real Herdr observations drive the service recap without counting recovery 
     await expect(
       recap.getByRole("table", { name: "Retained agent observations" }),
     ).toBeVisible();
+    // The recap is a bounded popover: under 45% of the canvas at 1280x720,
+    // with no horizontally clipped cells.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const canvasBox = (await page.locator(".canvasHost").boundingBox())!,
+      recapBox = (await recap.locator(":scope > div").boundingBox())!;
+    expect(
+      (recapBox.width * recapBox.height) / (canvasBox.width * canvasBox.height),
+    ).toBeLessThan(0.45);
+    for (const cell of await recap.locator("tbody th, tbody td").all())
+      expect(
+        await cell.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth + 1,
+        ),
+        await cell.innerText(),
+      ).toBe(true);
     await expect(countsLine).toContainText("Blocked occurrences: 1");
     await expect(countsLine).toContainText("86’d: 0");
     await expect(
@@ -3512,6 +3551,285 @@ test("real Herdr observations keep recap identities stable through paging and ch
           .toBe(true);
       }
     }
+  } finally {
+    await app.close();
+  }
+});
+
+test("fixture-backed chrome stays attention ordered and panels remain bounded", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const source = await panelFixture(),
+    fixture = structuredClone(source) as typeof source & {
+      workspaces: Array<{ workspace_id: string; label: string }>;
+      agents: Array<Record<string, unknown>>;
+    },
+    template = fixture.agents[0]!;
+  fixture.workspaces = [
+    { workspace_id: "kitchen-one", label: "Kitchen One" },
+    { workspace_id: "pantry-two", label: "Pantry Two" },
+  ];
+  fixture.agents = [
+    {
+      ...template,
+      terminal_id: "fixture-blocked",
+      pane_id: "fixture-pane-blocked",
+      workspace_id: "kitchen-one",
+      display_agent: "Blocked cook",
+      agent_status: "blocked",
+      state_change_seq: 101,
+    },
+    {
+      ...template,
+      terminal_id: "fixture-working",
+      pane_id: "fixture-pane-working",
+      workspace_id: "kitchen-one",
+      display_agent: "Working cook",
+      agent_status: "working",
+      state_change_seq: 102,
+    },
+    {
+      ...template,
+      terminal_id: "fixture-unknown",
+      pane_id: "fixture-pane-unknown",
+      workspace_id: "kitchen-one",
+      display_agent: "Unknown cook",
+      agent_status: "unknown",
+      state_change_seq: 103,
+    },
+    {
+      ...template,
+      terminal_id: "fixture-elsewhere",
+      pane_id: "fixture-pane-elsewhere",
+      workspace_id: "pantry-two",
+      display_agent: "Elsewhere cook",
+      agent_status: "blocked",
+      state_change_seq: 104,
+    },
+  ];
+  const app = await startFixtureApp({
+    prefix: "mise-chrome-order-",
+    snapshot: fixture,
+  });
+  try {
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 960, height: 540 },
+      { width: 375, height: 667 },
+      { width: 320, height: 640 },
+    ] as const) {
+      await page.setViewportSize(viewport);
+      await page.goto(`${app.appUrl}/?stats`);
+      await expect(
+        page.getByRole("button", { name: /Blocked cook, Blocked/ }),
+      ).toBeAttached({ timeout: 20_000 });
+
+      const summary = page.getByRole("region", {
+        name: "Observed service summary",
+      });
+      // Blocked attention leads, oldest before the next action.
+      const summaryHtml = (await summary.innerHTML()).toLowerCase();
+      expect(summaryHtml.indexOf("blocked")).toBeLessThan(
+        summaryHtml.indexOf("working"),
+      );
+      expect(summaryHtml.indexOf("oldest blocked")).toBeLessThan(
+        summaryHtml.indexOf("next blocked"),
+      );
+      // Uninformative qualifiers are absent, zero counts stay accessible.
+      await expect(summary).not.toContainText("Hidden plated:");
+      expect(
+        await summary.locator(".chromeCountEmpty").count(),
+      ).toBeGreaterThan(0);
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <= innerWidth &&
+            document.documentElement.scrollHeight <= innerHeight,
+        ),
+      ).toBe(true);
+
+      // Scoping to one workspace keeps blocked work elsewhere as a badge.
+      await page
+        .getByRole("combobox", { name: "Workspace" })
+        .selectOption({ label: "Kitchen One" });
+      await expect(
+        page.getByRole("button", { name: "1 blocked elsewhere — Show all" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /^Next blocked:/ }),
+      ).toBeAttached();
+
+      // Settings opens bounded, closes, and restores its trigger focus.
+      const settingsTrigger = page.getByRole("button", {
+        name: "Open settings",
+      });
+      await settingsTrigger.click();
+      const settings = page.getByRole("complementary", { name: "Settings" });
+      await expect(settings).toBeVisible();
+      const settingsBox = (await settings.boundingBox())!;
+      expect(settingsBox.x).toBeGreaterThanOrEqual(0);
+      expect(settingsBox.y).toBeGreaterThanOrEqual(0);
+      expect(settingsBox.x + settingsBox.width).toBeLessThanOrEqual(
+        viewport.width + 1,
+      );
+      expect(settingsBox.y + settingsBox.height).toBeLessThanOrEqual(
+        viewport.height + 1,
+      );
+      await page.keyboard.press("Escape");
+      await expect(settingsTrigger).toBeFocused();
+
+      // The recap stays a bounded popover with unclipped cells.
+      const recap = page.locator(".serviceRecap");
+      await recap.locator("summary").click();
+      const table = recap.getByRole("table", {
+        name: "Retained agent observations",
+      });
+      await expect(table).toBeVisible();
+      const canvasBox = (await page.locator(".canvasHost").boundingBox())!,
+        panelBox = (await recap.locator(":scope > div").boundingBox())!;
+      expect(panelBox.x).toBeGreaterThanOrEqual(0);
+      expect(panelBox.y).toBeGreaterThanOrEqual(0);
+      expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(
+        viewport.width + 1,
+      );
+      expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(
+        viewport.height + 1,
+      );
+      if (viewport.width >= 1280)
+        expect(
+          (panelBox.width * panelBox.height) /
+            (canvasBox.width * canvasBox.height),
+        ).toBeLessThan(0.45);
+      for (const cell of await recap.locator("tbody th, tbody td").all())
+        expect(
+          await cell.evaluate(
+            (element) => element.scrollWidth <= element.clientWidth + 1,
+          ),
+          await cell.innerText(),
+        ).toBe(true);
+      await page.keyboard.press("Escape");
+      await expect(recap).not.toHaveAttribute("open");
+      await expect(recap.locator("summary")).toBeFocused();
+
+      // Station details open beside the station that opened them and follow
+      // it across a resize instead of falling back to a fixed corner.
+      await page
+        .getByRole("navigation", { name: "Agent stations" })
+        .getByRole("button", { name: /Blocked cook, Blocked/ })
+        .evaluate((element: HTMLElement) => element.click());
+      const details = page.getByRole("complementary", {
+        name: "Blocked cook details",
+      });
+      await expect(details).toBeVisible();
+      const detailAnchored = async (width: number, height: number) => {
+        const cell = (await sceneMetrics(page))?.stationCells[
+            "fixture-blocked"
+          ],
+          box = await details.boundingBox();
+        return Boolean(
+          cell &&
+          box &&
+          !boxesIntersect(cell, box) &&
+          edgeGap(cell, box) <= 24 &&
+          box.x >= 0 &&
+          box.y >= 0 &&
+          box.x + box.width <= width + 1 &&
+          box.y + box.height <= height + 1,
+        );
+      };
+      await expect
+        .poll(() => detailAnchored(viewport.width, viewport.height))
+        .toBe(true);
+      if (viewport.width === 1280) {
+        await page.setViewportSize({ width: 960, height: 540 });
+        await expect.poll(() => detailAnchored(960, 540)).toBe(true);
+      }
+      await page.keyboard.press("Escape");
+      await expect(details).toHaveCount(0);
+    }
+
+    // An ended snapshot still renders the kitchen without a false hidden-plated
+    // qualifier or losing attention order.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const ended = structuredClone(fixture);
+    ended.agents = [
+      {
+        ...fixture.agents[0]!,
+        terminal_id: "fixture-ended",
+        pane_id: "fixture-pane-ended",
+        display_agent: "Ended cook",
+        agent_status: "done",
+        state_change_seq: 200,
+      },
+    ];
+    app.setSnapshot(ended);
+    await expect(
+      page
+        .getByRole("navigation", { name: "Agent stations" })
+        .getByRole("button", { name: /Ended cook, Done — plated/i }),
+    ).toBeAttached({ timeout: 20_000 });
+    const endedSummary = page.getByRole("region", {
+      name: "Observed service summary",
+    });
+    await expect(endedSummary).not.toContainText("Hidden plated:");
+    await expect(endedSummary).toContainText("Plated: 1");
+
+    // An ended session's summary opens beside the freezer row that opened
+    // it, never over the ended-chefs drawer, and stays there after a resize.
+    await page.getByRole("button", { name: "Freezer", exact: true }).click();
+    const drawer = page.getByRole("navigation", { name: "Ended chefs" });
+    // Cooks dropped from the ended snapshot now rest in the freezer.
+    await expect(drawer.getByRole("button").first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await drawer.getByRole("button").first().click();
+    const sessionSummary = page.getByRole("complementary", {
+      name: /session summary$/i,
+    });
+    await expect(sessionSummary).toBeVisible();
+    const summaryAnchored = async (width: number, height: number) => {
+      const box = await sessionSummary.boundingBox(),
+        drawerBox = await drawer.boundingBox();
+      return Boolean(
+        box &&
+        drawerBox &&
+        !boxesIntersect(box, drawerBox) &&
+        edgeGap(box, drawerBox) <= 24 &&
+        box.x >= 0 &&
+        box.y >= 0 &&
+        box.x + box.width <= width + 1 &&
+        box.y + box.height <= height + 1,
+      );
+    };
+    await expect.poll(() => summaryAnchored(1280, 720)).toBe(true);
+    await page.setViewportSize({ width: 960, height: 540 });
+    await expect.poll(() => summaryAnchored(960, 540)).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(sessionSummary).toHaveCount(0);
+
+    // Recap opened in the freezer neither hides behind nor covers the drawer.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const freezerRecap = page.locator(".serviceRecap");
+    await freezerRecap.locator("summary").click();
+    const freezerRecapBody = freezerRecap.locator(":scope > div");
+    await expect(freezerRecapBody).toBeVisible();
+    const recapBodyBox = (await freezerRecapBody.boundingBox())!,
+      drawerBox = (await drawer.boundingBox())!;
+    expect(boxesIntersect(recapBodyBox, drawerBox)).toBe(false);
+    expect(
+      await freezerRecapBody.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return [0.2, 0.5, 0.8].every((fraction) =>
+          element.contains(
+            document.elementFromPoint(
+              rect.x + rect.width * fraction,
+              rect.y + rect.height / 2,
+            ),
+          ),
+        );
+      }),
+    ).toBe(true);
   } finally {
     await app.close();
   }

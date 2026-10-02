@@ -60,7 +60,7 @@ export const PRODUCT_CAPTION_ID = "capture-caption";
 export const PRODUCT_INSTALL_CARD_ID = "product-install-card";
 
 const INSTALL_STYLE_ID = "product-install-card-style";
-const INSTALL_STYLE = `#${PRODUCT_INSTALL_CARD_ID}{position:fixed;left:24px;bottom:24px;z-index:30;max-width:min(560px,calc(100vw - 48px));padding:12px 16px;color:var(--text);background:var(--panel);border:3px solid var(--panel);border-radius:var(--radiusControl);box-shadow:var(--shadow);font:600 14px/1.4 var(--fontChrome)}#${PRODUCT_INSTALL_CARD_ID} h2{margin:0 0 6px;font-size:16px}#${PRODUCT_INSTALL_CARD_ID} pre{margin:0;overflow:auto;white-space:pre-wrap;font:600 13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}#${PRODUCT_INSTALL_CARD_ID} p{margin:6px 0 0;color:var(--secondary)}`;
+const INSTALL_STYLE = `#${PRODUCT_INSTALL_CARD_ID}{position:fixed;left:24px;bottom:80px;z-index:30;max-width:min(560px,calc(100vw - 48px));padding:12px 16px;color:var(--text);background:var(--panel);border:1px solid var(--borderSoft);border-radius:var(--radiusControl);font:600 14px/1.4 var(--fontChrome)}@supports(backdrop-filter:blur(1px)){#${PRODUCT_INSTALL_CARD_ID}{background:var(--surface);backdrop-filter:blur(var(--surfaceBlur))}}@media(prefers-reduced-transparency:reduce){#${PRODUCT_INSTALL_CARD_ID}{background:var(--panel);backdrop-filter:none}}#${PRODUCT_INSTALL_CARD_ID} h2{margin:0 0 6px;font-size:16px}#${PRODUCT_INSTALL_CARD_ID} pre{margin:0;overflow:auto;white-space:pre-wrap;font:600 13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}#${PRODUCT_INSTALL_CARD_ID} p{margin:6px 0 0;color:var(--secondary)}`;
 
 export function productSceneClockCeiling(scene) {
   return scene === "blocked" || scene === "details"
@@ -173,7 +173,7 @@ export async function prepareProductScene(page, baseUrl, scene, label) {
       break;
     case "comparison":
       await page.clock.runFor(PRODUCT_SETTLE_MS);
-      await page.getByRole("button", { name: "Expand recording" }).click();
+      await page.getByRole("button", { name: "Terminal view" }).click();
       await requireVisible(
         page.locator('figure.visualTuiFigure[data-expanded="true"]'),
         label,
