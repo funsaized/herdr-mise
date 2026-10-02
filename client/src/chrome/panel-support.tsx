@@ -89,14 +89,16 @@ export function FocusedPanel({
   useLayoutEffect(() => {
     const resolve = () => (typeof anchor === "function" ? anchor() : anchor);
     const update = () => {
-      const node = ref.current,
-        target = resolve();
+      const node = ref.current;
       if (!node) return;
-      if (!target) {
-        setPlacement(null);
-        setStyle(undefined);
-        return;
-      }
+      // Without an opener on screen (for example the renderer-fallback
+      // list), anchor to the top-right corner so obstacles still apply.
+      const target = resolve() ?? {
+        x: innerWidth - panelMargin,
+        y: 0,
+        width: 0,
+        height: 0,
+      };
       const rect = node.getBoundingClientRect(),
         rail = document.querySelector(".chromeFooter")?.getBoundingClientRect(),
         strip = document
@@ -119,6 +121,9 @@ export function FocusedPanel({
             ".freezerInspector",
             ".demoPlacard",
             ".emptyPill",
+            // The renderer-fallback list paints above chrome, so panels
+            // opened from its rows must sit beside it, not under it.
+            ".rendererFallback",
             ".serviceRecap[open] > div",
           ].map((selector) =>
             document.querySelector(selector)?.getBoundingClientRect(),

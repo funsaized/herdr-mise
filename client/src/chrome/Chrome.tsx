@@ -45,17 +45,16 @@ function VisualExplorer({ search }: { search: string }) {
       aria-label="Preview explorer"
       data-minimized={minimized}
     >
-      <button type="button" onClick={() => setMinimized(!minimized)}>
-        {minimized ? "Restore introduction" : "Minimize introduction"}
-      </button>
       {!minimized && (
-        <>
-          <p>
-            <strong>AI coding agents, at a glance</strong> — a pixel-art kitchen
-            for Herdr. Runs locally and read-only; it never controls agents.
-            This playground uses deterministic demo data.
-          </p>
-          <div className="visualExplorerActions">
+        <p>
+          <strong>AI coding agents, at a glance</strong> — a pixel-art kitchen
+          for Herdr. Runs locally and read-only; it never controls agents. This
+          playground uses deterministic demo data.
+        </p>
+      )}
+      <div className="visualExplorerActions">
+        {!minimized && (
+          <>
             <a href="https://github.com/funsaized/herdr-mise#quick-start">
               Install for Herdr
             </a>
@@ -63,43 +62,60 @@ function VisualExplorer({ search }: { search: string }) {
             <button type="button" onClick={() => location.reload()}>
               Replay demo
             </button>
-          </div>
-          <div>
-            <form onSubmit={loadPreview}>
-              <label>
-                Scene
-                <select name="preset" defaultValue={config.preset}>
-                  {visualPresets.map((preset) => (
-                    <option key={preset}>{preset}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Cooks
-                <select name="agents" defaultValue={config.agents}>
-                  {!visualAgentCounts.some(
-                    (count) => count === config.agents,
-                  ) && (
-                    <option value={config.agents}>
-                      {config.agents} — URL roster
-                    </option>
-                  )}
-                  {visualAgentCounts.map((count) => (
-                    <option key={count} value={count}>
-                      {count === 0
-                        ? "0 — Clear service"
-                        : count === 12
-                          ? "12 — Large herd"
-                          : count}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit">Load preview</button>
-            </form>
-            <span>Loading a scene resets this preview.</span>
-          </div>
-        </>
+          </>
+        )}
+        <button
+          type="button"
+          className="explorerMinimize"
+          aria-label={
+            minimized ? "Restore introduction" : "Minimize introduction"
+          }
+          title={minimized ? "Restore introduction" : "Minimize introduction"}
+          onClick={() => setMinimized(!minimized)}
+        >
+          <span aria-hidden="true">{minimized ? "＋" : "–"}</span>
+        </button>
+      </div>
+      {!minimized && (
+        <form onSubmit={loadPreview}>
+          <label>
+            Scene
+            <select name="preset" defaultValue={config.preset}>
+              {visualPresets.map((preset) => (
+                <option key={preset}>{preset}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Cooks
+            <select name="agents" defaultValue={config.agents}>
+              {!visualAgentCounts.some((count) => count === config.agents) && (
+                <option value={config.agents}>
+                  {config.agents} — URL roster
+                </option>
+              )}
+              {visualAgentCounts.map((count) => (
+                <option key={count} value={count}>
+                  {count === 0
+                    ? "0 — Clear service"
+                    : count === 12
+                      ? "12 — Large herd"
+                      : count}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            aria-describedby="visual-explorer-reset"
+            title="Loading a scene resets this preview."
+          >
+            Load preview
+          </button>
+          <span id="visual-explorer-reset" className="visuallyHidden">
+            Loading a scene resets this preview.
+          </span>
+        </form>
       )}
     </aside>
   );

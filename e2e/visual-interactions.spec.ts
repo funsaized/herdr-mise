@@ -384,6 +384,70 @@ test("playground introduction exposes install and replay without expanding the e
   await expect(explorer).toHaveAttribute("data-minimized", "true");
   await explorer.getByRole("button", { name: "Restore introduction" }).click();
   await expect(explorer).not.toHaveAttribute("data-minimized", "true");
+  // Wherever it fits beside the kitchen, the introduction is sized to its
+  // content: no inner scrollbar, no page scroll, and clear of the 86 board,
+  // the pass, stations and bells.
+  for (const viewport of [
+    { width: 2000, height: 1000 },
+    { width: 1440, height: 900 },
+    { width: 1280, height: 800 },
+    { width: 1200, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/?preset=blocked&agents=6&stats");
+    await expect
+      .poll(
+        async () =>
+          Object.keys((await sceneMetrics(page))?.stationCells ?? {}).length,
+      )
+      .toBeGreaterThan(0);
+    expect(
+      await explorer.evaluate((element) => {
+        const shell = document.querySelector(".appShell")!;
+        return {
+          inner: element.scrollHeight > element.clientHeight + 1,
+          page:
+            shell.scrollHeight > shell.clientHeight + 1 ||
+            document.documentElement.scrollHeight > innerHeight,
+        };
+      }),
+      `${viewport.width}×${viewport.height}: introduction must fit`,
+    ).toEqual({ inner: false, page: false });
+    const surface = (await explorer.boundingBox())!,
+      canvas = (await page.locator(".canvasHost").boundingBox())!,
+      metrics = (await sceneMetrics(page))!,
+      layout = computeLayout(
+        canvas.width,
+        canvas.height,
+        Object.keys(metrics.stationCells),
+      ),
+      boardWidth = Math.min(92 * layout.unit, canvas.width * 0.36),
+      board = {
+        x: (canvas.width - boardWidth) / 2 - 2 * layout.unit,
+        y: 2 * layout.unit,
+        width: boardWidth + 4 * layout.unit,
+        height:
+          Math.max(22 * layout.unit, layout.wall.height - 15 * layout.unit) +
+          4 * layout.unit,
+      };
+    expect(surface.x + surface.width).toBeLessThanOrEqual(viewport.width);
+    expect(surface.y + surface.height).toBeLessThanOrEqual(viewport.height);
+    for (const rect of [
+      board,
+      layout.pass,
+      ...Object.values(metrics.stationCells),
+      ...Object.values(metrics.blockedPlacements).map(({ bell }) => bell),
+    ])
+      expect(
+        boxesIntersect(surface, {
+          ...rect,
+          x: canvas.x + rect.x,
+          y: canvas.y + rect.y,
+        }),
+        `${viewport.width}×${viewport.height}: introduction must clear the kitchen`,
+      ).toBe(false);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?preset=mixed&agents=6&theme=dinner&campaign=keep&stats");
   await expect(
     page.getByRole("button", { name: /^Codex, Blocked — .*open details$/ }),
@@ -405,6 +469,8 @@ for (const viewport of [
   { width: 320, height: 320 },
   { width: 320, height: 640 },
   { width: 640, height: 720 },
+  { width: 1024, height: 640 },
+  { width: 1024, height: 768 },
   { width: 1280, height: 720 },
   { width: 1280, height: 800 },
   { width: 1440, height: 900 },

@@ -1399,7 +1399,7 @@ summary:focus-visible {
     max-height: calc(100dvh - 264px - var(--chromePagerSpace, 0px));
   }
 }
-@media (max-width: 1439px), (max-height: 719px) {
+@media (max-width: 1199px), (max-height: 639px) {
   .appShell:has(.visualExplorer) {
     position: relative;
     overflow-y: auto;
@@ -1443,12 +1443,16 @@ summary:focus-visible {
   z-index: 9;
   max-width: calc(100vw - 16px);
 }
-@media (min-width: 1440px) and (min-height: 720px) {
+/* Wherever it fits beside the kitchen, the playground intro is sized to its
+   content in the top-right corner: no inner scrollbar and no page scroll. */
+@media (min-width: 1200px) and (min-height: 640px) {
   .visualExplorer {
-    left: auto;
+    top: 8px;
     right: 8px;
-    width: 300px;
-    max-height: 190px;
+    left: auto;
+    width: 360px;
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -1693,4 +1697,62 @@ summary:focus-visible {
       100dvh - 188px - min(24vh, 150px) - var(--chromePagerSpace, 0px)
     );
   }
+}
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.visualExplorer form {
+  margin-top: 4px;
+}
+.visualExplorer form select {
+  min-width: 64px;
+}
+@media (min-width: 1200px) and (min-height: 640px) {
+  .visualExplorer form {
+    flex-wrap: nowrap;
+  }
+}
+.visualExplorer form label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.visualExplorer form select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.visualExplorer {
+  position: absolute;
+}
+.visualExplorer p {
+  padding-right: 40px;
+}
+.visualExplorerActions .explorerMinimize {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 44px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--secondary);
+  font-size: 16px;
+}
+.visualExplorer[data-minimized="true"] {
+  min-height: 48px;
+  min-width: 48px;
+}
+.visualExplorer button,
+.visualExplorer a {
+  white-space: nowrap;
+}
+.visualExplorer form label:has(select[name="agents"]) {
+  flex: 0 0 auto;
+}
+.visualExplorer form select[name="agents"] {
+  flex: 0 0 64px;
+  width: 64px;
 }

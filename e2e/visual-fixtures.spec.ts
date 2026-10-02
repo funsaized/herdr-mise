@@ -3830,6 +3830,56 @@ test("fixture-backed chrome stays attention ordered and panels remain bounded", 
         );
       }),
     ).toBe(true);
+
+    // With graphics unavailable, details opened from the fallback list sit
+    // beside that list (which paints above chrome) and stay operable.
+    const fallbackPage = await page.context().newPage();
+    await fallbackPage.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (
+        ...args: Parameters<typeof original>
+      ) {
+        if (String(args[0]).includes("webgl")) return null;
+        return Reflect.apply(original, this, args);
+      } as typeof original;
+    });
+    const restored = structuredClone(fixture);
+    restored.agents = restored.agents.map((agent) => ({
+      ...agent,
+      state_change_seq: Number(agent.state_change_seq) + 1_000,
+    }));
+    app.setSnapshot(restored);
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 320, height: 900 },
+    ]) {
+      await fallbackPage.setViewportSize(viewport);
+      await fallbackPage.goto(app.appUrl);
+      const fallback = fallbackPage.getByRole("region", {
+        name: "Agent status list",
+      });
+      await expect(fallback.getByRole("alert")).toBeVisible({
+        timeout: 20_000,
+      });
+      await fallback.getByRole("button", { name: /^Blocked cook/ }).click();
+      const fallbackDetails = fallbackPage.getByRole("complementary", {
+        name: "Blocked cook details",
+      });
+      await expect(fallbackDetails).toBeVisible();
+      expect(
+        boxesIntersect(
+          (await fallbackDetails.boundingBox())!,
+          (await fallback.boundingBox())!,
+        ),
+        `${viewport.width}: details must not open under the fallback list`,
+      ).toBe(false);
+      await fallbackDetails
+        .getByRole("button", { name: "Copy locator" })
+        .click({ trial: true });
+      await fallbackPage.keyboard.press("Escape");
+      await expect(fallbackDetails).toHaveCount(0);
+    }
+    await fallbackPage.close();
   } finally {
     await app.close();
   }

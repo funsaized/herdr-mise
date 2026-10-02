@@ -338,9 +338,10 @@ test("preview explorer controls remain operable at 320 by 320 CSS pixels", async
     expect(target.width).toBeGreaterThanOrEqual(44);
     expect(target.height).toBeGreaterThanOrEqual(44);
   }
+  // The compact introduction fits without an inner scrollbar.
   expect(
     await explorer.evaluate(
-      (element) => element.scrollHeight > element.clientHeight,
+      (element) => element.scrollHeight <= element.clientHeight + 1,
     ),
   ).toBe(true);
   await expect(
