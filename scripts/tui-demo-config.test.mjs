@@ -195,7 +195,11 @@ test("TUI storyboard generates contiguous captioned tape and transcripts", () =>
 
   const vtt = tuiWebVtt();
   assert.ok(vtt.startsWith("WEBVTT\n\n1\n00:00:00.000 --> 00:00:04.000\n"));
-  assert.equal(vtt.match(/-->/g).length, tuiStoryboard.length);
+  // One timing line per scene (counted without a regex over the cue arrow).
+  assert.equal(
+    vtt.split("\n").filter((line) => line.includes(" --> ")).length,
+    tuiStoryboard.length,
+  );
   assert.match(vtt, /00:00:28\.000 --> 00:00:30\.000\n\[Esc\] /);
   assert.match(vtt, /\[Esc \?\] Every key in one place/);
   const transcript = tuiTranscript("herdr-mise 0.4.0 · source abc1234");
