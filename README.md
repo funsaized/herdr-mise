@@ -1,67 +1,22 @@
 # herdr-mise
 
-A localhost visualizer that renders AI coding agents as pixel-art line cooks in
-a single restaurant kitchen. Agent state, the
-ticket rail, the pass, the 86 board, and the kitchen lights are a glanceable
-skin over a small, versioned JSON feed.
+Your AI coding agents as pixel-art line cooks in one restaurant kitchen. Agent
+state, the ticket rail, the pass, the 86 board, and the kitchen lights are a
+glanceable, read-only skin over local Herdr state. It is a window, not an
+office.
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/herdr-mise-hero-poster.png">
   <img alt="herdr-mise in 30 seconds: a demo kitchen of AI coding agents working, idling, and getting blocked; a cook ringing the bell; station details with the exact pane; workspace scope; the freezer of ended sessions; the observed-time recap; the terminal UI; and installation" src="docs/assets/herdr-mise-hero.gif">
 </picture>
 
-A 30-second tour of the demo kitchen: mixed states, a blocked cook ringing the
-bell, station details, workspace scope, the freezer, the service recap, the
-terminal UI, and installation.
-[MP4](docs/assets/herdr-mise-hero.mp4) ·
-[WebM](docs/assets/herdr-mise-hero.webm) ·
+[Try the playground](https://herdr-mise.s11a.com/) ·
 [75-second walkthrough](docs/assets/herdr-mise-product-demo.mp4) ·
-[feature loops](docs/product-demo.md) ·
-[capture provenance](scripts/hero-demo.capture.json)
+[feature loops](docs/product-demo.md)
 
 > IT's RAW!
-
-_Gordon Ramsey_
-
-herdr-mise does not control agents, render their output, or aggregate remote
-servers. It is a window, not an office.
-
-[Visual playground](https://herdr-mise.s11a.com/) — choose a deterministic
-scene and roster in the preview explorer, then load it as a shareable URL. See
-the [playground guide](docs/operations.md#visual-playground) for local use.
-
-| Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
-| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
-
-The binary also runs as a TUI for terminal work. These terminal chefs are lower level, so they're relegated to primitive kitchen tools:
-
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/herdr-mise-tui-demo-poster.png">
-  <img alt="herdr-mise --tui in 30 seconds: six demo cooks in the terminal kitchen; b jumps to Claude blocked at the pass; Tab walks the stations; ? lists every key; R recaps observed time blocked; w focuses one workspace; f opens the walk-in freezer of ended sessions; Esc returns to the kitchen" src="docs/assets/herdr-mise-tui-demo.gif">
-</picture>
-
-A 30-second, captioned tour of `herdr-mise --tui`: jump to the blocked cook
-(`b`), walk the stations (`Tab`), every key (`?`), the service recap (`R`),
-workspace scope (`w`/`a`), and the walk-in freezer (`f`).
-[MP4](docs/assets/herdr-mise-tui-demo.mp4) ·
-[WebM](docs/assets/herdr-mise-tui-demo.webm) ·
-[captions](docs/assets/herdr-mise-tui-demo.vtt) ·
-[transcript](docs/assets/herdr-mise-tui-demo.txt) ·
-[capture provenance](scripts/tui-demo.capture.json)
-
-Mise remains a localhost-only, read-only projection. The browser playground,
-terminal recording, and static fallbacks remain explicitly labeled
-`DEMO SERVICE`; they do not claim live state.
-
-| Live kitchen                                                                                           | Blocked at the pass                                                                                                                                         | Compact fallback                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
-
-Re-record the terminal demo headlessly with `npm run capture:tui` (needs `vhs`,
-`ffmpeg`, and `gifsicle`); see
-[demo recording](docs/operations.md#human-operated-demo-recording) and
-[capture sources](docs/tui-scene-parity.md#cross-references).
+>
+> — _Gordon Ramsey_
 
 ## Quick start
 
@@ -73,32 +28,59 @@ herdr plugin install funsaized/herdr-mise
 herdr plugin action invoke open --plugin mise.kitchen
 ```
 
-The plugin installer downloads the pinned, verified release binary; users do
-not need Node, npm, Cargo, or Rust. Herdr may require Git to clone community
-plugins. See [Operations](docs/operations.md#installation) for logs, updates,
-uninstall, standalone installation, and manual archive verification.
+The plugin installer downloads the pinned, verified release binary, so you do
+not need Node, npm, Cargo, or Rust (Herdr may need Git to clone community
+plugins). The current pinned stable release is [v0.4.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.4.0).
 
-The current pinned stable release is [v0.4.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.4.0).
-
-### Standalone
+Without the plugin, install standalone and run the terminal kitchen; the
+plugin is preferred when Herdr should manage pane registration:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/funsaized/herdr-mise/main/install.sh | sh
 herdr-mise --tui
 ```
 
-Prefer the plugin installation when Herdr should manage pane registration.
-
-### Homebrew and Linuxbrew
+Or with Homebrew/Linuxbrew (installs `herdr`, but registers no plugin):
 
 ```sh
 brew install funsaized/tap/herdr-mise
-herdr-mise --tui
 ```
 
-The formula installs Homebrew Core's `herdr` dependency but does not register a
-Herdr plugin. Prefer `herdr plugin install funsaized/herdr-mise` for
-Herdr-managed pane registration.
+See [Operations](docs/operations.md#installation) for logs, updates, uninstall,
+and archive verification, and [First live connection](#first-live-connection)
+if you see the demo instead of your agents.
+
+## Terminal UI
+
+`herdr-mise --tui` runs the same kitchen in a terminal. These chefs are lower
+level, so they are relegated to primitive kitchen tools:
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/herdr-mise-tui-demo-poster.png">
+  <img alt="herdr-mise --tui in 30 seconds: six demo cooks in the terminal kitchen; b jumps to Claude blocked at the pass; Tab walks the stations; ? lists every key; R recaps observed time blocked; w focuses one workspace; f opens the walk-in freezer of ended sessions; Esc returns to the kitchen" src="docs/assets/herdr-mise-tui-demo.gif">
+</picture>
+
+[MP4](docs/assets/herdr-mise-tui-demo.mp4) ·
+[WebM](docs/assets/herdr-mise-tui-demo.webm) ·
+[captions](docs/assets/herdr-mise-tui-demo.vtt)
+
+| Live kitchen                                                                                           | Blocked at the pass                                                                                                                                         | Compact fallback                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
+
+## Browser kitchen
+
+`herdr-mise` serves the browser kitchen on <http://127.0.0.1:8686>. In the
+[playground](https://herdr-mise.s11a.com/), pick a deterministic scene and
+roster and share it as a URL ([local use](docs/operations.md#visual-playground)).
+Demo recordings, the playground, and static fallbacks are always labeled
+`DEMO SERVICE`; they never claim live state.
+
+| Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| ![Codex, Claude, Hermes, OpenClaw, Gemini, and Aider sharing several kitchen states](docs/assets/working-service-1280x720.png) | ![The same multi-agent brigade under dinner lighting, including blocked and plated work](docs/assets/blocked-dinner-service-1280x720.png) | ![Read-only display settings beside the mixed service](docs/assets/settings-1280x720.png) |
+
+## Connecting to Herdr
 
 ### First live connection
 
@@ -259,5 +241,7 @@ contracts.
   boundaries.
 - [Operations](docs/operations.md) — run, develop, diagnose, and troubleshoot.
 - [Release operations](docs/releasing.md) — signing, publication, and recovery.
+- [Product demo media](docs/product-demo.md) — how the README, playground, and
+  terminal recordings are captured, re-recorded, and validated.
 - [Contributing](CONTRIBUTING.md) — setup, verification, and review rules.
 - [Security policy](SECURITY.md) — supported versions and private reporting.
