@@ -1,5 +1,5 @@
 Terminal UI tour
-herdr-mise 0.4.0 · source b120166
+herdr-mise 0.4.0 · source 3d084e5
 30s · 20 fps · 1128×916
 
 0:00–0:04  Six coding agents, one kitchen: working, idle, blocked, plated.

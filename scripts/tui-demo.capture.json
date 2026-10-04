@@ -3,12 +3,12 @@
   "mode": "tui-demo",
   "automated": true,
   "provenance": "headless VHS recording of the release binary in demo mode",
-  "captured_at": "2026-10-04T18:33:04.655Z",
-  "sourceCommit": "b1201668562b23819c6bf033f5adb79026a7dd4b",
+  "captured_at": "2026-10-04T19:53:58.073Z",
+  "sourceCommit": "3d084e51567cc4230c6fa0064499a59c88c3ae62",
   "version": "0.4.0",
-  "versionLabel": "herdr-mise 0.4.0 · source b120166",
-  "release_binary_sha256": "1619da15c771a9f73c674241c16aa6765a732cc5933ef464a65814e11c9bde4f",
-  "source_sha256": "0934d9fb222398509ee7ccfe8e2a9eb425ea7d7a4215e00f995fea5aeb79409e",
+  "versionLabel": "herdr-mise 0.4.0 · source 3d084e5",
+  "release_binary_sha256": "d745905223b1dfab7f8e5dafcf814ee942a5a96429798277bcef84c4fb33d994",
+  "source_sha256": "3c0b21eb39207698407794753518b3c15873e0034501f99cf10f7d6be5032f93",
   "config_sha256": "4dbbcad6307eafd1947e82f63a9e4c4e16e5f40d2aff484adb95c0e163d99805",
   "recorder": {
     "tools": {
@@ -31,7 +31,7 @@
     },
     "checkpoints": {
       "kitchen": 11,
-      "blocked": 15,
+      "blocked": 14,
       "stations": 18,
       "help": 23,
       "recap": 28,
@@ -121,11 +121,11 @@
   ],
   "output": {
     "path": "docs/assets/herdr-mise-tui-demo.gif",
-    "sha256": "ad5298d25c40c2351f5dc6e3f087bb37cf4e6a3aaeab68c17a7776f133a809c3",
-    "bytes": 798245,
+    "sha256": "318d19b8037f1fd2eee3c606a2516808ded31b31e98fb7558438f19ea138d0ac",
+    "bytes": 830563,
     "poster": "docs/assets/herdr-mise-tui-demo-poster.png",
     "poster_sha256": "178a05906b3ccbf60befcdc32f19aa1a29ba6c016d0ce2f7cb46e0d1e85033fb",
-    "total_media_bytes": 922087,
+    "total_media_bytes": 954405,
     "media_budget_bytes": 1572864,
     "scheduled_views": [
       "kitchen",
@@ -141,18 +141,18 @@
   "outputs": {
     "gif": {
       "path": "docs/assets/herdr-mise-tui-demo.gif",
-      "bytes": 798245,
-      "sha256": "ad5298d25c40c2351f5dc6e3f087bb37cf4e6a3aaeab68c17a7776f133a809c3"
+      "bytes": 830563,
+      "sha256": "318d19b8037f1fd2eee3c606a2516808ded31b31e98fb7558438f19ea138d0ac"
     },
     "mp4": {
       "path": "docs/assets/herdr-mise-tui-demo.mp4",
-      "bytes": 621838,
-      "sha256": "8c2a7daedd6fb4358becb9e57b817ddcbf04bcec0d5c385a5e06359c9acd108a"
+      "bytes": 632519,
+      "sha256": "ff75397a1c7d82c8cad6d1ccae5d0bcd9ff821673e2a13d546bbdc32ec8f4f4a"
     },
     "webm": {
       "path": "docs/assets/herdr-mise-tui-demo.webm",
-      "bytes": 579092,
-      "sha256": "53fc3d6400fb0574788cb4d9ad1848078f3017ff5ce00db03a25201d78458800"
+      "bytes": 583697,
+      "sha256": "f57787fa91451c964e2571b49ae82b67b7b23bc798e8a8c8ca9dc1a93a0216dc"
     },
     "poster": {
       "path": "docs/assets/herdr-mise-tui-demo-poster.png",
@@ -167,7 +167,7 @@
     "txt": {
       "path": "docs/assets/herdr-mise-tui-demo.txt",
       "bytes": 658,
-      "sha256": "e5dbf2b93f467582f0b94c3b3ce07c8112fbf08d8ceee578714296912396b752"
+      "sha256": "5fb52e7a6d7f19956dc8ed90246831bdcf88d6887c520983e39ab8166281beaf"
     }
   }
 }

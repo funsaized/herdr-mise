@@ -36,8 +36,8 @@ test("hosted visual demo serves static assets without localhost sockets", async 
   await expect(
     explorer.getByRole("button", { name: "Replay demo" }),
   ).toBeVisible();
-  await expect(explorer.getByRole("combobox", { name: "Scene" })).toBeHidden();
-  await explorer.getByText("Preview explorer", { exact: true }).click();
+  // Since the minimal chrome (#336) the scene controls are shown up front.
+  await expect(explorer.getByRole("combobox", { name: "Scene" })).toBeVisible();
   await expect(explorer.getByRole("link", { name: "Source" })).toHaveAttribute(
     "href",
     "https://github.com/funsaized/herdr-mise",
@@ -72,17 +72,14 @@ test("hosted visual demo serves static assets without localhost sockets", async 
   await expect(
     page.locator('.stationA11yMirror button[aria-label*="Blocked —"]'),
   ).toHaveCount(6);
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await explorer.getByRole("combobox", { name: "Cooks" }).selectOption("0");
   await explorer.getByRole("button", { name: "Load preview" }).click();
   await expect(page).toHaveURL(/[?&]agents=0(?:&|$)/);
   await expect(page.locator(".stationA11yMirror button")).toHaveCount(0);
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await explorer.getByRole("combobox", { name: "Scene" }).selectOption("mixed");
   await explorer.getByRole("combobox", { name: "Cooks" }).selectOption("12");
   await explorer.getByRole("button", { name: "Load preview" }).click();
   await expect(page.locator(".stationA11yMirror button")).toHaveCount(12);
-  await explorer.getByText("Preview explorer", { exact: true }).click();
   await expect(
     page.getByRole("button", {
       name: /^Codex, Blocked — .*open details$/,
