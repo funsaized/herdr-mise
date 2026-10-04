@@ -11,6 +11,7 @@
 /docs/assets/.capture-web-*/
 /docs/assets/.capture-product-*/
 /docs/assets/.capture-hero-*/
+/docs/assets/.capture-tui-*/
 /.hermes/
 /.claude/
 /.stable-acceptance-evidence.json

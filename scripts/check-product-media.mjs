@@ -15,6 +15,7 @@ import {
   PRODUCT_DEMO_CAPTURE_PATH,
   PRODUCT_DEMO_PROVENANCE,
   PRODUCT_DEMO_SCHEMA,
+  TUI_DEMO_DISPLAYED_MEDIA,
   TUI_DEMO_INPUT,
   cuesFor,
   deliverables,
@@ -348,9 +349,9 @@ async function validateInputs(root, metadata, io) {
     "must preserve the original capture provenance",
   );
   requireCondition(
-    capture.schema === "demo-capture-v1",
+    ["demo-capture-v1", "demo-capture-v2"].includes(capture.schema),
     `${source}.capture.schema`,
-    "must be demo-capture-v1",
+    "must be demo-capture-v1 or demo-capture-v2",
   );
   requireCondition(
     capture.output?.path === input.path,
@@ -377,6 +378,40 @@ async function validateInputs(root, metadata, io) {
     `${source}.posterSha256`,
     "must preserve the original poster hash",
   );
+  // Historical v1 recordings were shown only as a GIF.
+  if (capture.schema === "demo-capture-v1") return;
+  const displayed = input.displayedMedia;
+  requireCondition(
+    Array.isArray(displayed) &&
+      displayed.length === TUI_DEMO_DISPLAYED_MEDIA.length,
+    `${source}.displayedMedia`,
+    "must list the TUI videos the comparison scene played",
+  );
+  for (const [index, expected] of TUI_DEMO_DISPLAYED_MEDIA.entries()) {
+    const media = displayed[index];
+    const label = `${source}.displayedMedia[${index}]`;
+    requireCondition(
+      media?.path === expected.path,
+      `${label}.path`,
+      `must be ${expected.path}`,
+    );
+    const path = resolve(root, media.path);
+    requireCondition(
+      fileSize(path) === media.bytes && media.bytes > 0,
+      `${label}.bytes`,
+      "does not match the TUI video size",
+    );
+    requireCondition(
+      media.sha256 === (await io.digest(path)),
+      `${label}.sha256`,
+      "does not match the TUI video hash",
+    );
+    requireCondition(
+      capture.outputs?.[expected.format]?.sha256 === media.sha256,
+      `${label}.sha256`,
+      "must match the TUI capture provenance",
+    );
+  }
 }
 
 function validateMetadataShape(metadata, sourceVersion) {

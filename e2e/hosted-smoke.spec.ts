@@ -55,6 +55,15 @@ test("hosted visual demo serves static assets without localhost sockets", async 
   ).toHaveCount(1);
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
   expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
+  for (const [path, type] of [
+    ["/tui-demo.mp4", "video/mp4"],
+    ["/tui-demo.webm", "video/webm"],
+    ["/tui-demo.vtt", "text/vtt"],
+  ]) {
+    const response = await request.get(path);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain(type);
+  }
   expect((await request.get("/og.png")).status()).toBe(200);
   await explorer
     .getByRole("combobox", { name: "Scene" })

@@ -33,6 +33,15 @@ export const TUI_DEMO_INPUT = Object.freeze({
   path: "docs/assets/herdr-mise-tui-demo.gif",
   capturePath: "scripts/tui-demo.capture.json",
 });
+// Headless (demo-capture-v2) TUI recordings are shown in the browser as video;
+// product captures record exactly which files the comparison figure played.
+export const TUI_DEMO_DISPLAYED_MEDIA = Object.freeze([
+  Object.freeze({ format: "mp4", path: "docs/assets/herdr-mise-tui-demo.mp4" }),
+  Object.freeze({
+    format: "webm",
+    path: "docs/assets/herdr-mise-tui-demo.webm",
+  }),
+]);
 
 export const storyboard = Object.freeze([
   {

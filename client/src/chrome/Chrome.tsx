@@ -122,7 +122,7 @@ function VisualExplorer({ search }: { search: string }) {
 }
 
 const tuiDemoDescription =
-  "The herdr-mise terminal runs deterministic demo data, showing its kitchen status before visiting WALK-IN FREEZER.";
+  "A 30-second captioned tour of the herdr-mise terminal UI on deterministic demo data: jumping to the blocked cook, station details, help, the service recap, workspace scope, and the walk-in freezer.";
 
 function shortWorkspaceId(id: string) {
   const compact = id.replace(/[^A-Za-z0-9]+/g, "");
@@ -189,10 +189,28 @@ export function Chrome(props: ChromeProps) {
     [tuiExpanded, setTuiExpanded] = useState(false),
     [tuiRestart, setTuiRestart] = useState(0),
     tuiExpandToggle = useRef<HTMLButtonElement>(null),
+    tuiVideo = useRef<HTMLVideoElement>(null),
     now = useClock(props.coarse.blocked > 0),
     workspaceSelect = useRef<HTMLSelectElement>(null),
     workspaceShowAll = useRef<HTMLButtonElement>(null);
   useEffect(() => reducedMotionPreference.subscribe(setTuiStopped), []);
+  // The video element follows the stopped state; a rejected play (autoplay
+  // policy, missing codec) falls back to the stopped poster state.
+  useEffect(() => {
+    const video = tuiVideo.current;
+    if (!video) return;
+    if (tuiStopped) {
+      video.pause();
+      return;
+    }
+    let current = true;
+    video.play()?.catch(() => {
+      if (current) setTuiStopped(true);
+    });
+    return () => {
+      current = false;
+    };
+  }, [tuiStopped, tuiExpanded, tuiRestart]);
   useEffect(() => {
     if (!tuiExpanded) return;
     const collapse = (event: KeyboardEvent) => {
@@ -488,24 +506,26 @@ export function Chrome(props: ChromeProps) {
               aria-label="herdr-mise TUI demo recording"
               aria-describedby="tui-demo-description"
             >
-              {tuiExpanded && (
-                <picture>
-                  <img
-                    src={
-                      tuiStopped
-                        ? "/tui-demo-poster.png"
-                        : `/tui-demo.gif${tuiRestart ? `?restart=${tuiRestart}` : ""}`
-                    }
-                    alt={
-                      tuiStopped
-                        ? "Still frame of the herdr-mise terminal demo kitchen."
-                        : "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer."
-                    }
-                  />
-                </picture>
-              )}
+              <video
+                ref={tuiVideo}
+                poster="/tui-demo-poster.png"
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                aria-label="Recording of the herdr-mise terminal demo kitchen."
+              >
+                <source src="/tui-demo.mp4" type="video/mp4" />
+                <source src="/tui-demo.webm" type="video/webm" />
+                <track
+                  kind="captions"
+                  src="/tui-demo.vtt"
+                  srcLang="en"
+                  label="English"
+                />
+              </video>
               <figcaption>
-                Native Ghostty recording of herdr-mise using deterministic demo
+                Headless recording of herdr-mise --tui using deterministic demo
                 data.
               </figcaption>
               <span id="tui-demo-description" className="visualTuiDescription">
@@ -526,7 +546,10 @@ export function Chrome(props: ChromeProps) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (tuiStopped) setTuiRestart((value) => value + 1);
+                      if (tuiStopped) {
+                        if (tuiVideo.current) tuiVideo.current.currentTime = 0;
+                        setTuiRestart((value) => value + 1);
+                      }
                       setTuiStopped(!tuiStopped);
                     }}
                   >
