@@ -386,9 +386,41 @@ npm run capture:web
 npm run capture:tui
 ```
 
-Run the script from a normal Ghostty shell, not a Herdr pane. TUI capture runs
-six deterministic demo agents, switches to the freezer, and exits without
-human choreography. Web capture uses
+TUI capture is headless: it never opens a window, records the display, or
+touches the operator's terminal, so it needs no screen-recording permission and
+runs the same from any shell. It requires `vhs` (`brew install vhs`), `ffmpeg`
+with `libx264`/`libvpx-vp9`, `gifsicle`, Cargo, Playwright Chromium, and the
+Menlo font (bundled with macOS); a preflight names whichever is missing.
+
+`scripts/tui-demo-config.mjs` is the single storyboard: eight scenes over 30
+seconds, each with the keys it presses and a caption. From it the capture
+generates a VHS tape that builds the release binary, starts six deterministic
+demo agents (`HERDR_MISE_DEMO_START_STEP=278`) against a nonexistent socket and
+a free loopback port, and drives `b`, `Tab`, `?`, `R`, `w`/`a`, and `f` while
+setup and shutdown stay hidden. VHS exports raw frames only (with ffmpeg 9 its
+own GIF/MP4 output can report success and write nothing); the capture checks
+the frame sequence is contiguous and at least 85% complete, spreads it evenly
+over the storyboard, and rejects a terminal grid below 120×40, where the TUI
+would fall back to its compact table. Playwright renders the window frame and
+captions as overlays (ffmpeg here has no `drawtext`), and ffmpeg encodes a
+1128×916 H.264 MP4 and VP9 WebM at 20 fps, an 800px 10 fps GIF, and a poster of
+the blocked-cook scene, plus `.vtt` captions and a `.txt` transcript.
+
+Every output is probed (codec, dimensions, duration, frame count, pixel format,
+no audio), fully decoded, hashed, and checked against the 1.5 MiB GIF-plus-poster
+budget before anything is renamed into `docs/assets/`; provenance
+(`scripts/tui-demo.capture.json`, schema `demo-capture-v2`) is written last with
+the source commit, release binary and tape hashes, tool versions, font, measured
+grid, and storyboard. A failed run publishes nothing and keeps
+`docs/assets/.capture-tui-*/` (ignored by Git) with the tape, `vhs.log`, and
+frames; delete only that directory once diagnosed. Check the checked-in package
+with `node scripts/check-tui-media.mjs`.
+
+Replacing the TUI recording changes the inputs of the README hero and product
+demo, whose comparison scene shows it: re-run `npm run capture:hero` and
+`npm run capture:product` from the same merged `main` commit afterwards.
+
+Web capture uses
 `?preset=attention&agents=6&theme=light` at 1280×720. It opens Codex details
 only after the accessible station label reports blocked, adds a high-contrast
 caption, and changes that caption only after the station reports working again.
@@ -398,7 +430,7 @@ audio absence, and non-empty files are checked before each staged file is
 renamed into place. `scripts/web-demo.capture.json` records the clean source
 commit, timeline, dimensions, durations, sizes, and hashes.
 
-Run web capture only from a clean committed tree. Re-run the same command
+Run either capture only from a clean committed tree. Re-run the same command
 whenever the demo changes. Neither capture requires Herdr.
 
 This is a client-development harness check, not full-product release

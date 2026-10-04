@@ -686,9 +686,9 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
     trigger = page
       .locator(".chromeTools")
       .getByRole("button", { name: "Terminal view", exact: true }),
-    figure = page.locator(".visualTuiFigure img"),
+    figure = page.locator(".visualTuiFigure video"),
     description =
-      "The herdr-mise terminal runs deterministic demo data, showing its kitchen status before visiting WALK-IN FREEZER.";
+      "A 30-second captioned tour of the herdr-mise terminal UI on deterministic demo data: jumping to the blocked cook, station details, help, the service recap, workspace scope, and the walk-in freezer.";
   // The recording is a persistent tools trigger until it is expanded.
   await expect(trigger).toBeVisible();
   await expect(trigger).toContainText("Terminal view");
@@ -706,15 +706,36 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
   await expect(page.locator("#tui-demo-description")).toHaveText(description);
   await expect(
     page.getByText(
-      "Native Ghostty recording of herdr-mise using deterministic demo data.",
+      "Headless recording of herdr-mise --tui using deterministic demo data.",
     ),
   ).toBeVisible();
   await expect(figure).toBeVisible();
   await expect(figure).toHaveAttribute(
-    "alt",
-    "The herdr-mise terminal demo moving from the kitchen to the walk-in freezer.",
+    "aria-label",
+    "Recording of the herdr-mise terminal demo kitchen.",
   );
-  await expect(figure).toHaveAttribute("src", "/tui-demo.gif");
+  await expect(figure).toHaveAttribute("poster", "/tui-demo-poster.png");
+  await expect(figure.locator("track")).toHaveAttribute("src", "/tui-demo.vtt");
+  // Normal motion plays the muted, looping video; time actually advances.
+  await expect
+    .poll(() => figure.evaluate((video: HTMLVideoElement) => video.paused))
+    .toBe(false);
+  await expect
+    .poll(() => figure.evaluate((video: HTMLVideoElement) => video.currentTime))
+    .toBeGreaterThan(0.5);
+  expect(
+    await figure.evaluate((video: HTMLVideoElement) => [
+      video.muted,
+      video.loop,
+      video.videoWidth,
+      video.currentSrc.replace(/^.*\//, ""),
+    ]),
+  ).toEqual([
+    true,
+    true,
+    1128,
+    expect.stringMatching(/^tui-demo\.(mp4|webm)$/),
+  ]);
   const stop = page.getByRole("button", { name: "Stop animation" }),
     collapse = figureBox.getByRole("button", { name: "Collapse recording" });
   await expect(stop).toBeVisible();
@@ -729,13 +750,25 @@ test("TUI recording controls stay accessible, bounded, and isolated", async ({
   await expect(collapse).toBeVisible();
 
   await stop.click();
-  await expect(figure).toHaveAttribute("src", "/tui-demo-poster.png");
-  await expect(figure).toHaveAttribute(
-    "alt",
-    "Still frame of the herdr-mise terminal demo kitchen.",
+  await expect
+    .poll(() => figure.evaluate((video: HTMLVideoElement) => video.paused))
+    .toBe(true);
+  const stoppedAt = await figure.evaluate(
+    (video: HTMLVideoElement) => video.currentTime,
   );
+  await page.waitForTimeout(400);
+  expect(
+    await figure.evaluate((video: HTMLVideoElement) => video.currentTime),
+  ).toBe(stoppedAt);
+  // Restart rewinds to the start of the tour and plays again.
   await page.getByRole("button", { name: "Restart animation" }).click();
-  await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
+  await expect(stop).toBeVisible();
+  await expect
+    .poll(() => figure.evaluate((video: HTMLVideoElement) => video.paused))
+    .toBe(false);
+  expect(
+    await figure.evaluate((video: HTMLVideoElement) => video.currentTime),
+  ).toBeLessThan(stoppedAt);
   await collapse.click();
   await expect(figureBox).toHaveCount(0);
   await expect(trigger).toBeFocused();
@@ -791,7 +824,7 @@ test("TUI recording respects viewport bounds and serves local assets", async ({
   const figureBox = page.getByRole("figure", {
       name: "herdr-mise TUI demo recording",
     }),
-    figure = page.locator(".visualTuiFigure img"),
+    figure = page.locator(".visualTuiFigure video"),
     trigger = page
       .locator(".chromeTools")
       .getByRole("button", { name: "Terminal view", exact: true }),
@@ -833,6 +866,18 @@ test("TUI recording respects viewport bounds and serves local assets", async ({
   await expect(figureBox).toBeInViewport({ ratio: 1 });
   expect((await request.get("/tui-demo.gif")).status()).toBe(200);
   expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
+  for (const [path, type] of [
+    ["/tui-demo.mp4", "video/mp4"],
+    ["/tui-demo.webm", "video/webm"],
+    ["/tui-demo.vtt", "text/vtt"],
+  ]) {
+    const response = await request.get(path);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain(type);
+  }
+  const captions = await (await request.get("/tui-demo.vtt")).text();
+  expect(captions.startsWith("WEBVTT")).toBe(true);
+  expect(captions).toContain("[b] Jump straight to the cook blocked");
   expect((await request.get("/og.png")).status()).toBe(200);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     "content",
@@ -856,34 +901,41 @@ test("TUI recording respects viewport bounds and serves local assets", async ({
   expect(errors).toEqual([]);
 });
 
-test("reduced motion starts stopped and allows an explicit GIF restart", async ({
+test("reduced motion starts stopped and allows explicit TUI video playback", async ({
   page,
   request,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?preset=blocked&agents=1");
-  const figure = page.locator(".visualTuiFigure img");
+  const figure = page.locator(".visualTuiFigure video");
+  const paused = () =>
+    figure.evaluate((video: HTMLVideoElement) => video.paused);
   await expect(figure).toHaveCount(0);
   await page
     .getByRole("button", { name: "Terminal view", exact: true })
     .click();
   await expect(figure).toBeVisible();
-  await expect(figure).toHaveAttribute(
-    "alt",
-    "Still frame of the herdr-mise terminal demo kitchen.",
-  );
-  await expect(figure).toHaveAttribute("src", "/tui-demo-poster.png");
+  // Reduced motion shows the poster and never starts playback by itself.
+  await expect(figure).toHaveAttribute("poster", "/tui-demo-poster.png");
+  await page.waitForTimeout(500);
+  expect(await paused()).toBe(true);
+  expect(
+    await figure.evaluate((video: HTMLVideoElement) => video.currentTime),
+  ).toBe(0);
   await page.getByRole("button", { name: "Restart animation" }).click();
-  await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
+  await expect.poll(paused).toBe(false);
   await expect(
     page.getByRole("button", { name: "Stop animation" }),
   ).toBeVisible();
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(figure).toHaveAttribute("src", "/tui-demo-poster.png");
+  await expect.poll(paused).toBe(true);
+  await expect(
+    page.getByRole("button", { name: "Restart animation" }),
+  ).toBeVisible();
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await expect(figure).toHaveAttribute("src", /\/tui-demo\.gif\?restart=1$/);
+  await expect.poll(paused).toBe(false);
   expect((await request.get("/tui-demo-poster.png")).status()).toBe(200);
 });
 

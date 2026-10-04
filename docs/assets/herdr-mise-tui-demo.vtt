@@ -1,0 +1,33 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:04.000
+Six coding agents, one kitchen: working, idle, blocked, plated.
+
+2
+00:00:04.000 --> 00:00:08.000
+[b] Jump straight to the cook blocked at the pass.
+
+3
+00:00:08.000 --> 00:00:12.000
+[Tab] Walk the stations: state, workspace, time in state.
+
+4
+00:00:12.000 --> 00:00:16.000
+[Esc ?] Every key in one place. Nothing here controls an agent.
+
+5
+00:00:16.000 --> 00:00:20.000
+[Esc R] Recap the service: observed time blocked, computed locally.
+
+6
+00:00:20.000 --> 00:00:24.000
+[R w] Focus one workspace; a returns to all of them.
+
+7
+00:00:24.000 --> 00:00:28.000
+[a f] Open the walk-in freezer, where ended sessions rest.
+
+8
+00:00:28.000 --> 00:00:30.000
+[Esc] Back to the kitchen. Read-only and localhost-only.

@@ -16,6 +16,7 @@ import test from "node:test";
 import {
   PRODUCT_DEMO_SCHEMA,
   PRODUCT_DEMO_PROVENANCE,
+  TUI_DEMO_DISPLAYED_MEDIA,
   TUI_DEMO_INPUT,
   cuesFor,
   deliverables,
@@ -394,6 +395,51 @@ test("product artifact validation rejects incomplete or inconsistent deliverable
         /absent or empty/,
       );
       await writeFile(file, bytes);
+    }
+
+    // A headless (v2) TUI recording must also identify the videos it played.
+    const capture = {
+      ...metadata.inputs.tuiDemo.originalCapture,
+      schema: "demo-capture-v2",
+      outputs: {},
+    };
+    const displayedMedia = [];
+    for (const { format, path } of TUI_DEMO_DISPLAYED_MEDIA) {
+      const bytes = `${format} recording`;
+      await writeFile(join(root, path), bytes);
+      capture.outputs[format] = { path, sha256: hash(bytes) };
+      displayedMedia.push({
+        path,
+        bytes: bytes.length,
+        sha256: hash(bytes),
+      });
+    }
+    const captureBytes = JSON.stringify(capture);
+    await writeFile(join(root, TUI_DEMO_INPUT.capturePath), captureBytes);
+    const v2 = structuredClone(metadata);
+    Object.assign(v2.inputs.tuiDemo, {
+      originalCapture: capture,
+      captureSha256: hash(captureBytes),
+      displayedMedia,
+    });
+    await validateProductMedia(root, v2, io);
+    for (const mutate of [
+      (m) => {
+        delete m.inputs.tuiDemo.displayedMedia;
+      },
+      (m) => {
+        m.inputs.tuiDemo.displayedMedia.reverse();
+      },
+      (m) => {
+        m.inputs.tuiDemo.displayedMedia[0].sha256 = "wrong";
+      },
+    ]) {
+      const bad = structuredClone(v2);
+      mutate(bad);
+      await assert.rejects(
+        validateProductMedia(root, bad, io),
+        /displayedMedia/,
+      );
     }
   } finally {
     await rm(root, { recursive: true });

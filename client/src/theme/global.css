@@ -735,15 +735,13 @@ summary:focus-visible {
   padding: 3px 6px;
   color: var(--text);
 }
-.visualTuiFigure picture {
-  display: flex;
-  min-height: 0;
-}
-.visualTuiFigure img {
+.visualTuiFigure video {
   display: block;
   width: 100%;
   height: auto;
+  min-height: 0;
   object-fit: contain;
+  border-radius: var(--radiusSmall);
 }
 .visualTuiFigure figcaption {
   color: var(--secondary);
@@ -782,10 +780,8 @@ summary:focus-visible {
   max-height: calc(100dvh - 140px - var(--chromePagerSpace, 0px));
   background: var(--panel);
 }
-.visualTuiFigure[data-expanded="true"] picture {
+.visualTuiFigure[data-expanded="true"] video {
   flex: 1;
-}
-.visualTuiFigure[data-expanded="true"] img {
   height: 100%;
 }
 .disconnectScrim {

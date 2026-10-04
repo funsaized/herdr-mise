@@ -63,12 +63,19 @@ async function assertProductCheckpoint(
         'figure.visualTuiFigure[data-expanded="true"]',
       );
       await expect(figure).toBeVisible();
-      await expect(figure.locator("img")).toHaveAttribute(
+      const video = figure.locator("video");
+      await expect(video).toHaveAttribute("poster", "/tui-demo-poster.png");
+      await expect(video.locator("source")).toHaveCount(2);
+      await expect(video.locator("source").first()).toHaveAttribute(
         "src",
-        "/tui-demo.gif",
+        "/tui-demo.mp4",
+      );
+      await expect(video.locator("source").last()).toHaveAttribute(
+        "src",
+        "/tui-demo.webm",
       );
       await expect(figure.locator("figcaption")).toContainText(
-        "Native Ghostty recording",
+        "Headless recording of herdr-mise --tui",
       );
       break;
     }

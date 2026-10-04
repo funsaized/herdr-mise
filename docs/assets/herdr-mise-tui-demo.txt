@@ -1,0 +1,12 @@
+Terminal UI tour
+herdr-mise 0.4.0 · source b120166
+30s · 20 fps · 1128×916
+
+0:00–0:04  Six coding agents, one kitchen: working, idle, blocked, plated.
+0:04–0:08  [b] Jump straight to the cook blocked at the pass.
+0:08–0:12  [Tab] Walk the stations: state, workspace, time in state.
+0:12–0:16  [Esc ?] Every key in one place. Nothing here controls an agent.
+0:16–0:20  [Esc R] Recap the service: observed time blocked, computed locally.
+0:20–0:24  [R w] Focus one workspace; a returns to all of them.
+0:24–0:28  [a f] Open the walk-in freezer, where ended sessions rest.
+0:28–0:30  [Esc] Back to the kitchen. Read-only and localhost-only.

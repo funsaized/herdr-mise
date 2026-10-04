@@ -36,10 +36,19 @@ the [playground guide](docs/operations.md#visual-playground) for local use.
 
 The binary also runs as a TUI for terminal work. These terminal chefs are lower level, so they're relegated to primitive kitchen tools:
 
-![The static herdr-mise terminal demo kitchen](docs/assets/herdr-mise-tui-demo-poster.png)
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/herdr-mise-tui-demo-poster.png">
+  <img alt="herdr-mise --tui in 30 seconds: six demo cooks in the terminal kitchen; b jumps to Claude blocked at the pass; Tab walks the stations; ? lists every key; R recaps observed time blocked; w focuses one workspace; f opens the walk-in freezer of ended sessions; Esc returns to the kitchen" src="docs/assets/herdr-mise-tui-demo.gif">
+</picture>
 
-[Watch the TUI GIF](docs/assets/herdr-mise-tui-demo.gif) ·
-[TUI capture provenance](scripts/tui-demo.capture.json)
+A 30-second, captioned tour of `herdr-mise --tui`: jump to the blocked cook
+(`b`), walk the stations (`Tab`), every key (`?`), the service recap (`R`),
+workspace scope (`w`/`a`), and the walk-in freezer (`f`).
+[MP4](docs/assets/herdr-mise-tui-demo.mp4) ·
+[WebM](docs/assets/herdr-mise-tui-demo.webm) ·
+[captions](docs/assets/herdr-mise-tui-demo.vtt) ·
+[transcript](docs/assets/herdr-mise-tui-demo.txt) ·
+[capture provenance](scripts/tui-demo.capture.json)
 
 Mise remains a localhost-only, read-only projection. The browser playground,
 terminal recording, and static fallbacks remain explicitly labeled
@@ -49,7 +58,9 @@ terminal recording, and static fallbacks remain explicitly labeled
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
 
-Re-record the terminal demo with `npm run capture:tui`; see
+Re-record the terminal demo headlessly with `npm run capture:tui` (needs `vhs`,
+`ffmpeg`, and `gifsicle`); see
+[demo recording](docs/operations.md#human-operated-demo-recording) and
 [capture sources](docs/tui-scene-parity.md#cross-references).
 
 ## Quick start

@@ -5,9 +5,20 @@ import { defineConfig, type Plugin } from "vite";
 
 const visualAssets = [
   ["../docs/assets/herdr-mise-tui-demo.gif", "tui-demo.gif"],
+  ["../docs/assets/herdr-mise-tui-demo.mp4", "tui-demo.mp4"],
+  ["../docs/assets/herdr-mise-tui-demo.webm", "tui-demo.webm"],
+  ["../docs/assets/herdr-mise-tui-demo.vtt", "tui-demo.vtt"],
   ["../docs/assets/herdr-mise-tui-demo-poster.png", "tui-demo-poster.png"],
   ["../docs/assets/herdr-mise-demo-poster.png", "og.png"],
 ] as const;
+
+const contentTypes: Record<string, string> = {
+  gif: "image/gif",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  vtt: "text/vtt; charset=utf-8",
+  png: "image/png",
+};
 
 function visualSite(): Plugin {
   return {
@@ -17,12 +28,38 @@ function visualSite(): Plugin {
       for (const [path, fileName] of visualAssets) {
         const asset = fileURLToPath(new URL(path, import.meta.url));
         if (!existsSync(asset)) continue;
-        server.middlewares.use(`/${fileName}`, (_request, response) => {
+        server.middlewares.use(`/${fileName}`, (request, response) => {
+          const body = readFileSync(asset);
           response.setHeader(
             "Content-Type",
-            fileName.endsWith(".gif") ? "image/gif" : "image/png",
+            contentTypes[fileName.split(".").pop()!] ?? "image/png",
           );
-          response.end(readFileSync(asset));
+          response.setHeader("Accept-Ranges", "bytes");
+          // Video elements seek (and Safari plays) only with byte ranges.
+          const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range ?? "");
+          if (!range || (!range[1] && !range[2])) {
+            response.end(body);
+            return;
+          }
+          const start = range[1]
+              ? Number(range[1])
+              : Math.max(0, body.length - Number(range[2])),
+            end =
+              range[1] && range[2]
+                ? Math.min(Number(range[2]), body.length - 1)
+                : body.length - 1;
+          if (start > end || start >= body.length) {
+            response.statusCode = 416;
+            response.setHeader("Content-Range", `bytes */${body.length}`);
+            response.end();
+            return;
+          }
+          response.statusCode = 206;
+          response.setHeader(
+            "Content-Range",
+            `bytes ${start}-${end}/${body.length}`,
+          );
+          response.end(body.subarray(start, end + 1));
         });
       }
     },

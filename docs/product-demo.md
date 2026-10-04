@@ -67,7 +67,11 @@ Poster timestamps within the clips are 21s, 11s, 2s, and 2s respectively.
 
 The TUI is **prerecorded demo footage**, not a new recording or synchronized live
 browser/TUI state. Its GIF and original `scripts/tui-demo.capture.json` are reused;
-their hashes and original provenance remain recorded. Installation is a closing
+their hashes and original provenance remain recorded. For a headless
+(`demo-capture-v2`) TUI recording, the comparison figure plays its MP4/WebM, so
+`inputs.tuiDemo.displayedMedia` also records those videos' sizes and hashes and
+must match the TUI provenance. Re-capture the product demo after re-recording
+the TUI; its checked-in input hashes otherwise no longer match. Installation is a closing
 card showing README plugin quick-start commands, never executing them.
 
 Review the entire main clip and all loop seams: readable captions, unclipped

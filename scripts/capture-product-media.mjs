@@ -11,6 +11,7 @@ import {
   PRODUCT_DEMO_CAPTURE_PATH,
   PRODUCT_DEMO_SCHEMA,
   PRODUCT_DEMO_PROVENANCE,
+  TUI_DEMO_DISPLAYED_MEDIA,
   TUI_DEMO_INPUT,
   cuesFor,
   deliverables,
@@ -58,11 +59,25 @@ export async function captureProduct(root, expectedCommit) {
   let browser;
   let visual;
   try {
-    for (const path of [TUI_DEMO_INPUT.path, TUI_DEMO_INPUT.capturePath])
-      await writeFile(join(staging, path), await readFile(join(root, path)));
     const tui = JSON.parse(
       await readFile(join(root, TUI_DEMO_INPUT.capturePath), "utf8"),
     );
+    // A headless (v2) recording is played as video by the comparison figure.
+    const displayed =
+      tui.schema === "demo-capture-v1" ? [] : TUI_DEMO_DISPLAYED_MEDIA;
+    for (const path of [
+      TUI_DEMO_INPUT.path,
+      TUI_DEMO_INPUT.capturePath,
+      ...displayed.map((media) => media.path),
+    ])
+      await writeFile(join(staging, path), await readFile(join(root, path)));
+    const displayedMedia = [];
+    for (const { path } of displayed)
+      displayedMedia.push({
+        path,
+        bytes: (await stat(join(root, path))).size,
+        sha256: await tools.digest(join(root, path)),
+      });
     const metadata = {
       schema: PRODUCT_DEMO_SCHEMA,
       capturedAt: new Date().toISOString(),
@@ -87,6 +102,7 @@ export async function captureProduct(root, expectedCommit) {
           posterSha256: tui.output.poster_sha256,
           provenance: "prerecorded demo footage",
           originalCapture: tui,
+          ...(displayed.length ? { displayedMedia } : {}),
         },
       },
       outputs: {},
