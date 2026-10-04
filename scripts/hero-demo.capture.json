@@ -1,10 +1,10 @@
 {
   "schema": "hero-demo-capture-v1",
-  "capturedAt": "2026-10-02T23:11:35.671Z",
-  "sourceCommit": "b361d613f40115b8e5830a4acb41e5747baa77a1",
+  "capturedAt": "2026-10-04T20:19:28.674Z",
+  "sourceCommit": "9440d526a07fad52bf24ef7440be2b526f431c88",
   "provenance": "deterministic client visual harness hero demo",
   "version": "0.4.0",
-  "versionLabel": "herdr-mise 0.4.0 · source b361d61",
+  "versionLabel": "herdr-mise 0.4.0 · source 9440d52",
   "frameRate": 20,
   "sourceDimensions": {
     "width": 1280,
@@ -62,24 +62,24 @@
       "start": 27,
       "end": 30,
       "scene": "installation",
-      "caption": "herdr-mise 0.4.0 · source b361d61 · local and read-only"
+      "caption": "herdr-mise 0.4.0 · source 9440d52 · local and read-only"
     }
   ],
   "outputs": {
     "gif": {
       "path": "docs/assets/herdr-mise-hero.gif",
-      "bytes": 1214291,
-      "sha256": "7cdd64a3f53c88b39ca1c67d0662a4d2f0ae2d868a9951165acf816827188e0c"
+      "bytes": 1202267,
+      "sha256": "3e5d149a23a29a780b00a4708b78622f3c543b3d668ed92450d20af4b150d5ca"
     },
     "mp4": {
       "path": "docs/assets/herdr-mise-hero.mp4",
-      "bytes": 400902,
-      "sha256": "744d98eafdd743fc37095e8d8ad0ddc6818b61be6f6843e8e9c1ec626d5841cb"
+      "bytes": 405478,
+      "sha256": "f57f23ac6c97162ca1e01f6c49e6bb7131bf68e2dd1ce6d513975bb0b361e244"
     },
     "webm": {
       "path": "docs/assets/herdr-mise-hero.webm",
-      "bytes": 978193,
-      "sha256": "cdb5928842f023363e87a1d79833fac40b52918216cac1ee82ad9aa60c09a3c3"
+      "bytes": 1010585,
+      "sha256": "396d9b009d947200ff832503bfd426965bd4b1b66f2ccdce26b2900d9ac5708c"
     },
     "poster": {
       "path": "docs/assets/herdr-mise-hero-poster.png",

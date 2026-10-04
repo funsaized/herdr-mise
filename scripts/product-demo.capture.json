@@ -1,10 +1,10 @@
 {
   "schema": "product-demo-capture-v1",
-  "capturedAt": "2026-10-02T23:11:39.305Z",
-  "sourceCommit": "b361d613f40115b8e5830a4acb41e5747baa77a1",
+  "capturedAt": "2026-10-04T20:19:47.479Z",
+  "sourceCommit": "9440d526a07fad52bf24ef7440be2b526f431c88",
   "provenance": "deterministic client visual harness product demo",
   "version": "0.4.0",
-  "versionLabel": "herdr-mise 0.4.0 · source b361d61",
+  "versionLabel": "herdr-mise 0.4.0 · source 9440d52",
   "frameRate": 20,
   "sourceDimensions": {
     "width": 1280,
@@ -55,43 +55,205 @@
       "start": 66,
       "end": 75,
       "scene": "installation",
-      "caption": "herdr-mise 0.4.0 · source b361d61"
+      "caption": "herdr-mise 0.4.0 · source 9440d52"
     }
   ],
   "inputs": {
     "tuiDemo": {
       "path": "docs/assets/herdr-mise-tui-demo.gif",
       "capturePath": "scripts/tui-demo.capture.json",
-      "bytes": 559490,
-      "sha256": "05e5d1956bab16f0027cb14638d24c60168fc933ac07c113392efce15f3806dd",
-      "captureSha256": "b5b29427f10e3727ae2143f0d8e28db0fcf5fedc2a893d99aa824363b53bb1e2",
-      "sourceSha256": "063f0074a798b46c2c08567dd7a686007a2a6625ce2c51207ba78b4df2c4236b",
-      "releaseBinarySha256": "a08324b7d24c349e299df7498ec2d07e5ed47aa116a4361ed1c96d5560a631d5",
-      "posterSha256": "80bc1ccf5ca2f67e19bfdc3f1ecb57e9e43b70fb53692fa192ffd45456c4c210",
+      "bytes": 830563,
+      "sha256": "318d19b8037f1fd2eee3c606a2516808ded31b31e98fb7558438f19ea138d0ac",
+      "captureSha256": "dfa5626ca2f8e7e3d160be46934c9e492db106a1dbfc02ca2ff0247a75b15b11",
+      "sourceSha256": "3c0b21eb39207698407794753518b3c15873e0034501f99cf10f7d6be5032f93",
+      "releaseBinarySha256": "d745905223b1dfab7f8e5dafcf814ee942a5a96429798277bcef84c4fb33d994",
+      "posterSha256": "178a05906b3ccbf60befcdc32f19aa1a29ba6c016d0ce2f7cb46e0d1e85033fb",
       "provenance": "prerecorded demo footage",
       "originalCapture": {
-        "automated": true,
-        "captured_at": "2026-09-04T11:30:51.779837+00:00",
+        "schema": "demo-capture-v2",
         "mode": "tui-demo",
-        "output": {
-          "bytes": 559490,
-          "duration_seconds": 15.34,
-          "fps": 15,
-          "frames": 230,
-          "height": 480,
-          "media_budget_bytes": 1572864,
-          "path": "docs/assets/herdr-mise-tui-demo.gif",
-          "poster": "docs/assets/herdr-mise-tui-demo-poster.png",
-          "poster_sha256": "80bc1ccf5ca2f67e19bfdc3f1ecb57e9e43b70fb53692fa192ffd45456c4c210",
-          "scheduled_views": ["kitchen", "freezer"],
-          "sha256": "05e5d1956bab16f0027cb14638d24c60168fc933ac07c113392efce15f3806dd",
-          "total_media_bytes": 632769,
-          "width": 620
+        "automated": true,
+        "provenance": "headless VHS recording of the release binary in demo mode",
+        "captured_at": "2026-10-04T19:53:58.073Z",
+        "sourceCommit": "3d084e51567cc4230c6fa0064499a59c88c3ae62",
+        "version": "0.4.0",
+        "versionLabel": "herdr-mise 0.4.0 · source 3d084e5",
+        "release_binary_sha256": "d745905223b1dfab7f8e5dafcf814ee942a5a96429798277bcef84c4fb33d994",
+        "source_sha256": "3c0b21eb39207698407794753518b3c15873e0034501f99cf10f7d6be5032f93",
+        "config_sha256": "4dbbcad6307eafd1947e82f63a9e4c4e16e5f40d2aff484adb95c0e163d99805",
+        "recorder": {
+          "tools": {
+            "vhs": "vhs version 0.12.0",
+            "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+            "ffprobe": "ffprobe version 9.0.2 Copyright (c) 2007-2026 the FFmpeg developers",
+            "gifsicle": "LCDF Gifsicle 1.96",
+            "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)"
+          },
+          "font": "Menlo",
+          "fontSize": 14,
+          "terminal": {
+            "width": 1080,
+            "height": 780,
+            "padding": 20
+          },
+          "grid": {
+            "rows": 45,
+            "columns": 126
+          },
+          "checkpoints": {
+            "kitchen": 11,
+            "blocked": 14,
+            "stations": 18,
+            "help": 23,
+            "recap": 28,
+            "workspace": 33,
+            "freezer": 38,
+            "return": 41
+          },
+          "rawFrames": 581,
+          "expectedFrames": 600,
+          "environment": {
+            "HERDR_MISE_DEMO_COUNT": "6",
+            "HERDR_MISE_DEMO_START_STEP": "278"
+          }
         },
-        "release_binary_sha256": "a08324b7d24c349e299df7498ec2d07e5ed47aa116a4361ed1c96d5560a631d5",
-        "schema": "demo-capture-v1",
-        "source_sha256": "063f0074a798b46c2c08567dd7a686007a2a6625ce2c51207ba78b4df2c4236b"
-      }
+        "frameRate": 20,
+        "gifFrameRate": 10,
+        "dimensions": {
+          "width": 1128,
+          "height": 916
+        },
+        "durationSeconds": 30,
+        "storyboard": [
+          {
+            "start": 0,
+            "end": 4,
+            "scene": "kitchen",
+            "expect": "Workspace: All[\\s\\S]*f freezer",
+            "keys": [],
+            "caption": "Six coding agents, one kitchen: working, idle, blocked, plated."
+          },
+          {
+            "start": 4,
+            "end": 8,
+            "scene": "blocked",
+            "expect": "^\\S?>!\\s*Claude\\b",
+            "keys": ["b"],
+            "caption": "Jump straight to the cook blocked at the pass."
+          },
+          {
+            "start": 8,
+            "end": 12,
+            "scene": "stations",
+            "expect": "^\\S?>\\s+Hermes\\b",
+            "keys": ["Tab"],
+            "caption": "Walk the stations: state, workspace, time in state."
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "scene": "help",
+            "expect": "Esc close / leave / quit",
+            "keys": ["Escape", "?"],
+            "caption": "Every key in one place. Nothing here controls an agent."
+          },
+          {
+            "start": 16,
+            "end": 20,
+            "scene": "recap",
+            "expect": "SERVICE RECAP",
+            "keys": ["Escape", "R"],
+            "caption": "Recap the service: observed time blocked, computed locally."
+          },
+          {
+            "start": 20,
+            "end": 24,
+            "scene": "workspace",
+            "expect": "Workspace: checkout-api",
+            "keys": ["R", "w"],
+            "caption": "Focus one workspace; a returns to all of them."
+          },
+          {
+            "start": 24,
+            "end": 28,
+            "scene": "freezer",
+            "expect": "WALK-IN FREEZER",
+            "keys": ["a", "f"],
+            "caption": "Open the walk-in freezer, where ended sessions rest."
+          },
+          {
+            "start": 28,
+            "end": 30,
+            "scene": "return",
+            "expect": "Workspace: All[\\s\\S]*f freezer",
+            "keys": ["Escape"],
+            "caption": "Back to the kitchen. Read-only and localhost-only."
+          }
+        ],
+        "output": {
+          "path": "docs/assets/herdr-mise-tui-demo.gif",
+          "sha256": "318d19b8037f1fd2eee3c606a2516808ded31b31e98fb7558438f19ea138d0ac",
+          "bytes": 830563,
+          "poster": "docs/assets/herdr-mise-tui-demo-poster.png",
+          "poster_sha256": "178a05906b3ccbf60befcdc32f19aa1a29ba6c016d0ce2f7cb46e0d1e85033fb",
+          "total_media_bytes": 954405,
+          "media_budget_bytes": 1572864,
+          "scheduled_views": [
+            "kitchen",
+            "blocked",
+            "stations",
+            "help",
+            "recap",
+            "workspace",
+            "freezer",
+            "return"
+          ]
+        },
+        "outputs": {
+          "gif": {
+            "path": "docs/assets/herdr-mise-tui-demo.gif",
+            "bytes": 830563,
+            "sha256": "318d19b8037f1fd2eee3c606a2516808ded31b31e98fb7558438f19ea138d0ac"
+          },
+          "mp4": {
+            "path": "docs/assets/herdr-mise-tui-demo.mp4",
+            "bytes": 632519,
+            "sha256": "ff75397a1c7d82c8cad6d1ccae5d0bcd9ff821673e2a13d546bbdc32ec8f4f4a"
+          },
+          "webm": {
+            "path": "docs/assets/herdr-mise-tui-demo.webm",
+            "bytes": 583697,
+            "sha256": "f57787fa91451c964e2571b49ae82b67b7b23bc798e8a8c8ca9dc1a93a0216dc"
+          },
+          "poster": {
+            "path": "docs/assets/herdr-mise-tui-demo-poster.png",
+            "bytes": 123842,
+            "sha256": "178a05906b3ccbf60befcdc32f19aa1a29ba6c016d0ce2f7cb46e0d1e85033fb"
+          },
+          "vtt": {
+            "path": "docs/assets/herdr-mise-tui-demo.vtt",
+            "bytes": 745,
+            "sha256": "e356218d705ec8185a4293f4fde4fa14822c8d6acdca88e7bdcd9a23c3e68d4f"
+          },
+          "txt": {
+            "path": "docs/assets/herdr-mise-tui-demo.txt",
+            "bytes": 658,
+            "sha256": "5fb52e7a6d7f19956dc8ed90246831bdcf88d6887c520983e39ab8166281beaf"
+          }
+        }
+      },
+      "displayedMedia": [
+        {
+          "path": "docs/assets/herdr-mise-tui-demo.mp4",
+          "bytes": 632519,
+          "sha256": "ff75397a1c7d82c8cad6d1ccae5d0bcd9ff821673e2a13d546bbdc32ec8f4f4a"
+        },
+        {
+          "path": "docs/assets/herdr-mise-tui-demo.webm",
+          "bytes": 583697,
+          "sha256": "f57787fa91451c964e2571b49ae82b67b7b23bc798e8a8c8ca9dc1a93a0216dc"
+        }
+      ]
     }
   },
   "outputs": {
@@ -147,22 +309,22 @@
           "start": 66,
           "end": 75,
           "scene": "installation",
-          "text": "herdr-mise 0.4.0 · source b361d61"
+          "text": "herdr-mise 0.4.0 · source 9440d52"
         }
       ],
       "assets": {
         "mp4": {
           "path": "docs/assets/herdr-mise-product-demo.mp4",
           "codec": "h264",
-          "bytes": 745974,
-          "sha256": "1856660082198550d7b26099507565005f08cfbf7618895c51057cad54f3990d",
+          "bytes": 750482,
+          "sha256": "25e5120f9ae94678cb28123299eb844b30ecdacd8a2e906b74909e9bb7f8b9c1",
           "durationSeconds": 75
         },
         "webm": {
           "path": "docs/assets/herdr-mise-product-demo.webm",
           "codec": "vp9",
-          "bytes": 2400944,
-          "sha256": "d236a2d0ea1960f368f2d17b226f989ec2e99776cd5965895bdf2dbb798019a6",
+          "bytes": 2465759,
+          "sha256": "8794e10b21be1d5bb8dd93e492a950dd75084c0b14af6c360744f8c5aa9413e7",
           "durationSeconds": 75
         },
         "poster": {
@@ -176,14 +338,14 @@
           "path": "docs/assets/herdr-mise-product-demo.vtt",
           "codec": "webvtt",
           "bytes": 536,
-          "sha256": "310ce8110a4900ad41ddc8dc4a206d225743b9abb65912ad6475f03678cee838",
+          "sha256": "83a2123da7e65327e88e7557796c662841436506e29a7c89cff6962941345f0f",
           "durationSeconds": null
         },
         "txt": {
           "path": "docs/assets/herdr-mise-product-demo.txt",
           "codec": "text",
           "bytes": 635,
-          "sha256": "96a7461f946fb0d8019780de8e37f790c25daf1cde05f824995dcb54ec7d8911",
+          "sha256": "3542364b55c7a5b3245bb5e085e0b1e1a4bb4ac4b0afa63fa28f755f0c8982c1",
           "durationSeconds": null
         }
       }
@@ -220,7 +382,7 @@
           "path": "docs/assets/herdr-mise-feature-attention.webm",
           "codec": "vp9",
           "bytes": 607086,
-          "sha256": "94aed2b2551192744627f36547bb98d32d156955566a0cc022d38fe3d3c684bc",
+          "sha256": "4573c1445f62253ccb97153659bf9f7b26d3d87f6947172fd7a126e1ae559df2",
           "durationSeconds": 22
         },
         "poster": {
@@ -241,14 +403,14 @@
           "path": "docs/assets/herdr-mise-feature-attention.txt",
           "codec": "text",
           "bytes": 215,
-          "sha256": "b5f54c071f472a0d21c24c03a64e79c743d82e8413c3f96aeb7f25c7747a51c1",
+          "sha256": "a8c4d0afdfd9cedecc94136b31b56ba5d5cb9d382482e1332b149f728f4738b2",
           "durationSeconds": null
         },
         "gif": {
           "path": "docs/assets/herdr-mise-feature-attention.gif",
           "codec": "gif",
-          "bytes": 504779,
-          "sha256": "900d4609c5103f7b7019befbfa0658d774f69d875f9ccf29f5faf802648ac05b",
+          "bytes": 498066,
+          "sha256": "d23df1095e5b0afb4b84ff24deec194653cd507c780c517b563f6525ea5dfb26",
           "durationSeconds": 22
         }
       }
@@ -270,15 +432,15 @@
         "mp4": {
           "path": "docs/assets/herdr-mise-feature-workspace.mp4",
           "codec": "h264",
-          "bytes": 90872,
-          "sha256": "2896c139a21fef5cdd75881d55c7d95bc8de32e439b86645cc1b4d538ce7766a",
+          "bytes": 90023,
+          "sha256": "ea27f6769c006e592d5f4230675be3e62d7bf72ffd73bc2394fc642e77916fa2",
           "durationSeconds": 12
         },
         "webm": {
           "path": "docs/assets/herdr-mise-feature-workspace.webm",
           "codec": "vp9",
-          "bytes": 313295,
-          "sha256": "530d7fd3dd078bf6a8697a86aeb974f2b2eb6e952128ad166bbeb57e5a79a39d",
+          "bytes": 312811,
+          "sha256": "c6028d46cac3f577b98959f68191eb67e3d26b886c22b7ddf5c58d64060b68d9",
           "durationSeconds": 12
         },
         "poster": {
@@ -299,14 +461,14 @@
           "path": "docs/assets/herdr-mise-feature-workspace.txt",
           "codec": "text",
           "bytes": 142,
-          "sha256": "6650bebeb82e72a7d0466227ab01b9c499b7ce4067e433ae83ec844374963e2c",
+          "sha256": "6fc72b6659244d516f55e532433e3dbd442d863a0e91bc9c378fea3952fe1555",
           "durationSeconds": null
         },
         "gif": {
           "path": "docs/assets/herdr-mise-feature-workspace.gif",
           "codec": "gif",
-          "bytes": 274813,
-          "sha256": "d6684f8d3ec20e8f0b21afc2bcf14b008313d419126cbaef07153cea6d24493a",
+          "bytes": 284692,
+          "sha256": "46a97db179aa01c56f230dc679d6fe172b31a96d66fa5349cebe4ab4df665316",
           "durationSeconds": 12
         }
       }
@@ -328,22 +490,22 @@
         "mp4": {
           "path": "docs/assets/herdr-mise-feature-presentation.mp4",
           "codec": "h264",
-          "bytes": 123410,
-          "sha256": "16d0b5864977fa777c9a68f9fb01951be18b27cbd1b9dfbda585a996e28d70d1",
+          "bytes": 125904,
+          "sha256": "eb2c7daef5511f064141d913c7897f4288c0bb53c721f534763da7dd8898f80a",
           "durationSeconds": 12
         },
         "webm": {
           "path": "docs/assets/herdr-mise-feature-presentation.webm",
           "codec": "vp9",
-          "bytes": 424369,
-          "sha256": "be94941ed11a0a00abc6c1383aa94920188255b202afd6f5a10d963bf8cb9048",
+          "bytes": 489170,
+          "sha256": "e93687a2a8cd2f35ce794b00056a0e4e7df2d6cd379393a93f35aea92327a047",
           "durationSeconds": 12
         },
         "poster": {
           "path": "docs/assets/herdr-mise-feature-presentation-poster.png",
           "codec": "png",
-          "bytes": 298888,
-          "sha256": "6b6146114bf949509a7d3fcff96cc27950dde6cc2b86148ee784dfb7cd83177f",
+          "bytes": 208228,
+          "sha256": "3088d820e4aa4f202fd7b77e484e03906bec4efd35901cf43a18c159028e2312",
           "durationSeconds": null
         },
         "vtt": {
@@ -357,14 +519,14 @@
           "path": "docs/assets/herdr-mise-feature-presentation.txt",
           "codec": "text",
           "bytes": 143,
-          "sha256": "94ba74de97f30ef2148aceabde52a700a917774df1b5ac1a5a510da22c8e91ec",
+          "sha256": "f1e6aa3721c7e20bf77858b218fa57c86c17f30e8d12daa1675a7a8a00d2e047",
           "durationSeconds": null
         },
         "gif": {
           "path": "docs/assets/herdr-mise-feature-presentation.gif",
           "codec": "gif",
-          "bytes": 805615,
-          "sha256": "b55fefe0aa85d6a5ba288d6989cc044561d7178e2f5f6927e29f6d431e241b8a",
+          "bytes": 709297,
+          "sha256": "f48206dc9574783fc198367447d1936bcb6a2cd4bea6105678fb5d68ee61d2cb",
           "durationSeconds": 12
         }
       }

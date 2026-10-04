@@ -1,5 +1,5 @@
 herdr-mise product demo
-herdr-mise 0.4.0 · source b361d61
+herdr-mise 0.4.0 · source 9440d52
 75s · 20 fps · 960×540
 
 0:00–0:10  Six cooks working the lunch service.
@@ -8,7 +8,7 @@ herdr-mise 0.4.0 · source b361d61
 0:32–0:44  Scope the kitchen to one local workspace.
 0:44–0:56  Prerecorded TUI demo, not a live terminal.
 0:56–1:06  Observed time blocked, computed locally.
-1:06–1:15  herdr-mise 0.4.0 · source b361d61
+1:06–1:15  herdr-mise 0.4.0 · source 9440d52
              $ brew install herdr
              $ herdr plugin install funsaized/herdr-mise
              $ herdr plugin action invoke open --plugin mise.kitchen
