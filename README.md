@@ -223,9 +223,7 @@ The browser service continues alongside the TUI when its loopback port is free
   `x86_64-unknown-linux-gnu`. Linux uses the Ubuntu 24.04 / glibc 2.39 baseline;
   older glibc, musl, Windows, and Linux ARM are not claimed supported.
   There is no background service or auto-update.
-- Browser settings are local site data. Reduced motion is honored. The
-  is recorded separately; the broader manual listening pass remains
-  post-release work.
+- Browser settings are local site data. Reduced motion is honored.
 
 See [Security policy](SECURITY.md) and
 [Operations](docs/operations.md) for the complete runtime and troubleshooting
