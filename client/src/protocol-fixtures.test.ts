@@ -20,19 +20,20 @@ describe("shared protocol fixtures", () => {
       expect(JSON.parse(JSON.stringify(event))).toEqual(fixture);
     },
   );
-  it("strictly validates bounded workspace scope metadata", () => {
-    expect(decodeFeedEvent(JSON.stringify(workspaces)).kind).toBe("accepted");
-    for (const invalid of [
-      { ...workspaces, workspaces: [{ id: "", label: "empty" }] },
-      {
-        ...workspaces,
-        workspaces: [
-          { id: "same", label: "one" },
-          { id: "same", label: "two" },
-        ],
-      },
-      { ...workspaces, agents: [{ ...workspaces.agents[0], workspaceId: "" }] },
-    ])
-      expect(decodeFeedEvent(JSON.stringify(invalid)).kind).toBe("rejected");
-  });
+});
+
+it("strictly validates bounded workspace scope metadata", () => {
+  expect(decodeFeedEvent(JSON.stringify(workspaces)).kind).toBe("accepted");
+  for (const invalid of [
+    { ...workspaces, workspaces: [{ id: "", label: "empty" }] },
+    {
+      ...workspaces,
+      workspaces: [
+        { id: "same", label: "one" },
+        { id: "same", label: "two" },
+      ],
+    },
+    { ...workspaces, agents: [{ ...workspaces.agents[0], workspaceId: "" }] },
+  ])
+    expect(decodeFeedEvent(JSON.stringify(invalid)).kind).toBe("rejected");
 });

@@ -173,6 +173,33 @@ mod tests {
     }
 
     #[test]
+    fn golden_fixture_schema_rejects_unknown_properties() {
+        let schema_value: Value = serde_json::from_str(
+            &fs::read_to_string(protocol_dir().join("schema/agent-state-event.v1.schema.json"))
+                .expect("read schema"),
+        )
+        .expect("parse schema");
+        let schema = jsonschema::validator_for(&schema_value).expect("compile schema");
+        let fixture: Value = serde_json::from_str(
+            &fs::read_to_string(protocol_dir().join("fixtures/snapshot.v1.json"))
+                .expect("read fixture"),
+        )
+        .expect("parse fixture");
+        assert!(
+            schema.is_valid(&fixture),
+            "golden fixture must match schema"
+        );
+
+        let mut unknown_top_level = fixture.clone();
+        unknown_top_level["unknown"] = Value::Bool(true);
+        assert!(!schema.is_valid(&unknown_top_level));
+
+        let mut unknown_agent = fixture.clone();
+        unknown_agent["agents"][0]["unknown"] = Value::Bool(true);
+        assert!(!schema.is_valid(&unknown_agent));
+    }
+
+    #[test]
     fn golden_fixture_schema_rejects_invalid_version_and_missing_agents() {
         let schema_value: Value = serde_json::from_str(
             &fs::read_to_string(protocol_dir().join("schema/agent-state-event.v1.schema.json"))
