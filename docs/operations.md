@@ -169,8 +169,8 @@ continues to write `client/dist/`, which remains the only rust-embed input.
 ### Run the release archive
 
 The current pinned public stable distribution is the GitHub release
-[v0.4.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.4.0).
-The plugin and standalone installers in this checkout both target `v0.4.0`.
+[v0.5.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.5.0).
+The plugin and standalone installers in this checkout both target `v0.5.0`.
 When preparing a later release, coordinate merge, tag, and publication so main
 is not left pinned to an unavailable release; see
 [Release operations](releasing.md).
@@ -196,7 +196,7 @@ and Linux ARM are not claimed supported.
 Download, verify, extract, and run from the upstream release:
 
 ```sh
-TAG=v0.4.0
+TAG=v0.5.0
 TARGET=aarch64-apple-darwin   # or x86_64-apple-darwin / x86_64-unknown-linux-gnu
 BASE=herdr-mise-${TAG}-${TARGET}
 URL=https://github.com/funsaized/herdr-mise/releases/download/${TAG}
@@ -764,10 +764,10 @@ From the directory that holds both files:
 
 ```sh
 # macOS
-shasum -a 256 -c herdr-mise-v0.4.0-aarch64-apple-darwin.tar.gz.sha256
+shasum -a 256 -c herdr-mise-v0.5.0-aarch64-apple-darwin.tar.gz.sha256
 
 # Linux
-sha256sum -c herdr-mise-v0.4.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+sha256sum -c herdr-mise-v0.5.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
 The sidecar is written next to the archive and names the archive basename
@@ -775,7 +775,7 @@ only. The release workflow verifies checksums before upload and again after
 public download. End-to-end local verification of a packaged archive:
 
 ```sh
-sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.4.0-aarch64-apple-darwin.tar.gz
+sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.5.0-aarch64-apple-darwin.tar.gz
 # optional on a signed macOS binary after extract:
 # VERIFY_CODESIGN=1 sh scripts/verify-release-artifact.sh path/to/archive.tar.gz
 ```
