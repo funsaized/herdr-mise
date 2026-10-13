@@ -93,7 +93,7 @@ jobs:
             uname -sm
             if test "$RUNNER_OS" = Linux; then ldd --version | head -1; fi
           } > "$RUNNER_TEMP/build-environment.txt"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-environment-${{ matrix.target }}
           path: ${{ runner.temp }}/build-environment.txt
@@ -155,7 +155,7 @@ jobs:
         run: |
           security delete-keychain "$RUNNER_TEMP/release-signing.keychain-db" || true
           rm -f "$RUNNER_TEMP/release-certificate.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/*.zip
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ matrix.target }}
           path: dist/herdr-mise-v*-${{ matrix.target }}.tar.gz*
