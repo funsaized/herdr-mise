@@ -1234,7 +1234,9 @@ summary:focus-visible {
   border-radius: var(--radiusSmall);
   box-shadow: none;
 }
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   :is(
     .panel,
     .serviceRecap > div,
@@ -1472,7 +1474,9 @@ summary:focus-visible {
   border: 1px solid var(--borderSoft);
   border-radius: var(--radiusControl);
 }
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   .serviceStrip::before,
   .chromeFooter::before {
     background: var(--surface);
@@ -1583,7 +1587,9 @@ summary:focus-visible {
 }
 /* Text-heavy panels need a calmer surface than the rails to stay readable
    over a busy kitchen. */
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   :is(.panel, .serviceRecap > div, .freezerInspector, .visualExplorer) {
     background: var(--panelSoft);
   }
