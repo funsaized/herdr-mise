@@ -25,7 +25,7 @@ independent run proof.
 Independent run proof (code only) is one of:
 
 1. Factory `subject.invocationId`: `swamp data get nightshift-builder-<workItem>
-invocation-<invocationId>` and its transcript show that exact command
+   invocation-<invocationId>` and its transcript show that exact command
    succeeded.
 2. A stored receipt revalidated by the review workflow against current HEAD and
    source bytes proves the exact selected test passed. Inspect its argv, positive

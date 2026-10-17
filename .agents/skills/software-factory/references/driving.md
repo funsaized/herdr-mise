@@ -303,7 +303,7 @@ queries together.
 - **workflow** — trigger the named swamp workflow with the resolved inputs
   (`swamp workflow run <name> --input k=v --json`), wait for completion, then record
   the outcome: `record_evidence name=<resultEvidence>
-payload='{"status":"succeeded|failed","runId":"…"}'`. `runId` is the run's
+  payload='{"status":"succeeded|failed","runId":"…"}'`. `runId` is the run's
   `id` from `swamp workflow run --json` output — never a placeholder. The
   `workflow-succeeded` gate verifies exactly that run (it takes precedence
   over a `record_dispatch` runId), so parallel work items on the same

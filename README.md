@@ -159,7 +159,7 @@ all-day use. The detailed browser/TUI representation audit is in
   recovery path; a repeated rejection is labeled as an incompatible
   browser-to-Mise feed rather than a Herdr failure.
 - **Empty:** a live source with no agents shows `Waiting for agents — start one
-in herdr.`
+  in herdr.`
 
 ## Local development
 

@@ -103,13 +103,13 @@ method reference. In short:
      with the (already resolved) inputs, wait, and record the outcome under
      `resultEvidence`.
 3. Record products: `record_artifact workItem=<ref> name=<n>
-payload='<json>'`, `record_evidence workItem=<ref> name=<n>
-payload='<json>'`.
+   payload='<json>'`, `record_evidence workItem=<ref> name=<n>
+   payload='<json>'`.
 4. Re-check `status`. **Propulsion rule**: if exactly one transition is
    `satisfied` and it has no failing or pending `human-approval` gate and no
    `manual: true`, advance automatically. If a human gate is the only
    blocker, fetch the recorded subject/own artifacts with `swamp data
-query`, present their actual payloads, and stop. If several transitions
+   query`, present their actual payloads, and stop. If several transitions
    are satisfied, ask the human.
 5. `advance transition=<name>`. Gate failures return actionable reasons —
    follow them; they are the factory steering you.
