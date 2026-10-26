@@ -30,7 +30,7 @@ herdr plugin action invoke open --plugin mise.kitchen
 
 The plugin installer downloads the pinned, verified release binary, so you do
 not need Node, npm, Cargo, or Rust (Herdr may need Git to clone community
-plugins). The current pinned stable release is [v0.5.1](https://github.com/funsaized/herdr-mise/releases/tag/v0.5.1).
+plugins). The current pinned stable release is [v0.5.2](https://github.com/funsaized/herdr-mise/releases/tag/v0.5.2).
 
 Without the plugin, install standalone and run the terminal kitchen; the
 plugin is preferred when Herdr should manage pane registration:
