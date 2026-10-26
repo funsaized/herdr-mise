@@ -13,7 +13,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { classifyReleaseTag, validateReleaseTag } from "./release-policy.mjs";
+import {
+  classifyReleaseTag,
+  readCargoVersion,
+  validateReleaseTag,
+} from "./release-policy.mjs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const artifactVerifier = readFileSync(
@@ -33,6 +37,40 @@ const targets = [
   "x86_64-apple-darwin",
   "x86_64-unknown-linux-gnu",
 ];
+
+test("current release lockfile and guidance match the authoritative Cargo version", () => {
+  const version = readCargoVersion();
+  const tag = `v${version}`;
+  const packages = readFileSync("Cargo.lock", "utf8")
+    .split(/^\[\[package\]\]$/m)
+    .filter((block) => /^name = "herdr-mise-server"$/m.test(block));
+  assert.equal(packages.length, 1);
+  assert.equal(packages[0].match(/^version = "([^"]+)"$/m)?.[1], version);
+
+  for (const path of ["README.md", "docs/operations.md"]) {
+    const text = readFileSync(path, "utf8");
+    const links = [
+      ...text.matchAll(/releases\/(?:tag|download)\/(v[0-9A-Za-z.+-]+)/g),
+    ];
+    assert.ok(links.length > 0, `${path}: current release link is required`);
+    for (const [, linkedTag] of links) assert.equal(linkedTag, tag, path);
+    for (const [, label] of text.matchAll(/\[(v[0-9A-Za-z.+-]+)\]\(/g))
+      assert.equal(label, tag, path);
+    const assignments = [...text.matchAll(/^TAG=(\S+)$/gm)];
+    const archives = [
+      ...text.matchAll(
+        /herdr-mise-(v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)-(?=aarch64|x86_64|<target>)/gi,
+      ),
+    ];
+    if (path === "docs/operations.md") {
+      assert.ok(assignments.length > 0, "current TAG assignment is required");
+      assert.ok(archives.length > 0, "current archive examples are required");
+    }
+    for (const [, assignedTag] of assignments)
+      assert.equal(assignedTag, tag, path);
+    for (const [, archiveTag] of archives) assert.equal(archiveTag, tag, path);
+  }
+});
 
 test("stable public verification checks fetched release consistency", () => {
   const publicJob = workflow.slice(

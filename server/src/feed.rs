@@ -1468,16 +1468,20 @@ mod tests {
         let server = tokio::spawn(async move {
             let mut attempt = 0;
             loop {
-                let Ok((mut stream, _)) = listener.accept().await else {
+                let Ok((stream, _)) = listener.accept().await else {
                     break;
                 };
+                // Consume the request before closing so unread bytes cannot reset the socket.
+                let mut stream = BufReader::new(stream);
+                let mut request = String::new();
+                stream.read_line(&mut request).await.unwrap();
                 attempt += 1;
                 let response: &[u8] = if attempt % 2 == 0 {
                     b"{\"version\":\"0.7.5\",\"protocol\":999,\"workspaces\":[],\"tabs\":[],\"layouts\":[],\"agents\":[]}\n"
                 } else {
                     b"not-json\n"
                 };
-                stream.write_all(response).await.unwrap();
+                stream.get_mut().write_all(response).await.unwrap();
                 attempt_tx.send(attempt).unwrap();
             }
         });
