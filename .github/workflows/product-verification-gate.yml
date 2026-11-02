@@ -1,10 +1,10 @@
-name: Swamp managed verification gate
+name: Product verification gate
 # Always runs the definition on main. It never checks out or executes pull
 # request code: it reads run and pull request metadata through the API and
 # sets the required status on the exact head that was verified.
 on:
   workflow_run:
-    workflows: [Swamp managed verification, Product verification]
+    workflows: [Product verification]
     types: [completed]
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: swamp-managed-gate-${{ github.event.workflow_run.id }}
+  group: product-verification-gate-${{ github.event.workflow_run.id }}
   cancel-in-progress: true
 
 jobs:
@@ -27,10 +27,8 @@ jobs:
         with:
           script: |
             const repository = 'funsaized/herdr-mise';
-            const executors = {
-              '.github/workflows/swamp-managed-verification.yml': 'Swamp managed verification',
-              '.github/workflows/product-verification.yml': 'Product verification',
-            };
+            const expectedPath = '.github/workflows/product-verification.yml';
+            const statusContext = 'Product verification';
             const { owner, repo } = context.repo;
             const run = (await github.rest.actions.getWorkflowRun({
               owner, repo, run_id: context.payload.workflow_run.id,
@@ -38,8 +36,7 @@ jobs:
             const workflow = (await github.rest.actions.getWorkflow({
               owner, repo, workflow_id: run.workflow_id,
             })).data;
-            const statusContext = executors[workflow.path];
-            if (!statusContext || workflow.name !== statusContext || run.name !== statusContext || run.event !== 'pull_request') {
+            if (workflow.path !== expectedPath || workflow.name !== statusContext || run.name !== statusContext || run.event !== 'pull_request') {
               throw new Error('workflow_run does not identify the managed pull request executor');
             }
             // Drafts are skipped and superseded heads are cancelled; the run

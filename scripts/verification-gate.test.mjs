@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflow = readFileSync(
-  ".github/workflows/swamp-managed-gate.yml",
+  ".github/workflows/product-verification-gate.yml",
   "utf8",
 );
 const script = workflow
@@ -19,8 +19,8 @@ const execute = new (Object.getPrototypeOf(async function () {}).constructor)(
 );
 
 async function gate({
-  name = "Swamp managed verification",
-  path = ".github/workflows/swamp-managed-verification.yml",
+  name = "Product verification",
+  path = ".github/workflows/product-verification.yml",
   current = "a".repeat(40),
   conclusion = "success",
   actor = "funsaized",
@@ -88,7 +88,7 @@ test("trusted gate binds success to the verified current PR head and known execu
   const [status] = await gate();
   assert.equal(status.state, "success");
   assert.equal(status.sha, "a".repeat(40));
-  assert.equal(status.context, "Swamp managed verification");
+  assert.equal(status.context, "Product verification");
   await assert.rejects(
     gate({ path: ".github/workflows/untrusted.yml" }),
     /does not identify/,
@@ -111,11 +111,9 @@ test("trusted gate rejects failed execution and non-owner verification changes",
   assert.equal((await gate({ actor: "contributor" }))[0].state, "success");
 });
 
-test("trusted gate supports the new required status before the branch-protection cutover", async () => {
-  const [status] = await gate({
-    name: "Product verification",
-    path: ".github/workflows/product-verification.yml",
-  });
-  assert.equal(status.state, "success");
-  assert.equal(status.context, "Product verification");
+test("trusted gate rejects a known path with a different workflow identity", async () => {
+  await assert.rejects(
+    gate({ name: "Unexpected executor" }),
+    /does not identify/,
+  );
 });
