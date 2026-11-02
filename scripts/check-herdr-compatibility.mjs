@@ -90,13 +90,6 @@ export function auditWorkflow(workflow) {
   }
   if (!/persist-credentials:\s*false/g.test(workflow))
     errors.push("compatibility workflow persists checkout credentials");
-  if (
-    !/actions\/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9/.test(
-      workflow,
-    ) ||
-    !/retention-days:\s*7/.test(workflow)
-  )
-    errors.push("compatibility workflow lacks bounded pinned canary upload");
   return errors;
 }
 

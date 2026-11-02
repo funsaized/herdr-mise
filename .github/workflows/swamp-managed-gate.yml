@@ -4,7 +4,7 @@ name: Swamp managed verification gate
 # sets the required status on the exact head that was verified.
 on:
   workflow_run:
-    workflows: [Swamp managed verification]
+    workflows: [Swamp managed verification, Product verification]
     types: [completed]
 
 permissions:
@@ -27,7 +27,10 @@ jobs:
         with:
           script: |
             const repository = 'funsaized/herdr-mise';
-            const expectedPath = '.github/workflows/swamp-managed-verification.yml';
+            const executors = {
+              '.github/workflows/swamp-managed-verification.yml': 'Swamp managed verification',
+              '.github/workflows/product-verification.yml': 'Product verification',
+            };
             const { owner, repo } = context.repo;
             const run = (await github.rest.actions.getWorkflowRun({
               owner, repo, run_id: context.payload.workflow_run.id,
@@ -35,7 +38,8 @@ jobs:
             const workflow = (await github.rest.actions.getWorkflow({
               owner, repo, workflow_id: run.workflow_id,
             })).data;
-            if (workflow.path !== expectedPath || run.event !== 'pull_request') {
+            const statusContext = executors[workflow.path];
+            if (!statusContext || workflow.name !== statusContext || run.name !== statusContext || run.event !== 'pull_request') {
               throw new Error('workflow_run does not identify the managed pull request executor');
             }
             // Drafts are skipped and superseded heads are cancelled; the run
@@ -91,7 +95,7 @@ jobs:
             }
             await github.rest.repos.createCommitStatus({
               owner, repo, sha: run.head_sha, state, description,
-              context: 'Swamp managed verification',
+              context: statusContext,
               target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
             });
             core.summary.addRaw(

@@ -382,8 +382,8 @@ HOSTED_VISUAL_URL=https://herdr-mise.s11a.com \
 One script records either README animation:
 
 ```sh
-npm run capture:web
-npm run capture:tui
+npm run media -- capture web
+npm run media -- capture tui
 ```
 
 TUI capture is headless: it never opens a window, records the display, or
@@ -392,7 +392,7 @@ runs the same from any shell. It requires `vhs` (`brew install vhs`), `ffmpeg`
 with `libx264`/`libvpx-vp9`, `gifsicle`, Cargo, Playwright Chromium, and the
 Menlo font (bundled with macOS); a preflight names whichever is missing.
 
-`scripts/tui-demo-config.mjs` is the single storyboard: eight scenes over 30
+`scripts/media/tui-demo-config.mjs` is the single storyboard: eight scenes over 30
 seconds, each with the keys it presses and a caption. From it the capture
 generates a VHS tape that builds the release binary, starts six deterministic
 demo agents (`HERDR_MISE_DEMO_START_STEP=278`) against a nonexistent socket and
@@ -409,16 +409,16 @@ the blocked-cook scene, plus `.vtt` captions and a `.txt` transcript.
 Every output is probed (codec, dimensions, duration, frame count, pixel format,
 no audio), fully decoded, hashed, and checked against the 1.5 MiB GIF-plus-poster
 budget before anything is renamed into `docs/assets/`; provenance
-(`scripts/tui-demo.capture.json`, schema `demo-capture-v2`) is written last with
+(`scripts/media/tui-demo.capture.json`, schema `demo-capture-v2`) is written last with
 the source commit, release binary and tape hashes, tool versions, font, measured
 grid, and storyboard. A failed run publishes nothing and keeps
 `docs/assets/.capture-tui-*/` (ignored by Git) with the tape, `vhs.log`, and
 frames; delete only that directory once diagnosed. Check the checked-in package
-with `node scripts/check-tui-media.mjs`.
+with `npm run media -- check tui`.
 
 Replacing the TUI recording changes the inputs of the README hero and product
-demo, whose comparison scene shows it: re-run `npm run capture:hero` and
-`npm run capture:product` from the same merged `main` commit afterwards.
+demo, whose comparison scene shows it: re-run `npm run media -- capture hero` and
+`npm run media -- capture product` from the same merged `main` commit afterwards.
 
 Web capture uses
 `?preset=attention&agents=6&theme=light` at 1280×720. It opens Codex details
@@ -427,7 +427,7 @@ caption, and changes that caption only after the station reports working again.
 The MP4, WebM, GIF, and blocked-phase poster come from the same 12-second frame
 sequence. Browser diagnostics, semantic ordering, codecs, dimensions, duration,
 audio absence, and non-empty files are checked before each staged file is
-renamed into place. `scripts/web-demo.capture.json` records the clean source
+renamed into place. `scripts/media/web-demo.capture.json` records the clean source
 commit, timeline, dimensions, durations, sizes, and hashes.
 
 Run either capture only from a clean committed tree. Re-run the same command

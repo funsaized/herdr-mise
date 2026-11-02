@@ -1,9 +1,6 @@
 name: Swamp managed verification
-# Runs on every non-draft pull request head. It has no token permissions; the
-# trusted gate (swamp-managed-gate.yml, always run from main) decides whether
-# this run may set the required status. Pull requests that change
-# trust-boundary paths only pass when authored by the code owner from this
-# repository, because this file then comes from the pull request itself.
+# Transitional name: main's trusted gate and branch protection still require
+# this identity. Execution is entirely native; the next cutover renames it.
 on:
   pull_request:
     branches: [main]
@@ -12,16 +9,64 @@ on:
 permissions: {}
 
 concurrency:
-  group: swamp-managed-verification-${{ github.event.pull_request.number }}
+  group: product-verification-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  execute:
+  checks:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions: {}
+    timeout-minutes: 15
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source identity and ancestry
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install pinned actionlint
+        run: |
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLo "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$archive"
+          echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix client --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
+      - run: npm run audit
+  rust:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source identity and ancestry
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -29,84 +74,47 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
-      - name: Check out trusted base controls and the exact pull request head
+      - run: npm run verify:rust:fallback
+      - run: npm ci --prefix client --no-audit --no-fund
+      - run: npm run build
+      - run: npm run verify:rust
+  browser-and-package:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source identity and ancestry
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -eu
-          control="$RUNNER_TEMP/control"
-          subject="$RUNNER_TEMP/subject"
-          git init "$control"
-          git -C "$control" config core.hooksPath /dev/null
-          git -C "$control" remote add origin https://github.com/funsaized/herdr-mise.git
-          git -C "$control" fetch --no-tags origin "$BASE_SHA"
-          git -C "$control" checkout --detach "$BASE_SHA"
-          git init "$subject"
-          git -C "$subject" config core.hooksPath /dev/null
-          git -C "$subject" remote add subject "https://github.com/$HEAD_REPOSITORY.git"
-          git -C "$subject" remote add upstream https://github.com/funsaized/herdr-mise.git
-          git -C "$subject" fetch --no-tags subject "$HEAD_SHA"
-          git -C "$subject" fetch --no-tags upstream "$BASE_SHA"
-          git -C "$subject" checkout --detach "$HEAD_SHA"
-          test "$(git -C "$control" rev-parse HEAD)" = "$BASE_SHA"
-          test "$(git -C "$subject" rev-parse HEAD)" = "$HEAD_SHA"
-          git -C "$subject" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
-      - name: Install pinned Swamp
-        working-directory: ${{ runner.temp }}/control
-        run: sh scripts/install-swamp-managed.sh
-      - name: Restore trusted Swamp extensions
-        env:
-          CONTROL_ROOT: ${{ runner.temp }}/control
-        run: swamp extension install --repo-dir "$CONTROL_ROOT"
-      - name: Resolve Swamp Deno runtime
-        run: |
-          deno_path="$(swamp doctor extensions --repo-dir "$RUNNER_TEMP/control" --json | jq -er '.denoPath')"
-          echo "DENO_EXEC_PATH=$deno_path" >> "$GITHUB_ENV"
-      - name: Run shared Swamp verification
-        env:
-          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-download-cache
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          CONTROL_ROOT: ${{ runner.temp }}/control
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          SUBJECT_ROOT: ${{ runner.temp }}/subject
         run: |
-          set -eu
-          swamp workflow validate verification --repo-dir "$CONTROL_ROOT"
-          swamp workflow run verification --repo-dir "$CONTROL_ROOT" \
-            --input commit="$HEAD_SHA" \
-            --input baseCommit="$BASE_SHA" \
-            --input subjectRoot="$SUBJECT_ROOT"
-      - name: Collect sanitized diagnostics
-        if: failure()
-        env:
-          CONTROL_ROOT: ${{ runner.temp }}/control
-        run: |
-          mkdir -p "$RUNNER_TEMP/diagnostics"
-          swamp report get @swamp/workflow-summary --workflow verification --json \
-            --repo-dir "$CONTROL_ROOT" > "$RUNNER_TEMP/diagnostics/workflow-summary.json" 2>&1 || true
-          swamp data query 'name.startsWith("log-")' \
-            --select '{"name": name, "content": content}' --json --repo-dir "$CONTROL_ROOT" \
-            > "$RUNNER_TEMP/verification-logs.json" 2>&1 || true
-          node -e "const fs=require('node:fs');const root=process.env.RUNNER_TEMP;const summary=process.argv[1];fs.writeFileSync(summary,fs.readFileSync(summary,'utf8').replaceAll(root,'<runner-temp>'));console.log(fs.readFileSync(process.argv[2],'utf8').slice(-131072).replaceAll(root,'<runner-temp>'))" \
-            "$RUNNER_TEMP/diagnostics/workflow-summary.json" \
-            "$RUNNER_TEMP/verification-logs.json"
-          rm -f "$RUNNER_TEMP/verification-logs.json"
-          exit 1
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-12
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix client --no-audit --no-fund
+      - run: npm run verify:browser:install
+      - run: npm run bundle
+      - run: npm run check:bundle
+      - run: npm run test:visual:prepared
+      - run: npm run validate:release
       - name: Retain browser failure artifacts
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: managed-browser-failures
-          path: ${{ runner.temp }}/subject/e2e/artifacts/results
+          name: browser-failures
+          path: e2e/artifacts/results
           retention-days: 7
           if-no-files-found: ignore
-      - name: Retain managed diagnostics
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: swamp-managed-diagnostics
-          path: ${{ runner.temp }}/diagnostics
-          overwrite: false
-          retention-days: 7

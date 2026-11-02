@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { homedir } from "node:os";
 
 export function dependencyDrift(
   root,
@@ -47,27 +46,13 @@ if (
     resolve(root, "rust-toolchain.toml"),
     "utf8",
   ).match(/channel\s*=\s*"([^"]+)"/)?.[1];
-  for (const [command, expected] of [
-    ["rustc", rustVersion],
-    [
-      "swamp",
-      readFileSync(resolve(root, ".swamp.yaml"), "utf8").match(
-        /^swampVersion:\s*(\S+)/m,
-      )?.[1],
-    ],
-    [
-      process.env.DENO_EXEC_PATH ?? resolve(homedir(), ".swamp/deno/deno"),
-      "deno 2.",
-    ],
-  ]) {
-    const result = spawnSync(command, ["--version"], { encoding: "utf8" });
-    const version = result.stdout?.trim() ?? "";
-    console.log(version || `${command}: unavailable`);
-    if (result.status !== 0 || !expected || !version.includes(expected))
-      errors.push(
-        `${command}: expected ${expected}; install the repository-pinned version.`,
-      );
-  }
+  const rust = spawnSync("rustc", ["--version"], { encoding: "utf8" });
+  const version = rust.stdout?.trim() ?? "";
+  console.log(version || "rustc: unavailable");
+  if (rust.status !== 0 || !rustVersion || !version.includes(rustVersion))
+    errors.push(
+      `rustc: expected ${rustVersion}; install the repository-pinned toolchain.`,
+    );
   console.log(`node ${process.versions.node}`);
   if (errors.length) {
     console.error(errors.join("\n"));

@@ -140,13 +140,13 @@ undocumented.
 - Implementation: `server/src/tui/scene/{mod,layout,sprites,particles}.rs`,
   `server/src/tui/{mod,canvas,theme}.rs`.
 - Goldens: `server/tests/goldens/scene-*.txt`.
-- Capture sources: `scripts/capture-demo.sh tui` (headless VHS tour driven by
-  `scripts/tui-demo-config.mjs` via `scripts/capture-tui-media.mjs`, validated
-  by `scripts/check-tui-media.mjs`) and `scripts/capture-tui-states.sh`.
+- Capture sources: `npm run media -- capture tui` (headless VHS tour driven by
+  `scripts/media/tui-demo-config.mjs` via `scripts/media/capture-tui-media.mjs`, validated
+  by `scripts/media/check-tui-media.mjs`) and `scripts/media/capture-tui-states.sh`.
 - Captured media: `docs/assets/herdr-mise-tui-demo.{gif,mp4,webm,vtt,txt}`,
   `docs/assets/herdr-mise-tui-demo-poster.png`,
   `docs/assets/herdr-mise-tui-{live,blocked,compact}.png`,
-  `scripts/tui-demo.capture.json`, and `scripts/tui-states.capture.json`.
+  `scripts/media/tui-demo.capture.json`, and `scripts/media/tui-states.capture.json`.
 
 ## Service recap
 

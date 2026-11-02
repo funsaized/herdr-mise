@@ -12,8 +12,6 @@ opinions; the docs below will save you time.
   versioned protocol).
 - `docs/operations.md` — how to run, develop, and verify locally.
 - `README.md` — product behavior, deliberate boundaries, and installation.
-- [Nightshift factory](docs/nightshift/README.md) — learn, operate, and understand
-  the software factory. Code plus passing tests wins when prose disagrees.
 
 ## Setup
 
@@ -63,98 +61,26 @@ for preset details.
    `cargo test -p herdr-mise-server real_herdr_snapshot_drives_keyboard_inspection_lifecycle`
    and `npm run check:herdr-compatibility`.
 
-For either path, run only the named narrow checks before the existing pull
-request handoff below. A maintainer dispatches `Swamp managed verification` for
-the current pull request head. Autonomous implementation, the full local
-verification workflow, and release-acceptance commands are not part of these
-small-change recipes.
-
-Managed CI uses Node 22 and the Rust version in `rust-toolchain.toml`.
-`rustup` installs that named toolchain automatically; install its `rustfmt` and
-`clippy` components when provisioning offline. Use the exact Swamp version in
-`.swamp.yaml`; extension tests use Swamp's bundled Deno (or `DENO_EXEC_PATH`).
-`npm run doctor` reports actual versions and rejects direct dependency drift.
-Run both `npm ci` commands after lockfile changes, not just `npm install`.
-For the tested macOS factory runtime, provision the project-local CLI with
-`swamp model method run nightshift-github install_local_swamp`, then run
-`npm run with:swamp-local -- npm run test:factory`. Use the same wrapper for
-`npm run orchestrator:serve` and `npm run intake:nightshift`; do not run two servers
-against one checkout. This leaves the global CLI unchanged. See the
-[local runtime instructions](docs/nightshift/setup.md#install-the-reproducible-runtime).
-
-On sandboxed macOS, if Swamp reports `SecTrustSettingsCopyCertificates`, use
-`DENO_TLS_CA_STORE=mozilla swamp ...` (or run in a terminal with certificate
-access). This selects Mozilla trust roots; it does not disable TLS verification.
-
-For the cross-browser critical path, install Chromium, Firefox, and WebKit with
-`npm run verify:browser:install`, then run
-`HERDR_MISE_CROSS_BROWSER=1 npm run test:visual`. Browser automation is not a
-replacement for the recorded human screen-reader pass.
+For either path, run focused checks while developing. Use Node 22+ and the
+Rust toolchain in `rust-toolchain.toml`; install its `rustfmt` and `clippy`
+components. Run both locked `npm ci` installs after dependency changes.
+`npm run doctor` checks tool versions and installed dependency drift.
 
 ## Before you open a PR
 
-Use narrow checks while developing and open the pull request from a clean,
-committed branch based on current upstream `main`. The full local Swamp workflow
-is optional advisory feedback:
+Run `npm run check`, `npm test`, and the relevant Rust/browser checks. For the
+complete product suite, install browsers with `npm run verify:browser:install`
+and run `npm run verify`. Open a ready PR from a branch based on current `main`.
+Native CI verifies every exact PR head; inspect its logs rather than relying on
+an agent's test summary. See [Product verification](docs/local-verification.md)
+for commands, trust-boundary changes and merge policy.
 
-```sh
-swamp workflow validate verification
-swamp workflow run verification \
-  --input commit=$(git rev-parse HEAD) \
-  --input baseCommit=$(git rev-parse upstream/main) \
-  --input subjectRoot=.
-```
+Read [AGENTS.md](AGENTS.md) for the shared agent contract. GitHub issues and PRs
+hold scope, decisions and review; a normal agent session uses repository tools
+directly. Use a fresh review session for substantial or sensitive changes.
 
-Every non-draft pull request head is verified automatically by the
-`Swamp managed verification` GitHub workflow; the required status applies only
-to that exact head, and every push starts a new run. Pull requests that change
-trust-boundary paths pass only when authored by `@funsaized` from this
-repository.
-
-See [Managed verification](docs/local-verification.md) for the contributor and
-maintainer runbook.
-
-Run `npm run format` to apply the repository's deterministic Oxfmt formatting
-before checking it with `npm run format:check`.
-
-### Verification commands
-
-Run the narrow checks relevant to your change while developing. These are the
-complete locally runnable gates:
-
-| Gate                       | Command                           |
-| -------------------------- | --------------------------------- |
-| Rust format                | `cargo fmt --all --check`         |
-| Rust check                 | `cargo check --workspace`         |
-| Rust tests                 | `cargo test --workspace --locked` |
-| Repository format          | `npm run format:check`            |
-| Client typecheck           | `npm run typecheck`               |
-| JavaScript/TypeScript lint | `npm run lint`                    |
-| Unit and contract tests    | `npm test`                        |
-| Extension tests            | `npm run test:extensions`         |
-| Token audit                | `npm run audit:tokens`            |
-| Architecture audit         | `npm run audit:architecture`      |
-| Accessibility audit        | `npm run audit:accessibility`     |
-| Production build           | `npm run build`                   |
-| Bundle budget              | `npm run check:bundle`            |
-| Embedded-binary smoke      | `npm run smoke`                   |
-| Server resources           | `npm run measure:server`          |
-| Release pipeline           | `npm run validate:release`        |
-| Performance suite          | `npm run perf`                    |
-
-Ground rules that reviews will enforce:
-
-- **Truthfulness over polish.** The UI never invents data. Metrics the feed
-  doesn't carry render as `Unavailable`, not as plausible numbers.
-- **Performance is a feature.** Bundle, wire-rate, idle-CPU, and hidden-tab
-  budgets are tested; changes that regress them need a measured justification.
-- **The blocked state is sacred.** Anything that makes a blocked agent less
-  obvious from across the room is a regression, whatever else it improves.
-- **Server binds localhost only.** `127.0.0.1`, the effective port (`8686` by
-  default or `HERDR_MISE_PORT`), and its origin policy are security boundaries,
-  not defaults to loosen.
-- Keep diffs small and root-caused; a fix in the shared path beats guards in
-  every caller.
+Media capture and validation are opt-in maintenance tasks under `scripts/media/`.
+Use `npm run media -- --help` and [Media maintenance](docs/product-demo.md).
 
 ## Reporting bugs
 
