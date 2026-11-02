@@ -3165,6 +3165,11 @@ test("real Herdr observations drive the service recap without counting recovery 
   page,
 }) => {
   test.setTimeout(120_000);
+  // Keep observation time independent of driver/render latency while real
+  // WebSocket, source recovery, and UI timers continue running.
+  const observationClock = Date.now();
+  await page.clock.setFixedTime(observationClock);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const source = JSON.parse(
       await readFile(
         join(
@@ -3246,6 +3251,7 @@ test("real Herdr observations drive the service recap without counting recovery 
     await expect(
       workspaceSelect.getByRole("option", { name: "Example Kitchen" }),
     ).toBeAttached();
+    await page.clock.setFixedTime(observationClock + 4_000);
     await expect
       .poll(async () => blockedSeconds((await blockedLine.textContent()) ?? ""))
       .toBeGreaterThan(0);
@@ -3259,8 +3265,12 @@ test("real Herdr observations drive the service recap without counting recovery 
     );
     await expect(statusLine).toContainText("Partial/provisional observations");
     const duringGap = blockedSeconds((await blockedLine.textContent()) ?? "");
-    expect(duringGap).toBeLessThanOrEqual(beforeGap + 1);
+    expect(duringGap).toBeLessThanOrEqual(beforeGap);
+    await page.clock.setFixedTime(observationClock + 8_000);
     await page.waitForTimeout(4_000);
+    expect(blockedSeconds((await blockedLine.textContent()) ?? "")).toBe(
+      duringGap,
+    );
 
     app.setSnapshot(workingSnapshot);
     await app.startSource();
@@ -3268,7 +3278,7 @@ test("real Herdr observations drive the service recap without counting recovery 
       page.getByRole("button", { name: /^example-cook, Working/ }),
     ).toBeAttached({ timeout: 20_000 });
     const afterGap = blockedSeconds((await blockedLine.textContent()) ?? "");
-    expect(afterGap - beforeGap).toBeLessThanOrEqual(1);
+    expect(afterGap).toBe(duringGap);
     await expect(countsLine).toContainText("Blocked occurrences: 1");
 
     // Ended observations keep their retained workspace and outcomes.
