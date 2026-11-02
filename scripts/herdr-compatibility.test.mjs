@@ -151,17 +151,10 @@ test("scheduled compatibility workflow is immutable, read-only, and non-publishi
     workflow,
     /secrets\.|GH_TOKEN|GITHUB_TOKEN|gh release (?:create|upload|edit|delete)|publish|git push|git tag/i,
   );
-  assert.match(workflow, /swamp workflow run herdr-release-discovery/);
+  assert.match(workflow, /node scripts\/discover-herdr-releases\.mjs/);
 });
 
-test("preview canary is immutable credential-free sandboxed advisory evidence", () => {
-  const extensionRunner = readFileSync("scripts/test-extensions.mjs", "utf8");
-  const scheduledWorkflow = readFileSync(
-    ".github/workflows/herdr-compatibility-drift.yml",
-    "utf8",
-  );
-  assert.match(scheduledWorkflow, /npm run test:extensions/);
-  assert.match(extensionRunner, /--allow-run=bwrap,/);
+test("advisory preview fixtures remain sanitized and outside the supported matrix", () => {
   const previewFixtures = readdirSync("server/tests/fixtures")
     .filter(
       (name) =>

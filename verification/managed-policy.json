@@ -7,17 +7,8 @@
     ".github/workflows/**",
     ".gitignore",
     ".oxfmtrc.json",
-    ".swamp.yaml",
     "AGENTS.md",
-    "extensions/models/**",
-    "extensions/tests/**",
-    "models/**",
-    "scripts/install-swamp-managed.sh",
-    "scripts/nightshift-intake.mjs",
-    "scripts/nightshift-serve.sh",
-    "intake/nightshift-features.json",
     "verification/**",
-    "workflows/**",
     "package.json",
     "package-lock.json",
     "client/package.json",
@@ -28,10 +19,8 @@
     "client/tsconfig.node.json",
     "e2e/**",
     "scripts/**",
-    "extensions/reports/**",
     "rust-toolchain.toml",
     "acceptance/**",
-    ".agents/skills/**",
-    "agent-constraints/**"
+    "CLAUDE.md"
   ]
 }

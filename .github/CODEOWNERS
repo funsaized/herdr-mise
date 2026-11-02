@@ -9,7 +9,6 @@
 /client/tsconfig.node.json @funsaized
 /e2e/ @funsaized
 /scripts/ @funsaized
-/extensions/reports/ @funsaized
 /rust-toolchain.toml @funsaized
 /acceptance/ @funsaized
 # Require human review for files that define or validate verification policy.
@@ -18,14 +17,5 @@
 /.github/workflows/ @funsaized
 /.gitignore @funsaized
 /.oxfmtrc.json @funsaized
-/.swamp.yaml @funsaized
-/extensions/models/ @funsaized
-/extensions/tests/ @funsaized
-/models/ @funsaized
-/scripts/install-swamp-managed.sh @funsaized
 /scripts/workflow-policy.test.mjs @funsaized
 /verification/ @funsaized
-/workflows/ @funsaized
-/.agents/skills/ @funsaized
-/agent-constraints/ @funsaized
-/docs/nightshift/ @funsaized

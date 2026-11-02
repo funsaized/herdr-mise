@@ -8,7 +8,7 @@ import {
   prepareProductScene,
   selectProductWorkspace,
   setProductCaption,
-} from "../scripts/product-demo-scenes.mjs";
+} from "../scripts/media/product-demo-scenes.mjs";
 import { startFixtureApp } from "./fixture-app";
 import { watchErrors } from "./visual-helpers";
 import { visualOrigin } from "./visual-origin";
@@ -16,7 +16,7 @@ import {
   readSourceVersion,
   storyboard,
   versionLabel,
-} from "../scripts/product-demo-config.mjs";
+} from "../scripts/media/product-demo-config.mjs";
 
 async function assertProductCheckpoint(
   page: Page,

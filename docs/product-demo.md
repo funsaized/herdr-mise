@@ -1,8 +1,37 @@
-# Product demo: building and ship preparation
+# Media maintenance
+
+All capture implementations, storyboards, provenance records and tests live in
+`scripts/media/`. Use one entry point:
+
+```sh
+npm run media -- --help
+npm run test:media
+npm run media -- check all
+npm run media -- capture web
+npm run media -- capture tui
+npm run media -- capture hero
+npm run media -- capture product
+npm run media -- capture tui-states --force
+```
+
+Version labels are checked against the recorded capture commit, so an ordinary
+release bump does not invalidate historical media.
+
+`check all` validates the packaged TUI and product walkthroughs; `test:media`
+also checks web and hero storyboards and provenance. These are explicit media
+maintenance tasks, separate from `npm test` and product CI. A path-filtered
+Media maintenance Actions job runs them for media changes and on manual dispatch. Captures require a
+clean committed source tree. Set `HERDR_MISE_MEDIA_ACCEPTANCE=1` when running
+`test:media` on a provisioned host to also exercise the full VHS recording round trip.
+Browser captures require Playwright Chromium and
+ffmpeg/ffprobe; the TUI recording additionally requires VHS/ttyd and its documented
+fonts. Static TUI screenshots require macOS `sips`, ImageMagick and tesseract.
+Use `--connect-herdr` for `tui-states` only when intentionally capturing a public
+live session. Other captures use deterministic demo data.
 
 ## Building (source only)
 
-The authoritative editorial timeline is `scripts/product-demo-config.mjs`:
+The authoritative editorial timeline is `scripts/media/product-demo-config.mjs`:
 busy kitchen 0–10s, blocked attention 10–20s, real details/locator 20–32s,
 local workspace scope 32–44s, browser/TUI comparison 44–56s, observed service
 recap 56–66s, and installation 66–75s. These durations are editorial choices.
@@ -15,8 +44,8 @@ Build and test source without generating media:
 npm ci
 npm ci --prefix client
 PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium
-node --test scripts/product-demo-config.test.mjs
-node --test scripts/readme-media-config.test.mjs
+node --test scripts/media/product-demo-config.test.mjs
+node --test scripts/media/readme-media-config.test.mjs
 PLAYWRIGHT_BROWSERS_PATH=0 npm run test:visual -- product-demo.spec.ts --grep 'product capture actions inspect fixture locators and scope workspaces by stable ID$'
 PLAYWRIGHT_BROWSERS_PATH=0 npm run test:visual -- product-demo.spec.ts --grep 'product storyboard renders captioned demo checkpoints without publishing media$'
 ```
@@ -26,12 +55,12 @@ The fixture test crosses the real Herdr snapshot → adapter → Feed → WebSoc
 Node tests generate temporary packages and stub media probes, not committed
 product assets. The explicit produced-artifact validator is intentionally not
 an automatically discovered test. The existing twelve-second README capture,
-its names, provenance, and default `capture:web` behavior are unchanged.
+its provenance and default web capture behavior are unchanged.
 
-## Ship preparation (driver only)
+## Publishing recordings
 
 This repository squash-merges pull requests, so a commit captured on a feature
-branch disappears from `main` and `check-product-media.mjs` would later reject
+branch disappears from `main` and the product media validator would later reject
 its `sourceCommit`. Merge the source change first, then capture from a clean
 checkout of that `main` commit and add the media in a follow-up pull request,
 as the README demo does.
@@ -43,8 +72,8 @@ output or starting capture dependencies. No override is provided. Chromium,
 the same checkout concurrently.
 
 ```sh
-PLAYWRIGHT_BROWSERS_PATH=0 npm run capture:product
-node scripts/check-product-media.mjs
+PLAYWRIGHT_BROWSERS_PATH=0 npm run media -- capture product
+npm run media -- check product
 ```
 
 One staging session captures all four deliverables, then validates the complete
@@ -62,11 +91,11 @@ and a timestamped text transcript. Only the loops have looping GIFs. Under
 Posters use `-poster.png`; other suffixes are `.mp4`, `.webm`, `.vtt`, `.txt`,
 and (loops only) `.gif`. Outputs are 960×540 at 20 fps, from a 1280×720 browser.
 Poster timestamps within the clips are 21s, 11s, 2s, and 2s respectively.
-`scripts/product-demo.capture.json` records the storyboard, package version from
+`scripts/media/product-demo.capture.json` records the storyboard, package version from
 `server/Cargo.toml`, captured source commit, hashes, and input provenance.
 
 The TUI is **prerecorded demo footage**, not a new recording or synchronized live
-browser/TUI state. Its GIF and original `scripts/tui-demo.capture.json` are reused;
+browser/TUI state. Its GIF and original `scripts/media/tui-demo.capture.json` are reused;
 their hashes and original provenance remain recorded. For a headless
 (`demo-capture-v2`) TUI recording, the comparison figure plays its MP4/WebM, so
 `inputs.tuiDemo.displayedMedia` also records those videos' sizes and hashes and
@@ -94,13 +123,13 @@ not manually publish a partial package. No new README links are added by capture
 
 ## README hero GIF
 
-`npm run capture:hero` (scripts/capture-hero-media.mjs) records a single
+`npm run media -- capture hero` (scripts/media/capture-hero-media.mjs) records a single
 30-second, captioned tour for the README hero: mixed kitchen states, a blocked
 cook ringing the bell, details with the pane locator, workspace scope, the
 freezer, the service recap, the prerecorded TUI, and installation. It reuses the
 product scene actions and the same clean-committed-source guard, and needs
 Chromium, `ffmpeg`, `ffprobe`, and `gifsicle`. Outputs are
 `docs/assets/herdr-mise-hero.{gif,mp4,webm}` and `herdr-mise-hero-poster.png`,
-with provenance in `scripts/hero-demo.capture.json`. The GIF is 800px wide at
+with provenance in `scripts/media/hero-demo.capture.json`. The GIF is 800px wide at
 10 fps (about 1.5 MB); MP4 and WebM keep the 960px, 20 fps capture. As with the
 product media, capture from a clean checkout of `main` after the source merges.
