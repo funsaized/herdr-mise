@@ -40,10 +40,9 @@ code, and verifies workflow identity and the current open PR head. Changes to
 repository. The gate sets an exact-head status only after verification completes;
 drafts and superseded runs do not receive a passing status.
 
-During the two-step cutover the required status retains its legacy name,
-`Swamp managed verification`, although execution uses only Node/npm and Rust.
-The follow-up rename switches it to `Product verification` after a successful
-new status is available; other required checks remain enforced throughout.
+The required exact-head status is `Product verification`. Its definition lives
+in `.github/workflows/product-verification.yml`; the trusted gate lives in
+`.github/workflows/product-verification-gate.yml`.
 
 Local results are advisory. Branch protection requires the trusted current-head
 status and an up-to-date branch. Security/advisory scans and trusted release

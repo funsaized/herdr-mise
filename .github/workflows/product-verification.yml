@@ -1,6 +1,4 @@
-name: Swamp managed verification
-# Transitional name: main's trusted gate and branch protection still require
-# this identity. Execution is entirely native; the next cutover renames it.
+name: Product verification
 on:
   pull_request:
     branches: [main]

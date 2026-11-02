@@ -2,8 +2,7 @@ name: CodeQL
 
 on:
   push:
-    branches-ignore:
-      - ops/evidence
+    branches: [main]
   pull_request:
 
 permissions:

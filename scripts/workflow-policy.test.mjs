@@ -17,8 +17,8 @@ const workflows = Object.fromEntries(
 const readOnly = { contents: "read" };
 // Top-level permissions per workflow; anything unlisted must be contents: read.
 const topPermissions = {
-  "swamp-managed-verification.yml": {},
-  "swamp-managed-gate.yml": {
+  "product-verification.yml": {},
+  "product-verification-gate.yml": {
     actions: "read",
     contents: "read",
     "pull-requests": "read",
@@ -41,8 +41,8 @@ const required = [
   "dependency-review.yml",
   "gitleaks.yml",
   "release.yml",
-  "swamp-managed-gate.yml",
-  "swamp-managed-verification.yml",
+  "product-verification-gate.yml",
+  "product-verification.yml",
 ];
 
 function permissionMap(block, indent) {
