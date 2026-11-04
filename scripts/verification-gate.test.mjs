@@ -24,6 +24,12 @@ async function gate({
   current = "a".repeat(40),
   conclusion = "success",
   actor = "funsaized",
+  draft = false,
+  jobs = ["checks", "rust", "browser-and-package"].map((name) => ({
+    name,
+    conclusion: "success",
+  })),
+  headRepo = "funsaized/herdr-mise",
   changed = ["server/src/feed.rs"],
 } = {}) {
   const writes = [];
@@ -39,14 +45,16 @@ async function gate({
   };
   const pr = {
     number: 4,
+    draft,
     user: { login: actor },
-    head: { sha: current, repo: { id: 3, full_name: "funsaized/herdr-mise" } },
+    head: { sha: current, repo: { id: 3, full_name: headRepo } },
     base: { repo: { full_name: "funsaized/herdr-mise" } },
   };
   const pulls = { list: "prs", listFiles: "files" };
   const github = {
     rest: {
       actions: {
+        listJobsForWorkflowRun: "jobs",
         getWorkflowRun: async () => ({ data: run }),
         getWorkflow: async () => ({ data: { path, name } }),
       },
@@ -67,8 +75,19 @@ async function gate({
         createCommitStatus: async (value) => writes.push(value),
       },
     },
-    paginate: async (route) =>
-      route === pulls.list ? [pr] : changed.map((filename) => ({ filename })),
+    paginate: async (route, options) => {
+      if (route === "jobs") {
+        assert.equal(options.filter, "latest");
+        assert.equal(options.run_id, run.id);
+      }
+      return route === pulls.list
+        ? [pr]
+        : route === "jobs"
+          ? jobs
+          : changed.map((file) =>
+              typeof file === "string" ? { filename: file } : file,
+            );
+    },
   };
   const core = { notice() {}, summary: { addRaw() {}, async write() {} } };
   await execute(
@@ -115,5 +134,57 @@ test("trusted gate rejects a known path with a different workflow identity", asy
   await assert.rejects(
     gate({ name: "Unexpected executor" }),
     /does not identify/,
+  );
+});
+
+test("draft success and draft-to-ready skipped jobs cannot certify a head", async () => {
+  assert.deepEqual(await gate({ draft: true }), []);
+  const jobs = ["checks", "rust", "browser-and-package"].map((name) => ({
+    name,
+    conclusion: "skipped",
+  }));
+  assert.deepEqual(await gate({ jobs }), []);
+  assert.equal((await gate())[0].state, "success");
+});
+
+test("success requires every product job, including after partial reruns", async () => {
+  for (const conclusion of ["skipped", "failure", "cancelled", null]) {
+    assert.deepEqual(
+      await gate({
+        jobs: [
+          { name: "checks", conclusion: "success" },
+          { name: "rust", conclusion: "success" },
+          { name: "browser-and-package", conclusion },
+        ],
+      }),
+      [],
+    );
+  }
+  assert.deepEqual(await gate({ jobs: [] }), []);
+});
+
+test("renamed protected paths and owner-authored forks remain protected", async () => {
+  assert.equal(
+    (
+      await gate({
+        actor: "contributor",
+        changed: [
+          {
+            filename: "docs/moved.yml",
+            previous_filename: ".github/workflows/ci.yml",
+          },
+        ],
+      })
+    )[0].state,
+    "failure",
+  );
+  assert.equal(
+    (
+      await gate({
+        headRepo: "fork/herdr-mise",
+        changed: [".github/workflows/ci.yml"],
+      })
+    )[0].state,
+    "failure",
   );
 });

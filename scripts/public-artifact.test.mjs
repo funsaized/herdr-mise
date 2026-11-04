@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import {
   chmodSync,
   lstatSync,
-  mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   readlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { testTempDir } from "./test-temp.mjs";
 
 function makeArtifact(root, version) {
   const stage = join(root, `stage-${version}`);
@@ -59,6 +59,7 @@ function installArtifact(root, installRoot, version) {
       encoding: "utf8",
       env: {
         ...process.env,
+        TMPDIR: root,
         ACCEPTANCE_ALLOW_FILE_URLS: "1",
         ACCEPTANCE_SKIP_SMOKE: "1",
       },
@@ -69,6 +70,7 @@ function installArtifact(root, installRoot, version) {
 }
 
 test("rejects non-HTTPS public URLs before download", () => {
+  const root = testTempDir("mise-rejected-url-");
   const result = spawnSync(
     "sh",
     [
@@ -77,14 +79,68 @@ test("rejects non-HTTPS public URLs before download", () => {
       "http://example.test/a.tar.gz.sha256",
       "0.1.0-rc.1",
     ],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: { ...process.env, TMPDIR: root } },
   );
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /HTTPS/);
+  assert.deepEqual(readdirSync(root), []);
 });
 
+for (const fault of ["mkdir", "curl", "SIGINT", "SIGTERM"]) {
+  test(`artifact setup cleans scratch after ${fault} without changing an existing install`, () => {
+    const root = testTempDir("mise-artifact-fault-");
+    const scratch = join(root, "tmp");
+    const bin = join(root, "bin");
+    const install = join(root, "install");
+    for (const path of [scratch, bin, install]) mkdirSync(path);
+    writeFileSync(join(install, "keep"), "existing installation");
+    writeFileSync(join(bin, "curl"), "#!/bin/sh\nexit 99\n");
+    chmodSync(join(bin, "curl"), 0o755);
+    const command = join(bin, fault === "mkdir" ? "mkdir" : "curl");
+    writeFileSync(
+      command,
+      fault.startsWith("SIG")
+        ? `#!/bin/sh\nkill -${fault.slice(3)} "$PPID"\nexit 0\n`
+        : "#!/bin/sh\nexit 42\n",
+    );
+    chmodSync(command, 0o755);
+    for (const destination of [[], [install]]) {
+      const result = spawnSync(
+        "sh",
+        [
+          "scripts/verify-public-artifact.sh",
+          "https://example.test/a.tar.gz",
+          "https://example.test/a.tar.gz.sha256",
+          "0.1.0-rc.1",
+          ...destination,
+        ],
+        {
+          encoding: "utf8",
+          timeout: 10_000,
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            TMPDIR: scratch,
+          },
+        },
+      );
+      assert.equal(
+        result.status,
+        fault === "SIGINT" ? 130 : fault === "SIGTERM" ? 143 : 42,
+        result.stderr,
+      );
+      assert.deepEqual(readdirSync(scratch), []);
+      assert.deepEqual(readdirSync(install), ["keep"]);
+      assert.equal(
+        readFileSync(join(install, "keep"), "utf8"),
+        "existing installation",
+      );
+    }
+  });
+}
+
 test("downloads, verifies, and installs into an exact versioned path", () => {
-  const root = mkdtempSync(join(tmpdir(), "mise-public-test-"));
+  const root = testTempDir("mise-public-test-");
   const installRoot = join(root, "install");
   const digest = installArtifact(root, installRoot, "0.1.0-rc.1");
   assert.equal(
@@ -108,7 +164,7 @@ test("downloads, verifies, and installs into an exact versioned path", () => {
 });
 
 test("second install switches current without leaving current.next litter", () => {
-  const root = mkdtempSync(join(tmpdir(), "mise-upgrade-test-"));
+  const root = testTempDir("mise-upgrade-test-");
   const installRoot = join(root, "install");
   installArtifact(root, installRoot, "0.1.0-rc.1");
   installArtifact(root, installRoot, "0.1.0-rc.2");
@@ -120,7 +176,7 @@ test("second install switches current without leaving current.next litter", () =
 });
 
 test("uninstall refuses current and removes only an unselected verified version", () => {
-  const root = mkdtempSync(join(tmpdir(), "mise-uninstall-test-"));
+  const root = testTempDir("mise-uninstall-test-");
   const base = join(root, "herdr-mise");
   for (const version of ["0.1.0-rc.1", "0.1.0-rc.2"]) {
     const directory = join(base, version);
@@ -151,7 +207,7 @@ test("uninstall refuses current and removes only an unselected verified version"
 
 for (const reserved of ["current", ".", ".."]) {
   test(`uninstall rejects reserved version name ${reserved}`, () => {
-    const root = mkdtempSync(join(tmpdir(), "mise-uninstall-reserved-"));
+    const root = testTempDir("mise-uninstall-reserved-");
     const base = join(root, "herdr-mise");
     const version = join(base, "0.1.0-rc.1");
     mkdirSync(version, { recursive: true });
@@ -196,7 +252,15 @@ test("soak rejects a relative state directory inside the repository", () => {
 test("soak start records the exec'd command and keeps reporting RUNNING", () => {
   // Regression: recording `ps` output before exec captured the pre-exec
   // `nohup <binary>` argv, so every later liveness check failed.
-  const root = mkdtempSync(join(tmpdir(), "herdr-mise-soak-"));
+  let started = false;
+  let stopped = false;
+  const stop = () => {
+    if (!started || stopped) return;
+    const result = soak("stop", state);
+    assert.equal(result.status, 0, result.stderr);
+    stopped = true;
+  };
+  const root = testTempDir("herdr-mise-soak-", stop);
   const install = join(root, "install", "herdr-mise", "1.0.0");
   mkdirSync(join(install, "bin"), { recursive: true });
   const binary = join(install, "bin", "herdr-mise");
@@ -217,9 +281,11 @@ test("soak start records the exec'd command and keeps reporting RUNNING", () => 
     spawnSync("sh", ["scripts/acceptance-soak.sh", ...args], {
       encoding: "utf8",
     });
-  const started = soak("start", state, binary, "12");
   try {
-    assert.equal(started.status, 0, started.stderr);
+    // Arm teardown before start: startup can fail after creating its process.
+    started = true;
+    const result = soak("start", state, binary, "12");
+    assert.equal(result.status, 0, result.stderr);
     assert.match(readFileSync(join(state, "command"), "utf8"), /herdr-mise$/m);
     for (const action of ["status", "status"]) {
       const status = soak(action, state);
@@ -227,7 +293,6 @@ test("soak start records the exec'd command and keeps reporting RUNNING", () => 
       assert.match(status.stdout, /soak=RUNNING/);
     }
   } finally {
-    const stopped = soak("stop", state);
-    assert.equal(stopped.status, 0, stopped.stderr);
+    stop();
   }
 });

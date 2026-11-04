@@ -381,17 +381,13 @@ upstream-to-pixel guarantee. `pane.agent_status_changed` remains outside the
 subscription contract until supported upstream subscription semantics are
 verified; the decoder recognizing a name is not sufficient evidence.
 
-Weekly compatibility maintenance has two independent lanes. The stable lane
-regresses only the immutable commits in `compatibility/herdr.json`. The preview
-lane discovers the newest public prerelease, pins its dereferenced tag commit,
-and builds that source with locked offline dependencies inside mandatory Linux
-`bwrap` isolation. The preview source and all of its build scripts are
-untrusted: they receive read-only source, toolchain, and dependency mounts,
-writable scratch only, and a kernel-enforced network namespace with no egress.
-The resulting source, build, negative-probe, and cleanup evidence is advisory
-and never expands `supported_protocols()`. The lane does not produce event or
-timing evidence, so production keeps the structural-only subscription and
-one-second authoritative snapshot polling described above.
+Weekly compatibility maintenance checks immutable supported sources and reports
+public release candidates. The discovery job does not build or run upstream
+code and cannot expand supported protocols. See
+[Maintaining Herdr support](operations.md#maintaining-herdr-support) for the
+workflow and review boundary. Production retains structural subscriptions and
+one-second authoritative snapshot polling.
+
 Adapter-derived observation boundaries travel as `state_entered_at` changes
 and therefore use the same immediate path; see
 [Feed v1 observation semantics](../protocol/README.md) for the sequence contract.

@@ -38,6 +38,10 @@ and presentation audits, and `npm run verify:rust` for Rust checks. Use existing
 Herdr fixtures to prove changes across the normalizer/Feed/WebSocket/TUI boundary;
 use Testing Library or Playwright for browser interaction changes. Verify that a
 selected test actually ran. Report commands, results and limitations honestly.
+Clean up only files and processes created by your task. Keep failure evidence
+deliberately and identify its path; never clear ignored local state wholesale.
+If verification is blocked, report the command and blocker, then run unaffected
+checks without treating skips or fixture runs as live-product evidence.
 
 `npm run verify:browser:install` installs browsers. `npm run verify` runs the full
 local product suite; it tests fallback assets before building the embedded client.
