@@ -28,12 +28,9 @@ herdr plugin install funsaized/herdr-mise
 herdr plugin action invoke open --plugin mise.kitchen
 ```
 
-The plugin installer downloads the pinned, verified release binary, so you do
-not need Node, npm, Cargo, or Rust (Herdr may need Git to clone community
-plugins). The current pinned stable release is [v0.7.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.7.0).
-
-Without the plugin, install standalone and run the terminal kitchen; the
-plugin is preferred when Herdr should manage pane registration:
+To run without the plugin, install the standalone binary
+([v0.7.0](https://github.com/funsaized/herdr-mise/releases/tag/v0.7.0))
+and start the terminal kitchen:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/funsaized/herdr-mise/main/install.sh | sh
@@ -46,14 +43,10 @@ Or with Homebrew/Linuxbrew (installs `herdr`, but registers no plugin):
 brew install funsaized/tap/herdr-mise
 ```
 
-See [Operations](docs/operations.md#installation) for logs, updates, uninstall,
-and archive verification, and [First live connection](#first-live-connection)
-if you see the demo instead of your agents.
-
 ## Terminal UI
 
-`herdr-mise --tui` runs the same kitchen in a terminal. These chefs are lower
-level, so they are relegated to primitive kitchen tools:
+`herdr-mise --tui` runs the same kitchen in an integrated terminal view. These
+chefs are lower level, so they are relegated to primitive kitchen tools:
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/herdr-mise-tui-demo-poster.png">
@@ -68,13 +61,12 @@ level, so they are relegated to primitive kitchen tools:
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | ![A live Herdr-connected service arranged as agent station tiles](docs/assets/herdr-mise-tui-live.png) | ![The truthful demo kitchen escalating Claude with a red double-line station, pass banner, and neutral outer frame](docs/assets/herdr-mise-tui-blocked.png) | ![The truthful demo service using the Kitchen status table below the 80 by 24 scene minimum](docs/assets/herdr-mise-tui-compact.png) |
 
-## Browser kitchen
+## Browser UI
 
 `herdr-mise` serves the browser kitchen on <http://127.0.0.1:8686>. In the
-[playground](https://herdr-mise.s11a.com/), pick a deterministic scene and
-roster and share it as a URL ([local use](docs/operations.md#visual-playground)).
-Demo recordings, the playground, and static fallbacks are always labeled
-`DEMO SERVICE`; they never claim live state.
+[playground](https://herdr-mise.s11a.com/), pick a scene and roster, then share
+the URL ([local use](docs/operations.md#visual-playground)). Demo recordings, the
+playground, and static fallbacks are labeled `DEMO SERVICE`.
 
 | Mixed lunch service                                                                                                            | Mixed dinner service                                                                                                                      | Settings                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -84,23 +76,14 @@ Demo recordings, the playground, and static fallbacks are always labeled
 
 ### First live connection
 
-Start Herdr (`herdr`), then open Mise using the plugin pane above or the
-[standalone instructions](docs/operations.md#installation). For the standalone
-browser, run `herdr-mise` and open <http://127.0.0.1:8686>; `herdr-mise --tui`
-opens the terminal kitchen too.
+Start Herdr (`herdr`), then open Mise through the plugin, `herdr-mise` for the
+browser, or `herdr-mise --tui` for the terminal.
 
-If you see demo instead of live state, run `herdr-mise --diagnostic` from the
-same environment as Mise. Plugin installs may not put the executable on PATH;
-use `./target/herdr-plugin/herdr-mise/current/bin/herdr-mise --diagnostic`
-from its installed plugin directory. This bounded source probe does **not**
-prove that the browser service is listening. See
-[first-connection details](docs/operations.md#first-live-connection).
+If you see demo instead of live state, run `herdr-mise --diagnostic`.
 
-- **Live:** the `DEMO SERVICE` placard is absent and the WebSocket payload
-  carries `mode: "live"`.
-- **Demo:** a persistent `DEMO SERVICE` placard identifies deterministic mock
-  data and names the source condition. Demo is not a successful live
-  connection.
+- **Live:** connected to Herdr, with no `DEMO SERVICE` placard.
+- **Demo:** `DEMO SERVICE` identifies mock data and explains why the source is
+  unavailable.
 - **Connected but empty:** `Waiting for agents — start one in herdr` means the
   source is live, but has no agents. Start an agent in Herdr, not another Mise.
 
@@ -109,8 +92,8 @@ Troubleshooting: [Herdr socket unavailable](docs/operations.md#herdr-socket-unav
 
 ### Herdr compatibility
 
-The adapter accepts the protocols in the verified matrix below. Other product
-versions on those protocols may work but are not part of the release matrix.
+These Herdr versions and protocols are verified. Other versions using the same
+protocols may work but have not been verified.
 
 <!-- herdr-compatibility:start -->
 
@@ -124,15 +107,14 @@ versions on those protocols may work but are not part of the release matrix.
 
 <!-- herdr-compatibility:end -->
 
-The authority is `compatibility/herdr.json`; each row names its immutable
-upstream commit and sanitized fixture. Run `npm run check:herdr-compatibility`
-to check runtime, docs, fixtures, and fixture privacy.
+[compatibility/herdr.json](compatibility/herdr.json) records the upstream
+commits and sanitized fixtures. Check them with
+`npm run check:herdr-compatibility`.
 
 ### Relationship
 
-herdr-mise is an **independent community project**, not an official Herdr
-project, and is not affiliated with, endorsed by, or maintained by the Herdr
-team.
+herdr-mise is an **independent community project**, unaffiliated with the
+Herdr team.
 
 ## What it is
 
@@ -143,31 +125,34 @@ team.
 - A single-machine tool, not a remote dashboard, notification inbox, session
   log, or multi-host aggregator.
 
-Blocked work must remain unmistakable from peripheral vision, and payload,
-wire traffic, hidden-tab activity, and server resources remain bounded during
-all-day use. The detailed browser/TUI representation audit is in
-[Browser and TUI scene parity](docs/tui-scene-parity.md).
+Blocked work stays visible, and resource use stays bounded during all-day use.
+See [Browser and TUI scene parity](docs/tui-scene-parity.md).
 
 ## Runtime modes
 
 - **Demo:** deterministic cooks remain visibly labeled while the server retries
   a missing, timed-out, unsupported, or incompatible Herdr source.
-- **Live:** a compatible snapshot atomically replaces the demo roster without a
-  process or browser restart.
-- **Disconnected:** browser silence surfaces `GAS LEAK — SERVICE SUSPENDED`,
-  then reconnects through a fresh snapshot. Rejected state frames take the same
-  recovery path; a repeated rejection is labeled as an incompatible
-  browser-to-Mise feed rather than a Herdr failure.
+- **Live:** a compatible Herdr snapshot replaces the demo roster without a
+  restart.
+- **Disconnected:** a lost browser connection shows
+  `GAS LEAK — SERVICE SUSPENDED` while reconnecting. Rejected updates also
+  trigger reconnection; repeated rejection is labeled as an incompatible
+  browser-to-Mise feed.
 - **Empty:** a live source with no agents shows `Waiting for agents — start one
   in herdr.`
 
 ## Local development
 
-Use the deterministic client-only playground for visual work:
+Install dependencies once:
 
 ```sh
 npm ci
 npm ci --prefix client
+```
+
+Use the client-only playground for visual work:
+
+```sh
 npm run dev:visual
 # open http://localhost:8686
 ```
@@ -175,35 +160,21 @@ npm run dev:visual
 Build the embedded client and release binary for integration work:
 
 ```sh
-npm ci
-npm ci --prefix client
 npm run bundle
 HERDR_SOCKET_PATH=/tmp/no-herdr.sock ./target/release/herdr-mise
+# or run the terminal kitchen:
+./target/release/herdr-mise --tui
 ```
 
 See [Client development](docs/operations.md#client-development) for playground
 presets, isolation guarantees, and plain Vite limitations.
 
-## Contributor plugin development
-
-Build from source for integration work:
-
-```sh
-npm ci
-npm ci --prefix client
-npm run bundle
-./target/release/herdr-mise --tui
-```
+### Contributor plugin development
 
 To exercise the published-binary plugin manifest from a checkout, link it:
 
 ```sh
 herdr plugin link .
-```
-
-Open the linked pane with:
-
-```sh
 herdr plugin action invoke open --plugin mise.kitchen
 ```
 
@@ -216,8 +187,8 @@ The browser service continues alongside the TUI when its loopback port is free
   `HERDR_MISE_PORT` changes only that loopback port. Browser WebSocket origins
   must match the effective port or be explicitly added for a personal reverse
   proxy, which owns its transport and access control.
-- The binary sends no telemetry and performs no outbound product network
-  requests. Live mode reads only the local Herdr Unix socket.
+- The binary sends no telemetry or outbound network requests. Live mode reads
+  only the local Herdr Unix socket.
 - Release archives and the installer support macOS arm64, macOS x86_64, and
   Linux x86_64 glibc: `aarch64-apple-darwin`, `x86_64-apple-darwin`, and
   `x86_64-unknown-linux-gnu`. Linux uses the Ubuntu 24.04 / glibc 2.39 baseline;
@@ -225,15 +196,13 @@ The browser service continues alongside the TUI when its loopback port is free
   There is no background service or auto-update.
 - Browser settings are local site data. Reduced motion is honored.
 
-See [Security policy](SECURITY.md) and
-[Operations](docs/operations.md) for the complete runtime and troubleshooting
-contracts.
+See [Security policy](SECURITY.md) and [Operations](docs/operations.md) for
+details and troubleshooting.
 
 ## Documentation
 
 - [GitHub issues](https://github.com/funsaized/herdr-mise/issues) — accepted
   work, ownership, and current status.
-
 - [Architecture](docs/architecture.md) — components, data flow, and trust
   boundaries.
 - [Operations](docs/operations.md) — run, develop, diagnose, and troubleshoot.
