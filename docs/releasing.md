@@ -167,20 +167,16 @@ This is a current-checkout/public-copy check, not verification of historical
 tag contents or artifact bytes. Keep the existing anonymous archive, checksum,
 and signature verification too. Latest must identify the checkout's release.
 
-For issue #314, the captured public v0.3.0 body still contains prospective
-publication wording. An explicitly authorized maintainer must make a
-metadata-only correction: replace only the prose before `## Checksums` with
-the corrected `docs/releases/v0.3.0.md`, retaining the existing Checksums section
-byte-for-byte. Do not rebuild, replace assets, move the tag, or rerun publication
-from the immutable old tag. That rerun intentionally rejects the corrected body
-because its old template differs; do not weaken the rerun comparison.
-The public-copy correction remains pending until fresh metadata passes the
-command above. The fixtures preserve the stale response as regression evidence.
+The historical v0.3.0 prose correction from issue #314 is complete: public
+metadata checked on 2026-11-04 matches `docs/releases/v0.3.0.md` before its
+Checksums section. The captured stale response remains a regression fixture.
+Do not rerun publication from the immutable old tag: its older template differs
+from the corrected public prose, and rerun comparison intentionally rejects
+that drift.
 
-Release scripts are managed-verification trust-boundary paths. Hand off the
-tested change through a same-repository, `@funsaized`-authored pull request and
-require managed verification on its current head; no full local verification
-run is needed for this documentation/release-contract change.
+Release scripts are native-verification trust-boundary paths. Use a
+same-repository, `@funsaized`-authored pull request and require native product
+verification on its current head; see [local verification](local-verification.md).
 
 ### Tagged workflow contract
 
@@ -248,9 +244,9 @@ same complete inputs. Any source or notes-template correction requires
 fix-forward with a new version and new tag.
 
 If a rerun finds an existing matching release, it validates the release class,
-tag, display name, and absence of unexpected assets before replacing the expected six
-assets. A class mismatch or unexpected asset blocks the rerun for operator
-review. Do not delete evidence of the failure merely to make the run proceed.
+tag, display name, and absence of unexpected assets, then compares existing
+asset bytes before uploading only missing assets. A class mismatch or unexpected
+asset blocks the rerun for operator review. Do not delete evidence of the failure merely to make the run proceed.
 
 If creation succeeded but public verification failed, leave the tag fixed and
 the release record available for diagnosis. Prefer fix-forward with a new

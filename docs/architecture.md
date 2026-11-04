@@ -420,7 +420,7 @@ or copying a locator does not focus a pane. No browser command interface exists.
 Human approval of the precise operation, target-safety decision and surfaces
 is required before any focus implementation or live experiment; issue
 acceptance is not approval. A trust-boundary change additionally needs an
-`@funsaized`-authored same-repository PR and managed verification on its
+`@funsaized`-authored same-repository PR and native product verification on its
 current head.
 
 ## Ended lifecycle

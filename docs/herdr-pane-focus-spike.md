@@ -84,6 +84,6 @@ specified; the present `/ws` allowance for missing Origin (CLI/tests) and
 optional extra origins must not silently authorize mutation. No direct
 Unix-socket browser access, deep links, or arbitrary RPC forwarding.
 Trust-boundary changes require a same-repository PR authored by `@funsaized`
-and managed verification on its current head. The fixture regression checks
+and native product verification on its current head. The fixture regression checks
 navigation/fallback, not Herdr focus safety; an approved implementation needs
 exact-request/response socket tests and isolated upstream race evidence.
