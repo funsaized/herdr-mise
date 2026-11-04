@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-HERDR_MISE_VERSION=0.6.0
+HERDR_MISE_VERSION=0.7.0
 release_base=${HERDR_MISE_RELEASE_BASE_URL:-https://github.com/funsaized/herdr-mise/releases/download/v$HERDR_MISE_VERSION}
 mode=${1:-standalone}
 
@@ -40,11 +40,16 @@ case "$checksum_url" in
   *) echo "checksum URL must use HTTPS" >&2; exit 1 ;;
 esac
 
-download=$(mktemp -d "${TMPDIR:-/tmp}/herdr-mise-download.XXXXXX")
-stage=$(mktemp -d "${TMPDIR:-/tmp}/herdr-mise-stage.XXXXXX")
 install_stage=
 link_stage=
-trap 'rm -rf "$download" "$stage"; [ -z "$install_stage" ] || rm -rf "$install_stage"; [ -z "$link_stage" ] || rm -f "$link_stage"' EXIT HUP INT TERM
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/herdr-mise-download.XXXXXX")
+trap 'rm -rf "$scratch"; [ -z "$install_stage" ] || rm -rf "$install_stage"; [ -z "$link_stage" ] || rm -f "$link_stage"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+download="$scratch/download"
+stage="$scratch/stage"
+mkdir "$download" "$stage"
 
 atomic_link() {
   link_target=$1

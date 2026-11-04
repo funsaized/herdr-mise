@@ -107,6 +107,56 @@ for (const [system, machine, target] of [
   });
 }
 
+for (const fault of ["setup", "SIGHUP", "SIGINT", "SIGTERM"]) {
+  test(`installer cleans scratch after ${fault} and preserves the selected version`, () => {
+    for (const mode of ["--plugin", "standalone"]) {
+      const value = fixture();
+      const initial = install(value, mode);
+      assert.equal(initial.result.status, 0, initial.result.stderr);
+      const base = join(
+        value.root,
+        mode === "--plugin" ? "plugin-root" : "data",
+        "herdr-mise",
+      );
+      const selected = readlinkSync(join(base, "current"));
+      const binary = readFileSync(join(base, "current", "bin", "herdr-mise"));
+      // Fail scratch setup on both the old two-mktemp layout and the new
+      // owned-root layout. Never fault the initial successful installation.
+      for (const [name, body] of fault === "setup"
+        ? [
+            [
+              "mktemp",
+              '#!/bin/sh\ncase "$*" in *stage*) exit 42;; esac\nexec /usr/bin/mktemp "$@"\n',
+            ],
+            ["mkdir", "#!/bin/sh\nexit 42\n"],
+          ]
+        : [["curl", `#!/bin/sh\nkill -${fault.slice(3)} "$PPID"\nexit 0\n`]]) {
+        writeFileSync(join(value.fakeBin, name), body);
+        chmodSync(join(value.fakeBin, name), 0o755);
+      }
+      const { result, temp } = install(value, mode);
+      assert.equal(
+        result.status,
+        fault === "SIGHUP"
+          ? 129
+          : fault === "SIGINT"
+            ? 130
+            : fault === "SIGTERM"
+              ? 143
+              : 42,
+        result.stderr,
+      );
+      assert.deepEqual(readdirSync(temp), []);
+      assert.equal(readlinkSync(join(base, "current")), selected);
+      assert.deepEqual(
+        readFileSync(join(base, "current", "bin", "herdr-mise")),
+        binary,
+      );
+      assert.deepEqual(readdirSync(base).sort(), [version, "current"].sort());
+    }
+  });
+}
+
 test("rejects unsupported systems before downloading", () => {
   const value = fixture("Linux", "aarch64");
   const { result } = install(value);
