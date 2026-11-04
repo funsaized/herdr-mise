@@ -4,7 +4,6 @@ import {
   chmodSync,
   existsSync,
   lstatSync,
-  mkdtempSync,
   mkdirSync,
   readFileSync,
   readlinkSync,
@@ -12,9 +11,9 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
+import { testTempDir } from "./test-temp.mjs";
 
 const version = readFileSync("install.sh", "utf8").match(
   /^HERDR_MISE_VERSION=(\S+)$/m,
@@ -26,7 +25,7 @@ function fixture(system = "Darwin", machine = "arm64", options = {}) {
     "Darwin-x86_64": "x86_64-apple-darwin",
     "Linux-x86_64": "x86_64-unknown-linux-gnu",
   };
-  const root = mkdtempSync(join(tmpdir(), "herdr-mise-installer-test-"));
+  const root = testTempDir("herdr-mise-installer-test-");
   const release = join(root, "release");
   const stage = join(root, "archive");
   const fakeBin = join(root, "fake-bin");
