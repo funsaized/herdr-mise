@@ -1,98 +1,79 @@
 # Release operations
 
-This is the operator runbook for release candidates and stable releases. It
-does not authorize a tag or publication; the GitHub releases page is
-authoritative for what has been published.
+The [Release workflow](../.github/workflows/release.yml) builds, signs,
+publishes, and verifies releases. Pull requests and manual runs validate only;
+publication requires an explicitly authorized version tag.
 
-## Release decision trail
+## Prepare
 
-`server/Cargo.toml` is the one authoritative version source. A release tag must
-be canonical SemVer with a lowercase `v` prefix and must exactly equal that
-Cargo version. Build metadata is rejected. A tag with any SemVer prerelease
-suffix (for example, `v0.1.0-rc.2`) is a GitHub prerelease. A tag without a
-suffix (for example, `v0.1.0`) is stable.
+1. Update `server/Cargo.toml`, `Cargo.lock`, `herdr-plugin.toml`, and
+   `HERDR_MISE_VERSION` in `install.sh`, plus current installation and support
+   guidance in `README.md`, `docs/operations.md`, and `SECURITY.md`.
+2. For a stable release, add `docs/releases/<TAG>.md` with the exact level-two
+   headings `Purpose`, `Install`, `Herdr compatibility`, and `Limitations`.
+   Include checksum-first installation instructions and supported platforms.
+   The workflow appends `Checksums` from the built archives; leave that heading
+   out of the template. Prereleases use generated notes.
+3. Complete [product verification](local-verification.md) on the intended
+   commit and confirm the [Apple credentials](#apple-trust-setup) are configured.
 
-Pull requests and manual workflow runs build and validate but never publish.
-Only a matching tag can reach the publish job. Do not create a tag until the
-candidate commit and notes are complete. Published tags
-are immutable: never move, force-update, delete-and-reuse, or otherwise reuse a
-release tag.
+`server/Cargo.toml` is the version authority. Tags must match it exactly, use a
+lowercase `v` prefix and canonical SemVer, and contain no build metadata.
+Prerelease suffixes produce GitHub prereleases; unsuffixed versions are stable.
+Published tags are immutable.
 
-The `v0.1.0` and `v0.2.0` acceptance contracts are retained as release history,
-not requirements for later releases. From `v0.3.0` onward, publication requires
-the tag/version match, successful platform builds, macOS signing and
-notarization, complete stable notes, and exact public assets. The 20-gate
-RC-to-stable evidence document is no longer a publication prerequisite.
+## Publish
 
-Both release classes retain the same three platform archives and three SHA-256
-sidecars, signing/notarization checks, exact-six-asset checks, rerun validation,
-and anonymous public download verification. RCs are marked prerelease and are
-verified not to be Latest. Stable releases are non-prereleases and must become
-the public Latest release.
+From the reviewed commit and a clean checkout:
 
-## Release assembly
+```sh
+VERSION=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml)
+TAG=v$VERSION
+test -z "$(git status --porcelain)"
+git tag -a "$TAG" -m "$TAG"
+git push origin "$TAG"
+```
 
-Publication first assembles a draft. Retries download and compare every existing
-asset before uploading missing files, then expose the complete set. Existing
-bytes are never overwritten. A timestamp-signed rebuild with different bytes
-fails closed: rerun the publish job using the original retained `release-*`
-artifacts, rather than rebuilding the release. Build-environment artifacts
-are separate from the six public assets and retained for 30 days.
+Wait for all **Release** jobs, including public verification. The workflow:
 
-The Linux release is built on Ubuntu 24.04 (glibc 2.39 baseline); older glibc and
-musl are not claimed supported. Each build retains its actual compiler, Node,
-OS, and libc identities. Supporting older distributions requires a deliberately
-older build sysroot and installation acceptance, not just relaxing the installer.
+- Builds macOS arm64 (`macos-15`), macOS x86_64 (`macos-15-intel`), and Linux
+  x86_64 (`ubuntu-24.04`, glibc 2.39 baseline).
+- Signs and notarizes macOS binaries, then packages three archives and three
+  SHA-256 sidecars.
+- Assembles a draft and publishes only the complete six-asset set. Retries
+  compare existing bytes and upload only missing assets.
+- Downloads every archive anonymously and verifies checksums, contents,
+  startup, and macOS signatures. Stable releases must become Latest;
+  prereleases must not.
+- Checks stable public metadata against version pins, installation guidance,
+  supported platforms, security policy, and the release-note template.
 
-## Stable release notes
+After public verification, check plugin and standalone installation against
+that release and [update Homebrew](#homebrew-tap-update).
 
-Before a stable tag is created, check in `docs/releases/<TAG>.md`. This is the
-prose template, and the workflow refuses stable creation unless it contains
-these exact level-two headings:
+## Homebrew tap update
 
-- `Purpose`: what the release is for and its important user-visible outcome.
-- `Install`: checksum-first download, extraction, and launch instructions.
-- `Herdr compatibility`: the tested Herdr releases and snapshot protocols.
-- `Limitations`: known constraints, including localhost/read-only behavior and
-  any remaining supported-platform limits.
+Generate the formula from published sidecars:
 
-Do not put a `Checksums` heading or prospective stable checksum in the template.
-After the signed archives exist, the same successful workflow normalizes line
-endings/trailing newlines and appends `## Checksums` plus one
-`<sha256><two spaces><archive filename>` line per target from the generated
-sidecars. Existing stable notes are normalized before rerun comparison, avoiding
-CRLF or trailing-newline-only failures while still blocking content drift. RCs
-may continue to use generated notes and are always visibly marked prerelease.
+```sh
+gh repo clone funsaized/homebrew-tap /tmp/homebrew-tap
+node scripts/homebrew-formula.mjs "$TAG" \
+  < /tmp/homebrew-tap/Formula/herdr-mise.rb > /tmp/herdr-mise.rb
+mv /tmp/herdr-mise.rb /tmp/homebrew-tap/Formula/herdr-mise.rb
+```
 
-## Signing and publishing
+Open a pull request in the tap. Merge after its audit, install, test, and
+uninstall checks pass on the supported platforms, then verify
+`brew update && brew upgrade herdr-mise` from the preceding version.
+The generator rejects prereleases and malformed or mismatched sidecars.
 
-Publication is tag-triggered. Pull requests and manual workflow runs validate
-without publication credentials; only a matching `v*` tag can sign, notarize,
-and publish assets.
+## Apple trust setup
 
-### Preconditions
-
-Before tagging:
-
-1. Confirm the working tree is clean and the tag target is the intended commit.
-2. Confirm `server/Cargo.toml`, `herdr-plugin.toml`, and
-   `HERDR_MISE_VERSION` in `install.sh` contain the intended version. For a
-   stable release, also confirm `docs/releases/v<VERSION>.md` contains complete
-   release notes. Do not leave the manifest or installer pointing at an
-   unpublished version after the release workflow completes.
-3. Run the relevant local checks from [CONTRIBUTING.md](../CONTRIBUTING.md).
-4. Confirm the Apple signing and notarization secrets are configured for tagged
-   macOS jobs.
-5. Confirm all three archive/sidecar pairs will use the names resolved by both
-   plugin and standalone installer modes.
-
-### Apple trust setup
-
-Use a **Developer ID Application** certificate, not a Mac Distribution
-certificate. Export the identity and private key as a password-protected `.p12`.
-Create an App Store Connect **Team Key** with the App Manager role; Individual
-Keys cannot use `notarytool`. Download its `.p8` once and retain its Key ID and
-Issuer ID.
+Configure once and update when credentials change. Use a **Developer ID
+Application** certificate, exported with its private key as a
+password-protected `.p12`. Create an App Store Connect **Team Key** with the
+App Manager role; Individual Keys cannot use `notarytool`. Retain its `.p8`,
+Key ID, and Issuer ID.
 
 Encode file credentials locally without printing their values:
 
@@ -101,7 +82,7 @@ openssl base64 -A -in DeveloperID.p12 -out certificate.p12.base64
 openssl base64 -A -in AuthKey_KEYID.p8 -out AuthKey.p8.base64
 ```
 
-Set these repository secrets from a trusted checkout:
+Set repository secrets from a trusted checkout:
 
 ```sh
 gh secret set APPLE_CERTIFICATE_P12_BASE64 < certificate.p12.base64
@@ -121,142 +102,26 @@ gh secret set APPLE_API_PRIVATE_KEY_BASE64 < AuthKey.p8.base64
 | `APPLE_API_ISSUER_ID`          | App Store Connect issuer ID                        |
 | `APPLE_API_PRIVATE_KEY_BASE64` | base64 of the API key `.p8`                        |
 
-Delete the local encoded files after upload. Never commit certificates, keys,
-or encoded copies.
-
-### Tag and publish
-
-Derive the tag from the authoritative Cargo version, then create it only after
-reviewing the exact commit:
-
-```sh
-VERSION=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml)
-TAG=v$VERSION
-test -z "$(git status --porcelain)"
-git tag -a "$TAG" -m "$TAG"
-git push origin "$TAG"
-```
-
-Wait for the **Release** workflow's build, publish, and public-verification jobs.
-Confirm the release class and Latest status, then confirm exactly six assets:
-three platform archives and their three `.sha256` sidecars. Finally, download an
-asset anonymously and rerun its checksum and archive verifier.
-
-### Current-checkout guidance after publication
-
-The stable `verify-public-release` job runs the offline consistency checker
-against its fetched `release.json` and `latest.json`. It compares current Cargo,
-plugin, and installer pins, current installation guidance, supported platforms,
-security support policy, and the release-note template with public metadata.
-Ordinary PR tests use captured fixtures: preparing an unpublished next version
-does not require network access or `acceptance/releases/<version>.json`.
-
-After publication or a documentation-only correction, use a checkout containing
-the corrected current guidance and fresh anonymous API responses:
-
-```sh
-TAG=v0.3.0 # current checkout's stable Cargo version, not a historical tag
-curl -q --fail --silent --show-error \
-  "https://api.github.com/repos/funsaized/herdr-mise/releases/tags/$TAG" -o release.json
-curl -q --fail --silent --show-error \
-  https://api.github.com/repos/funsaized/herdr-mise/releases/latest -o latest.json
-node scripts/check-release-consistency.mjs release.json latest.json
-```
-
-This is a current-checkout/public-copy check, not verification of historical
-tag contents or artifact bytes. Keep the existing anonymous archive, checksum,
-and signature verification too. Latest must identify the checkout's release.
-
-The historical v0.3.0 prose correction from issue #314 is complete: public
-metadata checked on 2026-11-04 matches `docs/releases/v0.3.0.md` before its
-Checksums section. The captured stale response remains a regression fixture.
-Do not rerun publication from the immutable old tag: its older template differs
-from the corrected public prose, and rerun comparison intentionally rejects
-that drift.
-
-Release scripts are native-verification trust-boundary paths. Use a
-same-repository, `@funsaized`-authored pull request and require native product
-verification on its current head; see [local verification](local-verification.md).
-
-### Tagged workflow contract
-
-- `macos-15` builds `aarch64-apple-darwin`, `macos-15-intel` builds
-  `x86_64-apple-darwin`, and `ubuntu-24.04` builds
-  `x86_64-unknown-linux-gnu`.
-- macOS jobs import the P12 into an ephemeral keychain, sign with hardened
-  runtime and a secure timestamp, submit through `notarytool --wait`, verify the
-  Developer ID signature, and delete credentials in `always()` cleanup.
-- Packaging emits one archive and SHA-256 sidecar per target and runs
-  `scripts/verify-release-artifact.sh` before upload.
-- Publication rejects unexpected assets, uploads the exact expected set, and
-  verifies the public release through anonymous downloads.
-- After publication, test `install.sh` against the public release in plugin and
-  standalone modes; both must resolve the same three archives and sidecars.
-
-### Homebrew tap update
-
-After the release passes public verification:
-
-1. Regenerate the formula from the published sidecars, never local rebuilds,
-   and open the tap pull request:
-
-   ```sh
-   gh repo clone funsaized/homebrew-tap /tmp/homebrew-tap
-   node scripts/homebrew-formula.mjs "$TAG" \
-     < /tmp/homebrew-tap/Formula/herdr-mise.rb > /tmp/herdr-mise.rb
-   mv /tmp/herdr-mise.rb /tmp/homebrew-tap/Formula/herdr-mise.rb
-   ```
-
-2. Commit the formula on a branch in the tap and open its pull request.
-3. Require tap CI to audit, install, test, and uninstall the formula on macOS
-   arm64, macOS x86_64 while runners exist, and Linux x86_64.
-4. Merge the tap update and record its pull request or commit in the release
-   checklist.
-5. Verify `brew update && brew upgrade herdr-mise` from the preceding version.
-
-The script rejects prereleases and malformed or mismatched sidecars. Opening the
-tap pull request stays a maintainer action, so no cross-repository token exists.
-
-### Standalone CLI notarization
-
-The macOS artifact is a standalone Mach-O command-line executable, not an app
-bundle. There is no stapling target. Applicable evidence is an accepted
-`notarytool` submission plus a Developer ID signature retaining hardened runtime
-and a secure timestamp. Do not use app-bundle assessment as the acceptance gate
-for the extracted CLI.
-
-### Intel runner horizon
-
-The release workflow currently pins `macos-15-intel`. Review GitHub's current
-runner inventory before each release and move the pin deliberately when that
-label approaches retirement. Do not silently drop the Intel archive.
+Delete local encoded copies after upload; never commit credentials. The
+workflow uses an ephemeral keychain and removes signing material on completion.
+This standalone CLI has no stapling target: verification uses an accepted
+notarization submission and a Developer ID signature with hardened runtime
+and a secure timestamp.
 
 ## Failure recovery
 
-Before creating the stable tag, fix candidate source or notes template on a new
-commit and run the relevant checks. A missing signing secret, failed
-notarization, or incomplete notes is a safe blocked condition, not grounds to
-bypass a release safeguard.
+Inspect the failed job and retained artifacts before retrying. Transient or
+credential-only failures can use the same inputs. Source or notes-template
+changes after tagging require a new version and tag.
 
-If the immutable stable tag has already been pushed and its run blocks before
-release creation, do not move or reuse it. A purely transient retry may use the
-same complete inputs. Any source or notes-template correction requires
-fix-forward with a new version and new tag.
+A signed rebuild can produce different bytes. Retry publication with the
+original retained `release-*` artifacts; existing public assets are never
+overwritten. Metadata, notes, or asset mismatches require investigation.
+Keep failed release records available for diagnosis and fix forward. Withdrawal
+of a defective release is a separate explicit decision; never move or reuse its
+tag.
 
-If a rerun finds an existing matching release, it validates the release class,
-tag, display name, and absence of unexpected assets, then compares existing
-asset bytes before uploading only missing assets. A class mismatch or unexpected
-asset blocks the rerun for operator review. Do not delete evidence of the failure merely to make the run proceed.
-
-If creation succeeded but public verification failed, leave the tag fixed and
-the release record available for diagnosis. Prefer fix-forward with a new
-version and new tag. If a severe defect requires withdrawal, mark the affected
-release clearly and remove its release record only through an explicit incident
-decision; never move or reuse its tag. Source rollback does not rewrite a
-published release.
-
-For an Apple notarization rejection, retrieve the diagnostic log with temporary
-local key material:
+For an Apple notarization rejection, retrieve the log:
 
 ```sh
 xcrun notarytool log SUBMISSION_ID \
@@ -265,39 +130,26 @@ xcrun notarytool log SUBMISSION_ID \
   --issuer ISSUER_ID
 ```
 
-Wrong certificate type, missing hardened runtime or timestamp, and insufficient
-Team Key permissions are common causes. Fix credentials or source as
-appropriate; credential-only transient failures may be rerun, while source
-changes require a new version and tag.
+Check the certificate type, Team Key permissions, hardened runtime, and secure
+timestamp. To inspect an extracted public binary, use
+`codesign --verify --deep --strict --verbose=2 ./herdr-mise` and
+`codesign -dv --verbose=4 ./herdr-mise`.
 
-If public macOS signature verification fails, inspect the extracted public
-artifact with `codesign --verify --deep --strict --verbose=2 ./herdr-mise` and
-`codesign -dv --verbose=4 ./herdr-mise`. Require a Developer ID Application
-authority, TeamIdentifier, runtime flag, and secure timestamp.
+### Recheck public guidance
 
-## RC retirement after stable verification
+After correcting current stable documentation, compare it with fresh public
+metadata:
 
-RC retirement is a separate, destructive operation and is never part of this
-workflow. Keep every RC intact until the stable release has passed anonymous
-public verification for release class, Latest status, all six assets,
-checksums, extraction, and applicable signatures.
+```sh
+VERSION=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' server/Cargo.toml)
+TAG=v$VERSION
+curl -q --fail --silent --show-error \
+  "https://api.github.com/repos/funsaized/herdr-mise/releases/tags/$TAG" -o release.json
+curl -q --fail --silent --show-error \
+  https://api.github.com/repos/funsaized/herdr-mise/releases/latest -o latest.json
+node scripts/check-release-consistency.mjs release.json latest.json
+```
 
-For v0.1.0, BL-005 remained open through stable publication and RC retirement.
-The unresolved-P0 check applied to every v0.1.0 milestone P0 except BL-005
-itself; this was a narrow self-reference exception, not a general waiver.
-BL-005 closed only after stable verification, RC release deletion, RC
-remote-tag deletion, and final enumeration of the remaining release, assets,
-and tags.
-
-Future RC retirement follows the same rule: only after stable public
-verification and explicit authorization, retire RCs in this order:
-
-1. Delete the obsolete RC GitHub release records.
-2. Confirm the stable release and assets remain publicly correct.
-3. Delete the corresponding remote RC tags.
-
-`sh scripts/retire-rcs.sh "$TAG"` shows the RC releases and tags for a stable
-tag; add `--apply` to perform exactly these steps in this order.
-
-Do not delete local or remote RC tags first, do not delete the stable tag, and
-do not close release issues merely because stable automation started.
+This checks guidance against the current stable release; archive and signature
+verification remain part of the Release workflow. Ordinary PR tests use captured
+fixtures and do not require publication.

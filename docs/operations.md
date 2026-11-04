@@ -782,9 +782,8 @@ sh scripts/verify-release-artifact.sh dist/herdr-mise-v0.7.0-aarch64-apple-darwi
 
 ### Publishing a signed release
 
-Signing, Apple trust setup, tag publication, public verification, and failure
-recovery are maintained in the sole operator runbook:
-[Release operations](releasing.md).
+See [Release operations](releasing.md) for publishing, signing setup, and
+recovery.
 
 ### Verifying the binary from a source tree
 
