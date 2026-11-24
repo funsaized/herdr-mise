@@ -1,5 +1,5 @@
-use crate::protocol::{AgentRecord, AgentState, SessionStats};
-use chrono::{DateTime, Duration, SecondsFormat, Utc};
+use crate::protocol::{format_timestamp, AgentRecord, AgentState, SessionStats};
+use time::{SignedDuration, UtcDateTime};
 
 struct DemoIdentity {
     name: &'static str,
@@ -39,7 +39,7 @@ const ROSTER: [DemoIdentity; 6] = [
     },
 ];
 
-pub fn agents(step: u64, started_at: DateTime<Utc>) -> Vec<AgentRecord> {
+pub fn agents(step: u64, started_at: UtcDateTime) -> Vec<AgentRecord> {
     let count = std::env::var("HERDR_MISE_DEMO_COUNT")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
@@ -50,7 +50,7 @@ pub fn agents(step: u64, started_at: DateTime<Utc>) -> Vec<AgentRecord> {
         .collect()
 }
 
-fn record(index: usize, step: u64, started_at: DateTime<Utc>) -> AgentRecord {
+fn record(index: usize, step: u64, started_at: UtcDateTime) -> AgentRecord {
     let identity = ROSTER.get(index);
     let name = identity
         .map(|identity| identity.name.to_owned())
@@ -75,8 +75,7 @@ fn record(index: usize, step: u64, started_at: DateTime<Utc>) -> AgentRecord {
         name,
         state,
         progress,
-        state_entered_at: (started_at + Duration::seconds(entered_step))
-            .to_rfc3339_opts(SecondsFormat::Millis, true),
+        state_entered_at: format_timestamp(started_at + SignedDuration::seconds(entered_step)),
         accent_index: index as u8,
         model: identity
             .map(|value| value.model)
@@ -138,10 +137,10 @@ fn schedule(index: usize, step: u64) -> (AgentState, i64, u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use time::macros::utc_datetime;
 
-    fn start() -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(2026, 7, 31, 12, 0, 0).unwrap()
+    fn start() -> UtcDateTime {
+        utc_datetime!(2026-07-31 12:00)
     }
 
     #[test]

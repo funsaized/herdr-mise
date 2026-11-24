@@ -15,7 +15,6 @@ use std::{
     time::Duration,
 };
 
-use chrono::Utc;
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEventKind,
@@ -26,6 +25,7 @@ use crossterm::{
 };
 use futures_util::StreamExt;
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
+use time::UtcDateTime;
 use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
 
@@ -33,6 +33,10 @@ use crate::feed::Feed;
 use state::AgentTable;
 
 const SCENE_TICK_INTERVAL: Duration = Duration::from_millis(100);
+
+fn unix_millis(timestamp: UtcDateTime) -> i64 {
+    timestamp.unix_timestamp() * 1_000 + i64::from(timestamp.millisecond())
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum SceneView {
@@ -452,7 +456,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
     let mut events = EventStream::new();
     let (mut receiver, snapshot) = feed.subscribe_snapshot().await;
     let mut table = AgentTable::default();
-    table.apply_at(snapshot, Utc::now().timestamp_millis());
+    table.apply_at(snapshot, unix_millis(UtcDateTime::now()));
     guard.set_board_len(table.board().len());
     let mut interval = tokio::time::interval(SCENE_TICK_INTERVAL);
     let mut tick = 0_u64;
@@ -480,7 +484,7 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
         {
             select_all(&mut recap_scope);
         }
-        let now = Utc::now();
+        let now = UtcDateTime::now();
         terminal.draw(|frame| {
             if recap_open {
                 recap_offset = scene::draw_recap(frame, &table, &recap_scope, now, recap_offset);
@@ -521,14 +525,14 @@ pub async fn run(feed: Feed, shutdown: CancellationToken, warning: BindWarning) 
             _ = interval.tick() => tick = tick.wrapping_add(1),
             event = receiver.recv() => match decide_feed_event(&mut receiver, event) {
                 FeedDecision::Apply(event) => {
-                    table.apply_at(event, Utc::now().timestamp_millis());
+                    table.apply_at(event, unix_millis(UtcDateTime::now()));
                     guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Resnapshot => {
-                    table.gap_at(Utc::now().timestamp_millis());
+                    table.gap_at(unix_millis(UtcDateTime::now()));
                     let (cursor, snapshot) = feed.subscribe_snapshot().await;
                     receiver = cursor;
-                    table.apply_at(snapshot, Utc::now().timestamp_millis());
+                    table.apply_at(snapshot, unix_millis(UtcDateTime::now()));
                     guard.set_board_len(table.board().len());
                 },
                 FeedDecision::Closed => break,

@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -6,6 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
     Frame,
 };
+use time::{format_description::well_known::Rfc3339, macros::format_description, UtcDateTime};
 
 use super::{
     freezer_keys,
@@ -93,11 +93,10 @@ pub(crate) fn draw_service_recap(
         ),
         format!(
             "Started {}",
-            summary.start_ms.map_or_else(
-                || "Unavailable".into(),
-                |ms| chrono::DateTime::from_timestamp_millis(ms)
-                    .map_or_else(|| "Unavailable".into(), |dt| dt.to_rfc3339())
-            )
+            summary
+                .start_ms
+                .and_then(format_recap_start)
+                .unwrap_or_else(|| "Unavailable".into())
         ),
         if summary.partial {
             "Partial / provisional"
@@ -176,6 +175,18 @@ pub(crate) fn draw_service_recap(
     offset
 }
 
+fn format_recap_start(ms: i64) -> Option<String> {
+    let timestamp = UtcDateTime::from_unix_timestamp_nanos(i128::from(ms) * 1_000_000).ok()?;
+    let format = if timestamp.millisecond() == 0 {
+        format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
+    } else {
+        format_description!(
+            "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]+00:00"
+        )
+    };
+    timestamp.format(format).ok()
+}
+
 #[cfg(test)]
 mod recap_view_tests {
     use super::*;
@@ -217,7 +228,7 @@ mod recap_view_tests {
                     label: "C:\\secret\\kitchen\nALERT".into(),
                 }]),
             },
-            1000,
+            1250,
         );
         let scope = Scope {
             id: Some("ws".into()),
@@ -238,6 +249,7 @@ mod recap_view_tests {
                 .collect::<String>();
             assert!(text.contains("Observed time blocked"));
             assert!(text.contains("Cause unverified"));
+            assert!(text.contains("Started 1970-01-01T00:00:01.250"));
             assert!(text.contains("Partial / provisional"));
             assert!(!text.contains("secret"));
             assert!(!text.contains("\n"));
@@ -822,7 +834,7 @@ pub(super) fn format_duration(milliseconds: u64) -> String {
     }
 }
 
-pub(super) fn service_line(table: &AgentTable, now: DateTime<Utc>, scope: Option<&str>) -> String {
+pub(super) fn service_line(table: &AgentTable, now: UtcDateTime, scope: Option<&str>) -> String {
     let summary = table.service_summary_scoped(scope);
     let oldest = table
         .blocked_agents()
@@ -831,13 +843,9 @@ pub(super) fn service_line(table: &AgentTable, now: DateTime<Utc>, scope: Option
         .map_or_else(
             || "None".into(),
             |agent| {
-                let milliseconds = DateTime::parse_from_rfc3339(&agent.state_entered_at)
+                let milliseconds = UtcDateTime::parse(&agent.state_entered_at, &Rfc3339)
                     .ok()
-                    .map(|entered| {
-                        now.signed_duration_since(entered.with_timezone(&Utc))
-                            .num_milliseconds()
-                            .max(0) as u64
-                    })
+                    .map(|entered| (now - entered).whole_milliseconds().max(0) as u64)
                     .unwrap_or(0);
                 format!(
                     "{} {}",
@@ -1166,7 +1174,7 @@ pub(crate) fn render_stats_table(
     agents: &[&AgentRecord],
     selected_id: Option<&str>,
     requested_offset: usize,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
 ) -> (TableWindow, Vec<HitRegion>) {
     let window = stats_table_window(area, agents, selected_id, requested_offset);
     let inner_width = area.width.saturating_sub(2);
@@ -1230,11 +1238,9 @@ pub(crate) fn render_stats_table(
         .take(window.end.saturating_sub(window.offset))
         .map(|agent| {
             let selected = selected_id == Some(agent.id.as_str());
-            let entered = DateTime::parse_from_rfc3339(&agent.state_entered_at)
-                .ok()
-                .map(|value| value.with_timezone(&Utc));
+            let entered = UtcDateTime::parse(&agent.state_entered_at, &Rfc3339).ok();
             let elapsed = entered
-                .map(|value| now.signed_duration_since(value).num_milliseconds().max(0) as u64)
+                .map(|value| (now - value).whole_milliseconds().max(0) as u64)
                 .unwrap_or(0);
             let mut cells = vec![
                 Cell::from(format!(
@@ -1340,7 +1346,7 @@ pub(crate) fn render_stats_table(
 fn test_table_window(
     area: Rect,
     table: &AgentTable,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     scope: &Scope,
     selected_id: Option<&str>,
     requested_offset: usize,
@@ -1375,7 +1381,7 @@ pub(crate) fn draw_scoped_with_hits(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     _tick: u64,
     selected_id: Option<&str>,
     table_offset: usize,
@@ -1458,7 +1464,7 @@ pub(crate) fn draw_scoped(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     tick: u64,
     selected_id: Option<&str>,
     table_offset: usize,
@@ -1480,7 +1486,7 @@ pub(crate) fn draw_freezer_scoped(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     selected_id: Option<&str>,
 ) {
     let total = table.board().len();
@@ -1712,9 +1718,7 @@ mod tests {
         table.apply(feed.snapshot().await);
         let selected_id = "fictional-terminal-19";
         let mut terminal = Terminal::new(TestBackend::new(60, 18)).unwrap();
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:00:00);
         terminal
             .draw(|frame| draw_scoped(frame, &table, None, now, 0, None, 0, &Scope::default()))
             .unwrap();
@@ -1851,9 +1855,7 @@ mod tests {
         help_open: bool,
     ) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:00:00);
         terminal
             .draw(|frame| {
                 scene::draw_view_scoped(
@@ -1931,9 +1933,7 @@ mod tests {
     fn render_dump(table: &AgentTable, warning: Option<&str>) -> String {
         let backend = TestBackend::new(110, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:02:05Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:02:05);
         terminal
             .draw(|frame| draw_scoped(frame, table, warning, now, 9, None, 0, &Scope::default()))
             .unwrap();
@@ -2025,7 +2025,7 @@ mod tests {
                     frame,
                     &table,
                     None,
-                    Utc::now(),
+                    UtcDateTime::now(),
                     0,
                     super::super::canvas::ColorMode::Xterm256,
                     false,
@@ -2253,9 +2253,7 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:00:00);
         terminal
             .draw(|frame| {
                 scene::draw_view_scoped(
@@ -2418,9 +2416,7 @@ mod tests {
             agents,
             workspaces: None,
         });
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:00:00);
         let render = |width, height, selected: Option<&str>, offset: &mut usize| {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal
@@ -2854,9 +2850,7 @@ mod tests {
         apply_upsert(&mut table, record("ended", AgentState::Ended));
         let backend = TestBackend::new(110, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:02:05Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:02:05);
         terminal
             .draw(|frame| draw_scoped(frame, &table, None, now, 9, None, 0, &Scope::default()))
             .unwrap();
@@ -2914,9 +2908,7 @@ mod tests {
                 label: "/srv/Kitchen One".into(),
             }]),
         });
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:02:05Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:02:05);
         let mut terminal = Terminal::new(TestBackend::new(110, 24)).unwrap();
         let scope = Scope {
             id: Some("ws-1".into()),
@@ -2990,9 +2982,7 @@ mod tests {
         }
         assert_eq!(table.blocked_elsewhere(scope.id.as_deref()), 1);
 
-        let now = DateTime::parse_from_rfc3339("2026-08-13T12:02:05Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-08-13 12:02:05);
         let mut scene_terminal = Terminal::new(TestBackend::new(110, 40)).unwrap();
         scene_terminal
             .draw(|frame| {
@@ -3143,9 +3133,7 @@ mod tests {
     fn fixed_inputs_render_status_surface() {
         let backend = TestBackend::new(60, 12);
         let mut terminal = Terminal::new(backend).unwrap();
-        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-01-01 00:00:00);
         terminal
             .draw(|frame| {
                 draw_scoped(
@@ -3177,9 +3165,7 @@ mod tests {
     fn unsupported_source_treatment_stays_actionable_at_narrow_sizes() {
         let mut table = AgentTable::default();
         table.apply(fixture("snapshot-demo-unsupported.v1.json"));
-        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let now = time::macros::utc_datetime!(2026-01-01 00:00:00);
 
         for (width, height) in [(80, 24), (60, 12)] {
             let backend = TestBackend::new(width, height);
@@ -3300,7 +3286,7 @@ mod tests {
                     frame,
                     &table,
                     None,
-                    Utc::now(),
+                    UtcDateTime::now(),
                     0,
                     Some("agent-02"),
                     0,
@@ -3348,9 +3334,7 @@ mod tests {
                         frame,
                         table,
                         None,
-                        DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
-                            .unwrap()
-                            .with_timezone(&Utc),
+                        time::macros::utc_datetime!(2026-08-13 12:00:00),
                         0,
                         super::super::canvas::ColorMode::Xterm256,
                         true,
@@ -3428,9 +3412,7 @@ mod tests {
                     frame,
                     table,
                     None,
-                    DateTime::parse_from_rfc3339("2026-08-13T12:00:00Z")
-                        .unwrap()
-                        .with_timezone(&Utc),
+                    time::macros::utc_datetime!(2026-08-13 12:00:00),
                     0,
                     super::super::canvas::ColorMode::Xterm256,
                     true,
@@ -3696,7 +3678,7 @@ mod tests {
                     frame,
                     &table,
                     None,
-                    Utc::now(),
+                    UtcDateTime::now(),
                     0,
                     Some("fictional-unknown"),
                     0,

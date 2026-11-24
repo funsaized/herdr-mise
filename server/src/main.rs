@@ -8,6 +8,7 @@ use herdr_mise_server::{
     runtime::{self, Command, Mode},
     service, tui,
 };
+use time::{format_description::well_known::Rfc3339, UtcDateTime};
 use tokio_util::sync::CancellationToken;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,8 +27,10 @@ async fn diagnostic() -> Result<(), Box<dyn std::error::Error>> {
         match adapter::fetch_snapshot(&discovery::discover_socket(), Duration::from_secs(2))
             .await
             .and_then(|snapshot| {
-                Normalizer::default()
-                    .normalize_snapshot_value(snapshot, &chrono::Utc::now().to_rfc3339())
+                let received_at = UtcDateTime::now()
+                    .format(&Rfc3339)
+                    .expect("current UTC time must format as RFC 3339");
+                Normalizer::default().normalize_snapshot_value(snapshot, &received_at)
             }) {
             Ok(_) => SourceStatus::Connected,
             Err(error) => error.source_status(),

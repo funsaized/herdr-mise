@@ -1,5 +1,5 @@
-use chrono::{SecondsFormat, Utc};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use time::{SignedDuration, UtcDateTime};
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
@@ -7,8 +7,8 @@ use crate::{
     adapter::{self, Normalizer},
     demo,
     protocol::{
-        AgentRecord, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic, SourceStatus,
-        WorkspaceRecord, PROTOCOL_VERSION,
+        format_timestamp, AgentRecord, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic,
+        SourceStatus, WorkspaceRecord, PROTOCOL_VERSION,
     },
 };
 
@@ -55,7 +55,7 @@ impl Feed {
         tokio::spawn(run_coalescer(Arc::downgrade(&feed.inner), shutdown.clone()));
         let start_step =
             parse_demo_start_step(std::env::var("HERDR_MISE_DEMO_START_STEP").ok().as_deref());
-        let started_at = Utc::now() - chrono::Duration::seconds(start_step as i64);
+        let started_at = UtcDateTime::now() - SignedDuration::seconds(start_step as i64);
         feed.replace_demo(demo::agents(start_step, started_at))
             .await;
         tokio::spawn(run_startup_recovery(
@@ -380,7 +380,7 @@ async fn run_startup_recovery(
     path: PathBuf,
     probe_timeout: Duration,
     shutdown: CancellationToken,
-    started_at: chrono::DateTime<Utc>,
+    started_at: UtcDateTime,
     mut step: u64,
 ) {
     let mut normalizer = Normalizer::default();
@@ -531,7 +531,7 @@ async fn watch_events(
     }
 }
 fn now() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+    format_timestamp(UtcDateTime::now())
 }
 
 #[cfg(test)]
@@ -734,9 +734,7 @@ mod tests {
                         frame,
                         &table,
                         None,
-                        chrono::DateTime::parse_from_rfc3339("2026-08-13T12:00:01Z")
-                            .unwrap()
-                            .with_timezone(&chrono::Utc),
+                        time::macros::utc_datetime!(2026-08-13 12:00:01),
                         0,
                         crate::tui::canvas::ColorMode::Xterm256,
                         true,

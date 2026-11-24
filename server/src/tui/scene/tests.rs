@@ -3,9 +3,9 @@ use crate::adapter::Normalizer;
 use crate::protocol::{
     AgentStateEvent, AppMode, DeltaOperation, SessionStats, SourceDiagnostic, WorkspaceRecord,
 };
-use chrono::TimeZone;
 use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
+use time::macros::utc_datetime;
 use tokio_util::sync::CancellationToken;
 
 fn record(id: &str, state: AgentState) -> AgentRecord {
@@ -104,7 +104,7 @@ fn render_view_with_warning(
                 frame,
                 table,
                 warning,
-                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                utc_datetime!(2026-08-13 12:00),
                 tick,
                 ColorMode::Xterm256,
                 true,
@@ -128,7 +128,7 @@ fn render_capability(table: &AgentTable, width: u16, height: u16, scene_supporte
                 frame,
                 table,
                 None,
-                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                utc_datetime!(2026-08-13 12:00),
                 7,
                 ColorMode::Truecolor,
                 scene_supported,
@@ -158,7 +158,7 @@ fn render_help(
                 frame,
                 table,
                 None,
-                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                utc_datetime!(2026-08-13 12:00),
                 0,
                 ColorMode::Xterm256,
                 true,
@@ -213,7 +213,7 @@ fn workspace_scope_scene_filters_stations_and_keeps_global_blocked_count() {
                 frame,
                 &table,
                 None,
-                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                utc_datetime!(2026-08-13 12:00),
                 0,
                 ColorMode::Xterm256,
                 true,
@@ -709,7 +709,7 @@ fn fixture_backed_responsive_composition_matrix() {
                     frame,
                     &table,
                     None,
-                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                    utc_datetime!(2026-08-13 12:00),
                     7,
                     ColorMode::Truecolor,
                     true,
@@ -918,7 +918,7 @@ fn stats_table_selection_keeps_scene_geometry_and_blocked_cues() {
                     frame,
                     &table,
                     None,
-                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                    utc_datetime!(2026-08-13 12:00),
                     0,
                     ColorMode::Xterm256,
                     true,
@@ -977,7 +977,7 @@ fn station_click_selects_corresponding_stats_row() {
                 frame,
                 &table,
                 None,
-                Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                utc_datetime!(2026-08-13 12:00),
                 0,
                 ColorMode::Xterm256,
                 true,
@@ -1040,7 +1040,7 @@ fn real_herdr_help_scroll_exposes_complete_locators_at_20x12() {
                     frame,
                     &table,
                     None,
-                    Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap(),
+                    utc_datetime!(2026-08-13 12:00),
                     0,
                     ColorMode::Xterm256,
                     true,

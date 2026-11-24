@@ -1,8 +1,17 @@
 //! Generated-shape bindings for protocol/schema/agent-state-event.v1.schema.json.
 
 use serde::{Deserialize, Serialize};
+use time::{macros::format_description, UtcDateTime};
 
 pub const PROTOCOL_VERSION: u8 = 1;
+
+pub(crate) fn format_timestamp(timestamp: UtcDateTime) -> String {
+    timestamp
+        .format(format_description!(
+            "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+        ))
+        .expect("UTC date and time must format with millisecond precision")
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
