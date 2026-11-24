@@ -2,7 +2,6 @@ pub mod layout;
 pub mod particles;
 pub mod sprites;
 
-use chrono::{DateTime, Utc};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -10,6 +9,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
+use time::{format_description::well_known::Rfc3339, UtcDateTime};
 
 use self::layout::{
     compute_freezer_layout, compute_kitchen_composition, compute_layout, LayoutDecision, PixelRect,
@@ -335,14 +335,10 @@ fn render_line(frame: &mut Frame<'_>, area: Rect, x: u16, y: u16, width: u16, li
     );
 }
 
-fn blocked_elapsed(agent: &AgentRecord, now: DateTime<Utc>) -> String {
-    let elapsed = DateTime::parse_from_rfc3339(&agent.state_entered_at)
+fn blocked_elapsed(agent: &AgentRecord, now: UtcDateTime) -> String {
+    let elapsed = UtcDateTime::parse(&agent.state_entered_at, &Rfc3339)
         .ok()
-        .map(|entered| {
-            now.signed_duration_since(entered.with_timezone(&Utc))
-                .num_seconds()
-                .max(0)
-        })
+        .map(|entered| (now - entered).whole_seconds().max(0))
         .unwrap_or(0);
     format!("{:02}:{:02}", elapsed / 60, elapsed % 60)
 }
@@ -523,7 +519,7 @@ pub(crate) fn draw_view_scoped_with_hits(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     tick: u64,
     color_mode: ColorMode,
     scene_supported: bool,
@@ -557,7 +553,7 @@ pub(crate) fn draw_view_scoped_with_help_scroll(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     tick: u64,
     color_mode: ColorMode,
     scene_supported: bool,
@@ -662,10 +658,10 @@ pub(crate) fn draw_recap(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     scope: &super::Scope,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     offset: usize,
 ) -> usize {
-    view::draw_service_recap(frame, table, scope, now.timestamp_millis(), offset)
+    view::draw_service_recap(frame, table, scope, super::unix_millis(now), offset)
 }
 
 #[cfg(test)]
@@ -674,7 +670,7 @@ pub(crate) fn draw_view_scoped(
     frame: &mut Frame<'_>,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     tick: u64,
     color_mode: ColorMode,
     scene_supported: bool,
@@ -708,7 +704,7 @@ fn draw_kitchen(
     area: Rect,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     tick: u64,
     color_mode: ColorMode,
     selected_id: Option<&str>,
@@ -1175,7 +1171,7 @@ fn draw_freezer(
     area: Rect,
     table: &AgentTable,
     warning: Option<&str>,
-    now: DateTime<Utc>,
+    now: UtcDateTime,
     tick: u64,
     color_mode: ColorMode,
     selected_id: Option<&str>,

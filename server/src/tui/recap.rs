@@ -1,5 +1,5 @@
-use chrono::DateTime;
 use std::collections::{HashMap, HashSet, VecDeque};
+use time::{format_description::well_known::Rfc3339, UtcDateTime};
 
 use crate::protocol::{
     AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SourceStatus,
@@ -186,9 +186,9 @@ fn elapsed(start: i64, end: i64) -> u64 {
 
 fn same_generation(previous: &str, incoming: &str) -> bool {
     previous == incoming
-        || DateTime::parse_from_rfc3339(incoming)
+        || UtcDateTime::parse(incoming, &Rfc3339)
             .ok()
-            .zip(DateTime::parse_from_rfc3339(previous).ok())
+            .zip(UtcDateTime::parse(previous, &Rfc3339).ok())
             .is_some_and(|(incoming, previous)| incoming <= previous)
 }
 

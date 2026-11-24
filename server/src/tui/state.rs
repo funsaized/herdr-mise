@@ -3,7 +3,7 @@ use crate::protocol::{
     AgentRecord, AgentState, AgentStateEvent, AppMode, DeltaOperation, SourceDiagnostic,
     SourceStatus, WorkspaceRecord,
 };
-use chrono::DateTime;
+use time::{format_description::well_known::Rfc3339, UtcDateTime};
 
 pub(crate) const BOARD_CAP: usize = 64;
 
@@ -55,7 +55,7 @@ impl Default for AgentTable {
 
 impl AgentTable {
     pub fn apply(&mut self, event: AgentStateEvent) {
-        self.apply_at(event, chrono::Utc::now().timestamp_millis());
+        self.apply_at(event, super::unix_millis(UtcDateTime::now()));
     }
 
     pub fn apply_at(&mut self, event: AgentStateEvent, now_ms: i64) {
@@ -184,8 +184,8 @@ impl AgentTable {
             .filter(|agent| agent.state == AgentState::Blocked && agent.state_known != Some(false))
             .collect::<Vec<_>>();
         blocked.sort_by(|a, b| {
-            let a_time = DateTime::parse_from_rfc3339(&a.state_entered_at).ok();
-            let b_time = DateTime::parse_from_rfc3339(&b.state_entered_at).ok();
+            let a_time = UtcDateTime::parse(&a.state_entered_at, &Rfc3339).ok();
+            let b_time = UtcDateTime::parse(&b.state_entered_at, &Rfc3339).ok();
             match (a_time, b_time) {
                 (Some(a_time), Some(b_time)) => a_time.cmp(&b_time).then_with(|| a.id.cmp(&b.id)),
                 (Some(_), None) => std::cmp::Ordering::Less,

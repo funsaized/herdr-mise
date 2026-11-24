@@ -1,5 +1,4 @@
 //! The only module containing Herdr protocol schema knowledge.
-use chrono::DateTime;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
@@ -9,6 +8,7 @@ use std::{
     sync::LazyLock,
     time::Duration,
 };
+use time::{format_description::well_known::Rfc3339, UtcDateTime};
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
@@ -375,12 +375,12 @@ fn truncate_utf16(value: String) -> String {
 
 fn mise_runtime_ms(started_at: &str, received_at: &str) -> u64 {
     let (Ok(start), Ok(end)) = (
-        DateTime::parse_from_rfc3339(started_at),
-        DateTime::parse_from_rfc3339(received_at),
+        UtcDateTime::parse(started_at, &Rfc3339),
+        UtcDateTime::parse(received_at, &Rfc3339),
     ) else {
         return 0;
     };
-    end.signed_duration_since(start).num_milliseconds().max(0) as u64
+    (end - start).whole_milliseconds().max(0) as u64
 }
 
 fn accent(id: &str) -> u8 {
@@ -718,9 +718,9 @@ mod tests {
         n.normalize_snapshot_value(raw("working"), "2026-07-31T00:00:00Z")
             .unwrap();
         let later = n
-            .normalize_snapshot_value(raw("working"), "2026-07-31T00:00:05Z")
+            .normalize_snapshot_value(raw("working"), "2026-07-30T19:00:05.123456-05:00")
             .unwrap();
-        assert_eq!(later.agents[0].session.runtime_ms, 5_000);
+        assert_eq!(later.agents[0].session.runtime_ms, 5_123);
         n.normalize_snapshot_value(
             json!({"version":"0.7.5","protocol":17,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}),
             "2026-07-31T00:00:06Z",
