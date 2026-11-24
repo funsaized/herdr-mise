@@ -42,8 +42,8 @@
     "verify:rust:fallback": "test ! -e target/fallback-dist/index.html && HERDR_MISE_DIST_DIR=\"$PWD/target/fallback-dist\" cargo test --workspace --locked"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.0",
-    "oxfmt": "0.78.0",
-    "oxlint": "1.93.0"
+    "@playwright/test": "^1.65.1",
+    "oxfmt": "0.80.0",
+    "oxlint": "1.95.0"
   }
 }
